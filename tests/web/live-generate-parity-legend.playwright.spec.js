@@ -682,7 +682,8 @@ test('a Legend rename onto a deleted row of one feature type restores and merges
     const app = window.__GBDRAW_APP__;
     return {
       rules: app.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]),
-      row: app.legendEntries.find((entry) => entry.caption === 'beta').color
+      // The color the Legend panel shows for the restored row of Python's (its record holds none).
+      row: app.legendEntryColor(app.legendEntries.find((entry) => entry.caption === 'beta'))
     };
   }), 'the row returns in its own color, which the merged feature adopts').toEqual({
     rules: [['^FL1$', 'beta', '#2a9d8f'], ['^FL2$', 'beta', '#2a9d8f']], row: '#2a9d8f'

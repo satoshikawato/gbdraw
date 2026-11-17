@@ -1078,7 +1078,9 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       labelVisibilityOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
       labelOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
       legendFill,
-      legendEntryColor: app.legendEntries[legendIndex]?.color,
+      // The color the Legend panel shows for the row (its user Legend color; a row of
+      // Python's holds none of it).
+      legendEntryColor: app.legendEntryColor(app.legendEntries[legendIndex]),
       featureResultContent,
       textResultContent,
       visibilityResultContent,

@@ -82,8 +82,9 @@ export const WORK_ALLOWLIST = [
   // them or the row's key, so every display of the fills also shows the
   // strokes (OV-1985, OV-1986).
   { kind: 'Legend row color (no rule)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#7b2cbf') },
-  // The step restores the editor's Legend rows (their colors among them): Legend rows and fills.
-  { kind: 'History step (Undo of a Legend row color)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
+  // The step restores the user's Legend color of a row of Python's, which only the color overrides
+  // hold (the row's record holds none): Legend fills.
+  { kind: 'History step (Undo of a Legend row color)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
   // The rules' matches are prepared: the palette sends no request.
   { kind: 'palette change', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: [], run: (page) => switchPalette(page, 'arctic') },
   {

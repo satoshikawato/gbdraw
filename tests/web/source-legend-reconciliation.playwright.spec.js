@@ -369,7 +369,8 @@ const legendView = async page => ({
       (features[id] ||= new Set()).add(stroke(element));
     });
     return {
-      entries: s.activeDrawing().legendEntries.value.map(entry => `${entry.caption} ${entry.color}`),
+      // Each row's caption and the color the Legend panel shows (a row of Python's holds none).
+      entries: s.activeDrawing().legendEntries.value.map(entry => `${entry.caption} ${window.__GBDRAW_APP__.legendEntryColor(entry)}`),
       swatches: getAllFeatureLegendGroups(svg).map(group => [...group.querySelectorAll('g[data-legend-key]')]
         .map(row => `${row.getAttribute('data-legend-key')}: ${stroke(getLegendEntrySwatch(row))}`).sort()),
       features: Object.fromEntries(Object.entries(features).map(([id, strokes]) => [id, [...strokes].sort().join(', ')]))

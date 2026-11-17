@@ -76,7 +76,11 @@ const addSkewSlots = async (page) => {
     Object.assign(add().params, { nt: 'AT', positive_color: '#deaf6e', negative_color: '#7294e3' });
   });
   await generate(page);
-  const rows = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => [entry.caption, entry.color]));
+  // The colors the Legend panel shows (a row of Python's holds no color of its own).
+  const rows = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.legendEntries.map((entry) => [entry.caption, app.legendEntryColor(entry)]);
+  });
   expect(rows).toEqual(expect.arrayContaining([['AT skew (+)', '#deaf6e'], ['AT skew (-)', '#7294e3']]));
   const captions = rows.map(([caption]) => caption);
   expect(captions.filter((caption) => caption.startsWith('GC skew'))).toEqual(['GC skew (+)', 'GC skew (-)']);

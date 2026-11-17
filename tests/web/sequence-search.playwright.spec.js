@@ -306,7 +306,11 @@ test('Circular: a search colour edit applies at once and keeps a Legend colour e
     await legendRowColor(page, 'CDS', '#7b2cbf');
     await searchFromPanel(page, fasta(ORIGIN_QUERIES.slice(2)));
     const generated = await generationKey(page);
-    const legend = () => page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.legendEntries.map((entry) => [entry.caption, entry.color])));
+    // The colors the Legend panel shows (a row of Python's holds no color of its own).
+    const legend = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return Object.fromEntries(app.legendEntries.map((entry) => [entry.caption, app.legendEntryColor(entry)]));
+    });
     expect((await legend()).CDS).toBe('#7b2cbf');
     const section = page.locator('[data-setting="region-annotations"]');
     const fill = section.locator('input[aria-label="Annotation fill color"]').last();
