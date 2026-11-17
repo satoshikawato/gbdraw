@@ -898,7 +898,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
       displayedResultMetadata: () => null, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
-      activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
+      activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] }, legendColorOverrides: {} })
     },
     readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []),
     legendRowNames: { value: new Map() }

@@ -775,7 +775,9 @@ export const createLegendEntryActions = ({
       if (!caption || !originalCaption || caption === originalCaption || drawnOriginals.has(originalCaption)
         || deleted.has(originalCaption) || seen.has(originalCaption)) return [];
       seen.add(originalCaption);
-      return [{ caption, originalCaption, color: entry.color, featureIds: [] }];
+      // A dormant row is Python's: it holds only the user's Legend color of its key (OV-282).
+      const row = { caption, originalCaption, color: entry.color, featureIds: [] };
+      return [withOwnLegendColor(row, legendEntryKey(row), { python: true, overrides: drawing.legendColorOverrides })];
     });
   };
 

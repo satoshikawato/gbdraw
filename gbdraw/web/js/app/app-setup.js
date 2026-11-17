@@ -26,7 +26,7 @@
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
 /** @import { RegionSourceFeature } from './region-drawing.js' */
 import { createRulePreparation } from './rule-matching.js';
-import { displayedLegendRowColors, editorPaintDomains, keptLegendRowColors, LIVE_EDIT_DOMAINS } from './candidate-render.js';
+import { displayedLegendRowColors, editorPaintDomains, keptLegendRowColors, legendRowResult, LIVE_EDIT_DOMAINS } from './candidate-render.js';
 import { createDeclinedPaintDisplay, createDepartedResultIntent, createDisplayedResultProjection, createEditorIntentShow, createMountedEditorIntentProjection } from './editor-intent.js';
 import { createMountedLegendBinding, createMountedResultReadiness } from './mounted-result-binder.js';
 import { createResultPaintRecord, editorPaintState, visibilityPaintState } from './result-paint-record.js';
@@ -1196,10 +1196,10 @@ export const createAppSetup = () => {
   const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing(), readDrawnTracks()));
   /** @param {DrawingState} drawing */
   const keptLegendOf = (drawing) => historySnapshots.artifactSlots.readOfDrawing(drawing.id, state.activeDrawingId.value,
-    () => null, (slot) => ({ inventory: slot.legend.originalOrder, swatches: slot.legend.originalColors }));
+    () => null, (slot) => legendRowResult(slot.legend.originalOrder, slot.legend.originalColors));
   /** @type {import('./candidate-render.js').ReadLegendRowColorsPort} */
   const readLegendRowColors = (drawing) => (drawing === state.activeDrawing() ? legendRowColors.value
-    : keptLegendRowColors(drawing, keptLegendOf(drawing) ?? { inventory: [], swatches: {} }));
+    : keptLegendRowColors(drawing, keptLegendOf(drawing) ?? legendRowResult([], {})));
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
   const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */

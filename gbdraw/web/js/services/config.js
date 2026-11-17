@@ -784,18 +784,19 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
     }
     const caption = String(entry.caption || '').trim();
     const key = rowOf(entry);
-    const python = inventory.has(legendEntryKey(entry));
+    const from = entry.dormant === true ? 'dormantEntries' : list;
+    // A dormant row is a renamed row of Python's that the Result does not draw (OV-120).
+    const python = from === 'dormantEntries' || inventory.has(legendEntryKey(entry));
     const storedColor = normalizeDefaultColor(entry.color);
     const color = ownLegendColor(legendEntryKey(entry), { python, overrides, color: storedColor });
     // An entry without a color is a row of Python's as Session 51 writes it, also where Load reads it without the
-    // inventory (a drawing's paint apart from its set's); one whose color Load cannot read is not drawn.
-    const unreadColor = !isUnsetValue(entry.color) && !storedColor;
+    // inventory (a drawing's paint apart from its set's); an editor row whose color Load cannot read is not drawn.
+    // A row of Python's loses no color: its stored one is a copy of its swatch, or of its user color, which replaces
+    // the stored one that Save writes again (listed when Load cannot read it).
     const readable = python || Boolean(color) || isUnsetValue(entry.color);
-    const from = entry.dormant === true ? 'dormantEntries' : list;
     if (!caption && Object.values(entry).some((field) => !isUnsetValue(field))) countUnread(from);
     if (caption && !readable && !keys.has(key)) dropped.push({ list: from, caption, key });
-    // A kept entry whose stored color Load cannot read loses that value: it is listed too.
-    if (caption && readable && unreadColor && !keys.has(key)) {
+    if (caption && color && !storedColor && !isUnsetValue(entry.color) && !keys.has(key)) {
       repairs?.push(loadRepair({ code: 'legend-color-dropped', path: `${path}.${from}`, effect: 'dropped', label: caption }));
     }
     if (caption && readable && keys.has(key)) {

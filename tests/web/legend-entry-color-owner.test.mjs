@@ -126,6 +126,16 @@ test('Load keeps an entry\'s color only for an editor row and a user color, and 
     { repairs: lost });
   assert.deepEqual(read.legend.entries, []);
   assert.deepEqual(lost.map((repair) => [repair.code, repair.label]), [['legend-color-dropped', 'Bad']]);
+  // A dormant row is a renamed row of Python's (OV-120): its copy is discarded too. A swatch copy Load cannot read
+  // is no loss; a stored color the user's Legend color replaces, which Save writes again, is listed (G2).
+  const kept = [];
+  const copies = normalizeEditorStateData({ legend: { ...storedLegend(),
+    entries: [{ caption: 'C', originalCaption: 'CDS', color: 'url(x)' }, { caption: 'Mine', originalCaption: 'Mine', color: 'url(x)' }],
+    dormantEntries: [{ caption: 'Renamed', originalCaption: 'Gone', color: '#999999' }],
+    colorOverrides: { Mine: '#00ff00' } } }, { repairs: kept });
+  assert.deepEqual(colors(copies.legend.entries), [['CDS', null], ['Mine', '#00ff00']]);
+  assert.deepEqual(colors(copies.legend.dormantEntries), [['Gone', null]]);
+  assert.deepEqual(kept.map((repair) => [repair.code, repair.label]), [['legend-color-dropped', 'Mine']]);
 });
 
 test('a Session that recorded swatches shows the same Legend colors after Load', () => {
