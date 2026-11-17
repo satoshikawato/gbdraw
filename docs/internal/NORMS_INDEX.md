@@ -497,6 +497,7 @@ under "Cited ids without a record".
 - [PD-OI-070](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-070-reset-settings-scope-for-linear-record-display): Reset Settings scope for Linear record display. ACCEPTED, concern `web.reset.linear-record-display`, scenario revision 1.
   - `tests/fixtures/sessions/mode-scoped-settings-registry-v46.tsv`
   - `tests/web/drawing-inputs.test.mjs`
+  - `tests/web/drawing-member-paths.test.mjs`
   - `tests/web/drawing-slices.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
 
@@ -602,6 +603,7 @@ under "Cited ids without a record".
   - `tests/web/drawing-bar.playwright.spec.js`
   - `tests/web/drawing-inputs.test.mjs`
   - `tests/web/drawing-list.test.mjs`
+  - `tests/web/drawing-member-paths.test.mjs`
   - `tests/web/feature-label-visual-unit.test.mjs`
   - `tests/web/helpers/app-lifecycle.cjs`
   - `tests/web/helpers/drawing-bar.cjs`
@@ -640,6 +642,7 @@ under "Cited ids without a record".
   - `tests/web/track-layout-transition.playwright.spec.js`
 
 - [PD-OI-091](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-091-per-record-draw-onoff): Per-record draw ON/OFF. ACCEPTED, concern `diagram-generation.record-draw-selection`, scenario revision 1.
+  - `tests/web/drawing-member-paths.test.mjs`
   - `tests/web/mode-scoped-session.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
 

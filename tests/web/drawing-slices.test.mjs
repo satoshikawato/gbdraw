@@ -48,11 +48,8 @@ const {
   installShownDrawing,
   setUnmanagedConfigOverrideValidator
 } = sessionConfig;
-const { normalizeAnnotationSets } = await import('../../gbdraw/web/js/services/annotation-state.js');
-const { normalizeFeatureVisibilityRule } = await import('../../gbdraw/web/js/services/feature-visibility.js');
-const { normalizeSpecificRule } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
-const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color-utils.js');
-const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { sliceSample, refFree } = await import('./helpers/drawing-member-samples.mjs');
+const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -284,100 +281,30 @@ test('only the slices import slice-handle.js, and its member key is written ther
 });
 
 // 6. A slice's install, its view, and Save then Load carry an edit of its own
-// mode only (M6 isolation, node half): each slice holds a non-default sample
-// in the forms its writers and Load give, so a no-op install fails.
-const SAMPLES = {
-  visibilityRules: () => ({ featureVisibilityManualRules: [normalizeFeatureVisibilityRule({
-    id: 'sample-rule', featureType: 'CDS', qualifier: 'locus_tag', value: '^A$', action: 'off'
-  })] }),
-  colorRules: () => ({
-    manualSpecificRules: [normalizeSpecificRule({ feat: 'CDS', qual: 'product', val: 'kinase', color: '#123456', cap: 'Kinase', fromFile: true })]
-  }),
-  // Load gives a palette's colors the comparison colors (`normalizePaletteColors`).
-  palette: () => ({
-    selectedPalette: 'mint', currentColors: normalizePaletteColors({ CDS: '#123456', tRNA: '#654321' }),
-    pendingPaletteName: 'queued', pendingPaletteColors: normalizePaletteColors({ CDS: '#abcdef' })
-  }),
-  labelTables: () => ({
-    labelTextBulkOverrides: { 'hypothetical protein': 'HP' },
-    canonicalLabelOverrideRows: [{ recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: '^kinase$', labelText: 'Kinase' }],
-    manualPriorityRules: [{ feat: 'CDS', order: 'gene,product' }],
-    filterMode: 'Whitelist',
-    manualBlacklist: 'putative',
-    manualWhitelist: [{ feat: 'CDS', qual: 'product', key: 'kinase' }]
-  }),
-  annotationSets: () => ({ annotationSets: normalizeAnnotationSets([{ id: 'sample-set', legendLabel: 'Sample', annotations: [
-    { id: 'region_1', target: { kind: 'coordinateSpan', start: 10, end: 20 }, label: 'Sample region' }
-  ] }]) }),
-  // Load keeps a drawing's group name only for a group of its saved Result
-  // (`orthogroupEditsOf`); no drawing of the fixture holds one.
-  groupNames: () => ({
-    orthogroupNameOverrides: {},
-    orthogroupDescriptionOverrides: {},
-    orthogroupDormantOverrides: { '["sample-member"]': { name: 'Dormant name', description: 'Dormant description' } }
-  }),
-  // A file bound in the drawing's own input fields: a Circular drawing's
-  // GenBank file in its File card, a Linear drawing's one record row. The store registers it.
-  inputs: (mode) => {
-    const inputs = DRAWING_SLICES.inputs.capture(modeDrawing(state, mode).slices.inputs);
-    const file = state.inputFiles.registerFile(new File([`LOCUS       sample_${mode}\n//\n`], `sample-${mode}.gb`, { lastModified: 1 }));
-    return mode === 'linear'
-      ? { ...inputs, linearSeqs: [createLinearSeq({ uid: 'sample-row', gb: file })] }
-      // The card's record read waits, as after the Load of a Circular request (OV-2881).
-      : { ...inputs, circularSources: [{ uid: 'sample-card', gb: file, gff: null, fasta: null }],
-        circularRecordDiscovery: { status: 'deferred', error: '', inputType: inputs.inputType,
-          sources: [{ uid: 'sample-card', primaryFile: file, pairedFile: null, error: '' }] } };
-  },
-  canvas: () => ({ canvasPadding: { top: 12, right: 3, bottom: 7, left: 5 } }),
-  // Load keeps the rows `canonicalFeatureOverrides` and the placement reader
-  // of the drawing's mode accept.
-  // Load reads the Legend rows as `normalizeEditorStateData` gives them.
-  paint: () => ({
-    featureColorOverrides: { '["record-1","CDS_1"]': { color: '#123456', caption: 'Kinase' } },
-    featureStrokeOverrides: { 'record-1\u0000CDS_1': { strokeColor: '#654321', strokeWidth: 2 } },
-    legendEntries: [{ caption: 'Renamed CDS', originalCaption: 'CDS', color: '#abcdef', featureIds: [] }],
-    deletedLegendEntries: [{ caption: 'tRNA', originalCaption: 'tRNA', color: '#fedcba', featureIds: [] }],
-    dormantLegendEntries: [{ caption: 'Coverage', originalCaption: 'depth', color: '#111111', featureIds: [] }],
-    legendColorOverrides: { CDS: '#abcdef' },
-    legendStrokeOverrides: { CDS: { strokeColor: '#222222', strokeWidth: 1.5 } },
-    addedLegendCaptions: ['Kinase']
-  }),
-  // A drawing's settings as Load gives them, with values no default holds.
-  settings: (mode) => {
-    const settings = DRAWING_SLICES.settings.capture(modeDrawing(state, mode).slices.settings);
-    return {
-      ...settings,
-      form: { ...settings.form, plot_title: `Sample ${mode} title` },
-      losatProgram: 'tblastx',
-      linearRecordLayoutEnabled: !settings.linearRecordLayoutEnabled
-    };
-  },
-  featureEdits: (mode) => ({
-    featureOverrides: { '["record-1","CDS_1"]': {
-      recordKey: 'record-1', biologicalFeatureId: 'CDS_1', featureVisibility: 'off', labelVisibility: null, labelText: 'Sample', labelSourceText: null
-    } },
-    featurePlacementOverrides: { '["record-1","CDS_2"]': {
-      recordKey: 'record-1', biologicalFeatureId: 'CDS_2', placement: { kind: 'lane', side: mode === 'linear' ? 'above' : 'outward', level: 1 }
-    } }
-  })
-};
+// mode only (M6 isolation, node half): each slice holds a non-default sample,
+// the merge of its members' samples (helpers/drawing-member-samples.mjs, which
+// tests/web/drawing-member-paths.test.mjs runs member by member through every
+// state path), so a no-op install fails.
+const sampleContext = { registerFile: (file) => state.inputFiles.registerFile(file) };
+// What a Load gives back of a slice: not the records a read of the drawing's
+// File cards finds (`circularRecordList`), which a Load of a drawing with a
+// request defers (OV-2881) and the member test checks through the read; the
+// read's state (`circularRecordDiscovery`) is compared.
+const stored = (capture) => Object.fromEntries(Object.entries(capture).filter(([member]) => member !== 'circularRecordList'));
 // A view member as plain data: a ref's value, a set's values.
 const plain = (value) => {
   if (value instanceof Set) return [...value];
   if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && 'value' in value) return plain(value.value);
   return value;
 };
-// A capture as JSON without the store's file IDs: a Load binds each input
-// file again, under a new ref of the same file. A record row without a file
-// is a placeholder (a Circular drawing saves no rows), new at each Load.
-const refFree = (value) => JSON.stringify(value, (key, entry) => {
-  if (entry && typeof entry === 'object' && typeof entry.fileId === 'string' && typeof entry.sourceId === 'string') {
-    return { name: entry.name, type: entry.type, size: entry.size, lastModified: entry.lastModified };
-  }
-  if (key === 'linearSeqs') return entry.map((row) => (row.gb || row.gff || row.fasta ? row : { ...row, uid: '' }));
-  return entry;
-});
-const captures = (mode) => refFree(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
+// The slices of the drawing of `mode` as a Save writes them: the mark a Load
+// of a Session 46 sets on the cards its flat record positions count over
+// (`c_legacy_record_cards`, OV-2867) is read by that Load only, and a Save
+// writes none.
+const captures = (mode) => refFree(SLICES.map(([name, slice]) => {
+  const capture = slice.capture(modeDrawing(state, mode).slices[name]);
+  return name === 'inputs' ? { ...capture, files: { ...capture.files, c_legacy_record_cards: null } } : capture;
+}));
 // Each Save names its own file: Save asks before downloading a file name again.
 let saves = 0;
 const saveSession = async () => {
@@ -387,6 +314,12 @@ const saveSession = async () => {
   return saved.blob;
 };
 
+const reload = async (session) => {
+  const reloaded = await importSession({ target: { files: [session], value: 'selected' } },
+    { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  addPairDrawings();
+  return reloaded;
+};
 // Before Load the edit is undone: by the slice's reset, or, for the inputs
 // slice, whose reset keeps every binding (PD-OI-070), by a new drawing's inputs.
 const undo = (name, slice, handle) => (name === 'inputs' ? slice.install(handle, slice.capture(slice.create().handle)) : slice.reset(handle));
@@ -394,15 +327,26 @@ const undo = (name, slice, handle) => (name === 'inputs' ? slice.install(handle,
 // adds it after each Load as the offer tab makes it, at the defaults with the
 // boot palettes, so Save does not write it.
 test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', () => withBootPalettes(state, async () => {
-  assert.deepEqual(Object.keys(SAMPLES).sort(), SLICES.map(([name]) => name).sort(), 'every slice has a sample');
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
   addPairDrawings();
+  // A Load reads the records of a Circular drawing with a request when
+  // Generate needs them, not after Load (OV-2881): the read waits, with the
+  // drawing's cards as its sources.
+  // The cards' files as the input type reads them (`circularSourceInputs`).
+  const deferred = ({ inputType, circularSources }) => ({ status: 'deferred', error: '', inputType,
+    sources: circularSourceInputs(inputType, circularSources).map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, error: '' })) });
+  const circular = DRAWING_SLICES.inputs.capture(modeDrawing(state, 'circular').slices.inputs);
+  assert.ok(circular.circularSources.length > 0, 'the fixture\'s Circular drawing has File cards');
+  assert.equal(refFree(circular.circularRecordDiscovery), refFree(deferred(circular)), 'Load defers the record read');
+  // So a Load of the Circular inputs sample defers the read of its cards.
+  const loadedForm = (name, mode, sample) => (name === 'inputs' && mode === 'circular'
+    ? { ...sample, circularRecordDiscovery: deferred(sample) } : sample);
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
     for (const [name, slice] of SLICES) {
       const drawing = modeDrawing(state, mode);
       const loaded = JSON.stringify(slice.capture(drawing.slices[name]));
-      const sample = SAMPLES[name](mode);
+      const sample = sliceSample(name, mode, drawing, sampleContext);
       const json = JSON.stringify(sample);
       const untouched = captures(other);
       slice.install(drawing.slices[name], sample);
@@ -413,11 +357,10 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
       const session = await saveSession();
       undo(name, slice, drawing.slices[name]);
       assert.notEqual(JSON.stringify(slice.capture(drawing.slices[name])), json, `${mode} ${name}: the sample is no default`);
-      const reloaded = await importSession({ target: { files: [session], value: 'selected' } },
-        { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+      const reloaded = await reload(session);
       assert.equal(reloaded?.status, 'ok', `${mode} ${name}: ${reloaded?.error?.message ?? reloaded?.status}`);
-      addPairDrawings();
-      assert.equal(refFree(slice.capture(modeDrawing(state, mode).slices[name])), refFree(sample), `${mode} ${name}: Save then Load`);
+      assert.equal(refFree(stored(slice.capture(modeDrawing(state, mode).slices[name]))), refFree(stored(loadedForm(name, mode, sample))),
+        `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
       // Back to the loaded fixture, which a Save and Load keep as it is (Load
       // resolves the defaults Reset gives, such as the track placements).
