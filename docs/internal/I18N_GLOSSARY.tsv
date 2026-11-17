@@ -1242,3 +1242,10 @@ gap must be a number (masculine subject)																	गैप ... संख
 Track row cited with a verb: Hide … and turn off {rows}																	छिपाएँ; बंद करें: {rows}		hi: same colon pattern as the row Track row {row} cited with a verb or a list; M
 left out (a label or row not drawn)																	बाहर रखा गया / बाहर रखे गए		hi: A label or row that the figure does not draw; distinct from Skip (“छोड़ें”).
 range selection (feature selection between two clicks)																	श्रेणी चयन		hi: श्रेणी is a run of items; a numeric range keeps सीमा.
+draw / is drawn (a record, sequence, feature, region, Depth series, table or figure as the object)																	X का आरेख बनाएँ / X को आरेखित करें / X आरेखित किया जाता है		hi: draw is आरेख बनाना or आरेखित करना, never बनाना of the data itself (रिकॉर्ड बनाएँ says create a record); a graphic element the drawing adds (track, ring, line, ruler) keeps बनाना; M
+leader pair crosses (the two lines of a pair)																	लीडर रेखाओं की {count} जोड़ी में दोनों रेखाएँ एक-दूसरे को पार करती हैं		hi: एक-दूसरे needs a plural antecedent, so the two lines are the subject, not the pair; the plural form reads जोड़ियों में हर जोड़ी की दोनों रेखाएँ …; label pairs that overlap keep ओवरलैप करती है (no reciprocal pronoun); M
+Ident. % (table column header)																	identity %		hi: as the sibling column Identity (identity kept in English); Hindi has no dotted abbreviation; L
+{rows} rows (auto) (a key that is not a plural pair)																	पंक्तियाँ: {rows}		hi: the count can be 1, so the label stays number-neutral (STYLE 18.5); M
+Does not fit up to <offset> {limit}																	<offset> {limit} तक बढ़ाने पर भी फ़िट नहीं होता		hi: same shape as the row Does not fit down to … (घटाने पर भी); bare तक can read until; M
+{count} <noun> (the exactly-1 text of a count key, with a participle)																	{count} एम्बेड किया गया लेबल / रैखिक आरेख का {count} लेबल		hi: the exactly-1 text takes the singular participle and का; only the plural object's forms take the plural; M
+a Depth file that is already loaded																	डेप्थ फ़ाइल पहले से लोड होने पर		hi: लोड होते हुए says while it is loading; M
