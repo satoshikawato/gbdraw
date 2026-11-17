@@ -1030,6 +1030,14 @@ export const requireLegacyProteinReferencesMigrate = (idMap, ...values) => {
 };
 
 /**
+ * The keys a Generate's Result names (`LosatEvidence.losatNamedKeys`, OV-3785): each search it searched or reused,
+ * every direction and self pair included, and its converted payload (none: '').
+ * @param {readonly { cacheKey: string }[]} pairs @param {string} payloadKey
+ * @returns {ReadonlySet<string>}
+ */
+const namedLosatKeysOf = (pairs, payloadKey) => new Set([...pairs.map(({ cacheKey }) => cacheKey), ...(payloadKey ? [payloadKey] : [])]);
+
+/**
  * The searches and payloads the drawings of the project hold now, read once, when a Generate's first lookup needs them
  * (D-224).
  * @param {() => readonly LosatEvidence[]} projectLosatEvidence
@@ -1931,6 +1939,7 @@ export const createRunAnalysis = ({
     proteinIdentityManifest,
     legacyProteinRawCandidates,
     legacyProteinDerivedEvidence,
+    losatNamedKeys,
     orthogroups,
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
@@ -2963,9 +2972,12 @@ export const createRunAnalysis = ({
     const previousRecordIdentities = previousRequestRecords.length > 0
       ? committedRecordIdentities.get(getCommittedCanonicalSession?.()?.resources ?? {}) ?? null : null;
     // A Circular Generate writes its drawing's rows anew (OV-3201): its rings' searches.
-    /** @type {readonly LosatCacheInfoEntry[]} */
-    let workingLosatCacheInfo = mode.value === 'circular' ? []
-      : committedArtifactHandle?.ownerSet?.losatCacheInfo ?? losatCacheInfo.value;
+    // With them, the searches and payload its Result names (OV-3785): a Linear Generate that reuses the committed
+    // protein result names the same ones.
+    let workingLosatCacheInfo = /** @type {readonly LosatCacheInfoEntry[]} */ (mode.value === 'circular' ? []
+        : committedArtifactHandle?.ownerSet?.losatCacheInfo ?? losatCacheInfo.value),
+      workingLosatNamedKeys = /** @type {ReadonlySet<string>} */ (mode.value === 'circular' ? new Set()
+        : committedArtifactHandle?.ownerSet?.losatNamedKeys ?? losatNamedKeys.value);
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
@@ -3115,7 +3127,10 @@ export const createRunAnalysis = ({
     let legacyPromotionCommitted = false;
     /** @type {((candidateOwnerSet: Record<string, any>) => Record<string, any>) | null} */
     let commitProteinMigration = null;
-    /** @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null } | null} */
+    /**
+     * This Generate's LOSAT evidence, committed with its Result: `namedKeys` are the searches and payload it uses.
+     * @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null, namedKeys: ReadonlySet<string> } | null}
+     */
     let pendingLosatCacheCommit = null;
 
     processingStatus.value = t('Preparing input files...');
@@ -3619,7 +3634,7 @@ export const createRunAnalysis = ({
                 text: blastText
               });
             }
-            pendingLosatCacheCommit = { cacheInfo, cacheMap, derivedCacheMap: null };
+            pendingLosatCacheCommit = { cacheInfo, cacheMap, derivedCacheMap: null, namedKeys: namedLosatKeysOf(losatPairs, '') };
             return resolved;
           };
 
@@ -3902,6 +3917,11 @@ export const createRunAnalysis = ({
         const derivedCacheMap = useProteinBlastp
           ? new Map(losatDerivedCache.value || [])
           : null;
+        // Every search this Generate searches or reuses, and the payload it converts or reuses: its Result names them.
+        const losatPairs = [];
+        const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
+        // The key of the derived payload these raw results convert to (similarity groups and Collinear).
+        let derivedCacheKey = '';
         const losatTiming = useLosat
           ? {
               fastaExtractionMs: 0,
@@ -3952,9 +3972,7 @@ export const createRunAnalysis = ({
             })
           : null;
 
-        if (!hasLosatIntent) {
-          workingLosatCacheInfo = [];
-        }
+        if (!hasLosatIntent) [workingLosatCacheInfo, workingLosatNamedKeys] = [[], new Set()];
 
         /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
@@ -4422,7 +4440,6 @@ export const createRunAnalysis = ({
         // `losatTiming` is built exactly when `useLosat` holds; the second test narrows it for this block.
         if (useLosat && losatTiming) {
           setProcessingStatus(t('Preparing LOSAT jobs...'));
-          const losatPairs = [];
           /** @type {LosatLinearJob[]} */
           const losatJobs = [];
           const pendingJobKeys = new Set();
@@ -4468,7 +4485,6 @@ export const createRunAnalysis = ({
           const pairNumbers = numberLosatDisplayPairs(
             preparedJobs.map(({ spec }) => spec), unitResolution.edges, gridPairs
           );
-          const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
           // The converter settings. The derived key and the converter read these same values.
           const derivedSettings = {
             mode: blastpMode,
@@ -4496,8 +4512,6 @@ export const createRunAnalysis = ({
               .sort((left, right) => left - right);
           /** @type {readonly string[] | null} */
           let proteinCacheKeys = null;
-          // The key of the derived payload these raw results convert to (similarity groups and Collinear).
-          let derivedCacheKey = '';
           if (useProteinBlastp && preparedJobs.length > 0) {
             throwIfGenerationCanceled();
             const derivedRecords = [];
@@ -5037,7 +5051,8 @@ export const createRunAnalysis = ({
               (left, right) => Number(left?.ordinal) - Number(right?.ordinal)
             ),
             cacheMap,
-            derivedCacheMap
+            derivedCacheMap,
+            namedKeys: namedLosatKeysOf(losatPairs, useDerivedProteinPayloadCache ? derivedCacheKey : '')
           };
           recordSessionLifecycleEvent('losat-cache-preparation-end', {
             cacheHits: Number(losatTiming?.cacheHits || 0),
@@ -5379,6 +5394,7 @@ export const createRunAnalysis = ({
         losatDerivedCache:
           pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
         losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+        losatNamedKeys: pendingLosatCacheCommit?.namedKeys || workingLosatNamedKeys,
         lastRunInfo: candidateRunInfo,
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],

@@ -89,7 +89,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'legendCurrentOffset', 'diagramOffset', 'lengthBarUserOffset', 'plotTitleUserOffset',
   'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
   'proteinIdentityManifest', 'losatCache', 'losatDerivedCache', 'losatCacheInfo',
-  'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
+  'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence', 'losatNamedKeys'
 ]);
 
 // Inputs that every drawing shares.

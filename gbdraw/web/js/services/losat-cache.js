@@ -108,7 +108,7 @@ export const losatRowsOnePerKey = (rows) => {
  * A drawing's LOSAT evidence (D-221): artifact values of one drawing, as its Results are. The shown drawing's are in
  * the state, another's in its artifact slot; History steps and a drawing History holds out of the project keep them
  * by reference. A search exists for a drawing exactly while its `losatCache` holds it; no operation counts holders.
- * Writers make new arrays and Maps, never change one in place (a Duplicate and History share them).
+ * Writers make new arrays, Maps and Sets, never change one in place (a Duplicate and History share them).
  * @typedef {object} LosatEvidence
  * @property {readonly LosatCacheInfoEntry[]} losatCacheInfo The listed results; every key is in `losatCache`.
  * @property {ReadonlyMap<string, RawLosatCacheEntry>} losatCache Every raw search the drawing used or keeps for reuse.
@@ -117,6 +117,11 @@ export const losatRowsOnePerKey = (rows) => {
  * @property {ProteinIdentityManifest} proteinIdentityManifest The record instances its protein searches resolve in (D-197).
  * @property {LegacyProteinCandidateEnvelope} legacyProteinRawCandidates The older Session's protein candidates Load gave it.
  * @property {{ schema: number, entries: unknown[] }} legacyProteinDerivedEvidence
+ * @property {ReadonlySet<string>} losatNamedKeys The keys of the searches and the converted payload its current Result
+ *   uses (OV-3785): every search Generate searched or reused for it (rows, reverse directions, self pairs and pairs
+ *   without a row alike) and its payload, or those Load gave it; Clear empties it. Another drawing's Generate reuses
+ *   only these (`projectLosatSearches`); the rest of `losatCache` and `losatDerivedCache` serves this drawing alone.
+ *   Not saved: Load derives it.
  */
 /**
  * @typedef {(drawingId: DrawingId, edit: (rows: readonly LosatCacheInfoEntry[]) => LosatCacheInfoEntry[]) => void} EditLosatRows
@@ -125,7 +130,7 @@ export const losatRowsOnePerKey = (rows) => {
 /** The keys of a drawing's LOSAT evidence, as artifact slot keys. */
 export const LOSAT_EVIDENCE_KEYS = /** @type {const} */ ([
   'losatCacheInfo', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest', 'legacyProteinRawCandidates',
-  'legacyProteinDerivedEvidence'
+  'legacyProteinDerivedEvidence', 'losatNamedKeys'
 ]);
 /**
  * Empty LOSAT evidence of each key, new objects every call: a shared empty Map would let two drawings' values be
@@ -138,7 +143,8 @@ export const LOSAT_EVIDENCE_EMPTY = Object.freeze({
   losatDerivedCache: () => /** @type {Map<string, LosatDerivedCacheEntry>} */ (new Map()),
   proteinIdentityManifest: () => emptyProteinIdentityManifest(),
   legacyProteinRawCandidates: () => createLegacyProteinCandidateEnvelope([]),
-  legacyProteinDerivedEvidence: () => ({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] })
+  legacyProteinDerivedEvidence: () => ({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] }),
+  losatNamedKeys: () => /** @type {Set<string>} */ (new Set())
 });
 /** @returns {LosatEvidence} Fresh empty evidence: what **Clear LOSAT results** leaves in a drawing. */
 export const emptyLosatEvidence = () => ({
@@ -147,22 +153,28 @@ export const emptyLosatEvidence = () => ({
   losatDerivedCache: LOSAT_EVIDENCE_EMPTY.losatDerivedCache(),
   proteinIdentityManifest: LOSAT_EVIDENCE_EMPTY.proteinIdentityManifest(),
   legacyProteinRawCandidates: LOSAT_EVIDENCE_EMPTY.legacyProteinRawCandidates(),
-  legacyProteinDerivedEvidence: LOSAT_EVIDENCE_EMPTY.legacyProteinDerivedEvidence()
+  legacyProteinDerivedEvidence: LOSAT_EVIDENCE_EMPTY.legacyProteinDerivedEvidence(),
+  losatNamedKeys: LOSAT_EVIDENCE_EMPTY.losatNamedKeys()
 });
 /** @param {Partial<LosatEvidence> | null | undefined} values @returns {boolean} Whether a drawing lists LOSAT results. */
 export const listsLosatResults = (values) => Array.isArray(values?.losatCacheInfo) && values.losatCacheInfo.length > 0;
 
 /**
  * The raw searches and converted payloads a Generate may reuse besides its drawing's own: those the drawings of the
- * project hold now (D-224: not a held drawing's, not a History step's). A lookup index that owns nothing; the Generate
- * drops it.
+ * project hold now (D-224: not a held drawing's, not a History step's) and name, that is, their current Results use
+ * (`losatNamedKeys`, OV-3785; PD-OI-022 Revision #2101: a search no other drawing names is gone after Clear). A search
+ * a drawing keeps for its own reuse alone is lent to no other. A lookup index that owns nothing; the Generate drops it.
  * @param {readonly LosatEvidence[]} project Every project drawing's evidence (`projectLosatEvidence`).
  * @returns {{ searches: Map<string, RawLosatCacheEntry>, payloads: Map<string, LosatDerivedCacheEntry> }}
  */
-export const projectLosatSearches = (project) => ({
-  searches: new Map(project.flatMap(({ losatCache }) => [...losatCache])),
-  payloads: new Map(project.flatMap(({ losatDerivedCache }) => [...losatDerivedCache]))
-});
+export const projectLosatSearches = (project) => {
+  /** @template V @param {ReadonlyMap<string, V>} map @param {ReadonlySet<string>} named @returns {[string, V][]} */
+  const namedOf = (map, named) => [...map].filter(([key]) => named.has(key));
+  return {
+    searches: new Map(project.flatMap(({ losatCache, losatNamedKeys }) => namedOf(losatCache, losatNamedKeys))),
+    payloads: new Map(project.flatMap(({ losatDerivedCache, losatNamedKeys }) => namedOf(losatDerivedCache, losatNamedKeys)))
+  };
+};
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw

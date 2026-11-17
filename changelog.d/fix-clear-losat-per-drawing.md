@@ -2,9 +2,11 @@
   clears only the LOSAT results of the drawing you are looking at, and its
   count ("Clear 3 LOSAT results") is the number of results that drawing lists.
   The other drawings keep their results and their **Save Raw LOSAT TSV**. A
-  search another drawing still holds is reused by the cleared drawing's next
-  Generate instead of running LOSAT again; the result is the same. In a project
-  with one drawing, Clear removes every LOSAT result, as before.
+  search another drawing's diagram uses is reused by the cleared drawing's next
+  Generate instead of running LOSAT again; the result is the same. A search
+  that another drawing only keeps from an earlier Generate is not reused, so
+  LOSAT runs it again. In a project with one drawing, Clear removes every LOSAT
+  result, as before.
 - Changed: **Clear LOSAT results** is a step in the drawing's History. **Undo**
   brings back the results it cleared, and **Redo** clears them again. It is
   unavailable while a diagram is being generated, as **Reset Settings** is;

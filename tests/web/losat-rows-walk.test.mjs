@@ -103,14 +103,15 @@ const CATALOG = { items: [{ recordKeys: ['a#1', 'a#2', 'b'], windowOf: { 'a#1': 
 
 /**
  * A Generate of the shown drawing as one History step, as Generate commits (D-221): its rows replace its own, its
- * searches join its own (new Maps; it keeps the searches it did not use until Clear), and a protein Generate writes its
- * manifest and converted payloads.
+ * searches join its own (new Maps; it keeps the searches it did not use until Clear), its Result names the searches
+ * and payloads it uses (a new Set, OV-3785), and a protein Generate writes its manifest and converted payloads.
  * @param {import('../../gbdraw/web/js/services/losat-cache.js').LosatCacheInfoEntry[]} rows
  * @param {{ searches?: ReadonlyMap<string, object>, manifest?: object, derived?: readonly { key: string }[], legacy?: object }} [evidence]
  */
 const generateRows = (rows, { searches = new Map(), manifest, derived = [], legacy } = {}) => window.__GBDRAW_HISTORY__.runUndoableArtifactReplacement('Generate diagram', () => {
   state.losatCache.value = new Map([...state.losatCache.value, ...rows.map((row) => [row.key, { key: row.key }]), ...searches]);
   state.losatCacheInfo.value = rows.map((row) => ({ ...row }));
+  state.losatNamedKeys.value = new Set([...rows.map((row) => row.key), ...searches.keys(), ...derived.map((entry) => entry.key)]);
   if (manifest) state.proteinIdentityManifest.value = manifest;
   if (derived.length) state.losatDerivedCache.value = new Map([...state.losatDerivedCache.value, ...derived.map((entry) => [entry.key, entry])]);
   if (legacy) state.legacyProteinRawCandidates.value = legacy;
@@ -256,6 +257,8 @@ test('Clear LOSAT results is one History step: Undo brings back what it cleared,
       } : {});
       const cleared = shownValues();
       assert.equal(app.losatResultRows.value.length, 2, `${mode}: "Clear 2 LOSAT results"`);
+      // OV-3785: the searches A's Result uses go with Clear and come back, the same Set, with its Undo.
+      assert.deepEqual([...cleared.losatNamedKeys].sort(), (linear ? ['allA', 'k1', 'kS', 'pA'] : ['k1', 'kS']).sort(), mode);
       const undoCount = history.getUndoCount();
       await app.clearLosatCache();
       assert.equal(history.getUndoCount(), undoCount + 1, `${mode}: one History step`);
@@ -528,6 +531,11 @@ test('a drawing\'s LOSAT values follow it through Generate, New, Duplicate, Dele
       assert.deepEqual(unsearched, [], `${where} (a'): ${id}'s rows whose search it does not hold`);
       const keys = rows.map(({ key }) => key);
       assert.equal(new Set(keys).size, keys.length, `${where} (b): ${id} holds one row per key: ${keys}`);
+      // OV-3785: a drawing names its rows' searches and only searches and payloads it holds; Clear names none.
+      const named = values.losatNamedKeys ?? new Set();
+      assert.deepEqual(keys.filter((key) => !named.has(key)), [], `${where} (l): ${id}'s rows it does not name`);
+      assert.deepEqual([...named].filter((key) => !values.losatCache?.has(key) && !values.losatDerivedCache?.has(key)), [],
+        `${where} (l): ${id} names a search it does not hold`);
     }
     const shown = state.activeDrawing();
     const rows = state.losatCacheInfo.value;

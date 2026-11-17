@@ -4297,6 +4297,9 @@ const savedLegacyArtifacts = ({ legacyArtifacts }) => {
  * drawing): it could never list the entry, and holding it would keep it for reuse after the Clear of the drawing that
  * lists it (OV-3769). Only in a file without a drawing of its kind does such an entry stay among the drawing's
  * searches, listed in no drawing (review 2 L1). The older Session's protein candidates go to `legacy.drawingId`.
+ * A drawing names (`losatNamedKeys`, OV-3785) each entry of its own kind it holds, the entries Save wrote for it because
+ * its request names them, listed or not, and its saved converted payloads; it never names an entry of the other kind
+ * (its Result cannot use it), so no other drawing's Generate reuses one.
  * @param {readonly {
  *   drawing: DrawingState, entries: unknown, derived: unknown, manifest: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
  *   ringDrawingId?: DrawingId | null
@@ -4317,10 +4320,10 @@ const loadedLosatEvidenceOf = (sources, { legacy, adoptCurrent = false, listed =
   const legacyEntries = [];
   /** @type {unknown[]} */
   const legacyDerived = [];
-  /** @type {Map<DrawingId, { rows: Map<string, LosatCacheInfoEntry>, cache: Map<string, RawLosatCacheEntry>, derived: Map<string, LosatDerivedCacheEntry> }>} */
+  /** @type {Map<DrawingId, { rows: Map<string, LosatCacheInfoEntry>, cache: Map<string, RawLosatCacheEntry>, derived: Map<string, LosatDerivedCacheEntry>, named: Set<string> }>} */
   const drawings = new Map();
   /** @param {DrawingId} id */
-  const of = (id) => drawings.get(id) ?? drawings.set(id, { rows: new Map(), cache: new Map(), derived: new Map() }).get(id);
+  const of = (id) => drawings.get(id) ?? drawings.set(id, { rows: new Map(), cache: new Map(), derived: new Map(), named: new Set() }).get(id);
   of(legacy.drawingId);
   const fileModes = new Set(sources.map(({ drawing }) => drawing.mode));
   sources.forEach(({ drawing, entries, derived, manifest, places = new Map(), ringDrawingId = null }) => {
@@ -4338,6 +4341,7 @@ const loadedLosatEvidenceOf = (sources, { legacy, adoptCurrent = false, listed =
       if (adoptCurrent) markValidatedWith(value, manifest);
       const holder = /** @type {NonNullable<ReturnType<typeof of>>} */ (of(owner ?? drawing.id));
       holder.cache.set(entry.key, value);
+      if (owner !== null) holder.named.add(entry.key);
       if (entry.display === false || owner === null || holder.rows.has(entry.key)) return;
       holder.rows.set(entry.key, {
         key: entry.key,
@@ -4348,13 +4352,17 @@ const loadedLosatEvidenceOf = (sources, { legacy, adoptCurrent = false, listed =
       });
     });
     const read = readLosatDerivedCache(derived, { adoptCurrent });
-    read.map.forEach((payload, key) => own.derived.set(key, payload));
+    read.map.forEach((payload, key) => {
+      own.derived.set(key, payload);
+      own.named.add(key);
+    });
     legacyDerived.push(...read.legacyEntries);
   });
-  return new Map([...drawings].map(([id, { rows, cache, derived }]) => [id, {
+  return new Map([...drawings].map(([id, { rows, cache, derived, named }]) => [id, {
     losatCacheInfo: listed ? [...rows.values()] : [],
     losatCache: cache,
     losatDerivedCache: derived,
+    losatNamedKeys: named,
     savedManifest: savedManifests.get(id),
     ...(id === legacy.drawingId ? {
       legacyProteinRawCandidates: { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [

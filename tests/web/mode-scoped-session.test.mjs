@@ -763,7 +763,7 @@ const loadKeepingSlots = async (session) => {
 // Each drawing's LOSAT evidence after a Load (D-221): the shown one's from state, any other's from its slot.
 const loadedLosatEvidenceOf = (id, { stashed, opening }) => {
   if (id === state.activeDrawing().id && !opening) {
-    return { losatCacheInfo: state.losatCacheInfo.value, losatCache: state.losatCache.value };
+    return { losatCacheInfo: state.losatCacheInfo.value, losatCache: state.losatCache.value, losatNamedKeys: state.losatNamedKeys.value };
   }
   return [opening, ...stashed].find((entry) => entry?.drawingId === id)?.values ?? emptyLosatEvidence();
 };
@@ -1790,6 +1790,9 @@ test('Load gives no drawing a search of the other kind while the file has a draw
   assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
   assert.deepEqual(['circular', 'linear'].map((id) => [...loadedLosatEvidenceOf(id, outcome).losatCache.keys()]),
     [[ringKey], []], 'each drawing holds the searches of its own kind only');
+  // OV-3785: each drawing names the searches Load gave it of its own kind, which another drawing may reuse.
+  assert.deepEqual(['circular', 'linear'].map((id) => [...loadedLosatEvidenceOf(id, outcome).losatNamedKeys]),
+    [[ringKey], []], 'each drawing names the searches of its own kind it holds');
   const legacy = fixtureSession('two-mode-linear-shown.v48');
   legacy.losatCache.entries.push(ringCacheEntry());
   resetDrawings();
@@ -1982,6 +1985,9 @@ test('Load lists no entry of the other kind in a drawing, by that drawing alone 
     const evidence = loadedLosatEvidenceOf('circular', loaded);
     assert.deepEqual(evidence.losatCacheInfo.map(({ key }) => key), [keys.ring1, keys.ring2, keys.ring3], files);
     assert.equal(evidence.losatCache.has('f'.repeat(64)), held, files);
+    // OV-3785: a held entry of the other kind is named by no drawing (its Result cannot use it), so no other drawing's
+    // Generate reuses it; the entries of its own kind are named.
+    assert.deepEqual([...evidence.losatNamedKeys], [keys.ring1, keys.ring2, keys.ring3], files);
   }
 });
 

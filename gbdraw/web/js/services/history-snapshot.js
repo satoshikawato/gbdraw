@@ -1232,6 +1232,7 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.losatDerivedCache, null)
       ),
       losatCacheInfo: toRaw(getGeneratedArtifactRef(state.losatCacheInfo, null)),
+      losatNamedKeys: toRaw(getGeneratedArtifactRef(state.losatNamedKeys, null)),
       lastRunInfo: toRaw(getGeneratedArtifactRef(state.lastRunInfo, null)),
       pairwiseMatchFactors: toRaw(
         getGeneratedArtifactRef(state.pairwiseMatchFactors, null)
@@ -1880,13 +1881,13 @@ export const createHistorySnapshotService = ({
   };
   const losatEvidence = createLosatEvidenceAccess({
     shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues,
-    // A drawing's six values where its artifact is: the shown drawing's state, a kept slot (every key filled).
+    // A drawing's seven values where its artifact is: the shown drawing's state, a kept slot (every key filled).
     losatEvidenceOf: (drawingId) => {
       const values = readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
       return {
         losatCacheInfo: values.losatCacheInfo, losatCache: values.losatCache, losatDerivedCache: values.losatDerivedCache,
         proteinIdentityManifest: values.proteinIdentityManifest, legacyProteinRawCandidates: values.legacyProteinRawCandidates,
-        legacyProteinDerivedEvidence: values.legacyProteinDerivedEvidence
+        legacyProteinDerivedEvidence: values.legacyProteinDerivedEvidence, losatNamedKeys: values.losatNamedKeys
       };
     }
   });

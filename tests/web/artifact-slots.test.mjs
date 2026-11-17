@@ -44,7 +44,7 @@ const SWAPPED = [
   'similarityAlignmentPlan', 'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'originalSvgStroke',
   // D-221: the drawing's LOSAT evidence (D-197: with the manifest its LOSAT protein rows resolve in).
   'proteinIdentityManifest', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'legacyProteinRawCandidates',
-  'legacyProteinDerivedEvidence'
+  'legacyProteinDerivedEvidence', 'losatNamedKeys'
 ];
 // Draft and project state that sits in today's owner set or beside it.
 const KEPT = [
@@ -79,7 +79,8 @@ const fillCircularArtifact = async () => {
     originalSvgStroke: { color: '#000000', width: 1 },
     proteinIdentityManifest: { schema: 2, proteinSets: {}, recordAnalyses: {}, recordInstances: {} },
     losatCache: new Map([['k', {}]]), losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ key: 'k', edgeKey: 'e' }],
-    legacyProteinRawCandidates: { schema: 1, entries: [] }, legacyProteinDerivedEvidence: { schema: 1, entries: [] }
+    legacyProteinRawCandidates: { schema: 1, entries: [] }, legacyProteinDerivedEvidence: { schema: 1, entries: [] },
+    losatNamedKeys: new Set(['k', 'd'])
   };
   Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
   state.generatedDrawingId.value = modeDrawing(state, 'circular').id; // the displayed artifact is Circular's
@@ -127,7 +128,8 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.deepEqual(state.originalLegendOrder.value, []);
   assert.deepEqual(state.originalLegendColors.value, {});
   // The empty slot's LOSAT evidence is fresh and empty (D-221).
-  assert.deepEqual([state.losatCacheInfo.value, [...state.losatCache.value], [...state.losatDerivedCache.value]], [[], [], []]);
+  assert.deepEqual([state.losatCacheInfo.value, [...state.losatCache.value], [...state.losatDerivedCache.value], [...state.losatNamedKeys.value]],
+    [[], [], [], []]);
   // Draft and project state stays.
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);

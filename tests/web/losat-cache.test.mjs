@@ -1248,7 +1248,8 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
 }
 
 // D-221, D-224: a drawing's LOSAT evidence is its own; Clear leaves fresh empty values, never one object two drawings
-// share; a Generate may reuse the searches and payloads the project's drawings hold now, and only those.
+// share; a Generate may reuse the searches and payloads the project's drawings hold now and name (OV-3785,
+// `losatNamedKeys`: their Results use them), and only those.
 {
   const first = cache.emptyLosatEvidence();
   const second = cache.emptyLosatEvidence();
@@ -1260,11 +1261,20 @@ for (const { left, right, suffix, queryWindow = null, subjectWindow = null, expe
   assert.equal(cache.listsLosatResults(first), false);
   const searchA = { key: 'a' };
   const searchB = { key: 'b' };
+  const kept = { key: 'k' };
   const payload = { key: 'p' };
-  // Each drawing's evidence is whole (review 2 L2): a kept slot carries every key.
+  const keptPayload = { key: 'q' };
+  // Each drawing's evidence is whole (review 2 L2): a kept slot carries every key. A search or payload a drawing keeps
+  // for its own reuse, which its Result does not use (`k`, `q`, D-223), is lent to no other drawing: after Clear in
+  // another drawing it is gone for that drawing (PD-OI-022 Revision #2101). A named key the drawing no longer holds
+  // lends nothing.
   const project = cache.projectLosatSearches([
-    { ...cache.emptyLosatEvidence(), losatCache: new Map([['a', searchA]]), losatDerivedCache: new Map([['p', payload]]) },
-    { ...cache.emptyLosatEvidence(), losatCache: new Map([['b', searchB]]) },
+    {
+      ...cache.emptyLosatEvidence(), losatCache: new Map([['a', searchA], ['k', kept]]),
+      losatDerivedCache: new Map([['p', payload], ['q', keptPayload]]), losatNamedKeys: new Set(['a', 'p', 'gone'])
+    },
+    { ...cache.emptyLosatEvidence(), losatCache: new Map([['b', searchB]]), losatNamedKeys: new Set(['b']) },
+    { ...cache.emptyLosatEvidence(), losatCache: new Map([['k', kept]]) },
     cache.emptyLosatEvidence()
   ]);
   assert.deepEqual([...project.searches], [['a', searchA], ['b', searchB]]);

@@ -2043,7 +2043,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       projectEvidence = [{
         ...emptyLosatEvidence(),
         losatCacheInfo: kept.rows.filter(({ key }) => key !== ownKey),
-        losatCache: new Map([...kept.cache].filter(([key]) => key !== ownKey))
+        losatCache: new Map([...kept.cache].filter(([key]) => key !== ownKey)),
+        // Its Result uses the two (OV-3785: another drawing reuses only those).
+        losatNamedKeys: new Set(ringKeys.filter((key) => key !== ownKey))
       }];
       state.losatCacheInfo.value = [];
       state.losatCache.value = new Map();
@@ -2205,6 +2207,31 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // Flipped (D-224): the Undo puts back the drawing's searches as they were before that Generate, so ring d is
     // searched again; no History step lends its searches to a Generate.
     assert.equal(losatCalls, 2, 'the Generate after the Undo of the Generate that searched ring d searches it again');
+    losatCalls = 0;
+    // OV-3785 (D-263), PD-OI-022 scenario revision 2: Clear LOSAT results invalidates every search no other drawing
+    // names. Another drawing (a Duplicate) that removed ring d and Generated again keeps ring d's search for its own
+    // reuse without listing it (D-223); a drawing that Cleared, then Generates the three rings, reuses the two searches
+    // the other drawing lists and runs LOSAT for ring d. The other drawing's evidence comes from a real Generate; the
+    // harness keeps no slots, so Clear is the fresh empty evidence it leaves, as in the copy case above.
+    await generateRings([0, 1]);
+    assert.equal(losatCalls, 0);
+    assert.deepEqual([state.losatCacheInfo.value.length, state.losatCache.value.has(ringDKey)], [2, true],
+      'the other drawing lists two rings and keeps ring d\'s search unlisted');
+    assert.equal(state.losatNamedKeys.value.has(ringDKey), false, 'its Result does not use ring d');
+    const { emptyLosatEvidence: clearedEvidence } = await import('../../gbdraw/web/js/services/losat-cache.js');
+    const otherDrawing = {
+      ...clearedEvidence(), losatCacheInfo: state.losatCacheInfo.value, losatCache: state.losatCache.value,
+      losatNamedKeys: state.losatNamedKeys.value
+    };
+    projectEvidence = [otherDrawing];
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    state.losatDerivedCache.value = new Map();
+    losatJobKeys.splice(0);
+    await generateRings([0, 1, 2]);
+    assert.deepEqual([losatCalls, losatJobKeys], [1, [ringDKey]],
+      'ring d, which no other drawing names, is searched again after Clear; the two listed rings are reused');
+    projectEvidence = [];
     losatCalls = 0;
 
     // OV-2818: with Show Comparison Rings off, Generate reads no ring file, runs no LOSAT search (the cache is
