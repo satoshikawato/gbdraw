@@ -764,6 +764,8 @@ _RECORD_ROW_LISTS = _RECORD_ROW_VECTORS["rowLists"]
 _RECORD_ORDER_PLACEMENTS = _RECORD_ROW_VECTORS["placements"]
 _RECORD_ORDER_WINDOW_PLACEMENTS = _RECORD_ROW_VECTORS["windowPlacements"]
 _RECORD_ORDER_CIRCULAR_COUNTS = _RECORD_ROW_VECTORS["circularCounts"]
+# The refusals of `resolve_record_row_positions` for a token or the count of tokens, not another error of the same call.
+_PLACEMENT_REFUSAL = r"multi_record_position (entry|selector|must (provide|include))|Invalid record selector|Record index must be"
 
 
 def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -777,7 +779,7 @@ def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatc
 
     for token, row in _RECORD_ROW_TOKENS:
         if row is None:
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError, match=r"multi_record_position entry .* must (use a positive integer row|be in)"):
                 record_placement.parse_record_row_position(token)
         else:
             assert record_placement.parse_record_row_position(token)[1] == row, token
@@ -786,7 +788,7 @@ def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatc
     for case in _RECORD_ROW_LISTS:
         records = [SeqRecord(Seq("A"), id=f"r{index}") for index in range(len(case["tokens"]))]
         if case["order"] is None:
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError, match=r"multi_record_position entry .* must use a positive integer row"):
                 record_placement.resolve_record_row_positions(records, case["tokens"])
         else:
             assert list(record_placement.resolve_record_row_positions(records, case["tokens"])[0]) == case["order"]
@@ -812,7 +814,7 @@ def test_the_web_reads_a_record_order_token_s_record_with_the_renderer_s_rule(mo
         records = [SeqRecord(Seq("A"), id=record_id) for record_id in case["recordIds"]]
         mode = case.get("mode", "linear")
         if case["order"] is None:
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError, match=_PLACEMENT_REFUSAL):
                 record_placement.resolve_record_row_positions(records, case["tokens"], _compatibility=mode)
         else:
             resolved = record_placement.resolve_record_row_positions(records, case["tokens"], _compatibility=mode)
@@ -854,7 +856,7 @@ def test_the_web_places_record_order_windows_and_counts_circular_records_as_the_
         request = LinearDiagramRequest(records=_vector_record_inputs(case),
                                        layout=LinearMultiRecordOptions(multi_record_positions=tuple(case["tokens"])))
         if case["cells"] is None:
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError, match=r"multi_record_position must provide exactly \d+ entry"):
                 build_request_diagram(request)
             continue
         units = build_request_diagram(request).drawing._gbdraw_track_slot_geometry["records"]
@@ -869,7 +871,7 @@ def test_the_web_places_record_order_windows_and_counts_circular_records_as_the_
         request = CircularDiagramRequest(records=_vector_record_inputs(case),
                                          layout=CircularMultiRecordOptions(multi_record_positions=tuple(case["tokens"])))
         if case["refused"]:
-            with pytest.raises(ValidationError):
+            with pytest.raises(ValidationError, match=r"multi_record_position (selector|must include)"):
                 build_request_diagram(request)
         else:
             build_request_diagram(request)
