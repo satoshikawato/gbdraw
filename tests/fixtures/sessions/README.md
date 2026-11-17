@@ -204,7 +204,9 @@ Web Load makes it (`tests/web/mode-split-vectors.test.mjs`); the Python split
 values Session 46 Load gives the pointers the split leaves absent. `loadExpect`
 (node only) replaces an `expect` value where Web Load sends Python the value a
 drawing read rather than the stored one (a carried field, such as `"20"` read
-as `20`); the Python split of the stored draft keeps `expect`. A Session
+as `20`); `loadExpectAbsent` (node only) lists the `expect` pointers that Web Load
+does not send Python (a Python Legend row's copy of its user color, which
+`colorOverrides` holds); the Python split of the stored draft keeps `expect`. A Session
 27–39 case has no `expectedModes`: Web Load reads such a Session's settings from
 its request, which the Python split does not.
 

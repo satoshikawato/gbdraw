@@ -377,7 +377,7 @@ const WRITES = {
     replaceAddedLegendCaptions: (h) => modules.paint.replaceAddedLegendCaptions(h, ['Ligase']),
     renameListedLegendRow: (h, drawing) => modules.paint.renameListedLegendRow(h, drawing.legendEntries.value[1],
       { caption: 'Transfer RNA', originalCaption: 'tRNA' }),
-    recolorLegendRows: (h) => modules.paint.recolorLegendRows(h, ['tRNA'], '#000007'),
+    recolorLegendRows: (h) => modules.paint.recolorLegendRows(h, ['tRNA'], '#000007', []),
     rekeyLegendPaint: (h) => modules.paint.rekeyLegendPaint(h,
       { deletedEntries: [], dormantEntries: [], colorOverrides: {}, strokeOverrides: {}, addedCaptions: [] }),
     retireLegendPaint: (h) => modules.paint.retireLegendPaint(h, new Set(['CDS'])),

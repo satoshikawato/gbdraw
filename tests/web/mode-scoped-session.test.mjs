@@ -90,9 +90,11 @@ test('Session 51 saves each drawing as its own entry and loads it back into that
   modeDrawing(state, 'linear').adv.depth_min = 3;
   modeDrawing(state, 'linear').form.plot_title = 'Linear only';
   // OV-120: a renamed row the last Linear Generate did not draw.
-  // A Legend row holds no `showStroke` since OV-157 (view state, #940).
-  const waiting = { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf', featureIds: [] };
+  // A Legend row holds no `showStroke` since OV-157 (view state, #940). The row is Python's: its user color
+  // lives only in the color override of its key (V-OD22), which hiding its track leaves as it is.
+  const waiting = { caption: 'Coverage', originalCaption: 'depth', featureIds: [] };
   modeDrawing(state, 'linear').dormantLegendEntries.value = [waiting];
+  modeDrawing(state, 'linear').legendColorOverrides.depth = '#7b2cbf';
   const saved = await save('two drawings');
 
   assert.equal(saved.version, SESSION_DRAWINGS_LAYOUT.version);
@@ -116,6 +118,7 @@ test('Session 51 saves each drawing as its own entry and loads it back into that
   assert.equal(views.linear.modes.linear.config.form.separate_strands, createDefaultForm().separate_strands);
   // The waiting row follows the shown rows of its slice, marked `dormant`.
   assert.deepEqual(views.linear.modes.linear.editorState.legend.entries, [{ ...waiting, dormant: true }]);
+  assert.deepEqual(views.linear.modes.linear.editorState.legend.colorOverrides, { depth: '#7b2cbf' });
   assert.deepEqual(views.circular.modes.circular.editorState.legend.entries, []);
   assert.equal(typeof saved.ui.losatExecution, 'object');
   assert.equal(typeof saved.ui.richFeaturePopup, 'boolean');
@@ -139,6 +142,7 @@ test('Session 51 saves each drawing as its own entry and loads it back into that
   assert.equal(modeDrawing(state, 'linear').form.plot_title, 'Linear only');
   assert.notEqual(modeDrawing(state, 'circular').form.plot_title, 'Linear only');
   assert.deepEqual(modeDrawing(state, 'linear').dormantLegendEntries.value, [waiting]);
+  assert.deepEqual({ ...modeDrawing(state, 'linear').legendColorOverrides }, { depth: '#7b2cbf' });
   assert.deepEqual(modeDrawing(state, 'linear').legendEntries.value, []);
   assert.deepEqual(modeDrawing(state, 'circular').dormantLegendEntries.value, []);
 

@@ -45,6 +45,8 @@ import {
 } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
+// The root's reader without a displayed Result or its inventory: a row shows the color it holds.
+const NO_DISPLAYED_RESULT = { svgContent: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} } };
 
 // Session Load (services/config.js) reads the editor state through Vue state.
 globalThis.window = { Vue: {
@@ -860,7 +862,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []),
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []),
     legendRowNames
   });
   reconcileMountedResult(mounted, two);
@@ -896,9 +898,9 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
       displayedResultMetadata: () => null, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
-      activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
+      activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] }, legendColorOverrides: {} })
     },
-    readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []),
+    readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []),
     legendRowNames: { value: new Map() }
   });
   reconcileMountedResult(mounted, two);
@@ -927,8 +929,8 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   reconcileMountedResult(mounted, { ...createEmptySvgMutationPlan(1).operationsByResult[0], legendAdds: [added] });
   const paint = PAINT_SLICE.create();
   PAINT_SLICE.install(paint.handle, { legendEntries: [
-    { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
-    { caption: 'CDS', originalCaption: 'GC content', color: '#aaaaaa' }
+    { caption: 'CDS', originalCaption: 'CDS' },
+    { caption: 'CDS', originalCaption: 'GC content' }
   ] });
   const drawing = { manualSpecificRules: [], ...paint.view, slices: { paint: paint.handle } };
   const strokeOptionsOpen = new Set();
@@ -940,7 +942,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
     activeDrawing: () => drawing,
     sessionOperationAvailability: () => null
   };
-  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({ svgContent: { value: null } }, drawing, []) });
+  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []) });
   const strokes = createLegendStrokeActions({ state });
   assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
   assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);
@@ -952,10 +954,12 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   assert.deepEqual([...strokeOptionsOpen], ['GC content']);
   assert.deepEqual(drawing.legendEntries.value.map((entry) => strokes.isLegendStrokeOptionsOpen(entry)), [false, true]);
   owner.deleteLegendEntry(1);
+  // An old copy of its swatch in the kept row is no color of its (V-OD22).
   drawing.deletedLegendEntries.value[0].color = '#aaaaaa';
   owner.restoreDeletedLegendEntries();
-  assert.deepEqual(drawing.legendEntries.value.map(({ originalCaption, color }) => [originalCaption, color]),
-    [['CDS', '#0000ff'], ['GC content', '#ff0000']], 'a row returns in the color stored under its key');
+  const shown = displayedLegendRowColors(NO_DISPLAYED_RESULT, drawing, []);
+  assert.deepEqual(drawing.legendEntries.value.map((entry) => [entry.originalCaption, Object.hasOwn(entry, 'color'), shown.listed(entry)]),
+    [['CDS', false, '#0000ff'], ['GC content', false, '#ff0000']], 'a row returns in the color stored under its key, which it holds no copy of');
 });
 
 // OV-345: a reconcile says whether it changed the Result, so a display,
@@ -1580,6 +1584,48 @@ test('Load records no Python color for a Legend row named like an Object member'
     .find((row) => row.getAttribute('data-legend-key') === key).querySelector('path').getAttribute('data-gbdraw-base-fill');
   assert.equal(swatchBase('CDS'), '#123456');
   assert.equal(swatchBase('constructor'), null);
+});
+
+// OV-1725: the Legend extraction after Load reads Python's swatch of each
+// row (`originalLegendColors`) from the Result. A Session older than 46 saved
+// its swatches with the Legend colors drawn in and no record: Load records the
+// saved swatch first (`recordSavedEditBases`), so the extraction reads it, and
+// a user-colored row with no saved swatch gets none, never the user's color.
+test('the Legend extraction after Load reads no user color as Python\'s swatch', async () => {
+  const { createLegendEntryActions } = await import('../../gbdraw/web/js/app/legend/entry-actions.js');
+  const { withDrawings } = await import('./helpers/drawing-state.mjs');
+  const content = '<svg><path id="f0001" fill="#aaaaaa"></path><g id="legend"><g id="feature_legend">'
+    + '<g data-legend-key="CDS" transform="translate(0,0)"><path fill="#ff0000"></path><text>CDS</text></g>'
+    + '<g data-legend-key="tRNA" transform="translate(0,20)"><path fill="#ffaa00"></path><text>tRNA</text></g>'
+    + '<g data-legend-key="rRNA" transform="translate(0,40)"><path fill="#7cecd5"></path><text>rRNA</text></g></g></g></svg>';
+  const results = [{ name: 'diagram.svg', content }];
+  const saved = {
+    legendColorOverrides: { CDS: '#ff0000', tRNA: '#ffaa00' }, originalLegendColors: { CDS: '#84b9ec', rRNA: '#7cecd5' }
+  };
+  const plan = createSavedResultPlan(results, admitFeatureCatalog(catalog(), results, { mode: 'linear' }), {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [], legendStrokeOverrides: {},
+    originalLegendOrder: ['CDS', 'tRNA', 'rRNA'], rules: [], mode: 'linear', resultsRecordPythonPaint: false, ...saved
+  });
+  /** The swatches after Load installs `originalColors` and the extraction reads the admitted Result. */
+  const extracted = (originalColors) => {
+    const svg = parseSvgText(content);
+    plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
+    const ref = (value) => ({ value });
+    const state = withDrawings({
+      results: ref(results), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }),
+      displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+      legendEntries: ref([]), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+      originalLegendOrder: ref(['CDS', 'tRNA', 'rRNA']), originalLegendColors: ref({ ...originalColors }),
+      legendStrokeOverrides: {}, legendColorOverrides: { ...saved.legendColorOverrides }, manualSpecificRules: [],
+      skipCaptureBaseConfig: ref(false), svgContent: ref(null)
+    });
+    createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors(state, drawing, []) })
+      .extractLegendEntries({ replaceGeneratedInventory: true });
+    return state.originalLegendColors.value;
+  };
+  assert.deepEqual(extracted(saved.originalLegendColors), { CDS: '#84b9ec', rRNA: '#7cecd5' });
+  // Shown with no swatch installed (a drawing whose colors are not loaded yet), the drawn-in edits are still no swatch.
+  assert.deepEqual(extracted({}), { CDS: '#84b9ec', rRNA: '#7cecd5' });
 });
 
 // Python's paint is recorded only for a Session older than 46: a Session 46

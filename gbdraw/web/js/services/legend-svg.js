@@ -3,12 +3,58 @@ import { parseTransform } from './svg-transform.js';
 import { drawnBlockStrokeElement } from './feature-dom.js';
 import { legendSwatch, sameLegendLine } from './legend-row-names.js';
 /** @import { DrawnLegendName, LegendRowName, LegendSwatchIdentity } from './legend-row-names.js' */
+/** @import { UserLegendColor } from './drawing/paint.js' */
 import { LEGEND_ORDER_RECORD, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { LEGEND_MERGED_ROW } from './result-records.generated.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { legendCaptionRuns } from './legend-layout.js';
 
 export { parseTransform };
+
+// The rules of a Legend row's color that the Legend owner, its readers and
+// Load share (OV-282, D-26, V-OD22). They read and build values only, so they
+// live outside the paint slice (services/drawing/paint.js), whose exports
+// write a drawing.
+
+// The own color a row of key `key` shows (OV-282, D-26): the user's Legend
+// color of its key, else, for an editor row, its own `color`; a row of
+// Python's (`python`) has no other, since the Result owns its swatch. The
+// readers' rule; '' when it has none.
+/**
+ * @param {PythonLegendKey} key
+ * @param {{ python: boolean, overrides: Readonly<Record<string, string>>, color?: unknown }} row
+ * @returns {UserLegendColor | ''}
+ */
+export const ownLegendColor = (key, { python, overrides, color }) => {
+  const own = Object.hasOwn(overrides, key) ? overrides[key] : python ? '' : color;
+  // A color a user or an editor row owns is a user color (the cast).
+  return typeof own === 'string' ? /** @type {UserLegendColor | ''} */ (own.trim()) : '';
+};
+
+// The color a row record of key `key` holds (V-OD22): an editor row's own
+// color (`ownLegendColor`); a row of Python's none, since its user color has
+// one owner, `legendColorOverrides`. The one rule of the writers of a row's
+// color and of Load; '' when it holds none.
+/**
+ * @param {PythonLegendKey} key
+ * @param {{ python: boolean, overrides: Readonly<Record<string, string>>, color?: unknown }} row
+ * @returns {UserLegendColor | ''}
+ */
+export const recordedLegendColor = (key, row) => (row.python ? '' : ownLegendColor(key, row));
+
+/**
+ * `entry` holding the color `recordedLegendColor` gives it, and no `color` field when it holds none.
+ * @template {{ readonly color?: unknown }} T
+ * @param {T} entry
+ * @param {PythonLegendKey} key
+ * @param {{ python: boolean, overrides: Readonly<Record<string, string>> }} row
+ * @returns {Omit<T, 'color'> & { color?: UserLegendColor }}
+ */
+export const withOwnLegendColor = (entry, key, { python, overrides }) => {
+  const { color, ...rest } = entry;
+  const own = recordedLegendColor(key, { python, overrides, color });
+  return own ? { ...rest, color: own } : rest;
+};
 
 /**
  * @param {Element | null | undefined} parent
@@ -598,6 +644,7 @@ export const legendEntryAnchor = (entryGroup) => {
  * @property {boolean} shown The row shows.
  * @property {boolean} merged The naming pass hides it: an earlier row has its name and its swatch (D-28).
  * @property {SwatchColor} color The fill its swatch shows.
+ * @property {SwatchColor | null} pythonColor The fill Python drew on its swatch (`pythonLegendRow`).
  * @property {number} xPos
  * @property {number} yPos
  */
@@ -627,6 +674,7 @@ export const resultLegendRows = (svg) => {
       shown: legendRowShown(row),
       merged: row.hasAttribute(LEGEND_MERGED_ROW),
       color: /** @type {SwatchColor} */ (getLegendEntrySwatch(row)?.getAttribute('fill') || '#cccccc'),
+      pythonColor: pythonLegendRow(row).color,
       xPos: anchor.x,
       yPos: anchor.y
     }];

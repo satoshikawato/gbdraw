@@ -60,6 +60,8 @@ setLegacySessionUpgrader(async (operation, request) => {
   return reply;
 });
 const { normalizePaletteDefinitions } = await import('../../gbdraw/web/js/utils/color-utils.js');
+const { ownLegendColor } = await import('../../gbdraw/web/js/services/legend-svg.js');
+const { legendEntryKey } = await import('../../gbdraw/web/js/services/drawing/paint.js');
 
 const REPO = new URL('../../', import.meta.url);
 // The Worker's typed override check, run by Python (as session-cli-compatibility does).
@@ -186,8 +188,8 @@ const expectMismatches = (vector, view, keep = () => true, expected = vector.exp
     return actual !== ABSENT && canonical(actual) === canonical(expected) ? [] : [`${pointer}: expected ${
       canonical(expected).slice(0, 200)}, got ${actual === ABSENT ? '<absent>' : canonical(actual).slice(0, 200)}`];
   });
-/** The `expectAbsent` pointers that `view` holds (all, or those `keep` keeps). */
-const absentMismatches = (vector, view, keep = () => true) => (vector.expectAbsent || []).filter(keep)
+/** The `absent` pointers (default: the case's `expectAbsent`) that `view` holds (all, or those `keep` keeps). */
+const absentMismatches = (vector, view, keep = () => true, absent = vector.expectAbsent || []) => absent.filter(keep)
   .filter((pointer) => resolve(view, pointer) !== ABSENT)
   .map((pointer) => `${pointer}: expected absent, got ${canonical(resolve(view, pointer)).slice(0, 200)}`);
 /** The `loadDefaults` that Load's drawings (`loaded`, as Save writes them) do not hold. */
@@ -203,10 +205,18 @@ const isModePointer = (pointer) => pointer.startsWith('/modes/');
  * The `expect` values of a whole-Session case as Web Load sends them to
  * Python: Load's first pass carries a field each drawing reads differently
  * from the stored draft as the read value (D-15-148 (A)), so `loadExpect`
- * holds the read value for such a carried field (e.g. "20" read as 20). The
- * pytest vector converts the stored draft and keeps `expect`.
+ * holds the read value for such a carried field (e.g. "20" read as 20), and
+ * `loadExpectAbsent` the pointers of a stored value the first pass does not
+ * send (a copy of a value another owner holds). The pytest vector converts
+ * the stored draft and keeps `expect`. Returns the values (`expect`) and the
+ * absent pointers (`absent`).
  */
-const loadExpectOf = (vector) => ({ ...(vector.expect || {}), ...(vector.loadExpect || {}) });
+const loadExpectOf = (vector) => {
+  const absent = vector.loadExpectAbsent || [];
+  const expect = Object.entries({ ...(vector.expect || {}), ...(vector.loadExpect || {}) })
+    .filter(([pointer]) => !absent.includes(pointer));
+  return { expect: Object.fromEntries(expect), absent };
+};
 
 // `loadExpect` of F1: Load reads the retired spelling "either" as "strand" (OV-2301). Only that
 // spelling moves: a stored value is never replaced by today's default.
@@ -220,19 +230,47 @@ test('Load keeps a stored Collinear setting that differs from today\'s default',
   }
 });
 
+// `loadExpectAbsent` of F1: the CDS row is Python's, so the first pass sends Python its user color only in
+// `colorOverrides` (V-OD22), and the Legend shows it from there.
+test('Load shows a Session 44 user color of a row of Python\'s from its color override', async () => {
+  const session = readFixture('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  const { convertedModes } = await loadedOf({ input: session });
+  assert.deepEqual(convertedModes.linear.editorState.legend.colorOverrides, { CDS: '#112233' });
+  const drawing = modeDrawing(state, 'linear');
+  const cds = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === 'CDS');
+  assert.ok(cds && !Object.hasOwn(cds, 'color'));
+  assert.equal(ownLegendColor('CDS', { python: true, overrides: drawing.legendColorOverrides, color: cds.color }), '#112233');
+});
+
+// Web Load moves a Session 44's Legend edits to row keys before Python converts the file, and Python's
+// conversion moves them again from the rows it finds by color (`legend_edits_by_row_key`): a row of
+// Python's sent with no color is no row there, so an edit already under its row key stays (OV-1827).
+test('Load keeps each renamed row\'s Session 44 Legend color on its row', async () => {
+  const session = readFixture('tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz');
+  const { legend } = session.editorState;
+  // The CDS row shows "tRNA_RENAMED" and the tRNA_RENAMED row "Z"; Session 44 stored the edits by caption.
+  legend.entries[0] = { ...legend.entries[0], caption: 'tRNA_RENAMED', originalCaption: 'CDS' };
+  legend.entries[2] = { ...legend.entries[2], caption: 'Z', originalCaption: 'tRNA_RENAMED' };
+  legend.colorOverrides = { tRNA_RENAMED: '#ff0000', Z: '#0000ff' };
+  await loadedOf({ input: session });
+  assert.deepEqual({ ...modeDrawing(state, 'linear').legendColorOverrides }, { CDS: '#ff0000', tRNA_RENAMED: '#0000ff' });
+});
+
 for (const vector of VECTORS.cases) {
   const wholeSession = Boolean(vector.fixture) || vector.input?.format === 'gbdraw-session';
   test(vector.name, async () => {
     if (wholeSession) {
       // Load's drawings against Python's conversion of the same Session.
       const { converted, convertedModes, modes } = await loadedOf(vector);
+      const sent = loadExpectOf(vector);
+      /** @param {string} pointer */
+      const inConvertedMode = (pointer) => isModePointer(pointer) && Object.hasOwn(convertedModes, pointer.split('/')[2]);
       const mismatches = [
         // The values the split moves into each mode, in Python's drawing of
         // that mode. A one-mode Session composes to one drawing (DESIGN 3.2):
         // the split's slice of the other mode is pinned in Python only.
-        ...expectMismatches(vector, { modes: convertedModes },
-          (pointer) => isModePointer(pointer) && Object.hasOwn(convertedModes, pointer.split('/')[2]),
-          loadExpectOf(vector)),
+        ...expectMismatches(vector, { modes: convertedModes }, inConvertedMode, sent.expect),
+        ...absentMismatches(vector, { modes: convertedModes }, inConvertedMode, sent.absent),
         // The flat draft does not outlive the conversion.
         ...absentMismatches(vector, converted, (pointer) => !isModePointer(pointer)),
         // Load fills what the split left absent.

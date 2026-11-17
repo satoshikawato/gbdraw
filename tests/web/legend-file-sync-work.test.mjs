@@ -97,11 +97,12 @@ const setup = () => {
   const svg = new Node('svg', { 'data-gbdraw-composition-schema': '1' }, [new Node('g', { id: 'features' }, features), legend]);
   const state = withDrawings({
     results: ref([{ content: '<svg/>' }]), svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }),
-    originalLegendOrder: ref(['CDS', 'Rule A']), originalLegendColors: ref({ CDS: '#111111' }),
+    // Python's rows hold no color: their swatches are the Result's (OV-282).
+    originalLegendOrder: ref(['CDS', 'Rule A']), originalLegendColors: ref({ CDS: '#111111', 'Rule A': '#222222' }),
     originalSvgStroke: ref({ color: null, width: null }),
     legendEntries: ref([
-      { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: [] },
-      { caption: 'Rule A', originalCaption: 'Rule A', color: '#222222', featureIds: [] }
+      { caption: 'CDS', originalCaption: 'CDS', featureIds: [] },
+      { caption: 'Rule A', originalCaption: 'Rule A', featureIds: [] }
     ]), dormantLegendEntries: ref([]), deletedLegendEntries: ref([]),
     legendColorOverrides: {}, legendStrokeOverrides: {}, svgContent: ref(null)
   });
@@ -121,6 +122,16 @@ const setup = () => {
 const intent = (caption, color) => ({ caption, color });
 
 const listed = (state) => state.activeDrawing().legendEntries.value.map(({ caption, color }) => [caption, color]);
+// The color each listed row shows once the commit's caller writes the rules of `intents` (`displayedLegendRowColors`),
+// as the one compile and Generate draw it: a rule's row the rule's color, CDS Python's swatch.
+const shown = (state, intents) => {
+  Object.assign(state, {
+    manualSpecificRules: intents.map(({ caption, color }) => ({ feat: 'CDS', qual: 'gene', val: caption, color, cap: caption })),
+    extractedFeatures: ref(intents.map(({ caption }) => ({ type: 'CDS', svg_id: caption, qualifiers: { gene: [caption] } })))
+  });
+  const colors = displayedLegendRowColors({ ...state, svgContent: ref('<svg/>'), displayedResultMetadata: () => null }, state.activeDrawing(), []);
+  return state.activeDrawing().legendEntries.value.map((entry) => [entry.caption, colors.listed(entry)]);
+};
 const fills = (svg) => svg.getElementById('legend').querySelectorAll('g[data-legend-key]')
   .map((entry) => [entry.getAttribute('data-legend-key'), entry.querySelector('path').getAttribute('fill')]);
 
@@ -136,7 +147,8 @@ test('a rule commit that leaves the Legend as it is copies no node and serialize
   assert.equal(legend.apply(), null, 'no Legend row to show');
   assert.deepEqual(work, { commits: 0, layouts: 0 });
   assert.equal(svg.getElementById('legend'), before);
-  assert.deepEqual(listed(state), [['CDS', '#111111'], ['Rule A', '#222222']]);
+  assert.deepEqual(listed(state), [['CDS', undefined], ['Rule A', undefined]]);
+  assert.deepEqual(shown(state, [intent('Rule A', '#222222')]), [['CDS', '#111111'], ['Rule A', '#222222']]);
 });
 
 test('a rule commit that changes a Legend row writes its intent and leaves the show to the one compile', async () => {
@@ -150,7 +162,9 @@ test('a rule commit that changes a Legend row writes its intent and leaves the s
   // A color change is a `legendFills` operation of the rule commit's one show.
   assert.equal(legend.apply(), null);
   assert.deepEqual(work, { commits: 0, layouts: 0 });
-  assert.deepEqual(listed(state), [['CDS', '#111111'], ['Rule A', '#333333']]);
+  // The row of Python's holds no color; it shows its rule's new color (OV-282).
+  assert.deepEqual(listed(state), [['CDS', undefined], ['Rule A', undefined]]);
+  assert.deepEqual(shown(state, [intent('Rule A', '#333333')]), [['CDS', '#111111'], ['Rule A', '#333333']]);
   assert.deepEqual(fills(svg), [['CDS', '#111111'], ['Rule A', '#222222']], 'apply writes no node');
   assert.equal(svg.querySelectorAll('path').length, FEATURES + 2);
 });
@@ -164,6 +178,9 @@ test('a rule commit that adds a Legend row returns it for the one show and seria
   assert.equal(cloned, 0, `${cloned} nodes copied`);
   assert.deepEqual(legend.apply(), { add: [{ caption: 'Rule B', color: '#444444' }], retire: [] });
   assert.deepEqual(work, { commits: 0, layouts: 0 });
-  assert.deepEqual(listed(state), [['CDS', '#111111'], ['Rule A', '#222222'], ['Rule B', '#444444']]);
+  // The added row is the editor's until a Generate draws it: it holds its rules' color.
+  assert.deepEqual(listed(state), [['CDS', undefined], ['Rule A', undefined], ['Rule B', '#444444']]);
+  assert.deepEqual(shown(state, [intent('Rule A', '#222222'), intent('Rule B', '#444444')]),
+    [['CDS', '#111111'], ['Rule A', '#222222'], ['Rule B', '#444444']]);
   assert.deepEqual(fills(svg), [['CDS', '#111111'], ['Rule A', '#222222']], 'apply writes no node');
 });

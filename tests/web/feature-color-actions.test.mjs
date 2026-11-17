@@ -1024,7 +1024,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         clickedFeature: ref(clicked), featureStyleScopeDialog: scopeDialog, resetColorDialog: {}, legendRenameDialog,
         legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), dormantLegendEntries: ref([]),
         legendStrokeOverrides: {}, legendColorOverrides,
-        originalLegendOrder: originalOrder, originalLegendColors: ref({}),
+        // Python's swatch of each of its rows is the Result's (OV-282): the fixture's colors of the rows of `order`.
+        originalLegendOrder: originalOrder, originalLegendColors: ref(Object.fromEntries([...stateLegendEntries.value, ...deleted]
+          .map((entry) => [entry.originalCaption || entry.caption, entry.color]).filter(([key, color]) => order.includes(key) && color))),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
         addedLegendCaptions: ref(new Set()), errorLog,
         svgContent: { get value() { derivations.count += 1; return null; } }

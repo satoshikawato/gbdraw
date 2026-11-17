@@ -349,8 +349,9 @@ export const readLegendEditLeaves = (renderRequest) => {
 };
 
 /**
- * A Legend row as a Session's `editorState.legend` lists it.
- * @typedef {{ caption: string, originalCaption: PythonLegendKey, color: string, xPos: number, yPos: number, featureIds: string[] }} LeafLegendEntry
+ * A row of Python's as a Session's `editorState.legend` lists it: no color, since the Result owns its
+ * swatch (`LegendEntry` of services/drawing/paint.js, OV-282).
+ * @typedef {{ caption: string, originalCaption: PythonLegendKey, xPos: number, yPos: number, featureIds: string[] }} LeafLegendEntry
  */
 
 /**
@@ -358,7 +359,7 @@ export const readLegendEditLeaves = (renderRequest) => {
  * leaves (a CLI or Python Session): the Legend lists (`editorState.legend`: the rows Python shows, in their order,
  * with their names; the hidden rows; Python's order of its rows) when a Legend leaf is set and the shown Result has
  * a Legend, and the padding (`ui.canvasPadding`) when it is set. Python drew the leaves into the Result, so the
- * rows, swatches, and order are read from it, and the names and hidden rows from the leaves.
+ * rows and order are read from it, and the names and hidden rows from the leaves.
  * @typedef {object} LeafEditorState
  * @property {{ entries: LeafLegendEntry[], deletedEntries: LeafLegendEntry[], originalOrder: PythonLegendKey[] } | null} legend
  * @property {CanvasPadding | null} canvasPadding
@@ -382,7 +383,7 @@ export const editorStateOfLegendEditLeaves = (leaves, svg) => {
   const hiddenKeys = new Set(hidden);
   /** @param {typeof rows[number]} row @returns {LeafLegendEntry} */
   const entryOf = (row) => ({
-    caption: names.get(row.key) ?? row.key, originalCaption: row.key, color: row.color, xPos: row.xPos, yPos: row.yPos, featureIds: []
+    caption: names.get(row.key) ?? row.key, originalCaption: row.key, xPos: row.xPos, yPos: row.yPos, featureIds: []
   });
   const rowOf = new Map(rows.map((row) => [row.key, row]));
   return {

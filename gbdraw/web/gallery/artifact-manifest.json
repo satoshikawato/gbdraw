@@ -67,12 +67,12 @@
       "sha256": "2e2d2a03c166f3e1cbd4bd614b4317838e4c6d1fc02bab2239dd1363ad84c8e1"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw": {
-      "bytes": 484238,
-      "sha256": "756a48f26f6fcc0c4ddb4ecbfd4f0c85b00bcaeeba0734c919ac64d21e95f415"
+      "bytes": 484249,
+      "sha256": "8c3c785add1e61361b1d27de41aee0cb6a5ea26d1099e7df0bcca9e6daa146e9"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw": {
-      "bytes": 48694,
-      "sha256": "7e90c55d250c754f32caa1b74af9467a2949bc5f8cabd01024edc9a847b80e86"
+      "bytes": 48650,
+      "sha256": "119833aa3358dec7e2f1d93946d03b18ae3bd7b0d6bf91dbbbe2cbc30dd821be"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw": {
       "bytes": 45552,
@@ -83,16 +83,16 @@
       "sha256": "16b8ac9965b0bd602a52e2292c463cb54165e5448fb31805ae7ea2b8be2ae9d3"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw": {
-      "bytes": 12319971,
-      "sha256": "fe7903e9f12a3789bed041b460f5055022d1ab5aa15de982fbf75552cbebbb40"
+      "bytes": 12319932,
+      "sha256": "00aa82bde2ed4a6c22bf222d8e24e3d2e93b6df48856f75b80a119296917b0a4"
     },
     "gallery/sessions/hepatoplasma_scabrum_depth.gbdraw": {
-      "bytes": 719610,
-      "sha256": "e5bff88161946b4b6f7252a0d726132ff5ca13f699ffa8d684e15294a8c552c3"
+      "bytes": 719573,
+      "sha256": "3b3ed1e9833da2cab349240d13aea32a783f5ba9c7784d9076bc7c1d279dbe98"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw": {
-      "bytes": 8923978,
-      "sha256": "65f1eecb722bb4e82818921227dc5fac0153a0535f645fc920fdf1c2b93310e9"
+      "bytes": 8923934,
+      "sha256": "ef7c834a86757317440df4faf2e54233fa43242a32edec4b9e1a60d219e2d912"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw": {
       "bytes": 12026047,
@@ -103,8 +103,8 @@
       "sha256": "2b92f22483de824cead476fb7f38bf2d1ed389074fbbcb1693ae38f2974def63"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw": {
-      "bytes": 4827081,
-      "sha256": "a5eac7e1a7d1fb7e7bc5f533e654f5fc12672f85b27b883e2d005e4a21463c4b"
+      "bytes": 4827062,
+      "sha256": "458a81073488f4d00de4949f266edcde40842525d1aaaa06f4ec92e6df56caa1"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw": {
       "bytes": 189856,
