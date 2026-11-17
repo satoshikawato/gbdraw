@@ -40,6 +40,14 @@
 // 'default': that drawing's Session does not hold it, and its Load gives the
 // mode's default. tests/web/drawing-member-paths.test.mjs runs both.
 //
+// A member that no Session holds, which Save writes into other members
+// instead (the records a File card names of its file, `recordsNamed`, which
+// Save places into the records OFF), declares `drawn(drawing)`: what the
+// drawing draws of it. Save then Load gives the member a new drawing's value
+// and keeps `drawn`; every other path keeps the member itself. A slice's own
+// Save then Load (tests/web/drawing-slices.test.mjs, `sliceSample`) compares
+// members, so there the member keeps the drawing's value.
+//
 // Import this module after the test has set up `window`.
 import { DRAWING_SLICES } from './drawing-state.mjs';
 import { normalizeAnnotationSets } from '../../../gbdraw/web/js/services/annotation-state.js';
@@ -48,7 +56,8 @@ import { normalizeSpecificRule } from '../../../gbdraw/web/js/services/specific-
 import { normalizePaletteColors } from '../../../gbdraw/web/js/utils/color-utils.js';
 import { createCircularSource, createLinearSeq } from '../../../gbdraw/web/js/services/drawing/inputs.js';
 import { queuePalette } from '../../../gbdraw/web/js/services/drawing/palette.js';
-import { expandedRecordKey } from '../../../gbdraw/web/js/services/record-draw-selection.js';
+import { circularRecordsOff, expandedRecordKey } from '../../../gbdraw/web/js/services/record-draw-selection.js';
+import { circularRecordEntries } from '../../../gbdraw/web/js/services/record-options.js';
 import { defaultSettingsContainers, installStoredSettings, readLinearComparisonPlan, resolvedTrackStacks } from '../../../gbdraw/web/js/services/config-field-readers.js';
 import { createDefaultLayoutPreferences, normalizeLayoutPreferences } from '../../../gbdraw/web/js/services/layout-preferences.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../../../gbdraw/web/js/contracts/request-shape.generated.js';
@@ -74,6 +83,12 @@ import { LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, createLinearCompari
  * @property {readonly Mode[]} [modes]
  * @property {'default'} [otherModeLoad]
  * @property {boolean} [byContext]
+ * @property {(drawing: DrawingState) => DrawnRecords} [drawn]
+ */
+/**
+ * What a Circular drawing draws of its records: the records it leaves OFF
+ * (`circularRecordsOff`, over its read records) and its Record Order rows.
+ * @typedef {{ recordsOff: string[], recordOrder: unknown }} DrawnRecords
  */
 
 // The slice that holds `member`, and the member's current value in `drawing`.
@@ -229,11 +244,23 @@ const OTHER_LEAF_CHOICES = {
     }
   }
 };
+/** The key of `table` whose choices a leaf of `member` at `path` takes. @param {Record<string, object>} table @param {string} member @param {string[]} path */
+const choiceKeyAt = (table, member, path) => Object.keys(table[member] ?? {}).find((name) => {
+  const parts = name.split('.');
+  return parts.length === path.length && parts.every((part, index) => part === '*' || part === path[index]);
+});
+/**
+ * Every key of the choice tables, as `<member> <key>`, and the keys a leaf of
+ * `member` at `path` takes: a key no leaf takes in either mode names a leaf
+ * the member no longer has (tests/web/drawing-member-paths.test.mjs).
+ */
+export const LEAF_CHOICE_KEYS = Object.freeze([APP_LEAF_CHOICES, OTHER_LEAF_CHOICES]
+  .flatMap((table) => Object.entries(table).flatMap(([member, keys]) => Object.keys(keys).map((key) => `${member} ${key}`))));
+/** @param {string} member @param {string[]} path @returns {string[]} */
+export const leafChoiceKeysAt = (member, path) => [APP_LEAF_CHOICES, OTHER_LEAF_CHOICES]
+  .map((table) => choiceKeyAt(table, member, path)).filter((key) => key !== undefined).map((key) => `${member} ${key}`);
 const choicesAt = (table, member, path, leaf, drawing) => {
-  const key = Object.keys(table[member] ?? {}).find((name) => {
-    const parts = name.split('.');
-    return parts.length === path.length && parts.every((part, index) => part === '*' || part === path[index]);
-  });
+  const key = choiceKeyAt(table, member, path);
   const choices = key === undefined ? [] : table[member][key];
   return typeof choices === 'function' ? choices(leaf, drawing) : [...choices];
 };
@@ -436,6 +463,19 @@ export const MEMBER_SAMPLES = {
   // card's record key (a flat `#N` is the form of a Session 46-50, OV-2869).
   recordsOff: { needs: ['records'], value: (mode, drawing) => boundUids(drawing, mode).slice(0, 1)
     .map((uid) => (mode === 'linear' ? uid : expandedRecordKey(uid, 2))) },
+  // The first record of the first card's file, named as the request a Load
+  // or a copy installs names it (its request key and selector, OV-3530): the
+  // card draws that record alone. The card is read, as after an Undo across
+  // the read that placed the named records (`circularRecordsOff`); Save
+  // places them into the records OFF (`placeSavedNamedRecords`, config.js).
+  recordsNamed: { modes: ['circular'], otherModeLoad: 'default', needs: ['records'],
+    value: (mode, drawing) => boundUids(drawing, mode).slice(0, 1).map((uid) => ({
+      uid, named: [{ recordKey: 'record-1', selector: { kind: 'recordIndex', index: 0 } }]
+    })),
+    drawn: (drawing) => ({
+      recordsOff: circularRecordsOff(drawing, circularRecordEntries(drawing.circularRecordList.value)),
+      recordOrder: captureMember(drawing, 'adv').multi_record_positions
+    }) },
   // A configuration path the Python evaluator accepts.
   unmanagedConfigOverrides: { value: () => ({ 'objects.gc_content.percent_background_opacity': 0.42 }) },
   // The answer to a saved comparison, which only the drawing of a Linear
@@ -480,12 +520,12 @@ export const DRAWING_NEEDS = Object.freeze(['records', 'rings', 'rows']);
 // A slice's sample: the merge of its members' samples, after their contexts
 // (`prepare`). A member keeps the drawing's value when its sample needs a
 // fixture's Result, or bound records the drawing does not have, when only an
-// action writes it, or when a Session of `mode` does not hold it
-// (`otherModeLoad`).
+// action writes it, when a Session of `mode` does not hold it
+// (`otherModeLoad`), or when Save writes it into other members (`drawn`).
 export const sliceSample = (name, mode, drawing, context) => Object.fromEntries(DRAWING_SLICES[name].members.map((member) => {
   const sample = MEMBER_SAMPLES[member];
   const needs = sample.needs ?? [];
-  const kept = sample.byContext || needs.some((need) => !DRAWING_NEEDS.includes(need))
+  const kept = sample.byContext || Boolean(sample.drawn) || needs.some((need) => !DRAWING_NEEDS.includes(need))
     || (needs.includes('records') && boundUids(drawing, mode).length === 0)
     || (!(sample.modes ?? ['circular', 'linear']).includes(mode) && sample.otherModeLoad === 'default');
   if (!kept) sample.prepare?.(drawing);
