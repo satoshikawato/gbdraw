@@ -2,6 +2,7 @@
 /** @import { SvgMutationOperations, SvgResultEntry } from '../services/svg-result-ingestion.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
+  admitResultCopies,
   reconcileMountedResult,
   getCommittedSvgResultLineage,
   getCommittedSvgResultMetadata,
@@ -1170,6 +1171,8 @@ export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { val
     commitActiveResultEdit,
     commitResultEdit,
     configureMountedResultBinder,
+    // Duplicate (OV-3732): the copy's Results, each a Result of its own.
+    copyResults: admitResultCopies,
     createMountedResultContext,
     currentResults,
     getActiveRuntime,

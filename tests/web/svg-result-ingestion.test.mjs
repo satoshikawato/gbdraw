@@ -20,6 +20,7 @@ import { normalizeLogicalResults } from '../../gbdraw/web/js/services/result-nor
 import {
   admitCurrentGeneratedResults,
   admitCurrentSessionResults,
+  admitResultCopies,
   admitLegacyImportedResults,
   createCurrentSessionResultSource,
   createEmptySvgMutationPlan,
@@ -29,7 +30,9 @@ import {
   getCommittedSvgResultLineage,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
+  getCommittedSvgResultRuntimeKey,
   isCommittedSvgResult,
+  isCommittedSvgResultMounted,
   markCommittedSvgResultMounted,
   markCommittedSvgResultUnmounted,
   reconcileMountedResult
@@ -510,6 +513,33 @@ test('a Result drawn again continues the line of the Result it replaces under a 
   assert.equal(getCommittedSvgResultLineage(again), getCommittedSvgResultLineage(first));
   assert.equal(getCommittedSvgResultLineage(fresh), getCommittedSvgResultRuntimeIdentity(fresh));
   assert.notEqual(getCommittedSvgResultLineage(fresh), getCommittedSvgResultLineage(first));
+});
+
+// OV-3732: Duplicate gives the copy of a drawing copies of its Results, each
+// a Result of its own (identity, line, mount state), with the same text and
+// admission facts.
+test('a copied Result is a Result of its own with its source\'s text and facts', () => {
+  const { response, admission } = currentFixture();
+  const [source] = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission, mutationPlan: createEmptySvgMutationPlan(1), sanitizer: sanitizer({ calls: 0 }), parser: FakeDomParser
+  });
+  markCommittedSvgResultMounted(source);
+  const loose = { name: 'loose.svg', content: '<svg/>' };
+  const [copy, looseCopy] = admitResultCopies([source, loose]);
+  assert.notEqual(copy, source);
+  assert.equal(isCommittedSvgResult(copy), true);
+  assert.equal(copy.content, source.content);
+  assert.equal(getCommittedSvgContent(copy), getCommittedSvgContent(source));
+  assert.equal(getCommittedSvgResultMetadata(copy), getCommittedSvgResultMetadata(source), 'the admission facts are shared');
+  assert.notEqual(getCommittedSvgResultRuntimeKey(copy), getCommittedSvgResultRuntimeKey(source), 'a runtime state of its own');
+  assert.notEqual(getCommittedSvgResultRuntimeIdentity(copy), getCommittedSvgResultRuntimeIdentity(source));
+  assert.equal(getCommittedSvgResultLineage(copy), getCommittedSvgResultRuntimeIdentity(copy), 'a line of its own');
+  assert.equal(isCommittedSvgResultMounted(copy), false, 'not mounted where its source is');
+  markCommittedSvgResultUnmounted(source);
+  markCommittedSvgResultMounted(copy);
+  assert.equal(isCommittedSvgResultMounted(source), false, 'mounting the copy leaves the source as it is');
+  assert.deepEqual(looseCopy, loose);
+  assert.equal(isCommittedSvgResult(looseCopy), false);
 });
 
 test('JSON cannot forge current-worker provenance and malformed envelopes fail closed', () => {

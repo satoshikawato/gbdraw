@@ -20,7 +20,9 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const {
+  ARTIFACT_SLOT_ALIGNMENT_KEYS, ARTIFACT_SLOT_KEYS, ARTIFACT_SLOT_PALETTE_KEYS, artifactSlotAs, artifactSlotShowing, createArtifactSlot, createArtifactSlotStore, keptRequestArtifact
+} = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
 const { readdir, readFile } = await import('node:fs/promises');
@@ -249,6 +251,48 @@ test('a null applied palette restored in the shown drawing keeps the displayed p
 
 // REVIEW-1 M1: one store keeps the hidden drawings' artifacts, and only its
 // named operations change it; an entry's key is its slot's drawing.
+// OV-3732: Duplicate's slot shares its source's artifact but its Results,
+// which are copies with records of their own. A held figure shows
+// at the displayed Result index, clamped to its Results.
+test('a copied slot holds copies of its Results; a held figure keeps the displayed index', () => {
+  const results = [{ name: 'a.svg', content: '<svg/>' }, { name: 'b.svg', content: '<svg/>' }];
+  const source = createArtifactSlot({ drawing: { id: 'd1', mode: 'linear' }, values: { results, selectedResultIndex: 1 } });
+  /** @type {unknown[][]} */
+  const copied = [];
+  const copy = artifactSlotAs(source, { id: 'd2', mode: 'linear' }, {
+    copyResults: (sources) => sources.map((result) => ({ ...result, copy: true })),
+    copyRecords: (sources, copies) => { copied.push([sources, copies]); }
+  });
+  assert.equal(copy.drawingId, 'd2');
+  assert.deepEqual(copy.values.results, results.map((result) => ({ ...result, copy: true })));
+  assert.deepEqual(copied, [[results, copy.values.results]], 'the records follow the copies');
+  assert.equal(copy.values.selectedResultIndex, 1);
+  const shownAt = (selectedResultIndex) => createArtifactSlot({ drawing: { id: 'd1', mode: 'linear' }, values: { selectedResultIndex } });
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, shownAt(5)).values.selectedResultIndex, 1, 'clamped');
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, shownAt(0)).values.selectedResultIndex, 0);
+  assert.equal(artifactSlotShowing(source, { id: 'd1', mode: 'linear' }, shownAt(0)).values.results, results, 'by reference');
+});
+
+// A held figure is its slot's, but the values the restored intent owns are
+// the shown drawing's: a live edit in a later open step may have written its
+// own into the slot (a Default colors pick, a record drag's drop).
+test('a held figure shows with the palette and alignment state the restored intent left', () => {
+  const drawing = { id: 'd1', mode: 'linear' };
+  const results = [{ name: 'a.svg', content: '<svg/>' }];
+  const intentKeys = [...ARTIFACT_SLOT_PALETTE_KEYS, ...ARTIFACT_SLOT_ALIGNMENT_KEYS];
+  assert.deepEqual(intentKeys.filter((key) => !ARTIFACT_SLOT_KEYS.includes(key)), [], 'every key is a slot key');
+  const held = createArtifactSlot({ drawing, values: {
+    results, lastRunInfo: { held: true },
+    ...Object.fromEntries(intentKeys.map((key) => [key, { held: key }]))
+  } });
+  const restored = Object.fromEntries(intentKeys.map((key) => [key, { restored: key }]));
+  const shown = createArtifactSlot({ drawing, values: { results: [], lastRunInfo: { shown: true }, ...restored } });
+  const showing = artifactSlotShowing(held, drawing, shown);
+  intentKeys.forEach((key) => assert.equal(showing.values[key], restored[key], `${key} as the intent restore left it`));
+  assert.equal(showing.values.results, results, 'the figure is the slot\'s');
+  assert.deepEqual(showing.values.lastRunInfo, { held: true }, 'and so is what it was drawn with');
+});
+
 test('the slot store keeps a hidden drawing\'s artifact through its named operations', async () => {
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');
@@ -287,7 +331,7 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
     biologicalFeatures: [{ id: 'b2' }], results: [{ name: 'a.svg', content: '<svg id="a2"/>' }],
     labelFitReports: [],
     // The input summary the rerender drew replaces the Generate's (it draws the live Feature visibility).
-    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['redrawn'], warnings: [], drawnVisibility: '[[],[]]' }]
+    inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['redrawn'], warnings: [] }]
   };
   /** @type {unknown[][]} */
   const installed = [];

@@ -31,7 +31,7 @@ test('a record with no feature to draw: the status area says so and Run Info lis
     state.inputSummaries.value = state.inputSummaries.value.map((entry) => drawnInputSummaries([{
       resultIndex: entry.resultIndex, resultName: entry.resultName, lines: entry.lines,
       warnings: [...entry.warnings, repeated], records: entry.records, linearWrap: entry.linearWrap
-    }], entry.drawnVisibility)[0]);
+    }])[0]);
   });
   await expect(notice.locator('[data-input-warnings="left-out"] p')).toHaveText([
     'Part of the input was not drawn.',
@@ -54,7 +54,7 @@ test('a record with no feature to draw: the status area says so and Run Info lis
     state.inputSummaries.value = state.inputSummaries.value.map((entry) => drawnInputSummaries([{
       resultIndex: entry.resultIndex, resultName: entry.resultName, lines: entry.lines,
       warnings: pairs, records: entry.records, linearWrap: entry.linearWrap
-    }], entry.drawnVisibility)[0]);
+    }])[0]);
   });
   const leftOut = notice.locator('[data-input-warnings="left-out"]');
   await expect(leftOut.locator('[data-input-warning]:visible')).toHaveCount(3);

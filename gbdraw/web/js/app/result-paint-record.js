@@ -6,11 +6,12 @@
 import { isLegendOrderEdited } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { toRaw } from '../utils/vue-raw.js';
-import { featureVisibilityRows, movedIdentityValues } from '../services/feature-visibility.js';
-import { featureIdentityKey, parseFeatureIdentityKey } from '../services/feature-placement.js';
+import { featureVisibilityRows } from '../services/feature-visibility.js';
+import { featureIdentityKey } from '../services/feature-placement.js';
+import { paletteColorsEqual } from './svg-styles.js';
 
-// Which editor state each Result's bytes were drawn with and show (design
-// §5.4, W15): one record per Result. A Result displayed again receives a
+// Which editor state each Result's bytes were drawn with and show: one
+// record per Result. A Result displayed again receives a
 // domain only when that state changed since it was last shown, so a Result
 // without new edits gets no projection work and an Undo reaches a Result that
 // is displayed again. The displayed Result follows every live edit;
@@ -71,6 +72,29 @@ export const editorPaintState = (state, drawing) => ({
     : ''
 });
 
+/**
+ * The paint a Generate request draws, read as the request is built (its one producer), so that an edit made while it runs
+ * is an edit since: `palette` is the one its commit applies, `bound` the drawing's paint with it as the request
+ * starts, and `of` reads a drawing whose rows the request moved (OV-1949) with the same palette.
+ * @param {DrawingState} drawing
+ * @param {Readonly<{ name: string, colors: Record<string, string> }>} palette
+ * @param {PaintStateSource['originalLegendOrder']} originalLegendOrder
+ */
+export const requestPaintOf = (drawing, palette, originalLegendOrder) => {
+  /** @param {DrawingState} read */
+  const of = (read) => editorPaintState({ appliedPaletteColors: { value: palette.colors }, originalLegendOrder }, read);
+  return { palette, bound: of(drawing), of };
+};
+
+// A Generate keeps the fill edits that hold a color on a feature its Results
+// draw (`replaceFeatureFills`): the paint it drew names the fills it keeps, so
+// an edit it drops is no edit made since its request.
+/** @param {EditorPaintState} paint @param {unknown} fills The fills the Generate keeps. @returns {EditorPaintState} */
+export const withKeptFills = (paint, fills) => {
+  const [rules, , legendFills] = /** @type {[unknown, unknown, unknown]} */ (JSON.parse(paint.colors[1]));
+  return { ...paint, colors: [paint.colors[0], JSON.stringify([rules, fills, legendFills])] };
+};
+
 // The rule table a paint state shows, or null when it is unknown (a Result
 // restored without the state it shows, `unknownPaint`).
 /** @param {EditorPaintState} paint @returns {SpecificColorRule[] | null} */
@@ -81,6 +105,16 @@ export const paintRuleTable = (paint) => (paint.colors[1]
 // Whether two paint states show the same palette and color edits.
 /** @param {EditorPaintState['colors']} left @param {EditorPaintState['colors']} right */
 export const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
+
+// A held paint whose palette gives every key the color of `palette`, the
+// applied one, shows `palette` (a restore clones the palette it restores).
+/** @param {EditorPaintState} paint @param {unknown} palette @returns {EditorPaintState} */
+const withAppliedPalette = (paint, palette) => {
+  const [held, edits] = paint.colors;
+  return held !== palette && paletteColorsEqual(
+    /** @type {Record<string, unknown> | null} */ (held), /** @type {Record<string, unknown> | null} */ (palette)
+  ) ? { ...paint, colors: [palette, edits] } : paint;
+};
 
 // Whether two paint states show the same fills: palette and color edits, and visibility.
 /** @param {Pick<EditorPaintState, 'colors' | 'visibility'>} left @param {Pick<EditorPaintState, 'colors' | 'visibility'>} right */
@@ -192,8 +226,8 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
     /**
      * A committed artifact: each Result without a record gets one, and
      * `displayed` is the Result mounted by the commit. A commit that `draws`
-     * (`drawsResult`) has Results Python drew from `drawn` (`current` unless
-     * given): a label rerender draws the fills and visibility of the state it
+     * (`drawsResult`) has Results Python drew from the paint it names, read
+     * as its request was built: a label rerender draws the fills and visibility of the state it
      * started from (OV-346), so the displayed Result lacks those of an edit
      * made meanwhile (`lacking`) until they are shown. Any other commit (a
      * Session Load, a History restore, a rollback) keeps each Result's bytes
@@ -208,9 +242,11 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
      * @param {readonly SvgResultEntry[]} results The Results of all drawings.
      * @param {SvgResultEntry} displayed
      * @param {EditorPaintState} current
-     * @param {{ draws?: boolean, drawn?: EditorPaintState, drawingStateOf?: (result: SvgResultEntry) => EditorPaintState }} [options]
+     * @param {{ draws?: EditorPaintState | null, drawingStateOf?: (result: SvgResultEntry) => EditorPaintState }} [options]
+     *   `draws`: the paint the Results were drawn from, or null when the commit draws nothing.
      */
-    commit(results, displayed, current, { draws = false, drawn = current, drawingStateOf = () => current } = {}) {
+    commit(results, displayed, current, { draws = null, drawingStateOf = () => current } = {}) {
+      const drawn = draws ?? current;
       const displayedKey = keyOf(displayed);
       if (bound && bound !== records.get(displayedKey)) {
         if (draws) recordBound(current);
@@ -225,7 +261,22 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
       bound = /** @type {ResultEditorRecord} */ (records.get(displayedKey)); // Recorded above.
       bound.left = null;
       const { colors, visibility } = drawn;
-      behind = !draws || sameFills(drawn, current) ? null : { colors, visibility };
+      behind = sameFills(drawn, current) ? null : { colors, visibility };
+    },
+    /**
+     * Duplicate (OV-3732): each copied Result's bytes hold what its source's
+     * hold, so its record starts as a copy of the source's; the displayed
+     * Result followed every live edit (`current`, the copied drawing's state)
+     * but what it lacks.
+     * @param {readonly SvgResultEntry[]} sources
+     * @param {readonly SvgResultEntry[]} copies The copies, in the order of `sources`.
+     * @param {EditorPaintState} current
+     */
+    copy(sources, copies, current) {
+      sources.forEach((source, index) => {
+        const record = recordOf(source);
+        if (record) records.set(keyOf(copies[index]), { ...record, shown: record === bound ? { ...current, ...behind } : record.shown, left: null });
+      });
     },
     /**
      * The displayed Result leaves a drawing (a mode switch) having followed
@@ -308,6 +359,15 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
       return recordOf(result)?.drawn;
     },
     /**
+     * Whether the displayed Result was drawn with a Feature visibility other than `visibility`: a live edit no
+     * render drew since, so its input summary describes the render, not the figure (false while no Result is
+     * displayed).
+     * @param {string} visibility `visibilityPaintState` of the drawing that shows it.
+     */
+    displayedDrewOtherVisibility(visibility) {
+      return bound !== null && bound.drawn.visibility !== visibility;
+    },
+    /**
      * The Label visibility On and Off the displayed Result was drawn with, by
      * feature identity key, or null when no Result is displayed. Only Python
      * decides whether Default draws a label, so the label owner asks for the
@@ -324,25 +384,54 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
     },
     /**
      * A Generate that moves a record's rows to its new key (OV-1949) moves them
-     * after its Results were committed: the label rows they were drawn with
-     * follow, so the moved rows ask for no rerender (OV-1983).
+     * after its Results were committed; the request drew the moved rows
+     * (`moved`), which the Results' record takes then, so the moved rows ask
+     * for no rerender (OV-1983).
      * @param {readonly SvgResultEntry[]} results The Results the Generate committed.
-     * @param {ReadonlyMap<string, string>} moves
+     * @param {EditorPaintState} moved
      */
-    moveDrawn(results, moves) {
-      if (moves.size === 0) return;
+    moveDrawn(results, moved) {
       results.forEach((result) => {
         const record = recordOf(result);
-        if (!record) return;
-        const [rows, bulk] = /** @type {LabelPaintRows} */ (JSON.parse(record.drawn.labels));
-        const moved = movedIdentityValues(Object.fromEntries(rows.map(([recordKey, featureId, labelVisibility, labelText, labelSourceText]) => [
-          featureIdentityKey(recordKey, featureId), { labelVisibility, labelText, labelSourceText }
-        ])), moves);
-        const movedRows = Object.entries(moved).flatMap(([key, { labelVisibility, labelText, labelSourceText }]) => {
-          const identity = parseFeatureIdentityKey(key);
-          return identity ? [[identity.recordKey, identity.biologicalFeatureId, labelVisibility, labelText, labelSourceText]] : [];
-        });
-        record.drawn = { ...record.drawn, labels: JSON.stringify([movedRows, bulk]) };
+        if (record) record.drawn = moved;
+      });
+    },
+    /**
+     * What the bytes of `results` show now, in their order, for a figure
+     * History holds (OV-2436): a Result not displayed shows its record's
+     * `shown` (one without a record is recorded by its next display, as
+     * before); the displayed Result shows the current state but what it lacks, or,
+     * when `drawing` (a rerender's figure as its Legend is read, before an
+     * edit made while it ran is shown on it), the paint it was drawn with.
+     * @param {readonly SvgResultEntry[]} results
+     * @param {EditorPaintState} current
+     * @param {boolean} drawing
+     * @returns {EditorPaintState[]}
+     */
+    heldPaint(results, current, drawing) {
+      return results.map((result) => {
+        const record = recordOf(result);
+        if (!record) return unknownPaint(current);
+        if (record !== bound) return record.shown;
+        return drawing ? record.drawn : { ...current, ...behind };
+      });
+    },
+    /**
+     * A figure History holds shows again (OV-2436): its Results' bytes show
+     * `paints` (`heldPaint`, in their order), whatever their records said
+     * since, and left no drawing, so their next display shows the edits
+     * since. A held palette that gives every key the color of `applied`, the
+     * applied palette the restored intent left, is that palette: the restore
+     * clones it, and the same colors ask for no fills. Called once the
+     * displayed Result has left (`depart`).
+     * @param {readonly SvgResultEntry[]} results
+     * @param {readonly EditorPaintState[]} paints
+     * @param {unknown} applied
+     */
+    arrive(results, paints, applied) {
+      results.forEach((result, index) => {
+        const record = recordOf(result);
+        if (record) Object.assign(record, { shown: withAppliedPalette(paints[index], toRaw(applied)), left: null });
       });
     },
     /** @param {SvgResultEntry} result The Result shown again with the intent it left with (E1). */

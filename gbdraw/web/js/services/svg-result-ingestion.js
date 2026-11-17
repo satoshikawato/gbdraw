@@ -641,6 +641,21 @@ export const getCommittedSvgResultRuntimeIdentity = (result) => (
  */
 export const getCommittedSvgResultRuntimeKey = (result) => committedState(result) ?? result;
 
+/**
+ * Duplicate (OV-3732): the copy of a drawing shows copies of its source's
+ * Results, each a Result of its own (its own identity and line, not mounted)
+ * with the same text and admission facts, so that showing, mounting or
+ * recording one drawing's Result never changes the other's. A Result that was
+ * not admitted is copied as it is.
+ * @param {readonly SvgResultEntry[]} results
+ * @returns {SvgResultEntry[]}
+ */
+export const admitResultCopies = (results) => results.map((result) => {
+  const runtime = committedState(result);
+  // Its source was admitted with its catalog facts, which the copy shares.
+  return runtime ? commitCatalogBackedResult({ ...result }, runtime.metadata) : { ...result };
+});
+
 /** @param {SvgResultEntry | null | undefined} result The identity of the first Result of its line, or null. */
 export const getCommittedSvgResultLineage = (result) => (
   committedState(result)?.lineage ?? null

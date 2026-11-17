@@ -48,7 +48,7 @@ for (const filename of [
 
 const { createHistoryManager, createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
 const { createInputFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
-const { createHistorySnapshotService } = await import(
+const { createHeldFigurePorts, createHistorySnapshotService } = await import(
   pathToFileURL(join(tempDir, 'services', 'history-snapshot.js'))
 );
 
@@ -3448,6 +3448,222 @@ for (const previousSuppressed of [false, true]) {
   assert.deepEqual({ visible, legend }, { visible: true, legend: ['renamed', 'shown feature', 'drawn row'] },
     'Undo restores the rows from before the step that requested them');
   console.log('history drawn write requester tests passed');
+}
+
+// OV-2436, OV-2413: History holds the figures a label
+// rerender replaced and drew on the sides of the step that requested it, by
+// reference, and an Undo or Redo of that step shows the held figure at once
+// (no rerender) while the figure can show the state: same committed Session,
+// not the figure shown. A step begun after the request holds nothing; a
+// rerender after an Undo holds its figure on the boundary. Held figures count
+// in the byte budget once per Result array and drop before any step.
+{
+  const makeFigures = (maxBytes = 1_000_000) => {
+    const world = { visible: true, figure: 'A', committed: 'session-1', slow: 0, shows: [] };
+    /** @type {Record<string, object>} */
+    const keys = {};
+    const keyOf = (name) => (keys[name] ??= { name });
+    const history = createHistoryManager({
+      maxBytes,
+      buildIntent: () => ({ visible: world.visible }),
+      applyIntent: (intent, context) => {
+        world.visible = intent.visible;
+        // Without a held figure the figure shown waits for a rerender.
+        if (!context.figure) world.slow += 1;
+      },
+      buildCheckpoint: () => ({ visible: world.visible }),
+      applyCheckpoint: (checkpoint) => { world.visible = checkpoint.visible; },
+      heldFigures: {
+        capture: () => ({ slot: { figure: world.figure }, key: keyOf(world.figure), committed: world.committed, retainedBytes: 4000 }),
+        usable: (held) => held.committed === world.committed && held.slot.figure !== world.figure,
+        show: async (held, restoreIntent) => {
+          await restoreIntent();
+          world.figure = held.slot.figure;
+          world.shows.push(held.slot.figure);
+        }
+      }
+    });
+    // A label rerender read at `requestedAt` replaces the figure with `next`.
+    const rerender = (requestedAt, next) => {
+      history.adoptDrawnWrite(() => { world.figure = next; }, { requestedAt, figure: 'replaced' });
+      history.adoptDrawnWrite(() => {}, { requestedAt, figure: 'drawn' });
+    };
+    return { world, history, rerender };
+  };
+
+  // The step that requested the rerender ended before it bound (a hide whose
+  // rerender comes after the step): Undo shows A, Redo B, at once.
+  {
+    const { world, history, rerender } = makeFigures();
+    await history.captureBaseline('initial');
+    let requestedAt = -1;
+    await history.runUndoable('Hide feature', () => { world.visible = false; requestedAt = history.intentStepSerial(); });
+    rerender(requestedAt, 'B');
+    await history.undo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [true, 'A', 0], 'Undo shows the figure the rerender replaced');
+    await history.redo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [false, 'B', 0], 'Redo shows the figure the rerender drew');
+    assert.deepEqual(world.shows, ['A', 'B']);
+    // Another committed Session: the figures cannot show the state.
+    world.committed = 'session-2';
+    await history.undo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [true, 'B', 1], 'a figure of another Session is not shown');
+  }
+
+  // The requesting step is still open when the rerender binds (D-40).
+  {
+    const { world, history, rerender } = makeFigures();
+    await history.captureBaseline('initial');
+    let release = () => {};
+    const bound = new Promise((resolve) => { release = resolve; });
+    const action = history.runUndoable('Label On', async () => {
+      world.visible = false;
+      const requestedAt = history.intentStepSerial();
+      await Promise.resolve();
+      rerender(requestedAt, 'B');
+      await bound;
+    });
+    release();
+    await action;
+    await history.undo();
+    assert.deepEqual([world.figure, world.slow], ['A', 0], 'the open step holds its figures');
+  }
+
+  // A step opened after the request, still open as the rerender binds (a
+  // field's focus step), leaves the figures to the step that requested it.
+  {
+    const { world, history, rerender } = makeFigures();
+    await history.captureBaseline('initial');
+    let requestedAt = -1;
+    await history.runUndoable('Label Off', () => { world.visible = false; requestedAt = history.intentStepSerial(); });
+    const focus = await history.begin('Focus a field', { owner: 'field' });
+    rerender(requestedAt, 'B');
+    await history.cancel(focus);
+    await history.undo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [true, 'A', 0], 'the requesting step holds its figures');
+  }
+
+  // A step begun after the request is not its requester: it holds nothing.
+  {
+    const { world, history, rerender } = makeFigures();
+    await history.captureBaseline('initial');
+    const requestedAt = history.intentStepSerial();
+    await history.runUndoable('Hide feature', () => { world.visible = false; });
+    rerender(requestedAt, 'B');
+    await history.undo();
+    assert.deepEqual([world.figure, world.slow], ['B', 1], 'a step begun after the request holds no figure');
+  }
+
+  // A step holds on `before` only the figure it began on: a rerender an
+  // earlier step requested, installed while this step is open, replaced that
+  // figure first, so this step's own rerender holds its drawn figure only.
+  {
+    const { world, history, rerender } = makeFigures();
+    await history.captureBaseline('initial');
+    let earlier = -1;
+    await history.runUndoable('Hide feature', () => { world.visible = false; earlier = history.intentStepSerial(); });
+    let release = () => {};
+    const bound = new Promise((resolve) => { release = resolve; });
+    const action = history.runUndoable('Show feature', async () => {
+      world.visible = true;
+      const requestedAt = history.intentStepSerial();
+      rerender(earlier, 'B');
+      rerender(requestedAt, 'C');
+      await bound;
+    });
+    release();
+    await action;
+    await history.undo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [false, 'C', 1], 'the step began on A, so it holds no figure before it');
+    await history.redo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [true, 'C', 2], 'C is shown, so its Redo shows nothing new');
+  }
+
+  // A rerender after an Undo holds its figure on the boundary: the next Undo
+  // of the step shows it at once; a request read before an Undo holds nothing.
+  {
+    const { world, history, rerender } = makeFigures();
+    await history.captureBaseline('initial');
+    await history.runUndoable('Hide feature', () => { world.visible = false; });
+    const beforeUndo = history.intentStepSerial();
+    await history.undo();
+    assert.equal(world.slow, 1);
+    rerender(history.intentStepSerial(), 'C');
+    rerender(beforeUndo, 'stale');
+    await history.redo();
+    assert.equal(world.slow, 2, 'the step held no figure after it');
+    world.figure = 'D';
+    await history.undo();
+    assert.deepEqual([world.visible, world.figure, world.slow], [true, 'C', 2], 'Undo shows the boundary figure');
+  }
+
+  // The budget counts a figure once for the sides that hold it (A, B, C of
+  // 4000 bytes on four sides fit in 15000) and drops figures, oldest first,
+  // before it drops a step (they do not fit in 11000).
+  for (const [maxBytes, oldestKept] of [[15_000, true], [11_000, false]]) {
+    const { world, history, rerender } = makeFigures(maxBytes);
+    await history.captureBaseline('initial');
+    let requestedAt = -1;
+    await history.runUndoable('Hide feature', () => { world.visible = false; requestedAt = history.intentStepSerial(); });
+    rerender(requestedAt, 'B');
+    await history.runUndoable('Show feature', () => { world.visible = true; requestedAt = history.intentStepSerial(); });
+    rerender(requestedAt, 'C');
+    assert.equal(history.getUndoCount(), 2, 'figures drop before steps');
+    await history.undo();
+    assert.deepEqual([world.figure, world.slow], ['B', 0], 'the newest step keeps its figures');
+    await history.undo();
+    assert.deepEqual([world.visible, world.figure, world.slow], oldestKept ? [true, 'A', 0] : [true, 'B', 1],
+      oldestKept ? 'a figure on two sides counts once' : 'the oldest step lost its figures');
+  }
+  console.log('history held figure tests passed');
+}
+
+// OV-2436: the snapshot service's held figures. A figure shows only in its
+// own drawing while that drawing is shown, while the committed Session it was
+// drawn from is the current one, while no Clear LOSAT results ran since it was
+// held (review M1: the Clear is no step), and when it is not the figure shown;
+// without the display owner none shows. Its show restores the step's intent
+// and then makes its Results' records say what its bytes show. An evicted
+// figure is no longer on its step (the budget case above).
+{
+  const committed = { session: 1 };
+  const runtime = (session) => ({ canonical: { committedCanonicalSession: session } });
+  const slotOf = (drawingId, results, session = committed) => ({ drawingId, values: { results }, runtimeState: runtime(session), retainedBytes: 10 });
+  const world = { shown: slotOf('circular', [{ content: 'A' }]), clears: 0, arrived: [], log: [] };
+  const ports = createHeldFigurePorts({
+    captureArtifactSlot: () => world.shown,
+    paint: {
+      capture: (results, drawing) => results.map(() => (drawing ? 'drawn paint' : 'shown paint')),
+      arrive: (results, paints) => { world.log.push('arrive'); world.arrived.push([results, paints]); }
+    },
+    losatClearedSince: (count) => count !== world.clears,
+    losatClearCount: () => world.clears
+  });
+  const port = ports.of('circular');
+  const figure = { ...port.capture('replaced'), drawn: true };
+  const held = world.shown;
+  assert.equal(figure.retainedBytes, 12, 'the slot and its Results text, UTF-16');
+  world.shown = slotOf('circular', [{ content: 'B' }]);
+  assert.equal(port.usable(figure), false, 'no display owner yet');
+  ports.setDisplay(async (slot, restoreIntent) => { world.log.push('depart'); await restoreIntent(); world.shown = slot; world.log.push('shown'); });
+  assert.equal(port.usable(figure), true);
+  world.shown = held;
+  assert.equal(port.usable(figure), false, 'the figure shown');
+  world.shown = slotOf('linear', [{ content: 'B' }]);
+  assert.equal(port.usable(figure), false, 'another drawing shown');
+  assert.equal(ports.of('linear').usable(figure), false, 'a figure of another drawing in the shown drawing\'s History');
+  world.shown = slotOf('circular', [{ content: 'B' }], { session: 2 });
+  assert.equal(port.usable(figure), false, 'another committed Session');
+  world.shown = slotOf('circular', [{ content: 'B' }]);
+  world.clears = 1;
+  assert.equal(port.usable(figure), false, 'Clear LOSAT results ran since it was held');
+  world.clears = 0;
+  await port.show(figure, async () => { world.log.push('intent'); });
+  assert.deepEqual(world.log, ['depart', 'intent', 'arrive', 'shown'], 'its records are written after the intent, before it shows');
+  assert.deepEqual(world.arrived[0][1], ['shown paint'], 'the paint its bytes showed as it was held');
+  assert.equal(world.arrived[0][0], figure.key);
+  assert.deepEqual(port.capture('drawn').slot.shown, ['drawn paint'], 'a rerender figure as its Legend is read');
+  console.log('history held figure port tests passed');
 }
 
 // D-07 (b) (Owner 2026-10-16 「確認を出す」): a change outside History (the

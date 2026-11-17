@@ -94,7 +94,10 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
   'Legend row color on a sized figure': null,
   'Canvas padding on a sized figure': null,
   'sequence search': 'sequenceSearch',
-  'History step (Undo of a sequence search)': 'undo'
+  'History step (Undo of a sequence search)': 'undo',
+  'popup Label Off, Auto Reflow on': 'labelVisibility',
+  'History step (Undo with a held figure)': 'undo',
+  'History step (Redo with a held figure)': 'undoRedo'
 });
 
 // The confirmed mismatches of a step kind (multi-drawing-project FINDINGS.md),

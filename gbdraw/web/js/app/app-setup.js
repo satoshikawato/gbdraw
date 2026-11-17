@@ -29,7 +29,7 @@ import { createRulePreparation } from './rule-matching.js';
 import { displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createDeclinedPaintDisplay, createDepartedResultIntent, createDisplayedResultProjection, createEditorIntentShow, createMountedEditorIntentProjection } from './editor-intent.js';
 import { createMountedLegendBinding, createMountedResultReadiness } from './mounted-result-binder.js';
-import { createResultPaintRecord, visibilityPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, visibilityPaintState } from './result-paint-record.js';
 import {
   displayedLegendRowContext, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
@@ -861,6 +861,11 @@ export const createAppSetup = () => {
     nextTick,
     // The discovery owner exists once the runner does; a restore runs after setup.
     discoverDrawingRecords: (drawing) => discoverDrawingRecords(drawing),
+    // What a held figure's Results show, read with the shown drawing's paint, and written back as it shows again.
+    heldResultPaint: {
+      capture: (results, drawing) => resultPaintRecord.heldPaint(results, editorPaintState(state, state.activeDrawing()), drawing),
+      arrive: (results, paints) => resultPaintRecord.arrive(results, paints, state.appliedPaletteColors.value)
+    },
     buildConfigData: captureConfigData,
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
@@ -978,6 +983,7 @@ export const createAppSetup = () => {
         collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
         identityMapPath: ports.identityMapPath,
         editedPartOf: ports.editedPartOf,
+        heldFigures: ports.heldFigures,
         makeRef: ref,
         mutationAvailability: sessionOperationAvailability
       });
@@ -1951,7 +1957,8 @@ export const createAppSetup = () => {
   // its Canvas padding (its commit, Undo, or Redo) shows at once, and a figure drawn to a requested size is then fitted
   // again by the automatic rerender, which draws them (`projectCommittedEditorIntent`). An Auto figure is not redrawn.
   // History marks a checkpoint side undrawn while that fit is owed and keeps the rerender's figure as the last step's;
-  // a restore of an undrawn side asks the label owner to draw it again (`redrawRestored`, D-24).
+  // a restore of an undrawn side asks the label owner to draw it again (`redrawRestored`, D-24). A restore that shows
+  // a figure History held, drawn for the restored state, owes no fit.
   /**
    * @param {readonly HistoryChangeLike[] | null} changes
    * @param {'undo' | 'redo' | undefined} direction
@@ -2453,7 +2460,7 @@ export const createAppSetup = () => {
     runUndoable: history.runUndoable
   });
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string, figure?: boolean }} */ { domains, changes, direction, figure = false } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     // B17: restore the offsets of each Result whose composition this step changed.
@@ -2478,7 +2485,8 @@ export const createAppSetup = () => {
       path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
     ));
     if (legendChange) legendActions.adoptRestoredLegend({ from: legendChange[direction === 'undo' ? 'after' : 'before'] });
-    const projected = await projectMountedEditorIntent({
+    // A held figure arrives next and shows the intent as its Result is displayed (one projection, R3).
+    const projected = !figure && await projectMountedEditorIntent({
       colors,
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
       visibility: changedDomains.has('features'),
@@ -2598,7 +2606,7 @@ export const createAppSetup = () => {
   });
 
   const {
-    installArrivingSlot, drawingSwitchBusy, switchWorkBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
+    installArrivingSlot, showHeldFigure, drawingSwitchBusy, switchWorkBusy, drawingSwitchAvailable, errorDrawingId, showDrawingNow, selectDrawing
   } = createDrawingSwitch({
     state, results, selectedResultIndex, errorLog, failedGeneratePreservedResult, sessionOperationAvailability,
     historyAvailability: history.historyAvailability, historyRestoring: () => history.restoring.value,
@@ -2615,6 +2623,7 @@ export const createAppSetup = () => {
     rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
     captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
   });
+  historySnapshots.setHeldFigureDisplay(showHeldFigure);
   // The operations on the drawing list, each one project step (R11, R16-2).
   const drawingList = createDrawingList({
     drawingTabs: () => state.drawingTabs.value,
@@ -2631,12 +2640,19 @@ export const createAppSetup = () => {
       return applyDrawingStyle(withNewDrawingDefaults(state, createDrawingState(drawingId, mode)), source,
         resultsManager.paletteColorsOf(source));
     },
-    // The copy's Result is its source's slot under its ID (the shown drawing's through `captureArtifactSlot`, R1).
+    // The copy's Result is its source's slot under its ID (the shown drawing's through `captureArtifactSlot`, R1),
+    // with copies of its Results (OV-3732).
     copyDrawing: (sourceId, copyId) => {
       const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
       const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
         () => historySnapshots.captureArtifactSlot(), (kept) => kept);
-      return { drawing, held: { slot: slot ? artifactSlotAs(slot, drawing) : null, losatRows: losatRowsOf(sourceId), losatClears: historySnapshots.losatClearCount() } };
+      return { drawing, held: {
+        slot: slot ? artifactSlotAs(slot, drawing, {
+          copyResults: previewRuntime.copyResults,
+          copyRecords: (sources, copies) => resultPaintRecord.copy(sources, copies, currentEditorProjectionState(drawing))
+        }) : null,
+        losatRows: losatRowsOf(sourceId), losatClears: historySnapshots.losatClearCount()
+      } };
     },
     // A region drawing is read as Load reads a stored drawing, then made under its new ID.
     regionDrawing: makeRegionDrawing,
@@ -3228,12 +3244,11 @@ export const createAppSetup = () => {
     return entry && entry.report.drawn ? entry : null;
   });
   // A live Feature visibility edit no render drew since: the summary counts what the render drew,
-  // so it is compared with the visibility of the drawing whose Result is shown.
-  const shownInputSummaryStale = computed(() => {
-    const summary = shownInputSummary.value;
-    return summary !== null
-      && summary.drawnVisibility !== visibilityPaintState(historySnapshots.displayedArtifactDrawing());
-  });
+  // so the visibility the displayed Result was drawn with (its paint record, written as its request was built) is
+  // compared with that of the drawing whose Result is shown, once the Result is bound.
+  // The record is written as a Result binds (`mountedResultRevision`).
+  const shownInputSummaryStale = computed(() => shownInputSummary.value !== null && mountedResultRevision.value > 0
+    && resultPaintRecord.displayedDrewOtherVisibility(visibilityPaintState(historySnapshots.displayedArtifactDrawing())));
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;
@@ -3471,10 +3486,10 @@ export const createAppSetup = () => {
     panEnd: endPan
   });
   // Registered once sequenceSearch exists: a search's step names the sets it added (the live annotation-sets row).
-  history.setSettingsStepListener((changes, direction, undrawn) => {
+  history.setSettingsStepListener((changes, direction, undrawn, drawn) => {
     requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
       changes ? changedTrackHides(changes) : undefined, direction === 'undo', sequenceSearch.searchSetIdsOf(changes));
-    refitSizedFigure(changes, direction, undrawn);
+    if (!drawn) refitSizedFigure(changes, direction, undrawn);
   });
   return {
     sequenceSearch,

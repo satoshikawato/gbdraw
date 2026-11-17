@@ -337,8 +337,10 @@ export const WORK_ALLOWLIST = [
   // Figure size (PD-OI-114 rev 2, Q-D1 A): on a figure drawn to a requested
   // size, a Legend rename, deletion, Restore, Move, or Sort, or a Canvas
   // padding change shows at once as on an Auto figure (the rows above), and
-  // the automatic rerender then fits the figure with it (`render`); its Undo
-  // fits it again. A Legend row color stays the Web's: no rerender.
+  // the automatic rerender then fits the figure with it (`render`). Its Undo
+  // shows the fitted figure from before the step, which History holds,
+  // as a Result display: no rerender. A Legend row color stays the
+  // Web's: no rerender.
   {
     kind: 'Legend rename on a sized figure', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: ['render'],
     // Reset Settings above left one Result's settings: the batch is set again, at 1200 px wide.
@@ -364,8 +366,8 @@ export const WORK_ALLOWLIST = [
     }
   },
   {
-    kind: 'History step (Undo of a Legend rename on a sized figure)', stages: ['legend', 'legendFills'], compiles: 1,
-    requests: ['render'], run: (page) => history(page, 'undo')
+    kind: 'History step (Undo of a Legend rename on a sized figure)', stages: ['legend'], compiles: 1,
+    requests: [], run: (page) => history(page, 'undo')
   },
   { kind: 'Legend row color on a sized figure', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#2a9d8f') },
   {
@@ -392,5 +394,18 @@ export const WORK_ALLOWLIST = [
   {
     kind: 'History step (Undo of a sequence search)', stages: ['fills', 'legendFills'], compiles: 1, requests: ['render'],
     run: (page) => history(page, 'undo')
-  }
+  },
+  // OV-2436: a Label Off with Auto Reflow on asks for the automatic rerender, which replaces the
+  // figure. History holds the figure it replaced and the one it drew on the step's sides, so the step's Undo and
+  // Redo show them at once, as a Result display: no worker request.
+  {
+    kind: 'popup Label Off, Auto Reflow on', stages: [], compiles: 0, requests: ['render'],
+    before: (page) => page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; }),
+    run: (page) => popupEdit(page, embeddedLabelFeatures[1], { labelVisibility: 'off' })
+  },
+  // The Undo and the Redo each show the held figure as a Result display: its Results are recorded as showing what
+  // their bytes showed when History held them, not the intent they last left with, so each display compiles its
+  // Legend once (OV-2436: a figure held before a later edit was shown on it still holds the earlier bytes).
+  { kind: 'History step (Undo with a held figure)', stages: ['legend'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
+  { kind: 'History step (Redo with a held figure)', stages: ['legend'], compiles: 1, requests: [], run: (page) => history(page, 'redo') }
 ];

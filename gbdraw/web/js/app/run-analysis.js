@@ -230,7 +230,7 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
-import { editorPaintState, visibilityPaintState } from './result-paint-record.js';
+import { editorPaintState, requestPaintOf, withKeptFills } from './result-paint-record.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -1810,12 +1810,14 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   services/config.js owns the active-mode input check shared with Save.
  * @property {() => number} [readHistoryStepSerial] History's `intentStepSerial`, read as a label rerender
  *   is requested: the Legend rows it draws join only the History steps begun after it (D-40).
- * @property {(write: () => void, request: { requestedAt: number }) => void} [adoptDrawnWrite] History's
- *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873).
+ * @property {(write: () => void, request: { requestedAt: number, figure?: 'replaced' | 'drawn' }) => void} [adoptDrawnWrite] History's
+ *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873), and History holds the figure
+ *   it replaced (OV-2436).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {(results: readonly SvgResultEntry[], moves: ReadonlyMap<string, string>) => void} moveDrawnPaint
- *   The Result paint record's port: the label rows a Generate's Results were drawn with follow the rows it moved.
+ * @property {(results: readonly SvgResultEntry[], moved: EditorPaintState) => void} moveDrawnPaint
+ *   The Result paint record's port: a Generate drew the rows it moved to new record keys (`moved`; its bound paint
+ *   when it moved none), which its Results' record takes once the drawing holds them (OV-1949, OV-1983).
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
@@ -2877,8 +2879,6 @@ export const createRunAnalysis = ({
     let requestDrawing = drawing;
     /** @type {ReturnType<typeof requestLabelProjection> | null} */
     let generatedLabelProjection = null;
-    // The Feature visibility the request draws, kept with the input summaries.
-    let drawnVisibility = '';
     // The rings this run's ring searches read (`ringsOfDrawing`); null when it runs none.
     /** @type {string | null} */
     let requestRings = null;
@@ -3143,6 +3143,12 @@ export const createRunAnalysis = ({
       }
       candidateRules = colorCandidate.rules;
       requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
+      // The paint the request draws (its one producer), read as it is built, with the palette its commit applies: as its
+      // Result binds (`bound`, the record keys the drawing names until the commit moves its rows) and with the rows
+      // moved to their new keys (`movedPaint`, OV-1949).
+      const requestPaint = requestPaintOf(requestDrawing, Object.freeze({
+        name: String(drawing.selectedPalette?.value || appliedPaletteName.value || 'default'), colors: { ...drawing.currentColors.value }
+      }), originalLegendOrder);
       // OV-1949 (DESIGN 2-3, A1, A4): the records this run draws are matched by identity with the
       // committed request's records, and the rows of each record whose key changes move to its new key.
       // The request reads the moved rows; the drawing takes them when the run succeeds
@@ -3178,7 +3184,7 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         };
       }
-      drawnVisibility = visibilityPaintState(requestDrawing);
+      const movedPaint = recordMoves.size > 0 ? requestPaint.of(requestDrawing) : requestPaint.bound;
       if (mode.value === 'linear') {
         requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
@@ -5406,7 +5412,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         labelFitReports: canonicalExecution.labelFitReports,
-        inputSummaries: drawnInputSummaries(canonicalExecution.inputSummaries, drawnVisibility),
+        inputSummaries: drawnInputSummaries(canonicalExecution.inputSummaries),
         specificRules: candidateRules,
         proteinIdentityManifest: workingProteinIdentityManifest,
         legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -5424,10 +5430,8 @@ export const createRunAnalysis = ({
         generatedCircularPlotTitlePosition: drawing.mode === 'circular'
           ? normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position)
           : currentOwnerSet.generatedCircularPlotTitlePosition,
-        appliedPaletteName: String(
-          drawing.selectedPalette?.value || appliedPaletteName.value || 'default'
-        ),
-        appliedPaletteColors: { ...drawing.currentColors.value },
+        appliedPaletteName: requestPaint.palette.name,
+        appliedPaletteColors: requestPaint.palette.colors,
         pendingPaletteName: '',
         pendingPaletteColors: {}
       };
@@ -5471,6 +5475,7 @@ export const createRunAnalysis = ({
         phase: 'generate',
         bindingOptions: {
           isIncrementalEdit: false,
+          drawnPaint: withKeptFills(requestPaint.bound, candidateCommit.featureColorOverrides),
           requiredLabelFeatureIds,
           optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
         },
@@ -5552,7 +5557,7 @@ export const createRunAnalysis = ({
         biologicalFeatures: candidateBiologicalFeatures,
         moves: recordMoves
       });
-      moveDrawnPaint(candidateCommit.results, recordMoves);
+      moveDrawnPaint(candidateCommit.results, withKeptFills(movedPaint, candidateCommit.featureColorOverrides));
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
       if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
@@ -5948,7 +5953,7 @@ export const createRunAnalysis = ({
         featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
         labelFitReports: execution.labelFitReports,
-        inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility),
+        inputSummaries: drawnInputSummaries(execution.inputSummaries),
         editableLabels: []
       };
       const preservedRuntimeState = captureGeneratedArtifactRuntimeState();
@@ -6319,7 +6324,7 @@ export const createRunAnalysis = ({
           // The notice follows the Results the rerender drew: it goes when they fit (LP-D48).
           labelFitReports: execution.labelFitReports,
           // So does the input summary: the rerender draws the live Feature visibility.
-          inputSummaries: drawnInputSummaries(execution.inputSummaries, drawnPaint.visibility)
+          inputSummaries: drawnInputSummaries(execution.inputSummaries)
         }, {
           installResults(nextResults) {
             results.value = nextResults;
@@ -6332,7 +6337,7 @@ export const createRunAnalysis = ({
         if (execution.commit.results.length > 0) {
           previewRuntime.selectResult(nextSelectedResultIndex);
         }
-      }, { requestedAt: historyRequestedAt });
+      }, { requestedAt: historyRequestedAt, figure: 'replaced' });
       // The committed Session names what the new Results draw (PD-OI-102); the
       // binder reports for these Results while that Session stays committed.
       // A live Depth show or hide replaces its resources; their records stay,

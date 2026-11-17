@@ -7,10 +7,10 @@
 // as sent. Not saved in a Session.
 //
 // A live Feature visibility edit that no rerender draws (a hide) changes what
-// the Result draws without Python, so the counts no longer describe it. Each
-// entry keeps the Feature visibility of the render that sent it
-// (`drawnVisibility`, `visibilityPaintState`); while the drawing's differs, the
-// page says the summary describes the last render and keeps its warnings back.
+// the Result draws without Python, so the counts no longer describe it. The
+// Result's paint record keeps the Feature visibility its render drew (`drawn`,
+// app/result-paint-record.js); while the drawing's differs, the page says the
+// summary describes the last render and keeps its warnings back.
 import { INPUT_WARNINGS_OF_DRAWN_INPUT } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -52,11 +52,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @typedef {{ readonly kind: 'left-out' | 'drawn-in', readonly warnings: readonly InputWarning[] }} InputWarningGroup
  */
 /**
- * @typedef {InputSummary & {
- *   readonly drawnVisibility: string, readonly warningGroups: readonly InputWarningGroup[]
- * }} DrawnInputSummary
- *   A Result's summary with the Feature visibility of the render that sent it (Web-owned), and its warnings in the
- *   groups the notice shows, each with warnings, left-out first.
+ * @typedef {InputSummary & { readonly warningGroups: readonly InputWarningGroup[] }} DrawnInputSummary
+ *   A Result's summary with its warnings in the groups the notice shows, each with warnings, left-out first.
  */
 
 const SUMMARY_FIELDS = ['resultIndex', 'resultName', 'lines', 'warnings', 'records', 'linearWrap'];
@@ -123,15 +120,13 @@ export const validateInputSummaries = (value, results) => {
 };
 
 /**
- * The summaries of a render, each with the Feature visibility the render drew.
+ * The summaries of a render, each with its warning groups.
  * @param {readonly InputSummary[]} summaries
- * @param {string} drawnVisibility `visibilityPaintState` of the drawing the render read.
  * @returns {readonly DrawnInputSummary[]}
  */
-export const drawnInputSummaries = (summaries, drawnVisibility) => Object.freeze(
+export const drawnInputSummaries = (summaries) => Object.freeze(
   summaries.map((entry) => Object.freeze({
     ...entry,
-    drawnVisibility,
     warningGroups: Object.freeze(/** @type {const} */ (['left-out', 'drawn-in']).flatMap((kind) => {
       // A warning of an input drawn in full (Python's `INPUT_WARNINGS_OF_DRAWN_INPUT`) leaves nothing out.
       const warnings = entry.warnings.filter((warning) => INPUT_WARNINGS_OF_DRAWN_INPUT.includes(warning.code) === (kind === 'drawn-in'));
