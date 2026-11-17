@@ -15,6 +15,7 @@
  * @property {string} caption
  * @property {JoinedLegendRow | null} joins
  * @property {number[] | null} drawn
+ * @property {Record<string, string>} palette
  */
 /**
  * @typedef {object} RuleFeaturePayload

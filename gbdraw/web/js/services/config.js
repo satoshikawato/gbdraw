@@ -213,7 +213,7 @@ import { storedLeafKey } from './stored-leaf-readings.js';
 /** @import { LegacySessionUpgrade } from './legacy-session-upgrade.js' */
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
-import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
+import { NO_DRAWN_FEATURES, applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
 import { rekeyLegendRecords } from './legend-svg.js';
 import { editorStateOfLegendEditLeaves, readLegendEditLeaves } from './legend-draft-rows.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey } from './drawing/paint.js';
@@ -3394,7 +3394,7 @@ const savedLegendRekeys = (rules, kept) => {
     if (color) pythonRows.set(key, { key, color: /** @type {PythonLegendRow['color']} */ (color) });
   });
   return savedRuleRowRekeys({
-    rules: Array.isArray(rules) ? rules : [], pythonRows, features: [], originalLegendOrder: kept.originalOrder
+    rules: Array.isArray(rules) ? rules : [], pythonRows, ...NO_DRAWN_FEATURES, originalLegendOrder: kept.originalOrder
   });
 };
 

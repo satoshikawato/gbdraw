@@ -18,6 +18,8 @@ from gbdraw.web_support.rule_matching import evaluate_rules_json, exact_value_pa
 
 REPO = Path(__file__).resolve().parents[1]
 COLOR = "#ff0000"
+# The palette `_generate_legend` draws with: every type takes its `default`.
+PALETTE_DEFAULT = "#d3d3d3"
 
 
 def _payload(feature: SeqFeature, record: str, label: str = "", record_key: str | None = None,
@@ -60,7 +62,7 @@ def _synthesize(features: list[dict], selected: list[int], rules: list[dict] | N
                 color: str = COLOR, joins: dict | None = None, drawn: list[int] | None = None) -> dict:
     request = dict(scope=scope, features=features, selected=selected, labels=labels or [[] for _ in selected],
                    rules=[{key: rule[key] for key in ("feat", "qual", "val", "color", "cap")} for rule in rules or []],
-                   color=color, caption=caption, joins=joins, drawn=drawn)
+                   color=color, caption=caption, joins=joins, drawn=drawn, palette={"default": PALETTE_DEFAULT})
     return json.loads(synthesize_color_rules_json(json.dumps(request)))
 
 
@@ -400,10 +402,10 @@ def test_a_malformed_request_is_refused():
                                                     joins=None, drawn=None)))
     with pytest.raises(ValueError, match="joined row"):
         synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], selected=[], labels=[], rules=[],
-                                                    color=COLOR, caption="x", joins=dict(at=0, rows=[]), drawn=None)))
+                                                    color=COLOR, caption="x", joins=dict(at=0, rows=[]), drawn=None, palette={})))
     with pytest.raises(ValueError, match="drawn feature"):
         synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], selected=[], labels=[], rules=[],
-                                                    color=COLOR, caption="x", joins=None, drawn=[0])))
+                                                    color=COLOR, caption="x", joins=None, drawn=[0], palette={})))
 
 
 def _genbank_payloads(path: Path) -> list[dict]:
@@ -744,3 +746,70 @@ def test_a_rule_counts_as_used_only_for_the_types_whose_features_take_it(seqs, t
     # Legend draws rows of one caption and color as one row.
     next_table = _next_table(answer, table)
     assert list(dict.fromkeys(_answer_legend(answer, next_table))) == _generate_legend(seqs, next_table) == rows
+
+
+def _rrna(index: int, product: str) -> SeqFeature:
+    return SeqFeature(SimpleLocation(index * 100, index * 100 + 60, strand=1), type="rRNA",
+                      qualifiers={"product": [product]})
+
+
+SMALL_RRNA = dict(feat="rRNA", qual="product", val="^s-rRNA$", color="#ff00ff", cap="small rRNA")
+LARGE_RRNA = dict(feat="rRNA", qual="product", val="^l-rRNA$", color="#0055ff", cap="large rRNA")
+
+
+def _reset_small_rrna(rules: list[dict]) -> tuple[list[SeqFeature], list[dict], dict, list[dict]]:
+    """Reset fill on s-rRNA, which `SMALL_RRNA` colors, as the Web asks it: the
+    palette color, no caption (Python names the row), the drawn features."""
+    seqs = [_rrna(0, "s-rRNA"), _rrna(1, "l-rRNA")]
+    features = [_payload(f, "rec") for f in seqs]
+    answer = _synthesize(features, [0], rules=rules, scope="reset", color=PALETTE_DEFAULT, caption="", drawn=[0, 1])
+    return seqs, features, answer, _next_table(answer, rules)
+
+
+def _generated(seqs: list[SeqFeature], features: list[dict], table: list[dict]) -> list[str]:
+    """`_generate_legend` of `table`, whose `hash` rows name a feature instance:
+    the record `_generate_legend` draws has no record key, so its features have
+    no instance and each such row names the feature's stable hash instead."""
+    stable = {exact_value_pattern(_instance(item)): item["selector"]["hash"] for item in features}
+    return _generate_legend(seqs, [{**rule, "val": stable.get(rule["val"], rule["val"])} if rule["qual"] == "hash"
+                                   else rule for rule in table])
+
+
+def test_a_reset_that_leaves_no_other_rule_of_its_type_keeps_the_type_caption():
+    # OV-3350 (Owner D-15 = B, 2026-11-11): the reset row draws s-rRNA in the
+    # palette color under the name of the type's "other" row; while no other
+    # captioned rule draws an rRNA, the Legend keeps the type's own caption, in
+    # the answer and in Generate.
+    seqs, features, answer, table = _reset_small_rrna([SMALL_RRNA])
+    assert _colors(features, table) == [PALETTE_DEFAULT, None]
+    assert dict(feat="rRNA", qual="hash", val=exact_value_pattern(_instance(features[0])), color=PALETTE_DEFAULT,
+                cap="other rRNAs") in table
+    assert _answer_legend(answer, table) == _generated(seqs, features, table) == ["rRNA"]
+    # A later edit that colors l-rRNA brings the "other" row back.
+    later = _synthesize(features, [1], rules=table, color="#0055ff", caption="large rRNA", drawn=[0, 1])
+    later_table = _next_table(later, table)
+    assert _answer_legend(later, later_table) == _generated(seqs, features, later_table)
+    assert sorted(_answer_legend(later, later_table)) == ["large rRNA", "other rRNAs"]
+
+
+def test_a_reset_beside_a_rule_that_still_colors_its_type_keeps_the_other_row():
+    seqs, features, answer, table = _reset_small_rrna([SMALL_RRNA, LARGE_RRNA])
+    assert _colors(features, table) == [PALETTE_DEFAULT, "#0055ff"]
+    assert _answer_legend(answer, table) == _generated(seqs, features, table)
+    assert sorted(_answer_legend(answer, table)) == ["large rRNA", "other rRNAs"]
+
+
+def test_a_rule_named_like_the_other_row_in_another_color_keeps_its_own_row():
+    # Only a rule in the type's palette color draws the type's row: a rule a
+    # user named "other rRNAs" in red keeps its row beside the palette row, as before.
+    seqs = [_rrna(0, "s-rRNA"), _rrna(1, "l-rRNA")]
+    red = dict(feat="rRNA", qual="product", val="^s-rRNA$", color="#ff0000", cap="other rRNAs")
+    answer = _synthesize([_payload(f, "rec") for f in seqs], [], rules=[red], caption="", drawn=[0, 1])
+    assert _answer_legend(answer, [red]) == _generate_legend(seqs, [red]) == ["other rRNAs", "other rRNAs"]
+
+
+def test_a_reset_of_features_of_two_types_is_refused():
+    seqs = [_rrna(0, "s-rRNA"), _cds(1, product="x")]
+    features = [_payload(f, "rec") for f in seqs]
+    with pytest.raises(ValueError, match="one type at a time"):
+        _synthesize(features, [0, 1], scope="reset", color=PALETTE_DEFAULT, caption="")

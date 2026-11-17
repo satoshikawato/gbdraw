@@ -13,15 +13,17 @@ from pandas import DataFrame
 from gbdraw.core.color import (
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
     DEFAULT_COLLINEAR_ORIENTATION_MIN_COLORS,
-    normalize_hex_color,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import (
     RuleUse,
     TypeRuleUse,
     build_default_color_map,
+    color_identity,
     feature_type_color,
+    is_other_row_rule,
     legend_rule_use,
+    other_feature_row_name,
 )
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
@@ -68,18 +70,8 @@ def _unique_legend_key(reserved: Iterable[str], preferred: str) -> LegendRowKey:
     return LegendRowKey(f"{preferred} ({suffix})")
 
 
-def _legend_fill_identity(color: object) -> str:
-    """Return the color identity used to compare two legend colors (a name equals its hex)."""
-
-    from gbdraw.io.colors import resolve_color_to_hex
-
-    text = str(color or "").strip()
-    if text.lower() == "none":
-        return "none"
-    try:
-        return normalize_hex_color(resolve_color_to_hex(text))
-    except (ValueError, ValidationError):
-        return text.lower()
+# The color identity two legend colors compare by (a name equals its hex).
+_legend_fill_identity = color_identity
 
 
 def legend_swatch(entry: LegendEntry) -> tuple[object, ...]:
@@ -635,7 +627,7 @@ def pairwise_identity_legend_from_comparisons(
 
 
 def _other_feature_legend_key(feature_type: str) -> LegendRowKey:
-    return _key_of_name("other proteins" if feature_type == "CDS" else f"other {feature_type}s")
+    return _key_of_name(other_feature_row_name(feature_type))
 
 
 def _solid_legend_entry(fill: object, stroke: object, width: object) -> dict[str, object]:
@@ -669,7 +661,11 @@ class FeatureLegendRows:
     and ``default_types`` are what ``legend_rule_use`` reads of the drawn
     features (``used`` None: every captioned rule counts as used, for callers
     that do not read the features). A rule is used for a type when features of
-    that type take it (OV-3465), the same for explicit and ``*`` rules. The Web's twin is ``featureLegendRows``
+    that type take it (OV-3465), the same for explicit and ``*`` rules.
+    ``palette`` holds the type colors (``feature_type_color``): a rule drawn as
+    its type's "other" row draws its features in the type's own row while no
+    other captioned rule is used for the type (``is_other_row_rule``, OV-3350).
+    The Web's twin is ``featureLegendRows``
     (gbdraw/web/js/services/specific-color-rules.js); both answer
     tests/fixtures/legend_generated_rows.json (``feature_rows``).
     """
@@ -678,17 +674,21 @@ class FeatureLegendRows:
     present: tuple[str, ...]
     used: frozenset[TypeRuleUse] | None
     default_types: frozenset[str]
+    palette: Mapping[str, str]
 
     @classmethod
-    def of(cls, rules: Iterable[LegendRule], drawn: Sequence[tuple[str, RuleUse | None]]) -> FeatureLegendRows:
+    def of(
+        cls, rules: Iterable[LegendRule], drawn: Sequence[tuple[str, RuleUse | None]], palette: Mapping[str, str]
+    ) -> FeatureLegendRows:
         """The rows of the drawn features, each given by its type and the rule it takes (None: no rule)."""
 
-        used, default_types = legend_rule_use(drawn)
+        used, default_types = legend_rule_use(drawn, palette)
         return cls(
             tuple(rules),
             tuple(dict.fromkeys(feature_type for feature_type, _ in drawn)),
             frozenset(used),
             frozenset(default_types),
+            palette,
         )
 
     def type_rules(self, feature_type: str) -> list[LegendRule]:
@@ -724,9 +724,12 @@ class FeatureLegendRows:
         rule): a captioned rule's row, as (caption, color), whose key the whole
         table allocates (``rule_legend_keys``); else its type's row or its
         "other" row; no row for an uncaptioned rule once captioned rules of the
-        type are used. A feature that is not drawn gets the row it would join."""
+        type are used. A feature that is not drawn gets the row it would join;
+        one of a rule drawn as the "other" row is in its type's row while no
+        other captioned rule of the type is used (``legend_rule_use``)."""
 
-        if winner is not None and str(winner[0] or "").strip():
+        if winner is not None and str(winner[0] or "").strip() and not (
+                is_other_row_rule(feature_type, winner, self.palette) and not self.rules_draw(feature_type)):
             return winner
         if not self.rules_draw(feature_type):
             return _key_of_name(feature_type)
@@ -818,6 +821,8 @@ def prepare_legend_table(
         tuple(features_present),
         None if used_color_rules is None else frozenset(used_color_rules),
         frozenset(default_used_features or ()),
+        # The palette legend_rule_use read for ``used_color_rules`` (one source).
+        features.default_color_map,
     )
     # The renderer's own rows (feature types, "other ..." and numeric tracks)
     # keep their keys; a rule row takes its key from the whole color table and

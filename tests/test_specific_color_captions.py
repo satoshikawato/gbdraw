@@ -283,6 +283,7 @@ def test_rule_caption_equal_to_a_default_type_with_the_same_color_shares_one_row
         default_colors=pd.DataFrame(
             [["tRNA", "#ff00ff"], ["rRNA", "#71EE7D"]], columns=["feature_type", "color"]
         ),
+        default_color_map={"tRNA": "#ff00ff", "rRNA": "#71EE7D"},
         block_stroke_color="black",
         block_stroke_width=1.0,
     )
@@ -565,6 +566,7 @@ def test_rule_captioned_like_a_comparison_legend_row_keeps_its_own_row(caption: 
             columns=["feature_type", "qualifier", "value", "color", "caption"],
         ),
         default_colors=pd.DataFrame([("CDS", "#54bcf8"), ("default", "#d3d3d3")], columns=["feature_type", "color"]),
+        default_color_map={"CDS": "#54bcf8", "default": "#d3d3d3"},
         block_stroke_color="none",
         block_stroke_width=0,
     )

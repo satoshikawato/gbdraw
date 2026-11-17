@@ -23,7 +23,7 @@ from gbdraw.api.record_planning import resolve_record_inputs
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
-from gbdraw.features.colors import compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
+from gbdraw.features.colors import build_default_color_map, compute_feature_hash, precompute_used_color_rules, preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict, create_feature_layers
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
@@ -108,6 +108,7 @@ def _legend_config_stubs(
     feature_config = SimpleNamespace(
         color_table=color_table,
         default_colors=default_colors,
+        default_color_map=build_default_color_map(default_colors),
         block_stroke_color="#111111",
         block_stroke_width=0.5,
     )

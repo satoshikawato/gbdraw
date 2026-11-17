@@ -29,7 +29,7 @@ import {
   setLegendStroke
 } from '../../services/drawing/paint.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
-import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys, otherFeatureRowKey } from '../../services/specific-color-rules.js';
+import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys } from '../../services/specific-color-rules.js';
 import { drawnBlockStrokeElement } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -1654,11 +1654,12 @@ export const createFeatureColorActions = ({
     const rowRules = new Set(getLegendRowRules(caption));
     // "This feature only" takes back the `hash` rules that name the feature, in
     // Python: a rule another copy of it shares keeps coloring that copy. A
-    // feature that another rule still colors takes its palette color by itself.
+    // feature that another rule still colors takes its palette color by itself,
+    // under the name Python gives it (its type's "other" row, OV-3350).
     /** @type {SpecificRuleBuild} */
     const reset = choice === 'all'
       ? (current) => current.filter(rule => !rowRules.has(rule))
-      : groupColorRules([feature], color || '', otherFeatureRowKey(String(feature.type)), 'reset');
+      : groupColorRules([feature], color || '', '', 'reset');
     const applied = await commitRuleWrite(reset, msg('Reset feature color'), { drawing });
     if (applied) clickedFeature.value = null;
     return applied;

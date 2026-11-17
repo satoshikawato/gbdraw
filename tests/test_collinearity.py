@@ -3451,6 +3451,7 @@ def test_orientation_collinearity_suppresses_pairwise_identity_legend() -> None:
     feature_config = SimpleNamespace(
         color_table=None,
         default_colors=pd.DataFrame([("CDS", "#54bcf8"), ("default", "#d3d3d3")], columns=["feature_type", "color"]),
+        default_color_map={"CDS": "#54bcf8", "default": "#d3d3d3"},
         block_stroke_color="none",
         block_stroke_width=0,
     )
@@ -3495,6 +3496,7 @@ def test_average_identity_collinearity_legend_uses_average_identity_label() -> N
     feature_config = SimpleNamespace(
         color_table=None,
         default_colors=pd.DataFrame([("CDS", "#54bcf8"), ("default", "#d3d3d3")], columns=["feature_type", "color"]),
+        default_color_map={"CDS": "#54bcf8", "default": "#d3d3d3"},
         block_stroke_color="none",
         block_stroke_width=0,
     )
@@ -3540,6 +3542,7 @@ def test_orientation_identity_collinearity_legend_uses_two_orientation_gradients
     feature_config = SimpleNamespace(
         color_table=None,
         default_colors=pd.DataFrame([("CDS", "#54bcf8"), ("default", "#d3d3d3")], columns=["feature_type", "color"]),
+        default_color_map={"CDS": "#54bcf8", "default": "#d3d3d3"},
         block_stroke_color="none",
         block_stroke_width=0,
     )

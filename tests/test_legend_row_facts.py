@@ -363,6 +363,7 @@ def test_generated_legend_rows_are_the_rows_the_web_reads_from_their_keys(case):
             tuple(case["features_present"]),
             frozenset(tuple(row) for row in case["used_color_rules"]),
             frozenset(case["default_used_features"]),
+            {},
         ),
         default_colors,
         gc=track(GcContentLegendSource, case["gc"]),
@@ -394,7 +395,7 @@ def test_each_drawn_feature_is_in_a_row_generate_draws(case):
     Generate's rows are the rows of the drawn features: each feature's row is drawn, and each drawn row has one."""
     rules = [tuple(rule) for rule in case["rules"]]
     drawn = [(feature_type, None if winner is None else rules[winner][1:]) for feature_type, winner in case["drawn"]]
-    rows = FeatureLegendRows.of(rules, drawn)
+    rows = FeatureLegendRows.of(rules, drawn, case["palette"])
 
     def answer(row):
         return list(row) if isinstance(row, tuple) else row
@@ -408,7 +409,7 @@ def test_each_drawn_feature_is_in_a_row_generate_draws(case):
 
 
 # No feature drawn: the rows of the tracks alone.
-NO_FEATURE_ROWS = FeatureLegendRows((), (), None, frozenset())
+NO_FEATURE_ROWS = FeatureLegendRows((), (), None, frozenset(), {})
 
 TRACK_SLOT_ROWS = json.loads(
     (Path(__file__).parent / "fixtures" / "legend_track_slot_rows.json").read_text(encoding="utf-8")
