@@ -21,7 +21,13 @@ test('PR / gate merges the pull request into the current dev after its trusted c
   assert.match(fresh, /ref: refs\/heads\/\$\{\{ github\.base_ref \}\}\n {10}path: \.ci-fresh-merge\n {10}fetch-depth: 0\n/);
   assert.match(fresh, /persist-credentials: false\n/);
   assert.match(fresh, /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}\n/);
-  assert.match(fresh, /merge --no-ff --no-edit "\$HEAD_SHA"/);
+  // The merge is built by merge-tree and checked out as a commit (dev first, as in GitHub's merge commit):
+  // `git merge` on this blob-less checkout asks GitHub for the merged blob it just wrote (OV-3782).
+  assert.match(fresh, /git merge-tree --write-tree --messages "\$dev" "\$HEAD_SHA"/);
+  assert.match(fresh, /commit-tree "\$tree" -p "\$dev" -p "\$HEAD_SHA"/);
+  assert.doesNotMatch(fresh.replace(/^ *#.*\n/gm, ''), /\bgit\b[^\n]*\smerge\s/);
+  // Only exit status 1 of merge-tree is a conflict; any other failure is reported as itself.
+  assert.match(fresh, /\[ "\$status" -eq 1 \][\s\S]*title=Conflict with dev[\s\S]*\[ "\$status" -ne 0 \][\s\S]*title=Merge into dev failed/);
   assert.match(fresh, /working-directory: \.ci-fresh-merge\n {8}run: node tools\/ci-impact-fresh-guards\.mjs\n/);
   // Pull request code runs here: no token, no secret, and nothing after a failed trusted check.
   assert.doesNotMatch(fresh.replace(/^ *#.*\n/gm, ''), /token|secrets\.|\n {8}if:/i);

@@ -1991,6 +1991,12 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
+      # The merge is computed with `git merge-tree`, then checked out as a commit of its own. `git
+      # merge` against this blob-less checkout (git 2.56) fails whenever the merge rewrites a file
+      # both sides changed: its checkout asks the promisor remote for the merged blob, which exists
+      # only here, so GitHub answers "not our ref" (OV-3782, #2102). `merge-tree` writes the merged
+      # objects before any checkout, so the checkout finds them. Exit status 1 is a conflict; any
+      # other failure is reported as itself, never as a conflict.
       - name: Merge the pull request into the current dev
         working-directory: .ci-fresh-merge
         env:
@@ -1998,10 +2004,19 @@ jobs:
         run: |
           git fetch --no-tags origin "$HEAD_SHA"
           dev="$(git rev-parse HEAD)"
-          if ! git -c user.name='PR / gate' -c user.email='pr-gate@localhost' merge --no-ff --no-edit "$HEAD_SHA"; then
+          status=0
+          merged="$(git merge-tree --write-tree --messages "$dev" "$HEAD_SHA")" || status=$?
+          if [ "$status" -eq 1 ]; then
+            printf '%s\n' "$merged"
             echo "::error title=Conflict with dev::The pull request head $HEAD_SHA conflicts with dev $dev. Update the branch from dev."
             exit 1
+          elif [ "$status" -ne 0 ]; then
+            echo "::error title=Merge into dev failed::git merge-tree exited with status $status before it could tell whether the pull request head $HEAD_SHA conflicts with dev $dev. This is not a conflict; rerun the job."
+            exit 1
           fi
+          tree="${merged%%$'\n'*}"
+          merge="$(git -c user.name='PR / gate' -c user.email='pr-gate@localhost' commit-tree "$tree" -p "$dev" -p "$HEAD_SHA" -m "Merge $HEAD_SHA into $dev")"
+          git reset --hard "$merge"
           printf '## Fresh guards\n\nThe pull request head %s merged into dev %s.\n\n' "$HEAD_SHA" "$dev" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install the merge's locked Node packages
