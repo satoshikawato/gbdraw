@@ -1033,7 +1033,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     };
   };
   const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
-    legendRowName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {} }) => {
+    legendRowName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {}, featureColorOverrides = {} }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -1063,7 +1063,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       state: withDrawings({
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
-        featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
+        featureColorOverrides, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         displayedResultMetadata: () => null,
         clickedFeature: ref(clicked), featureStyleScopeDialog: scopeDialog, resetColorDialog: {}, legendRenameDialog,
         legendEntries: stateLegendEntries, deletedLegendEntries: ref(deleted), dormantLegendEntries: ref([]),
@@ -1233,6 +1233,89 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     'a rename onto the "other" row offers Keep both and Cancel');
   assert.equal(await otherRow().renameActions.preparedLegendRowDefaultColorType('other proteins'), 'CDS',
     'the "other" row is drawn in the CDS default color');
+  // OV-244 (c): a whole-row rename of a type's palette row (a row no Specific
+  // color rule draws, whose features all take their type's Default color: the
+  // test the row's color takes, D-15) names the row only, through Python's row
+  // names (`objects.legends.row_names`), from the Legend tab and from the
+  // popup's Legend name for every feature of the row. No rule is written.
+  // Merge into a listed row and "This feature only" still write rules, and a
+  // row a per-feature color edit draws is no palette row.
+  const { legendEditConfigLeaves } = await import(pathToFileURL(join(tempDir, 'services', 'legend-draft-rows.js')));
+  const paletteFeatures = [cds('p1', 'COX1', 'CDS'), cds('p2', 'COX2', 'CDS'), cds('p3', 'ATP6', 'CDS')];
+  const paletteRow = (options = {}) => build({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: ['CDS', 'GC content'],
+    features: paletteFeatures, ...options
+  });
+  const rowNames = (fixture, rules = []) => legendEditConfigLeaves({
+    legendEntries: fixture.stateLegendEntries.value, deletedLegendEntries: [], originalLegendOrder: fixture.originalOrder.value,
+    pythonRowKeys: fixture.originalOrder.value, rules, canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
+  });
+  const namesOf = (fixture) => fixture.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]);
+  const renamedPalette = paletteRow();
+  await renamedPalette.renameActions.renameLegendEntry(0, 'Coding');
+  assert.notEqual(renamedPalette.legendRenameDialog.show, true, 'a palette row rename asks nothing');
+  assert.deepEqual(renamedPalette.committed, [], 'a palette row rename writes no rule');
+  assert.deepEqual(namesOf(renamedPalette), [['Coding', 'CDS'], ['GC content', 'GC content']], 'the row is renamed in its place');
+  assert.deepEqual(rowNames(renamedPalette), { 'objects.legends.row_names': [['CDS', 'Coding']] }, 'Python draws the name');
+  // Its key names it back: the name leaf goes.
+  await renamedPalette.renameActions.renameLegendEntry(0, 'CDS');
+  assert.deepEqual(renamedPalette.committed, [], 'naming it back writes no rule');
+  assert.deepEqual(namesOf(renamedPalette)[0], ['CDS', 'CDS']);
+  assert.deepEqual(rowNames(renamedPalette), {}, 'no name leaf');
+  // The popup's Legend name for every feature of the row is the same rename, and the field then names the row.
+  const popupClicked = { svg_id: 'p1', feat: paletteFeatures[0], color: '#54bcf8', legendName: 'Coding', appliedLegendName: 'CDS' };
+  const popupPalette = paletteRow({ clicked: popupClicked });
+  await popupPalette.renameActions.handleLegendNameCommit();
+  assert.deepEqual([popupPalette.legendRenameDialog.mode, popupPalette.legendRenameDialog.siblingCount], ['scope', 2]);
+  await popupPalette.renameActions.handleLegendRenameChoice('group');
+  assert.deepEqual(popupPalette.committed, [], 'the popup group rename writes no rule');
+  assert.deepEqual(namesOf(popupPalette)[0], ['Coding', 'CDS']);
+  assert.deepEqual([popupClicked.legendName, popupClicked.appliedLegendName], ['CDS', 'CDS'],
+    'the popup field holds the row\'s key, which it shows by the row\'s name');
+  // The popup's rename of the "other" row for every feature of it is D-23's name change too.
+  const otherClicked = { svg_id: 'c1', feat: cds('c1', 'COX1', 'other proteins'), color: '#54bcf8', legendName: 'other CDS', appliedLegendName: 'other proteins' };
+  const popupOther = build({ clicked: otherClicked,
+    entries: [{ caption: 'ND1', color: '#e63946' }, { caption: 'other proteins', color: '#54bcf8' }], order: ['ND1', 'other proteins'],
+    rules: [nd1Rule], features: [cds('n1', 'ND1', 'ND1'), cds('c1', 'COX1', 'other proteins'), cds('c2', 'COX2', 'other proteins')],
+    otherRows: { 'other proteins': 'CDS' } });
+  await popupOther.renameActions.handleLegendNameCommit();
+  await popupOther.renameActions.handleLegendRenameChoice('group');
+  assert.deepEqual(popupOther.committed, [], 'the popup group rename of the "other" row writes no rule');
+  assert.deepEqual(namesOf(popupOther), [['ND1', 'ND1'], ['other CDS', 'other proteins']]);
+  // "This feature only" splits the feature off with a rule of its own.
+  const singleClicked = { svg_id: 'p1', feat: paletteFeatures[0], color: '#54bcf8', legendName: 'Coding', appliedLegendName: 'CDS' };
+  const singlePalette = paletteRow({ clicked: singleClicked });
+  await singlePalette.renameActions.handleLegendNameCommit();
+  await singlePalette.renameActions.handleLegendRenameChoice('single');
+  assert.deepEqual(singlePalette.committed.map((rules) => rules.map(({ val, cap }) => [val, cap])), [[['^COX1$', 'Coding']]],
+    'This feature only writes one rule for the feature');
+  assert.deepEqual(namesOf(singlePalette)[0], ['CDS', 'CDS'], 'the row keeps its name');
+  // Keep both onto a row of another color renames the row only; Python numbers the two names.
+  const ontoOtherColor = paletteRow({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'ND1', color: '#e63946' }], order: ['CDS', 'ND1'],
+    rules: [nd1Rule], features: [...paletteFeatures, cds('n1', 'ND1', 'ND1')]
+  });
+  await ontoOtherColor.renameActions.renameLegendEntry(0, 'ND1');
+  assert.deepEqual([ontoOtherColor.legendRenameDialog.mode, ontoOtherColor.legendRenameDialog.mergeAvailable], ['target', true]);
+  await ontoOtherColor.renameActions.handleLegendRenameChoice('keep-both');
+  assert.deepEqual(ontoOtherColor.committed, [], 'Keep both writes no rule');
+  assert.deepEqual(namesOf(ontoOtherColor), [['ND1', 'CDS'], ['ND1', 'ND1']]);
+  // Merge into a listed row of the same color joins its rules: the features take the row's rule.
+  const sameColorRule = { ...nd1Rule, color: '#54bcf8' };
+  const ontoSameColor = paletteRow({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'ND1', color: '#54bcf8' }], order: ['CDS', 'ND1'],
+    rules: [sameColorRule], features: [...paletteFeatures, cds('n1', 'ND1', 'ND1')]
+  });
+  await ontoSameColor.renameActions.renameLegendEntry(0, 'ND1');
+  assert.notEqual(ontoSameColor.legendRenameDialog.show, true, 'one color and one type: no dialog');
+  assert.equal(ontoSameColor.committed.length, 1, 'the join writes rules');
+  assert.deepEqual([...new Set(ontoSameColor.committed[0].map(({ cap }) => cap))], ['ND1']);
+  // A row a per-feature color edit draws is no palette row: its rename writes rules, as its color edit does (D-15).
+  const overridden = paletteRow({
+    featureColorOverrides: { [featureOverrideKey({ record_key: 'record-1', biological_feature_id: 'p2', ...paletteFeatures[1] })]: { color: '#123456', caption: 'CDS' } }
+  });
+  await overridden.renameActions.renameLegendEntry(0, 'Coding');
+  assert.equal(overridden.committed.length, 1, 'a row with a per-feature color edit takes rules');
   // D-26: a CDS that an uncaptioned rule colors while a captioned CDS rule is
   // used is in no Legend row ('' from the rule owner). Its Color Change Scope
   // dialog names no Legend item, and a popup rename from its empty name takes
@@ -1350,13 +1433,15 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
 
   // Review r1 (OV-244): a group edit whose rule synthesis Python refuses shows
   // the failure, on the Legend panel rename and on Selected features alike.
+  // The row is a rule row's (`Leu`), not its type's palette row, whose rename
+  // writes no rule.
   for (const [name, run] of [
     ['the Legend panel rename', (fixture) => fixture.renameActions.renameLegendEntry(0, 'Leucine')],
-    ['Selected features', (fixture) => fixture.renameActions.applyColorToSelectedFeatures([{ ...trna, legendCaption: 'tRNA' }], '#123456', 'Leucine')]
+    ['Selected features', (fixture) => fixture.renameActions.applyColorToSelectedFeatures([{ ...trna, legendCaption: 'Leu' }], '#123456', 'Leucine')]
   ]) {
     const synthesized = [];
-    const fixture = build({ entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }], order: ['tRNA'],
-      features: [{ ...trna, legendCaption: 'tRNA' }],
+    const fixture = build({ entries: [{ caption: 'Leu', color: '#e8b441', featureIds: ['t1'] }], order: ['Leu'],
+      features: [{ ...trna, legendCaption: 'Leu' }],
       ruleOverrides: { groupColorRules: () => async () => {
         synthesized.push(name);
         throw new Error('The rule synthesis could not color the selected features.');
@@ -1598,10 +1683,12 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await ruleOwned.renameActions.handleLegendRenameChoice('merge');
   assert.deepEqual(committedFor(ruleOwned, 't1'), [['t1', 'Special', '#ff0000']]);
   // A typed rename onto the name of a rule that draws no row asks too, from
-  // the Legend editor and from the popup's field.
-  for (const typed of [
-    (fixture) => fixture.renameActions.renameLegendEntry(0, 'Connector'),
-    (fixture) => fixture.renameActions.handleLegendNameCommit()
+  // the Legend editor and from the popup's field. Keep both of the tRNA row
+  // (its type's palette row) renamed whole names the row only (OV-244 (c));
+  // the popup's only feature of the row is named by itself, with a rule.
+  for (const [typed, keptRule, keptName] of [
+    [(fixture) => fixture.renameActions.renameLegendEntry(0, 'Connector'), [], 'Connector'],
+    [(fixture) => fixture.renameActions.handleLegendNameCommit(), [['t1', 'Connector', '#e8b441']], 'tRNA']
   ]) {
     const asked = ruleRows({ clicked: { svg_id: 't1', feat: t1, legendName: 'Connector', appliedLegendName: 'tRNA' } });
     await typed(asked);
@@ -1616,7 +1703,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const kept = ruleRows({ clicked: { svg_id: 't1', feat: t1, legendName: 'Connector', appliedLegendName: 'tRNA' } });
     await typed(kept);
     await kept.renameActions.handleLegendRenameChoice('keep-both');
-    assert.deepEqual(committedFor(kept, 't1'), [['t1', 'Connector', '#e8b441']]);
+    assert.deepEqual(committedFor(kept, 't1'), keptRule);
+    assert.equal(kept.stateLegendEntries.value[0].caption, keptName);
   }
   // The name of a rule of another feature type offers no Merge.
   const otherType = ruleRows();

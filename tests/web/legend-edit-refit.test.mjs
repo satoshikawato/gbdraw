@@ -12,7 +12,8 @@ import { gallerySessionDocument } from './helpers/session-documents.mjs';
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
-const { stepRefitsDrawnLegend } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { legendEditConfigLeaves, stepRefitsDrawnLegend } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { compileDirectEditorMutationPlan } = await import('../../gbdraw/web/js/app/candidate-render.js');
 const { SETTING_APPLICATION, refitFieldsBeforeStep, settingApplicationHelp } = await import('../../gbdraw/web/js/services/setting-application.js');
 const { requestedCanvasOf } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { createFigureSizeField } = await import('../../gbdraw/web/js/app/figure-size-field.js');
@@ -105,6 +106,32 @@ test('a rename that writes color rules fits again; a rule color edit does not', 
   const recolored = rules.map((entry) => ({ ...entry, color: '#ff0000' }));
   assert.equal(stepRefitsDrawnLegend([{ path: ['config', 'rules'], before: rules, after: recolored, beforeHas: true, afterHas: true }],
     undefined, { ...after, rules: recolored }), false, 'a rule color stays the size');
+});
+
+// OV-244 (c): the rename of a type's palette row (`CDS`, no color rule draws it) writes no color rule. The request
+// names the row by its key (`objects.legends.row_names`), Python draws the name, and a sized figure is fitted again.
+// The name is the row's, not the type's: while a captioned rule for the type is used, Python draws its features in the
+// rule's row and the type's "other" row, no `CDS` row; the renamed row waits (OV-120) and the request names no row.
+// Once the rule goes, the request built from the figure that had the rule still names no row, so Python draws `CDS`;
+// the live edit renames that drawn row from the waiting entry, and once the row is listed again under its name the
+// request names it again.
+test('a palette row rename is a row name the request carries, with no rule; a captioned rule for its type sets it aside', () => {
+  const renamed = [row('CDS', 'Coding'), row('tRNA'), row('rRNA')];
+  const named = { 'objects.legends.row_names': [['CDS', 'Coding']] };
+  assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named);
+  assert.equal(stepRefitsDrawnLegend([entriesChange(ENTRIES, renamed)], undefined, drawing({ legendEntries: renamed, rules: [] })), true);
+  const nd1 = { feat: 'CDS', qual: 'product', val: '^ND1$', color: '#e63946', cap: 'ND1' };
+  const ruledRows = ['ND1', 'other proteins', 'tRNA', 'rRNA'];
+  const waiting = drawing({ legendEntries: ruledRows.map((key) => row(key)), dormantLegendEntries: [row('CDS', 'Coding')], originalLegendOrder: ruledRows });
+  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [nd1] }), {}, 'with the rule, no row of the name is drawn');
+  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [] }), {}, 'the rule removed: the next request still names no row');
+  const live = compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: waiting.legendEntries, originalLegendOrder: ruledRows, dormantLegendEntries: waiting.dormantLegendEntries
+  }).operationsByResult[0];
+  assert.deepEqual(live.legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]), [['CDS', 'Coding', true]],
+    'the live edit renames a drawn CDS row from the waiting entry');
+  assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named, 'listed again, the row is named');
 });
 
 test('an Undo or a Redo of such a step fits again; the Undo reads the drawing as it was before the step', () => {

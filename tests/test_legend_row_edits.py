@@ -352,6 +352,40 @@ def test_the_cli_options_draw_the_edits_and_a_saved_session_replays_them(
     assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == drawn
 
 
+def _row_swatches(svg: str) -> dict[str, tuple[str, str]]:
+    """Each feature Legend row's key: its text and its swatch fill."""
+
+    swatches = {}
+    for match in re.finditer(r'<g ([^>]*data-legend-key="[^"]*"[^>]*)>(.*?)</g>', svg):
+        key = html.unescape(re.search(r'data-legend-key="([^"]*)"', match[1])[1])
+        text = re.search(r"<text[^>]*>([^<]*)</text>", match[2])
+        fill = re.search(r'fill="([^"]*)"', match[2])
+        swatches[key] = (html.unescape(text[1]) if text else "", fill[1] if fill else "")
+    return swatches
+
+
+def test_a_type_row_named_from_the_cli_keeps_its_palette_color_and_replays(tmp_path: Path, monkeypatch, capsys) -> None:
+    """``CDS<TAB>Coding`` names the CDS row of a 530-CDS genome as the Web app's rename of that row does (OV-244 (c)):
+    the row keeps its key and its palette color, no other row is drawn, and ``render --session`` draws the same SVG."""
+
+    genome = INPUTS / "AP027078.gb"
+    status, err = _gbdraw(monkeypatch, capsys, "circular", "--gbk", str(genome), "-o", str(tmp_path / "plain"), "-f", "svg")
+    assert status == 0, err
+    plain = _row_swatches((tmp_path / "plain.svg").read_text(encoding="utf-8"))
+    rows = _rows_table(tmp_path, "key\tname\thidden\tposition\nCDS\tCoding\n")
+    session = tmp_path / "named.gbdraw"
+    status, err = _gbdraw(monkeypatch, capsys, "circular", "--gbk", str(genome), "--legend_rows", str(rows),
+                          "-o", str(tmp_path / "named"), "-f", "svg", "--save_session", "--session_output", str(session))
+    assert status == 0, err
+    drawn = (tmp_path / "named.svg").read_text(encoding="utf-8")
+    named = _row_swatches(drawn)
+    assert named["CDS"] == ("Coding", plain["CDS"][1])
+    assert {key: row for key, row in named.items() if key != "CDS"} == {key: row for key, row in plain.items() if key != "CDS"}
+    status, err = _gbdraw(monkeypatch, capsys, "render", "--session", str(session), "-o", str(tmp_path / "replay"), "-f", "svg")
+    assert status == 0, err
+    assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == drawn
+
+
 @pytest.mark.parametrize(
     ("text", "message"),
     [

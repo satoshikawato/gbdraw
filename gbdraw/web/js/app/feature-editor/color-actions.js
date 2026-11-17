@@ -734,12 +734,15 @@ export const createFeatureColorActions = ({
     if (feat && clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id) clickedFeature.value.color = color;
   };
 
-  /** @param {ColorFeature | null | undefined} feat @param {string} caption @param {string | null} [color] */
-  const updateClickedFeatureLegendState = (feat, caption, color = null) => {
-    if (!clickedFeature.value || !feat || clickedFeature.value.svg_id !== feat.svg_id) return;
+  // After an edit of the row or the color of `features`, the popup of one of
+  // them holds its row's key in its Legend name field, which shows the row's
+  // name, and shows the color the edit gave.
+  /** @param {readonly ColorFeature[]} features @param {string | null} [color] */
+  const updateClickedFeatureLegendState = (features, color = null) => {
+    const feat = features.find((feature) => feature.svg_id === clickedFeature.value?.svg_id);
+    if (!clickedFeature.value || !feat) return;
     if (color) showClickedFeatureColor(feat, color);
-    clickedFeature.value.legendName = caption;
-    clickedFeature.value.appliedLegendName = caption;
+    clickedFeature.value.legendName = clickedFeature.value.appliedLegendName = effectiveLegendCaptions()(feat);
   };
 
   /** @param {DrawingState} drawing */
@@ -825,19 +828,25 @@ export const createFeatureColorActions = ({
     return Boolean(sourceKey) && getFeaturesForLegendCaption(sourceKey).every(feature => selected.has(feature.svg_id));
   };
 
-  // The rename of a Legend row without rules or features writes the intent
-  // (U3a gap 3): the row keeps its key, under which its styles stay (D-25),
-  // and takes the new name; Generate and the port rename a row of Python's
-  // (`legendRenames`, PV-02) and name an editor row (`legendAdds`), in its
-  // place in the order. The text control's open step holds the edit.
-  /** @param {DrawingState} drawing @param {PythonLegendKey} sourceKey @param {string} newCaption */
-  const renameLegendRow = (drawing, sourceKey, newCaption) => {
+  // The rename of a Legend row without rules, or of a type's palette row
+  // whole, writes the intent (U3a gap 3): the row keeps its key, under which
+  // its styles stay (D-25), and takes the new name. Python draws the name of a
+  // row of its own from the request's row names (`objects.legends.row_names`,
+  // PD-OI-114); the live edit shows it (`legendRenames`, PV-02) and names an
+  // editor row (`legendAdds`), in its place in the order. The text control's
+  // open step holds the edit.
+  /**
+   * @param {DrawingState} drawing @param {PythonLegendKey} sourceKey @param {string} newCaption
+   * @param {readonly ColorFeature[]} features The row's features the rename takes, if any.
+   */
+  const renameLegendRow = (drawing, sourceKey, newCaption, features) => {
     const legendEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === sourceKey);
     if (!legendEntry) return false;
     // An entry without a key record (an older editor row) records its key
     // first. The rename's own step holds it.
     renameListedLegendRow(drawing.slices.paint, legendEntry, { caption: /** @type {LegendCaption} */ (newCaption), originalCaption: sourceKey });
     showEditorIntent?.({ domains: RENAMED_ROW_DOMAINS });
+    updateClickedFeatureLegendState(features);
     return true;
   };
 
@@ -852,7 +861,18 @@ export const createFeatureColorActions = ({
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
     const sourceRules = getLegendRowRules(request.sourceKey);
-    if (sourceRules.length || features.length) {
+    // OV-244 (c): a type's palette row renamed whole keeps its features and
+    // its color and takes the new name, which Python's row names draw. The
+    // test the row's color edit takes (D-15, `paletteRowType`) decides it, so
+    // the row's name and color follow one rule. A rename that joins a listed
+    // row (`joins`) or a color-rule group (its name in its color: a Merge, a
+    // pick from the popup's list, a typed name of a group of the row's color)
+    // moves the features into that row's rules, and "This feature only"
+    // splits a feature off: both write rules.
+    const namesRowOnly = request.sourceScope === 'group' && !request.joins && takesWholeRow(request.sourceKey, features)
+      && paletteRowType(drawing, request.sourceKey, features) !== null
+      && !colorRuleLegendGroups(drawing.manualSpecificRules).some((group) => captionsMatch(group.name, caption) && colorsMatch(group.color, color));
+    if ((sourceRules.length || features.length) && !namesRowOnly) {
       const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
       // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
       // and every record stored under its key. The one decision that the
@@ -875,13 +895,10 @@ export const createFeatureColorActions = ({
         // OV-2247, OV-2248, Owner 2026-10-29).
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
           : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,
-        afterCommit: () => {
-          const committedCaptionOf = effectiveLegendCaptions();
-          for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
-        }
+        afterCommit: () => updateClickedFeatureLegendState(features, color)
       });
     }
-    return renameLegendRow(drawing, request.sourceKey, caption);
+    return renameLegendRow(drawing, request.sourceKey, caption, features);
   };
 
   /** @param {LegendRenameRequest} request @param {number} siblingCount */
@@ -1126,8 +1143,7 @@ export const createFeatureColorActions = ({
             && colorsMatch(entry.color, color));
           if (intent) setLegendColor(drawing.slices.paint, /** @type {PythonLegendKey} */ (intent.caption), intent.color);
         }
-        const committedCaptionOf = effectiveLegendCaptions();
-        for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
+        updateClickedFeatureLegendState(features, color);
       }
     });
   };

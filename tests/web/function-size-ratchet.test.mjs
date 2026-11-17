@@ -78,7 +78,7 @@ const FUNCTION_STATEMENTS = {
   'app/circular-record-controls.js::createCircularSourceEdits': 86,
   'app/circular-track-slots.js::createCircularTrackSlotEditor': 857,
   'app/drawing-list.js::createDrawingList': 107,
-  'app/feature-editor/color-actions.js::createFeatureColorActions': 920,
+  'app/feature-editor/color-actions.js::createFeatureColorActions': 919,
   'app/feature-editor/label-actions.js::createFeatureLabelActions': 620,
   'app/feature-editor/placement-actions.js::createFeaturePlacementActions': 100,
   'app/feature-editor/rule-actions.js::createFeatureRuleActions': 646,

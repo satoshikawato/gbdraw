@@ -586,6 +586,40 @@ test('HMMT Session: the popup names the Legend row the figure draws a default fe
   }
 });
 
+// OV-244 (c): the Legend editor's rename of a type's palette row (the CDS row
+// of the HMMT Session, which no color rule draws) names the row only: no rule
+// is written, Python draws the name at Generate as the live edit shows it, and
+// the popup's Legend name of a CDS shows the new name.
+test('HMMT Session: the rename of the CDS row, which no color rule draws, names the row and writes no rule (OV-244)', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    const rules = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => `${rule.cap}: ${rule.val}`));
+    const before = await rules();
+    expect(await legendCaptions(page, { source: 'result' })).toContain('CDS');
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), 'Coding');
+    });
+    await settle(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rename onto a new name asks nothing').toBe(false);
+    expect(await rules(), 'the rename writes no rule').toEqual(before);
+    const live = await legendCaptions(page, { source: 'mounted' });
+    expect(live, 'live').toContain('Coding');
+    expect(live, 'live').not.toContain('CDS');
+    await generate(page);
+    expect(await legendCaptions(page, { source: 'result' }), 'Generate draws the live rows').toEqual(live);
+    expect(await rules(), 'Generate writes no rule').toEqual(before);
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === 'cytochrome b'), null);
+    });
+    await expect(page.getByLabel('Feature legend name', { exact: true })).toHaveValue('Coding');
+  } finally {
+    await page.context().close();
+  }
+});
+
 // The Linear LAMBDA Gallery Session on one page. A page error anywhere in the
 // case fails the legend-free step.
 test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {
