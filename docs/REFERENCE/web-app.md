@@ -1709,7 +1709,10 @@ keeps `CDS (2)` as written, and the numbering of `CDS` skips it. Rows of one
 name and one swatch are one row, so **Keep both** with an equal swatch gives
 one row and its button names it without a number. When the rename takes only
 some features of a row, their new row goes right after the row of that name,
-so the legend draws the name the dialog showed. Renaming a row that a feature type's default
+so the legend draws the name the dialog showed. Renaming a whole row that no specific color
+rule draws, such as `CDS`, changes only the row's name: it writes no specific color rule, its
+features keep their default color, and **Reset** returns the name. **Merge into "<name>"** and
+**This feature only** still write rules. Renaming a row that a feature type's default
 color draws keeps its features drawn when you later clear that type in **Feature Types**; set
 their **Feature visibility** to **Off** to hide them. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features
