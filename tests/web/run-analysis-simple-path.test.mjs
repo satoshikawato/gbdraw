@@ -1739,7 +1739,8 @@ test('Save Raw LOSAT TSV and both Clear buttons read the shown drawing\'s result
   assert.equal(html.match(/\{\{ losatResultRows\.length === 0 \? t\('Clear LOSAT results'\) : tn\(losatResultRows\.length, 'Clear \{count\} LOSAT result', 'Clear \{count\} LOSAT results'\) \}\}/g)?.length, 2);
   assert.equal(html.includes('Clear the project'), false);
   assert.equal(html.includes('clearableLosatResultCount'), false);
-  assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="!semanticMutationAvailable \|\| \(losatResultRows\.length === 0\)"/g)?.length, 2);
+  // OV-3768 (D-259): both Clear buttons are off during a run, as Reset Settings is (OV-2446).
+  assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="Boolean\(sessionOperationAvailability\('not-during-run'\)\) \|\| \(losatResultRows\.length === 0\)"/g)?.length, 2);
   assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" :aria-describedby="losatResultRows\.length === 0 \? 'circular-losat-cache-reason' : null"/);
   // Each reason is true (round 13, OV-3206): while the shown drawing has no results, Save Raw and Clear are disabled
   // and point at one hint, dev's while the project has none, else that the shown drawing has none.

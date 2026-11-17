@@ -317,8 +317,12 @@ def integration_prepare(page, case, raw_cold=False):
         orthogroupMemberMaxHits: 5, collinearInferOrthogroups: options.infer,
         collinearSearchScope: 'adjacent', collinearUnitMode: 'auto', collinearAnchorMode: 'rbh'});
       app.losatExecution.executionMode = 'serial';
-      if (options.rawCold) app.clearLosatCache();
-      state.losatDerivedCache.value.clear();
+      // Clear is a History step; it records none when the shown drawing lists no row (its searches stay then).
+      if (options.rawCold && (await app.clearLosatCache()) !== true && state.losatCache.value.size) {
+        throw new Error('Clear LOSAT results was refused');
+      }
+      // A new Map: History steps share the values Clear put back, so the earlier Map is not emptied in place.
+      state.losatDerivedCache.value = new Map();
       const {disposeDiagramGenerationWorker} = await import('/gbdraw/web/js/services/diagram-generation.js');
       disposeDiagramGenerationWorker();
       await Vue.nextTick();
@@ -805,7 +809,7 @@ def run_integration_lifecycle(args, report, context_for, close_context, save):
         if not (args.integration == 'replacement' and args.resume):
             page.evaluate('''async () => {
               const app = window.__GBDRAW_APP__;
-              app.clearLosatCache();
+              if ((await app.clearLosatCache()) !== true) throw new Error('Clear LOSAT results was refused');
               await app.setLinearComparisonGlobalAction('losat');
               const {state} = await import('/gbdraw/web/js/state.js');
               if (state.losatCache.value.size || state.losatDerivedCache.value.size) throw new Error('Cache survived clear');

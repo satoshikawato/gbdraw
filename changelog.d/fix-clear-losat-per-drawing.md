@@ -6,7 +6,10 @@
   Generate instead of running LOSAT again; the result is the same. In a project
   with one drawing, Clear removes every LOSAT result, as before.
 - Changed: **Clear LOSAT results** is a step in the drawing's History. **Undo**
-  brings back the results it cleared, and **Redo** clears them again.
+  brings back the results it cleared, and **Redo** clears them again. It is
+  unavailable while a diagram is being generated, as **Reset Settings** is;
+  before, a Generate that finished after a Clear brought the cleared results
+  back.
 - Fixed: each drawing keeps its own LOSAT results through Delete, Duplicate,
   Undo and Redo. A deleted drawing that **Undo** brings back has the results it
   had, even after a Clear in another drawing; a Linear comparison edit in one

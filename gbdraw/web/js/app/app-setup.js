@@ -616,16 +616,23 @@ const clearLosatResultsCommand = (drawingId, { losatEvidenceOf, writeArtifactVal
  * The shown drawing's LOSAT results panel (D-221). The count and the enabled state are the shown drawing's listed
  * results, one per cache key (D-223); the hint says whether a drawing of the project lists some, reading the kept slots
  * through `slotRevision`, which every slot change bumps (the slots are not reactive); Clear is one History step.
+ * Clear takes Reset Settings' availability during a run (OV-2446, OV-3768): a Generate copies the drawing's searches
+ * when it starts and installs them when it commits, so a Clear between would be a step that commit undoes. The button
+ * is off then, and a call is refused with the run's reason (checked again when History builds the step) and records
+ * no step.
  * @param {{ runUndoableCommand: (label: string, build: () => ReturnType<typeof clearLosatResultsCommand>) => Promise<unknown>,
  *   owner: Parameters<typeof clearLosatResultsCommand>[1] & { projectLosatEvidence: () => LosatEvidence[] },
  *   slotRevision: { readonly value: number } }} ports
  */
-const createLosatResultsPanel = ({ runUndoableCommand, owner, slotRevision }) => ({
-  losatResultRows: computed(() => losatRowsOnePerKey(state.losatCacheInfo.value)),
-  projectHasLosatResults: computed(() => slotRevision.value >= 0 && owner.projectLosatEvidence().some(listsLosatResults)),
-  clearLosatCache: () => runUndoableCommand(msg('Clear LOSAT results'),
-    () => clearLosatResultsCommand(state.activeDrawingId.value, owner))
-});
+const createLosatResultsPanel = ({ runUndoableCommand, owner, slotRevision }) => {
+  const runBusy = () => sessionOperationAvailability('not-during-run');
+  return {
+    losatResultRows: computed(() => losatRowsOnePerKey(state.losatCacheInfo.value)),
+    projectHasLosatResults: computed(() => slotRevision.value >= 0 && owner.projectLosatEvidence().some(listsLosatResults)),
+    clearLosatCache: async () => runBusy() || runUndoableCommand(msg('Clear LOSAT results'),
+      () => (runBusy() ? null : clearLosatResultsCommand(state.activeDrawingId.value, owner)))
+  };
+};
 
 export const createAppSetup = () => {
   provideSettingNoteReaders();

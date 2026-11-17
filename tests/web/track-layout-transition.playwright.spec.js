@@ -1809,8 +1809,8 @@ test('Rotate Apply now reached by keyboard while a Generate runs is disabled and
     // Out of file order, so a run that adopts other rings shows in the series.
     await ringControls(page)[0].click();
     expect(await ringLabels(page)).toEqual(['ringb', 'ringa', 'ringc']);
-    await page.evaluate(() => {
-      window.__GBDRAW_APP__.clearLosatCache();
+    await page.evaluate(async () => {
+      await window.__GBDRAW_APP__.clearLosatCache();
       window.__GBDRAW_APP__.richFeaturePopup = true;
     });
     await holdNextSearch(page);

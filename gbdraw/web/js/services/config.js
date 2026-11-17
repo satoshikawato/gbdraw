@@ -4163,18 +4163,32 @@ const savedLosatEntriesOf = (artifact, { request, conservationPairs, catalog, ma
 };
 
 /**
- * Entries once each by their content: a Duplicate shares a drawing's legacy envelopes, and a write in the copy (a
- * promotion, History) makes new envelopes whose entries are copies, so identity cannot tell them apart.
+ * Entries once each by their content, in the order they first appear: a Duplicate shares a drawing's legacy envelopes,
+ * and a write in the copy (a promotion, History) makes new envelopes whose entries are copies, so identity cannot tell
+ * them apart. The first entry of a content is kept unless `prefer` takes a later one, so the drawings' order decides
+ * nothing that `prefer` decides.
  * @template T
  * @param {readonly T[]} entries
  * @param {(entry: T) => unknown} contentOf
+ * @param {(entry: T, kept: T) => boolean} [prefer]
  * @returns {T[]}
  */
-const onceByContent = (entries, contentOf) => [...new Map(entries.map((entry) => [JSON.stringify(contentOf(entry)), entry])).values()];
+const onceByContent = (entries, contentOf, prefer = () => false) => {
+  /** @type {Map<string, T>} */
+  const kept = new Map();
+  entries.forEach((entry) => {
+    const content = JSON.stringify(contentOf(entry));
+    const earlier = kept.get(content);
+    if (earlier === undefined || prefer(entry, earlier)) kept.set(content, entry);
+  });
+  return [...kept.values()];
+};
 /**
  * The project's `legacyArtifacts` Save writes: each older Session's protein candidate still pending in a drawing's
  * evidence (Load gives them to one drawing, D-224), once by its original entry, with the older derived evidence, each
- * entry once by its content (review 2 M1).
+ * entry once by its content (review 2 M1). A candidate one drawing rejected is written pending while another drawing
+ * holds it pending (review 3 L-1): a protein Generate there may still promote it, and one that rejects it again
+ * changes nothing.
  * @param {readonly SessionArtifactView[]} views Every drawing's artifact.
  */
 const savedLegacyArtifactsOf = (views) => {
@@ -4184,7 +4198,8 @@ const savedLegacyArtifactsOf = (views) => {
     legacyRawCandidates: {
       schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA,
       entries: onceByContent(envelopes('legacyProteinRawCandidates')
-        .flatMap((envelope) => serializableLegacyProteinCandidateEnvelope(envelope).entries), (candidate) => candidate.originalEntry)
+        .flatMap((envelope) => serializableLegacyProteinCandidateEnvelope(envelope).entries), (candidate) => candidate.originalEntry,
+        (candidate, kept) => candidate.state === 'pending' && kept.state !== 'pending')
     },
     legacyDerivedEvidence: normalizeLegacyDerivedEvidence({
       schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,

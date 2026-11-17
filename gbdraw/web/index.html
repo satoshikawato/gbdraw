@@ -4103,7 +4103,7 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatResultRows.length === 0)" :aria-describedby="losatResultRows.length === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ losatResultRows.length === 0 ? t('Clear LOSAT results') : tn(losatResultRows.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || (losatResultRows.length === 0)" :aria-describedby="losatResultRows.length === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ losatResultRows.length === 0 ? t('Clear LOSAT results') : tn(losatResultRows.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
                                 <p v-if="losatResultRows.length === 0" id="linear-losat-cache-reason" class="ui-hint">{{ projectHasLosatResults ? t('No LOSAT results in this drawing') : t('No LOSAT results yet') }}</p>
                             </section>
 
@@ -4485,7 +4485,7 @@
                                     <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatResultRows.length === 0" :aria-describedby="losatResultRows.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (losatResultRows.length === 0)" :aria-describedby="losatResultRows.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || (losatResultRows.length === 0)" :aria-describedby="losatResultRows.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-trash" aria-hidden="true"></i> {{ losatResultRows.length === 0 ? t('Clear LOSAT results') : tn(losatResultRows.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>

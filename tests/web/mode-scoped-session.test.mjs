@@ -1909,6 +1909,36 @@ test('Save writes each older Session protein candidate and evidence entry once a
   assert.deepEqual(saved.legacyArtifacts.proteinDerivedEvidence.entries.map(({ key }) => key), ['derived-1']);
 });
 
+// Review 3 L-1: a candidate one drawing rejected and another still holds pending (a Duplicate, then a protein Generate
+// in the copy) is written pending, whichever drawing comes first in the list: a reader of the field may still promote
+// it, and a rejection repeats on its next protein Generate if the candidate is still invalid.
+test('Save writes an older Session protein candidate pending while any drawing holds it pending (review 3 L-1)', async () => {
+  const { transitionLegacyProteinCandidate } = await import('../../gbdraw/web/js/services/losat-cache.js');
+  const { LEGACY_PROTEIN_CANDIDATE_SCHEMA, NUCLEOTIDE_LOSAT_CACHE_SCHEMA } =
+    await import('../../gbdraw/web/js/contracts/schema.generated.js');
+  const candidate = (name) => ({ state: 'pending', rejectionReason: null, originalEntry: {
+    kind: 'raw-losat', schema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA, program: 'blastp', key: name, text: `${name}\tq\t90.0\n`
+  } });
+  const pending = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [candidate('c1'), candidate('c2')] };
+  const rejected = transitionLegacyProteinCandidate(pending, 1, 'rejected', 'not resolved');
+  for (const rejectedIn of ['circular', 'circular-2']) {
+    const { session } = await twoConservationDrawings();
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+    const legacyOf = (id) => ({ legacyProteinRawCandidates: id === rejectedIn ? rejected : pending });
+    if (!loaded.opening) Object.entries(legacyOf(state.activeDrawing().id)).forEach(([key, value]) => { state[key].value = value; });
+    const withLegacy = (slot) => slot && withArtifactSlotValues(slot, state.drawingOf(slot.drawingId), legacyOf(slot.drawingId));
+    const result = await exportSession('legacy pending wins', {
+      readKeptArtifacts: () => [withLegacy(loaded.opening), ...loaded.stashed.map(withLegacy)].filter(Boolean)
+    });
+    assert.equal(result.status, 'saved', result.error?.message);
+    const saved = await readSavedSession(result.blob);
+    assert.deepEqual(saved.legacyArtifacts.proteinRawCandidates.entries.map(({ originalEntry, state: written }) => [originalEntry.key, written]),
+      [['c1', 'pending'], ['c2', 'pending']], `rejected in ${rejectedIn}`);
+  }
+});
+
 // Review 2 L1, D-221: Load lists a drawing's entry by the drawing's own kind alone: an entry of the other kind (one
 // neither Save writes) stays in the drawing's searches and lists in no drawing, whatever another drawing holds.
 test('Load lists no entry of the other kind in a drawing, by that drawing alone (review 2 L1)', async () => {

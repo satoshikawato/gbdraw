@@ -439,6 +439,45 @@ test('a Linear comparison edit in one drawing leaves another Linear drawing\'s r
   } finally { resetLosat(); }
 });
 
+// OV-3768 (review 3 M-1, D-259): a Generate copies the drawing's searches when it starts and installs them with its own
+// when it commits. Clear LOSAT results during it would be a History step the commit then undoes, so Clear takes Reset
+// Settings' availability during a run (OV-2446): refused, no step, nothing cleared, and the Generate's result is its own.
+test('Clear LOSAT results during a Generate is refused and records no step (OV-3768)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  resetLosat();
+  try {
+    onlyShownDrawing(app);
+    await generateRows([ringRow('k0')]);
+    const before = shownValues();
+    /** @type {() => void} */
+    let finishRun = () => {};
+    const running = history.runUndoableArtifactReplacement('Generate diagram', async () => {
+      state.processing.value = true;
+      const copied = new Map(state.losatCache.value);
+      try {
+        await new Promise((resolve) => { finishRun = () => resolve(undefined); });
+      } finally { state.processing.value = false; }
+      state.losatCache.value = new Map([...copied, ['k1', { key: 'k1' }]]);
+      state.losatCacheInfo.value = [ringRow('k0'), ringRow('k1')];
+      return { status: 'ok' };
+    }, { shouldCommit: (outcome) => outcome?.status === 'ok' });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.processing.value, true, 'the Generate runs');
+    const steps = history.getUndoCount();
+    const refused = await app.clearLosatCache();
+    assert.equal(/** @type {{ status?: string }} */ (refused)?.status, 'busy', 'Clear is refused with the run\'s reason');
+    assert.equal(history.getUndoCount(), steps, 'no step');
+    assert.ok(sameValues(shownValues(), before), 'nothing cleared');
+    finishRun();
+    await running;
+    assert.deepEqual(keysOf(app, state.activeDrawingId.value), ['k0', 'k1'], 'the Generate\'s result');
+    assert.equal(history.getUndoCount(), steps + 1, 'the Generate is the one step');
+    await history.undo();
+    assert.ok(sameValues(shownValues(), before), 'its Undo gives back the values before it');
+  } finally { state.processing.value = false; resetLosat(); }
+});
+
 // A project of one drawing: Clear empties every LOSAT value, a search no row names included.
 test('in a project of one drawing, Clear LOSAT results empties every LOSAT value', async () => {
   const app = createAppSetup();
