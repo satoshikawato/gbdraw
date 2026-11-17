@@ -3011,7 +3011,7 @@ and Google write loans (ফাইল, ফিচার, সেশন).
   (Latin), সূত্র (Strand; সম্মুখ সূত্র / বিপরীত সূত্র), বিপরীত পরিপূরক, অ্যানোটেশন, ফিচার (Feature; ফিচারের ধরন),
   কোয়ালিফায়ার (the keys /gene, /product stay), রেকর্ড, অ্যাক্সেশন নম্বর, লোকাস, অবস্থান (Location), উৎপাদ (/product),
   জীব, প্রজাতি, স্ট্রেইন, অঙ্গাণু, অণুজীব, GC পরিমাণ, ডাইনিউক্লিওটাইড, গভীরতা (Depth), কভারেজ, অভিন্নতা (Identity),
-  সাদৃশ্য, অর্থোলগ, প্যারালগ, সমরেখ (Collinear), ব্লক, ক্লাস্টার, জেনেটিক কোড, হিট, মিল (Match).
+  সাদৃশ্য, অর্থোলগ, প্যারালগ, Collinear (kept in Latin; Collinear ব্লক), ব্লক, ক্লাস্টার, জেনেটিক কোড, হিট, মিল (Match).
 - **Alignment has two words**: অ্যালাইনমেন্ট is a sequence alignment (BLAST, LOSAT); সারিবদ্ধকরণ / সারিবদ্ধ করুন is
   placing records in line (Similarity group alignment, Align).
 - **Figure words**: ডায়াগ্রাম (Diagram and map), ট্র্যাক, লেন, স্লট (track slot), স্থান (File card slot), বলয় (Ring),
