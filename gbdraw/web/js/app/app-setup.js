@@ -2497,6 +2497,12 @@ export const createAppSetup = () => {
     if (compositionResults.size > 0) {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas, compositionResults);
     }
+    // The canvas padding this step restored shows on the displayed Result through its one owner, as the edit did
+    // (OV-3709). A held figure arriving next was drawn with it; a drawing not shown shows its padding when its Result
+    // is next displayed (the binder applies it).
+    if (!figure && (!Array.isArray(changes) || changes.some(({ path } = {}) => path?.[0] === 'ui' && path[1] === 'canvasPadding'))) {
+      legendLayout.applyCanvasPadding();
+    }
     const colors = changedDomains.has('config') || changedDomains.has('features');
     const rulesChanged = Array.isArray(changes) && changes.some((change) => (
       change?.path?.[0] === 'config' && change.path[1] === 'rules'

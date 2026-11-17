@@ -8,6 +8,8 @@ import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { withBootPalettes } from './helpers/boot-palettes.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { gallerySessionDocument } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -138,6 +140,39 @@ test('Reset this drawing and Reset all drawings return the canvas padding to a n
   assert.deepEqual([{ ...circular.canvasPadding }, { ...linear.canvasPadding }], [PADDED, PADDED]);
   CANVAS_SLICE.reset(circular.slices.canvas);
   CANVAS_SLICE.reset(linear.slices.canvas);
+});
+
+// OV-3709: Undo and Redo of a padding edit restore the canvas slice, and the displayed Result shows that padding
+// through the Legend layout's one padding owner, as the edit did; without it the figure kept the padding it had.
+const COMPOSITION = 'data-gbdraw-composition';
+test('Undo and Redo of a canvas padding edit show the restored padding on the displayed Result', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  app.selectDrawing('circular');
+  const saved = await gallerySessionDocument('HmmtDNA_basic_circular');
+  const root = new DOMParser().parseFromString(savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content,
+    'image/svg+xml').documentElement;
+  root.setAttribute(COMPOSITION, root.getAttribute(COMPOSITION).replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  const [x, y, width, height] = root.getAttribute('viewBox').split(/\s+/).map(Number);
+  const base = root.getAttribute('viewBox');
+  const padded = (top, left) => [x - left, y - top, width + left, height + top].join(' ');
+  const container = state.svgContainer.value;
+  state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? root : null) };
+  try {
+    await history.runUndoable('Canvas padding', () => app.setCanvasPaddingSide('top', 10));
+    await history.runUndoable('Canvas padding', () => app.setCanvasPaddingSide('left', 20));
+    const shown = () => root.getAttribute('viewBox');
+    assert.equal(shown(), padded(10, 20), 'the edits show at once');
+    await history.undo();
+    assert.equal(shown(), padded(10, 0), 'Undo shows the padding it restores');
+    await history.undo();
+    assert.equal(shown(), base, 'Undo back to no padding shows the figure as drawn');
+    await history.redo();
+    assert.equal(shown(), padded(10, 0), 'Redo shows the padding it restores');
+    await history.undo();
+  } finally {
+    state.svgContainer.value = container;
+  }
 });
 
 // The follow-ups run for every drawing by its mode, not for the drawing of a

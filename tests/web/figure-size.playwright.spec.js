@@ -282,6 +282,28 @@ test('a Legend rename and Canvas padding on a sized figure are fitted again by t
   const padded = await sizeState(page);
   expect(px(padded.root.width)).toBeCloseTo(MM_160_PX, 2);
   expect(padded.larger).toBe(null);
+  // Its Undo and Redo show the fitted figure History held for each side, drawn with that side's padding, and run no
+  // Python (OV-3709: the figure shows the padding the step restores).
+  // `webAdds`: whether the Web shows padding beyond the drawn root (a recorded base that is not the shown viewBox).
+  const shownPadding = () => page.evaluate(() => {
+    const svg = document.querySelector('.gbdraw-preview-surface svg');
+    const base = svg.getAttribute('data-original-view-box');
+    return {
+      setting: window.__GBDRAW_APP__.canvasPadding.left,
+      drawn: JSON.parse(svg.getAttribute('data-gbdraw-composition')).spacing.canvasPadding?.left ?? 0,
+      webAdds: base !== null && base !== svg.getAttribute('viewBox')
+    };
+  });
+  expect(await shownPadding()).toEqual({ setting: 40, drawn: 40, webAdds: false });
+  await countFrom();
+  await undo(page);
+  expect((await sizeState(page)).root, 'Undo shows the fitted figure before the padding').toEqual(restored.root);
+  expect(await shownPadding()).toEqual({ setting: 0, drawn: 0, webAdds: false });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect((await sizeState(page)).root, 'Redo shows the figure the refit drew').toEqual(padded.root);
+  expect(await shownPadding()).toEqual({ setting: 40, drawn: 40, webAdds: false });
+  expect(await renders(), 'Undo and Redo of the fitted padding step run no Python').toBe(0);
 });
 
 // #1634 residual (OV-2560): a checkpoint step that starts while the refit of the step before it is still pending
