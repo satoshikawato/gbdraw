@@ -62,7 +62,8 @@ const spyOnPort = (onCapture, onRestore = () => {}) => ({
   capture: () => { onCapture(); return rollbackPort.capture(); },
   replaceHistoryMembers: rollbackPort.replaceHistoryMembers,
   restoreHistoryMembers: rollbackPort.restoreHistoryMembers,
-  restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); }
+  restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); },
+  endWorkOutside: rollbackPort.endWorkOutside
 });
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
@@ -2034,4 +2035,25 @@ test('a table repair line shows the table label in the UI language', async () =>
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
+});
+
+// D-44 (S-3, R15: an atomic Load): the work of a drawing a Load does not keep (an open Similarity alignment review,
+// OV-3618) ends when the Load succeeds, with the drawings it loaded, not at its commit: a Load that fails after its
+// commit gives the drawings back, and their work stays with them.
+test('a Load ends the work outside its drawings only when it succeeds', async () => {
+  const ended = [];
+  const port = { ...spyOnPort(() => {}), endWorkOutside: (/** @type {readonly string[]} */ ids) => { ended.push([...ids]); } };
+  const before = state.drawingTabs.value.map((tab) => tab.id);
+  const failed = await importSession(await input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
+    confirmLoadRepairs: async () => true, rollbackState: port,
+    afterImport: async () => { throw new Error('a failure after the commit'); }
+  });
+  assert.equal(failed.status, 'error');
+  assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), before, 'the rollback gave the drawings back');
+  assert.deepEqual(ended, [], 'and ended no work');
+  const loaded = await importSession(await input(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz')), {
+    confirmLoadRepairs: async () => true, rollbackState: port
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(ended, [state.drawingTabs.value.map((tab) => tab.id)], 'a Load that succeeds ends it, once');
 });

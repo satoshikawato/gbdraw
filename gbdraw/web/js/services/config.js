@@ -9306,6 +9306,7 @@ const importSessionDocument = async (e, options = {}) => {
       isCurrent: options.isCurrent
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
+    rollbackState.endWorkOutside(state.drawingTabs.value.map((tab) => tab.id));
     loadedOk = true;
     return {
       status: 'ok',
@@ -9559,10 +9560,12 @@ export const exportSession = (titleOverride = null, options) => {
  * IDs in the same task as the store write (each drawing a Load makes has a History before any reader asks for the
  * shown drawing's; OV-2131). When the Load fails, `restoreHistoryMembers` gives the captured members back in the
  * task that restores the store (OV-2132), then `restore` the rest; both take what `capture` returned (the method
- * form keeps the owner's own snapshot type assignable).
+ * form keeps the owner's own snapshot type assignable). When the Load succeeds, `endWorkOutside` with the loaded
+ * drawings' IDs ends the work of a drawing it did not keep (an open alignment review, OV-3618; R15).
  * @typedef {{ capture(): unknown, replaceHistoryMembers(drawingIds: readonly DrawingId[]): void,
  *   restoreHistoryMembers(snapshot: unknown): void,
- *   restore(snapshot: unknown): void | Promise<void> }} SessionImportRollbackState
+ *   restore(snapshot: unknown): void | Promise<void>,
+ *   endWorkOutside(drawingIds: readonly DrawingId[]): void }} SessionImportRollbackState
  */
 /**
  * What the composition root passes to `importSession`: the Save and Load availability and the shown drawing

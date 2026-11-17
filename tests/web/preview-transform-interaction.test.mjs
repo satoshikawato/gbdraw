@@ -22,6 +22,10 @@ const assert = {
   doesNotMatch(...args) {
     assertionCount += 1;
     nodeAssert.doesNotMatch(...args);
+  },
+  async rejects(...args) {
+    assertionCount += 1;
+    await nodeAssert.rejects(...args);
   }
 };
 const completeCase = (name) => caseNames.push(name);
@@ -421,6 +425,12 @@ const visualBox = () => {
 };
 const fakeSvg = { getBoundingClientRect: visualBox };
 let probes = 0;
+// The canvas's computed padding: where it lays out its content (p-2, 0.5rem).
+let canvasPaddingLeft = '8px';
+const computedStyle = (element) => ({
+  transform: element.style?.transform, paddingLeft: element === canvas ? canvasPaddingLeft : '0px'
+});
+globalThis.getComputedStyle = computedStyle;
 // OV-3588: the control over the canvas edge (the Editor toggle) beside the canvas in its workspace,
 // measured through a copy of it placed beside it.
 /** @type {{ left: number, top: number, width: number, height: number } | null} */
@@ -532,8 +542,8 @@ fakeSvg.getBoundingClientRect = () => {
   return svgBox();
 };
 globalThis.getComputedStyle = (element) => {
-  transitionsSeen.push(`read ${element.style.transform} ${element.style.transition}`);
-  return { transform: element.style.transform };
+  if (element !== canvas) transitionsSeen.push(`read ${element.style.transform} ${element.style.transition}`);
+  return computedStyle(element);
 };
 Object.assign(layout, { width: 997, height: 817 });
 uiState.zoom.value = 2;
@@ -546,13 +556,79 @@ assert.equal(transitionsSeen.join('\n'), [
 expectFitted(0.45);
 assert.equal(uiState.previewTransitionHeld.value, false);
 fakeSvg.getBoundingClientRect = svgBox;
-delete globalThis.getComputedStyle;
+globalThis.getComputedStyle = computedStyle;
+completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
+
+// D-57 (OV-3620, OV-3621): the figure a drawing switch shows keeps the zoom, its top stays where pan y 0
+// puts it, and it is centred in the free room Fit measures (left of the Editor reserve, and left of the edge
+// control when centred in the whole room it would meet it). It is hidden until placed, placed at once.
+/** @param {number} right The free room's right edge. */
+const expectCentred = (zoom, right) => {
+  const box = visualBox();
+  assert.equal(uiState.zoom.value, zoom);
+  assert.equal(uiState.canvasPan.y, 0);
+  // Centred to the whole pixel: the pan is a whole pixel.
+  assert.equal(Number.isInteger(uiState.canvasPan.x), true);
+  assert.equal(Math.abs((box.left - 100) - (right - box.right)) <= 1 + 1e-9, true);
+  assert.equal(uiState.previewHiddenUntilShown.value, false);
+  assert.equal(wrapper.style.visibility, '');
+  assert.equal(wrapper.style.transition, 'transform 0.2s');
+};
+const placements = [];
+globalThis.getComputedStyle = (element) => {
+  if (element !== canvas) placements.push(`read ${element.style.transform} ${element.style.transition} ${element.style.visibility}`);
+  return computedStyle(element);
+};
+Object.assign(layout, { width: 997, height: 300 });
+uiState.zoom.value = 0.5;
+Object.assign(uiState.canvasPan, { x: 30, y: -20 });
+const arriving = panZoom.showArrivingFigure();
+assert.equal(uiState.previewHiddenUntilShown.value, true);
+await arriving;
+expectCentred(0.5, 996);
+assert.equal(placements.join('\n'), `read translate(${uiState.canvasPan.x}px, 0px) scale(0.5) none hidden`);
+// An open Editor drawer: the room ends at its reserve.
+editorReserve = 360;
+await panZoom.showArrivingFigure();
+expectCentred(0.5, 636);
+editorReserve = 0;
+// A figure centred in the whole room at 0.84 would end at x 967 over the control: it is centred left of it.
+edgeControl = { left: 956, top: 223, width: 40, height: 40 };
+uiState.zoom.value = 0.84;
+await panZoom.showArrivingFigure();
+expectCentred(0.84, 956);
+// Clear of the control, a small figure stays centred in the whole room, at its own zoom.
+Object.assign(layout, { width: 50, height: 40 });
+uiState.zoom.value = 1;
+await panZoom.showArrivingFigure();
+expectCentred(1, 996);
+edgeControl = null;
+// A figure wider than the room at the kept zoom shows its start where the canvas lays out its content, inside
+// its padding, as Generate shows it: 8 px in, and 10 px in with a 20 px browser font (p-2 is 0.5rem).
+Object.assign(layout, { width: 997, height: 300 });
+uiState.zoom.value = 2;
+await panZoom.showArrivingFigure();
+assert.equal(uiState.zoom.value, 2);
+assert.equal(uiState.canvasPan.y, 0);
+assert.equal(Math.abs(visualBox().left - 108) <= 0.5, true);
+canvasPaddingLeft = '10px';
+await panZoom.showArrivingFigure();
+assert.equal(Math.abs(visualBox().left - 110) <= 0.5, true, `the start at the canvas padding: ${visualBox().left}`);
+canvasPaddingLeft = '8px';
+// N-c: a placement that throws never leaves the figure hidden.
+const canvasBox = canvas.getBoundingClientRect;
+canvas.getBoundingClientRect = () => { throw new Error('no box'); };
+await assert.rejects(panZoom.showArrivingFigure(), /no box/);
+assert.equal(uiState.previewHiddenUntilShown.value, false);
+canvas.getBoundingClientRect = canvasBox;
+completeCase('a drawing switch keeps the zoom and centres the arriving figure in the free room, shown at once');
+
 wrapper.querySelector = () => null;
 panZoom.fitPreviewToViewport();
-assert.equal(uiState.zoom.value, 0.45);
+assert.equal(uiState.zoom.value, 2, 'with no figure the Fit changes nothing');
 for (const key of ['querySelector', 'getBoundingClientRect']) delete wrapper[key];
 for (const key of ['clientLeft', 'clientTop', 'clientWidth', 'clientHeight', 'getBoundingClientRect', 'appendChild', 'parentElement', 'ownerDocument']) delete canvas[key];
-completeCase('fit centres the whole diagram left of the Editor reserve at the largest whole percent and cancels the interaction');
+delete globalThis.getComputedStyle;
 
 panZoom.handleWheel(wheelEvent);
 panZoom.disposePanZoom();

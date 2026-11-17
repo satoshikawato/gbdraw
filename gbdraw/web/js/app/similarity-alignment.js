@@ -16,6 +16,19 @@ import { recordTranslationsFor } from '../services/linear-record-layout.js';
 import { canonicalRecordReverseComplement, cropFormReverseComplement, linearCardCropForm } from '../services/record-display-model.js';
 /** @import { LinearSeq, WebState } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+/**
+ * The ports through which the drawer, the preview binder, the result watchers, the drawing switch and the drawing list
+ * reach the Similarity alignment owner and its review (R13); the root assigns them from this owner.
+ * @typedef {object} SimilarityAlignmentPorts
+ * @property {() => void} refreshCanvas
+ * @property {() => string} editorDisabledReason
+ * @property {() => void} arriveAtDrawing
+ * @property {() => { status: 'busy', reason: string } | null} busy
+ * @property {() => DrawingId} reviewDrawingId
+ * @property {() => boolean} reviewIsShown Whether the review (or the work in flight) is the shown drawing's.
+ * @property {(drawingId: DrawingId) => void} endReviewOf
+ * @property {(drawingIds: readonly DrawingId[]) => void} endReviewOutside
+ */
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,
@@ -2320,6 +2333,8 @@ export const createSimilarityAlignmentActions = ({
     dialogOpen: computed(() => !automaticApply.value && Boolean(draft.value && status.value !== 'idle')),
     isDraftArtifactCurrent: artifactIsCurrent,
     reviewDrawingId: workDrawingId,
+    // Whether the review is the shown drawing's: the one derivation the review's hold and its marks read (D-38).
+    reviewIsShown: workIsShown,
     unresolvedCount,
     applyDisabledReason,
     canApply: computed(() => status.value === 'reviewing' && unresolvedCount.value === 0 && workIsShown()),

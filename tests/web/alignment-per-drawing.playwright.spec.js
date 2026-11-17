@@ -15,7 +15,11 @@ const importSession = (page, bytes, name) => evaluateWithRetainedPromise(page, a
   const data = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) data[index] = binary.charCodeAt(index);
   const result = await window.__GBDRAW_APP__.importSession({ target: { files: [new File([data], name)], value: 'selected' } });
-  if (result.status !== 'ok') throw new Error(result.error?.stack || result.status);
+  // A failed Load returns its user-facing error (no stack): the message names its status, code, stage and summary.
+  if (result.status !== 'ok') {
+    const { code, stage, summary, details } = result.error ?? {};
+    throw new Error(`Load ${result.status}: ${JSON.stringify({ code, stage, summary, details })}`);
+  }
   return result.status;
 }, { base64: bytes.toString('base64'), name });
 
@@ -194,4 +198,88 @@ test('a Load that drops the drawing of an open review ends the review and the ap
   await expect(page.getByRole('button', { name: 'Generate Diagram' }), 'the app still renders').toBeVisible();
   expect(await page.evaluate(() => document.getElementById('app')?.childElementCount ?? 0)).toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
+});
+
+// OV-3620, OV-3621 (D-57): a drawing switch keeps the zoom and shows the arriving figure centred in the free room
+// (the canvas left of the Editor reserve, and left of the control over its edge when the figure would meet it),
+// whether or not a review is open: the copy a Duplicate shows, each drawing shown again, and, while the review of one
+// drawing is open (its docked panel narrows the room), its copy and the review's own drawing. A switch never fits.
+// Measured once the view settled: two frames after the step, past any transition of the surface's transform.
+const figureView = (page) => evaluateWithRetainedPromise(page, async () => {
+  const app = window.__GBDRAW_APP__;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  await Promise.all((app.svgContainer?.getAnimations?.() ?? []).map((animation) => animation.finished));
+  const canvas = app.canvasContainerRef;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:0;width:var(--preview-editor-reserve,0px)';
+  canvas.appendChild(probe);
+  const reserve = probe.getBoundingClientRect().width;
+  probe.remove();
+  const box = canvas.getBoundingClientRect();
+  const room = { left: box.left + canvas.clientLeft, top: box.top + canvas.clientTop };
+  Object.assign(room, { right: room.left + canvas.clientWidth - reserve, bottom: room.top + canvas.clientHeight });
+  const figure = app.svgContainer?.querySelector('svg')?.getBoundingClientRect();
+  // The control over the canvas edge beside the canvas in its workspace; the figure centred in the whole room
+  // that would meet it is centred left of it.
+  let control = null;
+  for (let node = canvas.parentElement; node && !control; node = node.parentElement) {
+    control = node.querySelector(':scope > [data-preview-edge-control]');
+  }
+  const controlBox = control?.getBoundingClientRect();
+  const besideControl = Boolean(controlBox?.width && figure?.width)
+    && Math.abs((room.left + room.right) / 2 - (controlBox.left + controlBox.right) / 2) < (figure.width + controlBox.width) / 2
+    && Math.abs((figure.top + figure.bottom) / 2 - (controlBox.top + controlBox.bottom) / 2) < (figure.height + controlBox.height) / 2;
+  const frameRight = besideControl ? controlBox.left : room.right;
+  return {
+    zoom: app.zoom,
+    inRoom: Boolean(figure?.width) && figure.left >= room.left && figure.right <= frameRight
+      && figure.top >= room.top && figure.bottom <= room.bottom,
+    // Centred to the whole pixel (the switch's pan is a whole pixel).
+    centred: Boolean(figure?.width) && Math.abs((figure.left - room.left) - (frameRight - figure.right)) <= 1.01,
+    measured: { room, frameRight, figure: figure && [figure.left, figure.top, figure.right, figure.bottom] }
+  };
+});
+test('a drawing switch keeps the zoom and centres the arriving figure in the free room, with or without an open review', async ({ page }) => {
+  test.setTimeout(900000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, readFileSync(GALLERY_SESSION), 'BGC0000708-BGC0000713.gbdraw');
+  const loaded = await figureView(page);
+  expect(loaded.inRoom, 'the loaded figure').toBe(true);
+  /** @param {string} step @param {number} zoom */
+  const expectCentredAt = async (step, zoom) => {
+    const { measured, ...view } = await figureView(page);
+    expect(view, `${step}: ${JSON.stringify(measured)}`).toEqual({ zoom, inRoom: true, centred: true });
+  };
+  const source = await shownDrawingId(page);
+  const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
+  await expect.poll(() => shownDrawingId(page)).toBe(copy);
+  await expectCentredAt('the copy its Duplicate shows', loaded.zoom);
+  await show(page, source);
+  await expectCentredAt('the source shown again', loaded.zoom);
+  const dialog = await openReview(page, 'CAG38712.1');
+  const reviewed = await figureView(page);
+  expect(reviewed.inRoom, 'the review fits its own drawing').toBe(true);
+  await show(page, copy);
+  await expect(dialog).toBeVisible();
+  await expectCentredAt('the copy shown while the review is open', reviewed.zoom);
+  await show(page, source);
+  await expectCentredAt('the review\'s drawing shown again', reviewed.zoom);
+});
+
+// D-44 (S-1, R11): the header's Undo is disabled, with the reason as its title, while the step it would take (a
+// drawing list step) waits for alignment work in flight; it is enabled again when the work ends. The work is held by
+// its status, which every writer of work in flight sets.
+test('the header Undo is disabled with the reason while the drawing list step it would take waits', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  expect((await page.evaluate(() => window.__GBDRAW_APP__.drawingList.newDrawing('linear'))).status).toBe('ok');
+  const undo = page.getByRole('button', { name: 'Undo', exact: true });
+  await expect(undo).toBeEnabled();
+  await page.evaluate(() => { window.__GBDRAW_APP__.similarityAlignmentStatus = 'resolving'; });
+  await expect(undo).toBeDisabled();
+  await expect(undo).toHaveAttribute('title', 'Resolving the current alignment.');
+  await page.evaluate(() => { window.__GBDRAW_APP__.similarityAlignmentStatus = 'idle'; });
+  await expect(undo).toBeEnabled();
 });

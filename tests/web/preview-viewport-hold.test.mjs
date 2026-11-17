@@ -104,6 +104,7 @@ test('the held view refits the shown figure when its room changes, but not in th
     observe(element) { this.observed = element; }
     disconnect() { this.observed = null; }
   };
+  globalThis.getComputedStyle = () => ({ paddingLeft: '8px' });
   const canvas = {
     offsetWidth: 800, offsetHeight: 400, clientWidth: 800, clientHeight: 400, clientLeft: 0, clientTop: 0,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 400 }), parentElement: null, style: {}
@@ -148,5 +149,6 @@ test('the held view refits the shown figure when its room changes, but not in th
     state.canvasContainerRef.value = null;
     state.svgContainer.value = null;
     delete globalThis.ResizeObserver;
+    delete globalThis.getComputedStyle;
   }
 });

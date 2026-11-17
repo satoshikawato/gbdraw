@@ -7,7 +7,8 @@
 // shown (`stepText`), in the list and in the Undo and Redo titles. The list
 // stays open until a press outside it or Escape. While a pick walks, History
 // reports Undo and Redo unavailable, so the rows wait as the buttons do; a
-// row that cannot be picked stays focusable (`aria-disabled`).
+// row that cannot be picked stays focusable (`aria-disabled`). A row whose
+// walk has a step that would wait is disabled too, and the hint says why.
 /** @import { HistoryTimeline, HistoryTimelineStep } from '../services/history.js' */
 import { controlValueText } from '../utils/control-description.js';
 import { t, tm, tn } from '../utils/i18n.js';
@@ -18,6 +19,11 @@ import { t, tm, tn } from '../utils/i18n.js';
  * @property {() => number} revision A reactive read that changes with every step, Undo, Redo, and baseline.
  * @property {() => boolean} canUndo
  * @property {() => boolean} canRedo
+ * @property {(direction: 'undo' | 'redo') => { reason: string } | null} stepWait Why the step Undo or Redo would
+ *   take waits now (a drawing list step while work outside History runs), or null; `canUndo` and `canRedo` read the
+ *   same check, and the titles say its reason.
+ * @property {(target: number | null) => { reason: string } | null} walkWait Why the walk a pick of the row with this
+ *   target would take waits now (any step of it would wait), or null: the same check, of every step of the walk.
  * @property {() => Promise<unknown>} undo
  * @property {() => Promise<unknown>} redo
  * @property {() => HistoryTimeline} timeline
@@ -52,7 +58,9 @@ const stepText = ({ label, detail }) => ({
 });
 
 /** @param {HistoryControlsOptions} options */
-export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, timeline: readTimeline, travelTo, computed, ref, nextTick }) => {
+export const createHistoryControls = ({
+  revision, canUndo, canRedo, stepWait, walkWait, undo, redo, timeline: readTimeline, travelTo, computed, ref, nextTick
+}) => {
   const canUndoHistory = computed(() => {
     void revision();
     return canUndo();
@@ -67,11 +75,13 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
   });
   const undoHistoryTitle = computed(() => {
     const step = timeline.value.undo[0];
-    return canUndoHistory.value && step ? t('Undo {action}', { action: stepText(step).name }) : t('Undo');
+    return canUndoHistory.value && step ? t('Undo {action}', { action: stepText(step).name })
+      : tm(stepWait('undo')?.reason ?? '') || t('Undo');
   });
   const redoHistoryTitle = computed(() => {
     const step = timeline.value.redo[0];
-    return canRedoHistory.value && step ? t('Redo {action}', { action: stepText(step).name }) : t('Redo');
+    return canRedoHistory.value && step ? t('Redo {action}', { action: stepText(step).name })
+      : tm(stepWait('redo')?.reason ?? '') || t('Redo');
   });
 
   /**
@@ -96,7 +106,8 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
   });
   const available = computed(() => canUndoHistory.value || canRedoHistory.value);
   /** @param {HistoryListRow} row */
-  const rowDisabled = (row) => row.steps === 0 || !(row.direction === 'undo' ? canUndoHistory.value : canRedoHistory.value);
+  const rowDisabled = (row) => row.steps === 0 || !(row.direction === 'undo' ? canUndoHistory.value : canRedoHistory.value)
+    || walkWait(row.target) !== null;
 
   const open = ref(false);
   // The row under the pointer or focus, by its key.
@@ -104,9 +115,9 @@ export const createHistoryControls = ({ revision, canUndo, canRedo, undo, redo, 
   const hint = computed(() => {
     const row = rows.value.find((candidate) => candidate.key === pointed.value);
     if (!row || row.steps === 0) return t('Pick a row to go back or forward to it');
-    return row.direction === 'undo'
+    return tm(walkWait(row.target)?.reason ?? '') || (row.direction === 'undo'
       ? tn(row.steps, 'Undo {count} step', 'Undo {count} steps')
-      : tn(row.steps, 'Redo {count} step', 'Redo {count} steps');
+      : tn(row.steps, 'Redo {count} step', 'Redo {count} steps'));
   });
   const place = ref({ top: 0, left: 0 });
   /** @type {HTMLElement | null} */

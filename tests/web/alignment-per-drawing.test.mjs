@@ -258,6 +258,85 @@ test('an Undo or Redo of a drawing list step waits while a Similarity alignment 
   assert.equal(state.activeDrawingId.value, added);
 });
 
+// D-44 (S-1, R11): Undo and Redo and their enabled state read one check of the step they would take. The
+// reviewer's sequence: Duplicate, then a review resolving in the copy: the next Undo is the Duplicate, a drawing list
+// step that waits for the alignment work, so the header's Undo is disabled with the work's reason, and so are the
+// History list's rows that walk through it. Once the work ends, both are enabled again.
+test('Undo and Redo are disabled with the reason while the drawing list step they would take waits', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('linear');
+  app.drawingList.duplicateDrawing(source);
+  const undoRows = () => app.historyList.rows.value.filter((row) => row.direction === 'undo' && row.steps > 0);
+  app.similarityAlignmentStatus.value = 'resolving';
+  assert.equal(app.canUndoHistory.value, false, 'the Undo of the Duplicate waits');
+  assert.equal(app.undoHistoryTitle.value, 'Resolving the current alignment.');
+  assert.ok(undoRows().length > 0 && undoRows().every((row) => app.historyList.rowDisabled(row)), 'and so do the rows');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(app.canUndoHistory.value, true);
+  assert.match(app.undoHistoryTitle.value, /^Undo /);
+  assert.equal(await history.undo(), true);
+  app.similarityAlignmentStatus.value = 'applying';
+  assert.equal(app.canRedoHistory.value, false, 'the Redo of the Duplicate waits');
+  assert.equal(app.redoHistoryTitle.value, 'Applying the alignment plan.');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(app.canRedoHistory.value, true);
+});
+
+// D-57 (N-a): a History list row is disabled, with the reason as the list's hint, when any step of its walk would
+// wait, read from the same one check the router uses; a pick of it takes no step, so no walk stops half way. The
+// reviewer's sequence: Duplicate, a setting changed in the copy, then a review resolving: the "Duplicate drawing" row
+// walks the setting step and then the Duplicate, which waits.
+test('a History list row is disabled when any step of its walk waits, and its pick undoes nothing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('linear');
+  app.drawingList.duplicateDrawing(source);
+  await drag(history, 7);
+  const duplicateRow = app.historyList.rows.value.find((row) => row.direction === 'undo' && row.steps === 2);
+  assert.ok(duplicateRow, 'the Duplicate is the second step back');
+  const settingRow = app.historyList.rows.value.find((row) => row.direction === 'undo' && row.steps === 1);
+  app.similarityAlignmentStatus.value = 'resolving';
+  assert.equal(app.historyList.rowDisabled(settingRow), false, 'the setting step alone waits for nothing');
+  assert.equal(app.historyList.rowDisabled(duplicateRow), true, 'the walk through the Duplicate waits');
+  app.historyList.pointed.value = duplicateRow.key;
+  assert.equal(app.historyList.hint.value, 'Resolving the current alignment.');
+  assert.deepEqual(await history.travelTo(duplicateRow.target), { status: 'busy', reason: 'Resolving the current alignment.' });
+  assert.deepEqual(shownAlignment().translations, [7], 'the pick undid nothing');
+  app.similarityAlignmentStatus.value = 'idle';
+  assert.equal(app.historyList.rowDisabled(duplicateRow), false);
+  assert.match(app.historyList.hint.value, /^Undo 2 steps$/);
+});
+
+// D-44 (S-3, N-1): the Load rollback port's commit member replaces the History router's members only; the alignment
+// review of a drawing the Load did not keep ends through its own member, which the Load calls once it succeeds.
+test('the Load rollback port ends the review only on a Load that succeeded', async () => {
+  const { createSessionImportRollbackState } = await import('../../gbdraw/web/js/app/app-setup.js');
+  const replaced = [];
+  const ended = [];
+  const port = createSessionImportRollbackState({
+    artifactSlots: /** @type {any} */ ({}), captureHistoryMembers: () => ({}), restoreHistoryMembers: () => {},
+    replaceHistoryMembers: (ids) => replaced.push([...ids]),
+    captureDisplayedArtifact: () => /** @type {any} */ ({}), installDisplayedArtifact: () => {},
+    featureListScrollTop: { value: 0 }, featureListScrollRef: { value: null }, selectedPairwiseBlockOrthogroupId: { value: '' },
+    alignment: { endReviewOutside: (ids) => ended.push([...ids]) }
+  });
+  port.replaceHistoryMembers(['linear-2']);
+  assert.deepEqual({ replaced, ended }, { replaced: [['linear-2']], ended: [] }, 'the commit ends no review');
+  port.endWorkOutside(['linear-2']);
+  assert.deepEqual(ended, [['linear-2']]);
+});
+
+// D-44 (N-2): whether the review is the shown drawing's has one derivation, the alignment owner's (reviewIsShown);
+// the review's hold (the root) and its marks (the review owner) read it, and compare no drawing IDs again.
+test('only the alignment owner compares the review\'s drawing with the shown drawing', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const file of ['app-setup.js', 'similarity-alignment-review.js']) {
+    const source = await readFile(new URL(`../../gbdraw/web/js/app/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /[Rr]eviewDrawingId\(\)\s*[!=]==\s*state\.activeDrawingId\.value/, file);
+  }
+});
+
 // D-41 (B1, OV-3618): a text that names a drawing reads its tab's name without throwing for an ID that has no tab.
 test('the drawing bar names a drawing by its tab and has no name for an ID without one', () => {
   const app = createAppSetup();

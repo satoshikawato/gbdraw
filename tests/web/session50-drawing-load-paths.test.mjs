@@ -263,3 +263,40 @@ test('a Load that fails after its commit gives the page back its alignment plan 
   assert.equal(loaded.status, 'error');
   assert.deepEqual({ plan: state.similarityAlignmentPlan.value, translations: state.linearRecordTranslations.value }, before);
 });
+
+// D-44 (S-3, N-1; R15, an atomic Load): a Load that fails after its commit gives the drawings back, and the open
+// Similarity alignment review of one of them stays open on it; a Load that succeeds without the review's drawing
+// ends the review (OV-3618), and one that keeps it keeps it (PD-OI-039 r5). The Load runs through the composition
+// root's own rollback port; the review ends as its owner ends it (similarity-alignment.js `endReviewOutside`: when
+// the drawings the store holds do not include the review's).
+test('a Load that fails after its commit leaves the open review of a drawing it gave back open on that drawing', async () => {
+  const review = { drawingId: 'linear-7', open: true };
+  const alignment = {
+    endReviewOutside: (/** @type {readonly string[]} */ drawingIds) => {
+      if (review.open && !drawingIds.includes(review.drawingId)) review.open = false;
+    }
+  };
+  const routed = callerSession(sessionConfig, state, await sessionRollbackPort(state, null, alignment));
+  const held = v49Session('drawings-circular-linear');
+  const linear = held.drawings.find((drawing) => drawing.id === 'linear');
+  held.drawings.push({ ...structuredClone(linear), id: 'linear-7', name: 'Reviewed' });
+  held.ui.activeDrawingId = 'linear-7';
+  const heldLoad = await routed.importSession(await sessionLoadEvent(held), { confirmLoadRepairs: async () => true });
+  assert.equal(heldLoad.status, 'ok', JSON.stringify(heldLoad.error));
+  assert.deepEqual({ shown: state.activeDrawingId.value, review }, { shown: 'linear-7', review: { drawingId: 'linear-7', open: true } },
+    'a Load that keeps the review\'s drawing keeps the review');
+  const tabsBefore = state.drawingTabs.value.map(({ id }) => id);
+  const failed = await routed.importSession(await sessionLoadEvent(v49Session('drawings-circular-linear')), {
+    confirmLoadRepairs: async () => true,
+    afterImport: async () => { throw new Error('a failure after the commit'); }
+  });
+  assert.equal(failed.status, 'error');
+  assert.deepEqual(state.drawingTabs.value.map(({ id }) => id), tabsBefore, 'the rollback gave the drawings back');
+  assert.deepEqual({ shown: state.activeDrawingId.value, review }, { shown: 'linear-7', review: { drawingId: 'linear-7', open: true } },
+    'the review is still open, on the restored drawing it was opened in');
+  const loaded = await routed.importSession(await sessionLoadEvent(v49Session('drawings-circular-linear')), {
+    confirmLoadRepairs: async () => true
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(review.open, false, 'a Load that succeeds without the review\'s drawing ends the review');
+});

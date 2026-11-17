@@ -25,6 +25,7 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ShowNotice } from './app-messages.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 /** @import { ExportLimitReply, ExportSnapshot, FontEmbedding, SvgRootReply } from '../services/export.js' */
 /** @import { PdfFontsReply } from '../services/pdf-fonts.js' */
 /** @import { CatalogSequences } from '../services/catalog-sequences.js' */
@@ -206,6 +207,8 @@ export const createImportedComparisonChoice = ({ state, runUndoable, errorLog, r
  * @property {(drawing: DrawingState, edgeKeys: string[]) => void} omitLinearComparisonPairs
  * @property {(edgeKey: string) => LinearComparisonPair | null} linearComparisonPairForEdgeKey
  * @property {() => unknown} runAnalysis Generate.
+ * @property {Pick<SimilarityAlignmentPorts, 'busy'>} alignment The Similarity alignment owner's
+ *   work in flight: both choices that Generate wait for it, as Generate does, and change nothing meanwhile.
  */
 
 /**
@@ -213,7 +216,8 @@ export const createImportedComparisonChoice = ({ state, runUndoable, errorLog, r
  * @param {MissingBlastTsvChoicePorts} ports
  */
 export const createMissingBlastTsvChoice = ({
-  state, withHistory, closeAfterChoice, choicePending, omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis
+  state, withHistory, closeAfterChoice, choicePending, omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis,
+  alignment
 }) => {
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
@@ -245,6 +249,8 @@ export const createMissingBlastTsvChoice = ({
   });
   /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
+    const work = choice === 'cancel' ? null : alignment.busy();
+    if (work) return work;
     if (choice === 'generate') {
       if (choicePending.value) return undefined;
       closeMissingBlastTsvDialog();

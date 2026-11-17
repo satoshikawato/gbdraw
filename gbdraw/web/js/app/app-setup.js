@@ -20,6 +20,7 @@
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { ArtifactSlot, ArtifactSlotSnapshot, ArtifactSlotStore, LoadedArtifactSlots } from '../services/artifact-slot.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 /** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { RecordIdentitySources } from '../services/record-draw-selection.js' */
@@ -322,7 +323,8 @@ const loadExportService = () => {
  *   The kept generated artifacts of the drawings not shown (E1), held by reference.
  * @property {HistoryRouter['captureMembers']} captureHistoryMembers
  *   The History router's members: a Load replaces them at its store commit (OV-1769, OV-2131).
- * @property {HistoryRouter['replaceMembers']} replaceHistoryMembers
+ * @property {HistoryRouter['replaceMembers']} replaceHistoryMembers The History router's: each drawing a Load's commit
+ *   made starts with an empty History.
  * @property {HistoryRouter['restoreMembers']} restoreHistoryMembers
  * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
  *   of the shown drawing.
@@ -333,8 +335,8 @@ const loadExportService = () => {
  * @property {{ value: string }} selectedPairwiseBlockOrthogroupId
  * @property {(() => any) | null} [captureSpecificRulePatternDrafts] The feature editor's capture of the unsaved rule pattern drafts.
  * @property {((drafts: any) => void) | null} [restoreSpecificRulePatternDrafts]
- * @property {Pick<SimilarityAlignmentPorts, 'endReviewOutside'>} alignment The Similarity alignment owner's: a Load's
- *   commit ends the review of a drawing it did not keep (OV-3618).
+ * @property {Pick<SimilarityAlignmentPorts, 'endReviewOutside'>} alignment The Similarity alignment owner's: a Load
+ *   that succeeded ends the review of a drawing it did not keep (OV-3618).
  */
 
 /**
@@ -373,12 +375,11 @@ export const createSessionImportRollbackState = ({
     selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
-  // A Load's commit, in the task that writes the store: each drawing it made starts with an empty History, and the
-  // alignment review of a drawing it did not keep ends (OV-3618).
-  replaceHistoryMembers: (/** @type {readonly DrawingId[]} */ drawingIds) => {
-    replaceHistoryMembers(drawingIds);
-    alignment.endReviewOutside(drawingIds);
-  },
+  // A Load's commit, in the task that writes the store: each drawing it made starts with an empty History.
+  replaceHistoryMembers,
+  // A Load that succeeded, with the drawings it loaded: the alignment review of a drawing it did not keep ends
+  // (OV-3618). Not at the commit: a Load that fails after it gives the drawings back, and the review with them (R15).
+  endWorkOutside: (/** @type {readonly DrawingId[]} */ drawingIds) => alignment.endReviewOutside(drawingIds),
   // The previous drawings' Histories, which the Load replaced (`replaceMembers`): the rollback gives them back in the
   // task that restores the store, before `restore` (OV-2132).
   restoreHistoryMembers: (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
@@ -520,18 +521,6 @@ const provideSettingNoteReaders = () => {
 };
 
 /**
- * The ports through which the drawer, the preview binder, the result watchers, the drawing switch and the drawing list
- * reach the Similarity alignment owner and its review (R13).
- * @typedef {object} SimilarityAlignmentPorts
- * @property {() => void} refreshCanvas
- * @property {() => string} editorDisabledReason
- * @property {() => void} arriveAtDrawing
- * @property {() => { status: 'busy', reason: string } | null} busy
- * @property {() => DrawingId} reviewDrawingId
- * @property {(drawingId: DrawingId) => void} endReviewOf
- * @property {(drawingIds: readonly DrawingId[]) => void} endReviewOutside
- */
-/**
  * The alignment ports until the root assigns the owner's: no review, no work in flight.
  * @param {Pick<WebState, 'activeDrawingId'>} state
  * @returns {SimilarityAlignmentPorts}
@@ -542,6 +531,7 @@ const alignmentPortsBeforeOwner = (state) => ({
   arriveAtDrawing: () => {},
   busy: () => null,
   reviewDrawingId: () => state.activeDrawingId.value,
+  reviewIsShown: () => true,
   endReviewOf: () => {},
   endReviewOutside: () => {}
 });
@@ -1052,7 +1042,8 @@ export const createAppSetup = () => {
   const isCurrentResultFeature = (feature) => isCurrentFeature(feature, recordDisplayControls.sourceBinding());
   // Undo, Redo, and the History list (PD-OI-112).
   const { canUndoHistory, canRedoHistory, undoHistoryTitle, redoHistoryTitle, undoHistory, redoHistory, historyList } = createHistoryControls({
-    revision: () => history.revision.value, canUndo: history.canUndo, canRedo: history.canRedo, undo: history.undo, redo: history.redo,
+    revision: () => history.revision.value, canUndo: history.canUndo, canRedo: history.canRedo, stepWait: history.stepWait,
+    walkWait: history.walkWait, undo: history.undo, redo: history.redo,
     timeline: history.timeline, travelTo: history.travelTo, computed, ref, nextTick
   });
   // D-03: the Rich Feature Popup preference records no Undo step, but a change
@@ -1076,7 +1067,7 @@ export const createAppSetup = () => {
     isPreviewTransformActive, subscribePreviewTransformChanges,
     holdPreviewViewport,
     releasePreviewViewport,
-    heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, storedFigurePreview
+    heldPreviewViewport, hidePreviewUntilShown, showHiddenPreview, showArrivingFigure, storedFigurePreview
   } = createPanZoom(state, { showCanvas: settingsPaneActions.showPhoneWorkspace });
   const { startResizing } = createSidebarResize(state);
 
@@ -1223,7 +1214,7 @@ export const createAppSetup = () => {
   // is not the held one, so the end of the review does not give it the held view and its
   // captures keep its own view.
   const similarityAlignmentHoldShown = () => {
-    return !similarityAlignmentTakeover.value || similarityAlignmentPorts.reviewDrawingId() === state.activeDrawingId.value;
+    return !similarityAlignmentTakeover.value || similarityAlignmentPorts.reviewIsShown();
   };
   // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds for
   // the shown mode. The departing mode's slot is captured before a switch changes `mode`.
@@ -2620,7 +2611,7 @@ export const createAppSetup = () => {
     installShownDrawing, dismissNotice: noticeBanner.dismiss,
     switchDrawingSearch: previewFeatureSearch.switchDrawingSearch, rebindAnnotationRecords,
     clearActiveRuntime: previewRuntime.clearActiveRuntime, getResultIdentity: previewRuntime.getResultIdentity,
-    presentSelectedResult: previewRuntime.presentSelectedResult,
+    presentSelectedResult: previewRuntime.presentSelectedResult, showArrivingFigure,
     rememberResultInventory: legendActions.rememberResultInventory, artifactSlotsSwap: artifactSlots.swap,
     captureArtifactSlot: historySnapshots.captureArtifactSlot, installArtifactSlot: historySnapshots.installArtifactSlot
   });
@@ -2826,14 +2817,13 @@ export const createAppSetup = () => {
   // E1 (PD-OI-079): an error about another drawing's Result (Save of a
   // legacy Result kept in that drawing) offers Generate there: the action
   // shows that drawing first. The drawing exists: its removal took the error
-  // with it (R17-29), and a Load clears every error.
+  // with it (R17-29), and a Load clears every error. Reached while alignment
+  // work runs, it shows no drawing and returns the work's reason (D-57).
   const generateFromError = () => {
     const target = errorDrawingId();
-    if (target !== undefined && target !== state.activeDrawingId.value) {
-      const switched = selectDrawing(target);
-      if (switched && switched.status === 'busy') return switched;
-    }
-    return runAnalysis();
+    const waiting = similarityAlignmentPorts.busy()
+      ?? (target !== undefined && target !== state.activeDrawingId.value ? selectDrawing(target) : null);
+    return waiting && waiting.status === 'busy' ? waiting : runAnalysis();
   };
 
   const cancelGeneration = () => cancelRunAnalysis();
@@ -2964,7 +2954,7 @@ export const createAppSetup = () => {
   });
   const { missingBlastTsvDialog, missingBlastTsvRows, resolveMissingBlastTsv } = createMissingBlastTsvChoice({
     state, withHistory: dialogChoice.withHistory, closeAfterChoice: dialogChoice.closeAfterChoice, choicePending: dialogChoice.pending,
-    omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis
+    omitLinearComparisonPairs, linearComparisonPairForEdgeKey, runAnalysis, alignment: similarityAlignmentPorts
   });
   const {
     reviewDrawingFigure, dropSimilarityAlignmentView, fitPreviewForSimilarityAlignment, endSimilarityAlignmentTakeover,
@@ -2990,6 +2980,7 @@ export const createAppSetup = () => {
     alignmentStatus: similarityAlignmentActions.status,
     isDraftArtifactCurrent: similarityAlignmentActions.isDraftArtifactCurrent,
     alignmentReviewDrawingId: similarityAlignmentActions.reviewDrawingId,
+    alignmentReviewShown: similarityAlignmentActions.reviewIsShown,
     selectAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     alignmentDirectionPreview: similarityAlignmentActions.directionPreview,
     alignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
@@ -3004,6 +2995,7 @@ export const createAppSetup = () => {
     arriveAtDrawing: similarityAlignmentActions.arriveAtDrawing,
     busy: similarityAlignmentActions.workBusy,
     reviewDrawingId: similarityAlignmentActions.reviewDrawingId,
+    reviewIsShown: similarityAlignmentActions.reviewIsShown,
     endReviewOf: similarityAlignmentActions.endReviewOf,
     endReviewOutside: similarityAlignmentActions.endReviewOutside
   });
@@ -3223,7 +3215,7 @@ export const createAppSetup = () => {
     withHistory: dialogChoice.withHistory,
     closeAfterChoice: dialogChoice.closeAfterChoice,
     choicePending: () => dialogChoice.pending.value,
-    runAnalysis: () => runAnalysis(),
+    runAnalysis: () => runAnalysis(), alignment: similarityAlignmentPorts,
     errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts),
     // The record-definition popup (created above) owns which field writes a record's name lines.
     showRecordText: (recordIndex) => previewItemPopup.showRecordTextSettings(recordIndex)

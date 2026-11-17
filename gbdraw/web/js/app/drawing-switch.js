@@ -19,6 +19,7 @@ import { createArtifactSlot } from '../services/artifact-slot.js';
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { PythonLegendKey } from '../services/legend-svg.js' */
 /** @import { SvgResultEntry } from '../services/svg-result-ingestion.js' */
+/** @import { SimilarityAlignmentPorts } from './similarity-alignment.js' */
 
 const { computed } = window.Vue;
 
@@ -51,7 +52,7 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {(departing: DrawingState, arriving: DrawingState) => UserFacingError | null} auxiliaryImportFailureOnArrival
  *   The arriving drawing's card failure error, or null.
  * @property {() => void} resetModeTransientUi
- * @property {{ arriveAtDrawing: () => void, refreshCanvas: () => void, busy: () => HistoryBusy | null }} alignment The
+ * @property {Pick<SimilarityAlignmentPorts, 'arriveAtDrawing' | 'refreshCanvas' | 'busy'>} alignment The
  *   Similarity alignment owner's ports: on arrival, its summary and notice were the departing drawing's, an open review
  *   stays with its own drawing, and the arriving drawing's plan selects its group; the review's marks are measured
  *   again on the arriving figure; `busy`, why a switch waits for its work in flight.
@@ -62,6 +63,9 @@ const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule ed
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
  * @property {(result: SvgResultEntry) => string} getResultIdentity
  * @property {(bindingOptions?: { modeArrival?: boolean }) => unknown} presentSelectedResult
+ * @property {() => Promise<void>} showArrivingFigure The pan and zoom owner's: the arriving figure shows from its
+ *   first frame at the current zoom, its top where pan y 0 puts it, centred in the free room the Fit measures (an
+ *   open review's docked panel narrows it), or its start shown when it is wider; it is not fitted (D-57).
  * @property {(identity: string | undefined, inventory: readonly PythonLegendKey[]) => void} rememberResultInventory
  * @property {(departing: Readonly<ArtifactSlot>, arrivingId: DrawingId) => Readonly<ArtifactSlot> | null} artifactSlotsSwap
  *   Keeps the departing slot and takes the arriving drawing's, or null.
@@ -80,8 +84,8 @@ export const createDrawingSwitch = ({
   historyAvailability, historyRestoring, traversalPending, settlePendingIntent, refreshCurrentIntent, adoptSessionReset,
   ruleWritePending, suspendSpecificRulePatternDrafts, clearFeatureSelection, rememberDepartingResultProjection,
   auxiliaryImportFailureOnArrival, resetModeTransientUi, alignment, installShownDrawing, dismissNotice, switchDrawingSearch,
-  rebindAnnotationRecords, clearActiveRuntime, getResultIdentity, presentSelectedResult, rememberResultInventory,
-  artifactSlotsSwap, captureArtifactSlot, installArtifactSlot
+  rebindAnnotationRecords, clearActiveRuntime, getResultIdentity, presentSelectedResult, showArrivingFigure,
+  rememberResultInventory, artifactSlotsSwap, captureArtifactSlot, installArtifactSlot
 }) => {
   // E1: installs the arriving slot as the displayed artifact, with its Legend
   // inventory and colors. The Legend owner also keeps each Result's inventory
@@ -121,7 +125,9 @@ export const createDrawingSwitch = ({
   //      kept per drawing. The feature panel tab it resets is no Session
   //      change (D-15-53). The arriving Similarity alignment plan selects
   //      its group (`arriveAtDrawing`).
-  //   5. Show the arriving Result as a selection.
+  //   5. Show the arriving Result as a selection, at the zoom shown and
+  //      centred in the free room: the departing figure's pan is no pan of
+  //      the arriving one, and a switch never fits (OV-3620, D-57).
   // A switch waits for Generate, a label rerender, Save and Load, so each
   // Result lands in its own drawing's slot (OIPC-C07), and for a History
   // restore or an open History transaction.
@@ -180,8 +186,9 @@ export const createDrawingSwitch = ({
     if (arrivingCardFailure !== null && errorLog.value === null) errorLog.value = arrivingCardFailure;
     // The arriving drawing's annotations, over its mode's record catalog.
     rebindAnnotationRecords();
-    // 5. Presentation: the arriving Result is shown as a selection.
+    // 5. Presentation: the arriving Result is shown as a selection, centred.
     presentSelectedResult({ modeArrival: true });
+    void showArrivingFigure();
   };
   // `false` when the drawing is already shown, the busy reason when a switch
   // waits, else `{ status: 'ok' }`. An unknown ID throws (`state.drawingOf`):

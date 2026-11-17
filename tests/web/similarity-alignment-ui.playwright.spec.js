@@ -3025,10 +3025,11 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
   const { before, dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
-  // OV-622: a mode switch brings no view of its own. After Circular and back, the review still
-  // holds the view from before it and gives it back; the figure is not fitted again (the draft no
-  // longer shows on it, as before).
+  // OV-622, D-57: a mode switch keeps the zoom and centres the arriving figure in the free room;
+  // it does not fit it again (PD-OI-039). After Circular and back, the review still holds the view
+  // from before it, and Cancel gives that view back.
   await test.step('a mode switch and back under an open review leaves the view the review gives back (OV-622, OV-1255)', async () => {
+    const reviewed = await previewView(page);
     for (const target of ['circular', 'linear']) {
       await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), ids[target]);
       await expect.poll(shownMode).toBe(target);
@@ -3036,6 +3037,7 @@ test('a review over a zoomed and panned view survives a mode switch, an end in C
     await expect(dialog).toBeVisible();
     await roomSettled(page);
     const shown = await previewView(page);
+    expect(shown.zoom, 'a switch keeps the zoom of the review\'s fit').toBe(reviewed.zoom);
     await page.setViewportSize({ width: 1400, height: 1000 });
     await roomSettled(page);
     expect(await previewView(page)).toEqual(shown);

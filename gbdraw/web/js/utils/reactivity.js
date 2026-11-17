@@ -79,3 +79,10 @@ export const watch = (getter, callback, options = {}) => {
  * @returns {{ readonly value: T }}
  */
 export const computed = (getter) => vue()?.computed?.(getter) ?? { get value() { return getter(); } };
+
+/**
+ * Resolves after Vue's next flush, when the DOM shows the state written before it (Vue `nextTick`); without a
+ * page, after the current microtasks.
+ * @returns {Promise<void>}
+ */
+export const nextTick = () => vue()?.nextTick?.() ?? Promise.resolve();

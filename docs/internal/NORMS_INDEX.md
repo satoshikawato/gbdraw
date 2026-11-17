@@ -301,6 +301,7 @@ under "Cited ids without a record".
 - [PD-OI-039](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-039-compact-review-with-exclusive-alignment-directions): Compact review with exclusive alignment directions. ACCEPTED, concern `web.similarity-alignment.review-presentation`, scenario revision 5, supersedes scenario revision 4.
   - `tests/web/alignment-per-drawing.playwright.spec.js`
   - `tests/web/alignment-per-drawing.test.mjs`
+  - `tests/web/session50-drawing-load-paths.test.mjs`
   - `tests/web/similarity-alignment-actions.test.mjs`
   - `tests/web/similarity-alignment-ui.playwright.spec.js`
 
