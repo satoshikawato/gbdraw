@@ -299,13 +299,15 @@ const checkpointSvgBytes = (checkpoint) => (
  *   `name` is shown by its label.
  * @typedef {{
  *   type: 'intent', label: string, changes: HistoryIntentChange[], byteSize: number, fileIds: Set<string>, sequence?: number,
- *   session?: IntentEntry, detail?: HistoryStepDetail, figureMark?: StepFigureMark, figures?: HeldFigureSides
+ *   session?: IntentEntry, detail?: HistoryStepDetail, figureMark?: EndedStepFigureMark, figures?: HeldFigureSides
  * }} IntentEntry
  *   `figureMark` and `figures`: what an intent step knew of its drawing's figure, and the figures its sides hold
- *   (W15 §8.2, OV-2436; `createStepFigures`).
- * @typedef {{ serial: number, epoch: number, drawn: boolean | undefined, ended?: number }} StepFigureMark
- *   An intent step's number as it began and as it ended (`intentStepSerial`; `ended` once it ended), the count of
- *   figure replacements as it began, and whether its figure was then the one its state draws (`figureDrawn`).
+ *   (OV-2436; `createStepFigures`).
+ * @typedef {{ serial: number, epoch: number, drawn: boolean | undefined }} StepFigureMark
+ *   An intent step's number as it began (`intentStepSerial`), the count of figure replacements as it began, and
+ *   whether its figure was then the one its state draws (`figureDrawn`).
+ * @typedef {StepFigureMark & { ended: number }} EndedStepFigureMark
+ *   The mark of a step that ended, with its number as it ended.
  * @typedef {{ before?: HeldFigure, after?: HeldFigure }} HeldFigureSides
  * @typedef {{ slot: object, key: object, committed: unknown, drawn: boolean | undefined, retainedBytes: number }} HeldFigure
  *   A figure an intent step side shows, by reference: the shown drawing's artifact (`slot`, the snapshot service's),
@@ -313,8 +315,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   (as a checkpoint side's `drawn`), and its bytes, which the shared budget counts once per `key` (the Result array
  *   it holds) with the generated artifacts (`uniqueArtifactBytes`).
  * @typedef {object} HeldFigurePort
- *   What History asks of the snapshot service for held figures (W15 §8.2, §8.3).
- * @property {() => Omit<HeldFigure, 'drawn'>} capture The shown drawing's figure now.
+ *   What History asks of the snapshot service for held figures (OV-2436).
+ * @property {(role: 'replaced' | 'drawn') => Omit<HeldFigure, 'drawn'>} capture The shown drawing's figure now: the one a
+ *   rerender replaces, or the one it drew, as its Legend is read (before an edit made while it ran is shown on it).
  * @property {(figure: HeldFigure) => boolean} usable Whether `figure` can show the shown drawing's state now: it is the
  *   shown drawing's, drawn from the committed Session now, and not the figure shown.
  * @property {(figure: HeldFigure, restoreIntent: () => Promise<unknown>) => Promise<void>} show Shows `figure`: the
@@ -540,7 +543,7 @@ const checkpointSvgBytes = (checkpoint) => (
  * @property {(kept?: object | null) => void} enforce
  *   Drops held figures, then steps, until the retained bytes fit, oldest first, from the members in
  *   `evictionOrder`, keeping `kept` (OV-1260); then releases the files no member names. A step without
- *   its figure still applies (W15 §8.2), so figures drop first, and silently.
+ *   its figure still applies (it asks the rerender, as before), so figures drop first, and silently.
  * @property {() => void} releaseUnreferencedFiles
  */
 
@@ -710,7 +713,7 @@ const holdNothing = async (run) => await run();
 /** @param {IntentEntry} entry @returns {HeldFigure[]} */
 const heldFiguresOf = ({ figures }) => [figures?.before, figures?.after].filter((figure) => figure !== undefined);
 /**
- * W15 §8.2, §8.3 (OV-2436, OV-2413): the figures History holds on the sides of a drawing's intent steps, by
+ * OV-2436, OV-2413: the figures History holds on the sides of a drawing's intent steps, by
  * reference, so that the Undo or Redo of a step whose rerender replaced the figure shows the figure Python drew for
  * that side at once. A label rerender's install (`adoptDrawnWrite`) holds them. The step that requested it (the
  * open step, or the last step, begun at or before the request and ended at or after it) holds the figure the
@@ -718,8 +721,9 @@ const heldFiguresOf = ({ figures }) => [figures?.before, figures?.after].filter(
  * figure it drew on `after` (the latest wins). A rerender no step requested holds its drawn figure on the current
  * boundary: `after` of the last step and `before` of the next Redo. A step begun after the request, or an Undo or
  * Redo since it, holds nothing; a step still open then leaves the figures to the steps before it, unless it adds
- * to another step's entry or is no intent step. A step whose end is not known (a remainder) bounds it only while a Redo step shows
- * that no step ended since the last Undo or Redo.
+ * to another step's entry or is no intent step. When the last step holds no mark (it added to another step's entry,
+ * or is no intent step), the boundary holds the figure only while a Redo step exists, which shows that no step
+ * ended since the last Undo or Redo.
  * @param {StepFigurePorts} ports
  */
 const createStepFigures = ({ port, openTransaction, stacks, busy, serial, nextSerial, figure, enforce }) => {
@@ -740,7 +744,7 @@ const createStepFigures = ({ port, openTransaction, stacks, busy, serial, nextSe
     const next = top(stacks.redo);
     const mark = last?.type === 'intent' ? last.figureMark : undefined;
     if (mark && requestedAt < mark.serial) return null;
-    if (last?.type === 'intent' && mark && requestedAt <= (mark.ended ?? requestedAt)) return { requester: last, boundary: [] };
+    if (last?.type === 'intent' && mark && requestedAt <= mark.ended) return { requester: last, boundary: [] };
     if (!next && !mark) return null;
     /** @type {[IntentEntry, 'before' | 'after'][]} */
     const boundary = [];
@@ -756,11 +760,11 @@ const createStepFigures = ({ port, openTransaction, stacks, busy, serial, nextSe
     const mark = requester?.figureMark;
     if (role === 'replaced') {
       if (requester && mark && mark.epoch === epoch && !requester.figures?.before) {
-        requester.figures = { ...requester.figures, before: { ...port.capture(), drawn: mark.drawn } };
+        requester.figures = { ...requester.figures, before: { ...port.capture('replaced'), drawn: mark.drawn } };
       }
       return;
     }
-    const drawn = { ...port.capture(), drawn: true };
+    const drawn = { ...port.capture('drawn'), drawn: true };
     if (requester) requester.figures = { ...requester.figures, after: drawn };
     boundary.forEach(([entry, side]) => { entry.figures = { ...entry.figures, [side]: drawn }; });
     enforce();
@@ -2172,7 +2176,7 @@ export const createHistoryManager = ({
   /**
    * @param {IntentEntry} entry
    * @param {'undo' | 'redo'} direction
-   * @param {'before' | 'after' | null} [side] The side whose held figure may show it (W15 §8.3).
+   * @param {'before' | 'after' | null} [side] The side whose held figure may show it.
    */
   const applyIntentEntry = async (entry, direction, side = null) => {
     const nextIntent = applyIntentPatch(currentIntent || {}, entry.changes, direction);
@@ -2276,7 +2280,7 @@ export const createHistoryManager = ({
 
   /**
    * Undo or Redo of the top step of its stack, which then moves to the other stack. An intent step's side may show
-   * with its held figure (W15 §8.3): Undo shows `before`, Redo `after`.
+   * with its held figure: Undo shows `before`, Redo `after`.
    * @param {'undo' | 'redo'} direction
    */
   const traverseTop = (direction) => traverse(async () => {
@@ -2371,7 +2375,7 @@ export const createHistoryManager = ({
    *   `direction`: set when the call restores an intent step, which way it went. `undrawn`: a checkpoint
    *   commit whose caller said its figure is not the one its state draws (the caller then asks for the automatic
    *   rerender itself); a restore tells `figureRestored`. `drawn`: an intent step's restore shows a figure History
-   *   held, drawn by Python for its state (W15 §8.3), so no fit is owed.
+   *   held, drawn by Python for its state, so no fit is owed.
    */
   const setSettingsStepListener = (listener) => { settingsStepListener = listener; };
 

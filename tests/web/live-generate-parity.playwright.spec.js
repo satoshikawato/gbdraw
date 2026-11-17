@@ -1341,7 +1341,7 @@ test.describe('a Result displayed after its intent changed', () => {
   // Undo or Redo back to Label visibility On, on a figure that lacks the label:
   // only a rerender can draw it (OV-2413). The rerender of the step drew it, and
   // History holds that figure on the step's side, so the Undo or Redo shows it at
-  // once, with no rerender (W15 §8.3).
+  // once, with no rerender.
   for (const mode of ['linear', 'circular']) {
     const labelsNoneOn = async (page) => {
       await open(page, { mode, results: 'single', reflow: 'off' });
@@ -1418,7 +1418,7 @@ test.describe('a Result displayed after its intent changed', () => {
 // Undo and Redo of a feature hide, a Label Off, or a label text apply at once:
 // when Undo or Redo returns, the figure shows the step, with any rerender held.
 // With Auto Reflow on, History shows the figure the step's rerender replaced or
-// drew (W15 §8.3, OV-2436). Guards of how History steps work, which also keep
+// drew (OV-2436). Guards of how History steps work, which also keep
 // the moved Legend and the displayed batch Result where they are.
 test.describe('Undo and Redo', () => {
   const featureIdOf = (page, locusTag) => page.evaluate((tag) => {
@@ -1549,6 +1549,28 @@ test.describe('Undo and Redo', () => {
         expect(redo, 'Redo').toEqual(edited);
         expect(await rerenderRequests(page), 'the Redo asks for no rerender').toBe(before);
       });
+      // A held figure shows again on each traversal: the figure the step's
+      // rerender replaced still holds the edit's bytes, so its second Undo shows
+      // the step undone, as the first did.
+      test(`Undo, Redo, and Undo again of ${domain} apply at once, Auto Reflow on (${mode})`, async ({ page }) => {
+        test.setTimeout(180_000);
+        await open(page, { mode, results: 'single', reflow: 'on' });
+        const id = await featureIdOf(page, 'FL2');
+        await edit(page);
+        await settleLive(page);
+        await history(page, 'undo');
+        await settleLive(page);
+        await history(page, 'redo');
+        await settleLive(page);
+        expect(await stepAndRead(page, null, id), 'before the second Undo').toEqual(edited);
+        const before = await rerenderRequests(page);
+        await holdRerenders(page);
+        const undo = await stepAndRead(page, 'undo', id);
+        await releaseRerenders(page);
+        expect(undo, 'Undo again').toEqual(SHOWN);
+        expect(await rerenderRequests(page), 'the second Undo asks for no rerender').toBe(before);
+        await expectLiveEqualsGenerate(page, { label: `Undo, Redo, and Undo again of ${domain}, Auto Reflow on` });
+      });
     }
     test(`a moved Legend returns through Undo of a label edit, and comes back through Redo, Auto Reflow off (${mode})`, async ({ page }) => {
       test.setTimeout(180_000);
@@ -1569,6 +1591,53 @@ test.describe('Undo and Redo', () => {
       expect(await moved(), 'Redo of the drag').toEqual(dragged);
     });
   }
+  // OV-3732: a duplicated drawing shows copies of its source's Results, each
+  // with its own runtime state, paint record and composition offsets, so a
+  // label rerender and a Legend drag, and their Undo and Redo, change only the
+  // drawing they are made in. Duplicate has no mode branch: one mode.
+  test('Undo and Redo in a duplicated drawing and in its source each change only their own drawing', async ({ page }) => {
+    test.setTimeout(300_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
+    const id = await featureIdOf(page, 'FL2');
+    const shownId = () => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.activeDrawingId.value);
+    const figure = async () => ({ legend: await movedLegend(page), figure: await stepAndRead(page, null, id) });
+    const source = await shownId();
+    const copy = await page.evaluate((drawing) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(drawing).drawingId, source);
+    await expect.poll(shownId).toBe(copy);
+    await settleLive(page);
+    const start = { legend: await movedLegend(page), figure: SHOWN };
+    expect(await figure(), 'the copy shows its source\'s figure').toEqual(start);
+    await dragLegend(page);
+    await settleLive(page);
+    await popupEdit(page, 'FL2', { labelText: 'in the copy' });
+    await settleLive(page);
+    const copyEdited = await figure();
+    expect(copyEdited.legend, 'the drag moves the copy\'s Legend').not.toEqual(start.legend);
+    await switchDrawing(page, { id: source });
+    expect(await figure(), 'the copy\'s edits leave the source').toEqual(start);
+    await dragLegend(page);
+    await settleLive(page);
+    await popupEdit(page, 'FL2', { labelVisibility: 'off' });
+    await settleLive(page);
+    const sourceEdited = await figure();
+    await history(page, 'undo');
+    await history(page, 'undo');
+    expect(await figure(), 'the source\'s Undo').toEqual(start);
+    await history(page, 'redo');
+    await history(page, 'redo');
+    expect(await figure(), 'the source\'s Redo').toEqual(sourceEdited);
+    await switchDrawing(page, { id: copy });
+    expect(await figure(), 'the source\'s steps leave the copy').toEqual(copyEdited);
+    await history(page, 'undo');
+    await history(page, 'undo');
+    expect(await figure(), 'the copy\'s Undo').toEqual(start);
+    await history(page, 'redo');
+    await history(page, 'redo');
+    expect(await figure(), 'the copy\'s Redo').toEqual(copyEdited);
+    await switchDrawing(page, { id: source });
+    expect(await figure(), 'the copy\'s steps leave the source').toEqual(sourceEdited);
+    await expectLiveEqualsGenerate(page, { label: 'the source after its copy\'s Undo and Redo' });
+  });
   for (const [name, change] of [['a hide', { visibility: 'off' }], ['a label text', { labelText: 'on result 1' }]]) {
     test(`Undo and Redo of ${name} leave another batch Result displayed`, async ({ page }) => {
       test.setTimeout(240_000);

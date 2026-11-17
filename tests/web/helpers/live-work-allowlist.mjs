@@ -338,8 +338,8 @@ export const WORK_ALLOWLIST = [
   // size, a Legend rename, deletion, Restore, Move, or Sort, or a Canvas
   // padding change shows at once as on an Auto figure (the rows above), and
   // the automatic rerender then fits the figure with it (`render`). Its Undo
-  // shows the fitted figure from before the step, which History holds (W15
-  // §8.3), as a Result display: no rerender. A Legend row color stays the
+  // shows the fitted figure from before the step, which History holds,
+  // as a Result display: no rerender. A Legend row color stays the
   // Web's: no rerender.
   {
     kind: 'Legend rename on a sized figure', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: ['render'],
@@ -395,7 +395,7 @@ export const WORK_ALLOWLIST = [
     kind: 'History step (Undo of a sequence search)', stages: ['fills', 'legendFills'], compiles: 1, requests: ['render'],
     run: (page) => history(page, 'undo')
   },
-  // W15 §8.2, §8.3 (OV-2436): a Label Off with Auto Reflow on asks for the automatic rerender, which replaces the
+  // OV-2436: a Label Off with Auto Reflow on asks for the automatic rerender, which replaces the
   // figure. History holds the figure it replaced and the one it drew on the step's sides, so the step's Undo and
   // Redo show them at once, as a Result display: no worker request.
   {
@@ -403,8 +403,9 @@ export const WORK_ALLOWLIST = [
     before: (page) => page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; }),
     run: (page) => popupEdit(page, embeddedLabelFeatures[1], { labelVisibility: 'off' })
   },
-  // The Undo shows the figure as a Result display (the Legend it was drawn with); the Redo's figure left with the
-  // intent it shows (E1), so it compiles nothing.
+  // The Undo and the Redo each show the held figure as a Result display: its Results are recorded as showing what
+  // their bytes showed when History held them, not the intent they last left with, so each display compiles its
+  // Legend once (OV-2436: a figure held before a later edit was shown on it still holds the earlier bytes).
   { kind: 'History step (Undo with a held figure)', stages: ['legend'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
-  { kind: 'History step (Redo with a held figure)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'redo') }
+  { kind: 'History step (Redo with a held figure)', stages: ['legend'], compiles: 1, requests: [], run: (page) => history(page, 'redo') }
 ];

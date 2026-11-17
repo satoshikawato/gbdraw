@@ -88,7 +88,7 @@ test('a summary that does not name its Result, or has another shape, refuses the
 
 // A live hide changes what the Result draws without Python: the page compares
 // the Feature visibility the Result's paint record says it was drawn with
-// (W15 §8.4) with the drawing's (`visibilityPaintState`); the summary itself
+// (read as its request was built) with the drawing's (`visibilityPaintState`); the summary itself
 // holds what Python sent and its warning groups.
 test('each summary holds what Python sent and its warning groups', () => {
   const drawing = { featureOverrides: {}, featureVisibilityManualRules: [] };

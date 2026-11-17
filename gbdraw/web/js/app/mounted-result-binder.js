@@ -70,7 +70,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
  * @property {(reason: string) => unknown} commitActiveResultEdit
  *   The preview runtime's methods.
  * @property {(write: () => void, request: { requestedAt: number, figure?: 'replaced' | 'drawn' }) => unknown} adoptDrawnWrite
- *   History's adoption of a drawn write; History holds the figure a rerender drew once its Legend is read (W15 §8.2).
+ *   History's adoption of a drawn write; History holds the figure a rerender drew once its Legend is read (OV-2436).
  * @property {() => unknown} captureBaseConfig
  * @property {(preserveOffset?: boolean) => unknown} setupDiagramDrag
  * @property {() => unknown} applyCanvasPadding

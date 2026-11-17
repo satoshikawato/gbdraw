@@ -252,7 +252,7 @@ test('a null applied palette restored in the shown drawing keeps the displayed p
 // REVIEW-1 M1: one store keeps the hidden drawings' artifacts, and only its
 // named operations change it; an entry's key is its slot's drawing.
 // OV-3732: Duplicate's slot shares its source's artifact but its Results,
-// which are copies with records of their own. W15 §8.3: a held figure shows
+// which are copies with records of their own. A held figure shows
 // at the displayed Result index, clamped to its Results.
 test('a copied slot holds copies of its Results; a held figure keeps the displayed index', () => {
   const results = [{ name: 'a.svg', content: '<svg/>' }, { name: 'b.svg', content: '<svg/>' }];

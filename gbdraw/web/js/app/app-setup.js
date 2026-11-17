@@ -29,7 +29,7 @@ import { createRulePreparation } from './rule-matching.js';
 import { displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createDeclinedPaintDisplay, createDepartedResultIntent, createDisplayedResultProjection, createEditorIntentShow, createMountedEditorIntentProjection } from './editor-intent.js';
 import { createMountedLegendBinding, createMountedResultReadiness } from './mounted-result-binder.js';
-import { createResultPaintRecord, visibilityPaintState } from './result-paint-record.js';
+import { createResultPaintRecord, editorPaintState, visibilityPaintState } from './result-paint-record.js';
 import {
   displayedLegendRowContext, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
@@ -861,6 +861,11 @@ export const createAppSetup = () => {
     nextTick,
     // The discovery owner exists once the runner does; a restore runs after setup.
     discoverDrawingRecords: (drawing) => discoverDrawingRecords(drawing),
+    // What a held figure's Results show, read with the shown drawing's paint, and written back as it shows again.
+    heldResultPaint: {
+      capture: (results, drawing) => resultPaintRecord.heldPaint(results, editorPaintState(state, state.activeDrawing()), drawing),
+      arrive: resultPaintRecord.arrive
+    },
     buildConfigData: captureConfigData,
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
@@ -1953,7 +1958,7 @@ export const createAppSetup = () => {
   // again by the automatic rerender, which draws them (`projectCommittedEditorIntent`). An Auto figure is not redrawn.
   // History marks a checkpoint side undrawn while that fit is owed and keeps the rerender's figure as the last step's;
   // a restore of an undrawn side asks the label owner to draw it again (`redrawRestored`, D-24). A restore that shows
-  // a figure History held, drawn for the restored state (W15 §8.3), owes no fit.
+  // a figure History held, drawn for the restored state, owes no fit.
   /**
    * @param {readonly HistoryChangeLike[] | null} changes
    * @param {'undo' | 'redo' | undefined} direction
@@ -2480,7 +2485,7 @@ export const createAppSetup = () => {
       path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
     ));
     if (legendChange) legendActions.adoptRestoredLegend({ from: legendChange[direction === 'undo' ? 'after' : 'before'] });
-    // A held figure arrives next and shows the intent as its Result is displayed (W15 §8.3).
+    // A held figure arrives next and shows the intent as its Result is displayed (one projection, R3).
     const projected = !figure && await projectMountedEditorIntent({
       colors,
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
@@ -3239,12 +3244,11 @@ export const createAppSetup = () => {
     return entry && entry.report.drawn ? entry : null;
   });
   // A live Feature visibility edit no render drew since: the summary counts what the render drew,
-  // so the visibility its Result was drawn with (the Result's paint record, W15 §8.4) is compared
-  // with that of the drawing whose Result is shown, once the Result is bound.
+  // so the visibility the displayed Result was drawn with (its paint record, written as its request was built) is
+  // compared with that of the drawing whose Result is shown, once the Result is bound.
   // The record is written as a Result binds (`mountedResultRevision`).
   const shownInputSummaryStale = computed(() => shownInputSummary.value !== null && mountedResultRevision.value > 0
-    && resultPaintRecord.drewOtherVisibility(results.value[shownInputSummary.value.resultIndex],
-      visibilityPaintState(historySnapshots.displayedArtifactDrawing())));
+    && resultPaintRecord.displayedDrewOtherVisibility(visibilityPaintState(historySnapshots.displayedArtifactDrawing())));
   const openLabelFitNotice = () => {
     const entry = labelFitNotice.value;
     if (!entry) return undefined;

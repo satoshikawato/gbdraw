@@ -184,7 +184,7 @@ test('the sized refit reads the shown drawing of the History step it follows', (
   assert.ok(refit, 'app-setup.js defines refitSizedFigure');
   assert.equal([...refit[1].matchAll(/\bactiveDrawing\s*\(/g)].length, 1, 'it resolves the shown drawing once');
   assert.match(refit[1], /if \(!root \|\| !changes \|\| !requestedCanvasOf\(root\)\) return;\s*const drawing = state\.activeDrawing\(\);/);
-  // A restore that shows a figure History held, drawn for its state, owes no fit (W15 §8.3).
+  // A restore that shows a figure History held, drawn for its state, owes no fit.
   assert.match(source, /history\.setSettingsStepListener\(\(changes, direction, undrawn, drawn\) => \{[\s\S]*?if \(!drawn\) refitSizedFigure\(changes, direction, undrawn\);\s*\}\);/,
     'only the History step listener calls it');
 });

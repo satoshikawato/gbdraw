@@ -99,12 +99,14 @@ export const createDrawingSwitch = ({
     const shown = results.value[Number(selectedResultIndex.value) || 0];
     if (shown) rememberResultInventory(getResultIdentity(shown), [...slot.legend.originalOrder]);
   };
-  // DESIGN §8.3 of W15 (OV-2436): a figure a History step of the shown
-  // drawing holds shows again as a display of its Result, as a switch shows
-  // the arriving one: the displayed Result leaves with what it shows,
-  // `restoreIntent` restores the step's intent, and the figure arrives at the
-  // displayed Result index (clamped to its Results) and pan, and shows the
-  // intent once (R3). Resolves once the arriving Result is bound.
+  // OV-2436: a figure a History step of the shown drawing holds shows again
+  // as a display of its Result, as a switch shows the arriving one: the
+  // displayed Result leaves with what it shows, `restoreIntent` restores the
+  // step's intent and the records of the arriving Results (what their bytes
+  // show), and the figure arrives at the displayed Result index (clamped to
+  // its Results) and keeps the pan (a History step is no drawing switch, so it
+  // is not centred), and shows the intent once (R3). Resolves once the
+  // arriving Result is bound.
   /** @param {Readonly<ArtifactSlot>} slot @param {() => Promise<unknown>} restoreIntent */
   const showHeldFigure = async (slot, restoreIntent) => {
     const drawing = state.activeDrawing();

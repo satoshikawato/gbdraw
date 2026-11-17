@@ -54,7 +54,7 @@ const { watch } = window.Vue;
 
 /**
  * The paint a Result Python drew was drawn from (`bindingOptions.drawnPaint`): every phase that draws
- * (`drawsResult`) names it as its request is built (W15 §8.4).
+ * (`drawsResult`) names it as its request is built, so the paint drawn has one producer.
  * @param {Pick<DisplayedResultContext, 'phase' | 'bindingOptions'>} context
  * @returns {EditorPaintState}
  */
@@ -479,7 +479,7 @@ export const createDisplayedResultProjection = ({
     // Result not displayed since the last edits without them (also a Session
     // older than 40, whose strokes reached only the mounted Result).
     // Each of them names the paint it drew, read as its request was built
-    // (W15 §8.4: the one producer).
+    // (the one producer of the paint drawn).
     const drawn = drawsResult(context.phase) ? drawnPaintOf(context) : null;
     if (drawn && drawn.labels !== current.labels) labelProjectionResultIdentity = context.resultIdentity;
     resultPaintCommit(liveResults(), context.result, current, {

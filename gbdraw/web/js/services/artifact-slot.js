@@ -202,7 +202,7 @@ export const artifactSlotAs = (slot, drawing, { copyResults, copyRecords }) => {
 
 /**
  * `slot` showing the Result at `selectedResultIndex`, clamped to its Results:
- * a figure History holds shows at the displayed index (DESIGN §8.3 of W15).
+ * a figure History holds shows at the displayed index, never the step's.
  * @param {Readonly<ArtifactSlot>} slot
  * @param {DrawingIdentity} drawing
  * @param {number} selectedResultIndex

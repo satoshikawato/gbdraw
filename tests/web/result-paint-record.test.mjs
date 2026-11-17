@@ -307,7 +307,7 @@ test('a Result that leaves lacking a domain keeps no intent to be shown again wi
 
 // OV-1983, OV-2413: the label owner reads the Label visibility On and Off the
 // displayed Result was drawn with; a Generate that moves a record's rows to
-// its new key drew the moved rows (W15 §8.4: read as its request was built),
+// its new key drew the moved rows (read as its request was built),
 // which its Results' record takes when the drawing takes them.
 test('the Label visibility the displayed Result was drawn with follows a Generate key move', () => {
   const labelsOf = (from) => JSON.stringify([[[from, 'f1', 'on', null, null], [from, 'f2', null, 'text', null], ['kept', 'f3', 'off', null, null]], {}]);
@@ -326,7 +326,7 @@ test('the Label visibility the displayed Result was drawn with follows a Generat
   assert.equal(record.displayedDrawnLabelVisibility(), null, 'the Result left');
 });
 
-// W15 §8.4: the paint a Generate drew is read as its request is built, with the palette its commit applies, and
+// The paint a Generate drew is read as its request is built, with the palette its commit applies, and
 // names the fills the Generate keeps; the input summary's staleness reads the visibility it drew.
 test('a Generate names the paint it drew as its request is built', () => {
   const drawing = {
@@ -344,10 +344,10 @@ test('a Generate names the paint it drew as its request is built', () => {
   assert.equal(JSON.parse(kept.colors[1])[0].length, 0, 'its rules stay');
   const [g] = ['g'].map(resultNamed);
   const record = createResultPaintRecord();
-  assert.equal(record.drewOtherVisibility(g, kept.visibility), false, 'no record yet');
+  assert.equal(record.displayedDrewOtherVisibility(kept.visibility), false, 'no Result displayed yet');
   record.commit([g], g, paint('now'), { draws: kept });
-  assert.equal(record.drewOtherVisibility(g, kept.visibility), false);
-  assert.equal(record.drewOtherVisibility(g, 'another visibility'), true, 'a live hide no render drew');
+  assert.equal(record.displayedDrewOtherVisibility(kept.visibility), false);
+  assert.equal(record.displayedDrewOtherVisibility('another visibility'), true, 'a live hide no render drew');
   assert.equal(record.drawn(g), kept, 'the record holds what the Generate drew, not the state at its bind');
 });
 
@@ -419,7 +419,39 @@ test('the committed editor state records a Result as drawn only in a phase that 
   const redrawn = commitIn('label-reflow');
   assert.equal(redrawn.drawn(b)?.visibility, drawnPaint.visibility, 'drawn from the rerender\'s request');
   assert.equal(redrawn.drawn(a)?.visibility, drawnPaint.visibility);
-  // W15 §8.4: every phase that draws names the paint it drew; none falls back to the state at its bind.
+  // Every phase that draws names the paint it drew; none falls back to the state at its bind.
   assert.throws(() => commitIn('generate', {}), (error) => error.code === 'RESULT_INVALID'
     && error.context.reason === 'DRAWN_PAINT_MISSING');
+});
+
+// OV-2436, review H1: a figure History holds keeps what its Results' bytes
+// show, and its records say so again when it shows: the figure a rerender
+// replaced was captured with the edit shown on it, so a second Undo, after a
+// Redo left it with the intent before the edit, still shows the step undone.
+// A rerender's figure, captured as its Legend is read, shows the paint it was
+// drawn with (an edit made while it ran is shown on it later), and a batch
+// Result not displayed shows what its record says.
+test('a held figure shows again with the paint its bytes show', () => {
+  const [a, other, b] = ['a', 'other', 'b'].map(resultNamed);
+  const record = createResultPaintRecord();
+  const [before, edited, meanwhile] = ['before', 'edited', 'meanwhile'].map(paint);
+  record.commit([a, other], a, before, { draws: before });
+  // The edit is shown on A, which the rerender then replaces.
+  const heldA = record.heldPaint([a, other], edited, false);
+  assert.deepEqual(heldA, [edited, before], 'the displayed Result shows the current state, the other its record');
+  record.commit([b], b, meanwhile, { draws: edited });
+  assert.deepEqual(record.heldPaint([b], meanwhile, true), [edited], 'a rerender figure shows the paint it was drawn with');
+  const lacking = { ...meanwhile, colors: edited.colors, visibility: edited.visibility };
+  assert.deepEqual(record.heldPaint([b], meanwhile, false), [lacking], 'once bound, the current state but the fills it lacks');
+  // Undo shows A; Redo leaves it with the intent before the edit.
+  record.depart(meanwhile, 'signature before');
+  record.arrive([a, other], heldA);
+  assert.deepEqual(record.display(a, before), edited, 'Undo projects the step undone onto A');
+  record.depart(before, 'signature before');
+  // Undo again: A's record says it left with the current intent, but the held bytes show the edit.
+  record.arrive([a, other], heldA);
+  assert.equal(record.takeLeft(a), null, 'the held figure left no drawing');
+  assert.deepEqual(record.display(a, before), edited, 'the second Undo projects the step undone again');
+  assert.deepEqual(record.heldPaint([b], before, false), [lacking],
+    'a Result not displayed shows what it left with, the fills it lacked included');
 });

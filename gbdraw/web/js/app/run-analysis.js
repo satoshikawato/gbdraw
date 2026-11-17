@@ -1812,7 +1812,7 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   is requested: the Legend rows it draws join only the History steps begun after it (D-40).
  * @property {(write: () => void, request: { requestedAt: number, figure?: 'replaced' | 'drawn' }) => void} [adoptDrawnWrite] History's
  *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873), and History holds the figure
- *   it replaced (W15 §8.2).
+ *   it replaced (OV-2436).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
  * @property {(results: readonly SvgResultEntry[], moved: EditorPaintState) => void} moveDrawnPaint
@@ -3143,7 +3143,7 @@ export const createRunAnalysis = ({
       }
       candidateRules = colorCandidate.rules;
       requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
-      // W15 §8.4: the paint the request draws, read as it is built, with the palette its commit applies: as its
+      // The paint the request draws (its one producer), read as it is built, with the palette its commit applies: as its
       // Result binds (`bound`, the record keys the drawing names until the commit moves its rows) and with the rows
       // moved to their new keys (`movedPaint`, OV-1949).
       const requestPaint = requestPaintOf(requestDrawing, Object.freeze({

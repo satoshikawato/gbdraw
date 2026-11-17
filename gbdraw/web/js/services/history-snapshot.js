@@ -906,6 +906,17 @@ const applyFilesData = (drawing, filesData, fileStore) => {
  *   discovery derived from them reads them again, or keeps a read that still matches them.
  *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
  *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
+ * @property {HeldResultPaint | null} [heldResultPaint] What the Results of a figure History holds show (the Result
+ *   paint record's); without it no figure is held.
+ */
+/**
+ * The Result paint record's part in a figure History holds (OV-2436): what each Result's bytes show as the figure is
+ * held, and their records made to say so when it shows again. Opaque here; a method type, so the record owner's own
+ * paint type fits it.
+ * @typedef {{
+ *   capture(results: readonly SvgResultEntry[], drawing: boolean): readonly object[],
+ *   arrive(results: readonly SvgResultEntry[], paints: readonly object[]): void
+ * }} HeldResultPaint
  */
 
 /**
@@ -991,14 +1002,17 @@ const createLosatClearReach = (artifactSlots, writeArtifactValues) => {
       artifactSlots.kept().forEach((slot) => emptyManifestOf(slot.drawingId));
     },
     count: () => clears,
+    /** Whether a Clear ran since `heldClears` (a `count`). @param {number} heldClears */
+    clearedSince: (heldClears) => heldClears !== clears,
     /**
      * Puts a held drawing's Result slot back; returns whether a Clear ran since it left (its LOSAT rows are gone too).
      * @param {DrawingId} drawingId @param {Readonly<ArtifactSlot> | null} slot @param {number} heldClears Its `count`.
      */
     putHeldSlot: (drawingId, slot, heldClears) => {
       if (slot) artifactSlots.putSlot(slot);
-      if (slot && heldClears !== clears) emptyManifestOf(drawingId);
-      return heldClears !== clears;
+      const cleared = heldClears !== clears;
+      if (slot && cleared) emptyManifestOf(drawingId);
+      return cleared;
     }
   };
 };
@@ -1007,44 +1021,62 @@ const createLosatClearReach = (artifactSlots, writeArtifactValues) => {
 const committedSessionOf = (runtimeState) => runtimeState?.canonical?.committedCanonicalSession ?? null;
 /** @typedef {(slot: Readonly<ArtifactSlot>, restoreIntent: () => Promise<unknown>) => Promise<void>} HeldFigureDisplay */
 /**
- * W15 §8.2, §8.3 (OV-2436): the figures History holds on the sides of a drawing's intent steps are its shown
- * artifact, by reference (`captureArtifactSlot`); the display owner shows one again (`setDisplay`, the drawing
- * switch's `showHeldFigure`). A figure shows only in its own drawing while it is shown, while the committed Session
- * it was drawn from is the current one (compared by reference), and only when it is not the figure shown (its
- * Result array is not the shown one).
- * @param {() => Readonly<ArtifactSlot>} captureArtifactSlot The shown drawing's artifact now.
+ * What the snapshot service keeps of a figure History holds (`HeldFigure.slot`): the shown artifact by reference,
+ * what each of its Results' bytes show (`HeldResultPaint.capture`), and the count of Clear LOSAT results then.
+ * @typedef {{ artifact: Readonly<ArtifactSlot>, shown: readonly object[], losatClears: number }} HeldFigureCapture
  */
-const createHeldFigurePorts = (captureArtifactSlot) => {
+/**
+ * The figures History holds on the sides of a drawing's intent steps (OV-2436) are its shown artifact, by reference
+ * (`captureArtifactSlot`), with what their Results' bytes show; the display owner shows one again (`setDisplay`, the
+ * drawing switch's `showHeldFigure`), and as it arrives its Results' records say what those bytes show, whatever
+ * the records said since. A figure shows only in its own drawing while it is shown, while the committed Session it
+ * was drawn from is the current one (compared by reference), while no Clear LOSAT results ran since it was held
+ * (the Clear is no step and empties the artifact's protein identities, as for a drawing History holds), and only
+ * when it is not the figure shown (its Result array is not the shown one).
+ * @param {{ captureArtifactSlot: () => Readonly<ArtifactSlot>, paint: HeldResultPaint | null,
+ *   losatClearedSince: (count: number) => boolean, losatClearCount: () => number }} ports
+ */
+export const createHeldFigurePorts = ({ captureArtifactSlot, paint, losatClearedSince, losatClearCount }) => {
   /** @type {HeldFigureDisplay | null} */
   let display = null;
-  /** @param {HeldFigure} figure @returns {Readonly<ArtifactSlot>} The snapshot service's own capture. */
-  const slotOf = (figure) => /** @type {Readonly<ArtifactSlot>} */ (figure.slot);
+  /** @param {HeldFigure} figure @returns {HeldFigureCapture} The snapshot service's own capture. */
+  const captureOf = (figure) => /** @type {HeldFigureCapture} */ (figure.slot);
+  /** @param {Readonly<ArtifactSlot>} slot @returns {readonly SvgResultEntry[]} */
+  const resultsOf = (slot) => slot.values.results;
   return {
     /** @param {HeldFigureDisplay} next */
     setDisplay: (next) => { display = next; },
     /** @param {DrawingId} drawingId @returns {HeldFigurePort} */
     of: (drawingId) => ({
-      capture: () => {
-        const slot = captureArtifactSlot();
-        /** @type {readonly { content?: unknown }[]} */
-        const results = slot.values.results;
+      capture: (role) => {
+        const artifact = captureArtifactSlot();
+        const results = resultsOf(artifact);
+        /** @type {HeldFigureCapture} */
+        const slot = { artifact, shown: paint ? paint.capture(results, role === 'drawn') : [], losatClears: losatClearCount() };
         return {
           slot,
           key: results,
-          committed: committedSessionOf(slot.runtimeState),
+          committed: committedSessionOf(artifact.runtimeState),
           // The slot's bytes and the Results' text, which the slot does not count (UTF-16).
-          retainedBytes: results.reduce((bytes, result) => bytes + String(result.content ?? '').length * 2, slot.retainedBytes)
+          retainedBytes: results.reduce((bytes, result) => bytes + String(result.content ?? '').length * 2, artifact.retainedBytes)
         };
       },
       usable: (figure) => {
         const shown = captureArtifactSlot();
-        return display !== null && slotOf(figure).drawingId === drawingId && shown.drawingId === drawingId
-          && figure.committed === committedSessionOf(shown.runtimeState) && figure.key !== shown.values.results;
+        const { artifact, losatClears } = captureOf(figure);
+        return display !== null && paint !== null && artifact.drawingId === drawingId && shown.drawingId === drawingId
+          && figure.committed === committedSessionOf(shown.runtimeState) && figure.key !== resultsOf(shown)
+          && !losatClearedSince(losatClears);
       },
       // `usable` asks for the display owner, so a figure without one is not shown.
       show: async (figure, restoreIntent) => {
-        if (display) await display(slotOf(figure), restoreIntent);
-        else await restoreIntent();
+        const { artifact, shown } = captureOf(figure);
+        if (!display || !paint) return void await restoreIntent();
+        const arriving = paint;
+        await display(artifact, async () => {
+          await restoreIntent();
+          arriving.arrive(resultsOf(artifact), shown);
+        });
       }
     })
   };
@@ -1074,7 +1106,8 @@ export const createHistorySnapshotService = ({
   buildRunStateData = null,
   applyRunStateData = null,
   clearSimilarityGroupCopyFeedback = null,
-  discoverDrawingRecords = null
+  discoverDrawingRecords = null,
+  heldResultPaint = null
 }) => {
   if (!state || !fileStore || typeof currentResults !== 'function') {
     throw new Error('createHistorySnapshotService requires state, fileStore, and currentResults.');
@@ -2071,7 +2104,9 @@ export const createHistorySnapshotService = ({
     discoverDrawingRecords?.(drawing);
   };
 
-  const heldFigures = createHeldFigurePorts(captureArtifactSlot);
+  const heldFigures = createHeldFigurePorts({
+    captureArtifactSlot, paint: heldResultPaint, losatClearedSince: losatClearReach.clearedSince, losatClearCount: losatClearReach.count
+  });
 
   // The History ports of one drawing (`createHistoryRouter`'s managers).
   /** @param {DrawingId} drawingId */

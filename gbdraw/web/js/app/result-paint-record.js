@@ -9,8 +9,8 @@ import { toRaw } from '../utils/vue-raw.js';
 import { featureVisibilityRows } from '../services/feature-visibility.js';
 import { featureIdentityKey } from '../services/feature-placement.js';
 
-// Which editor state each Result's bytes were drawn with and show (design
-// §5.4, W15): one record per Result. A Result displayed again receives a
+// Which editor state each Result's bytes were drawn with and show: one
+// record per Result. A Result displayed again receives a
 // domain only when that state changed since it was last shown, so a Result
 // without new edits gets no projection work and an Undo reaches a Result that
 // is displayed again. The displayed Result follows every live edit;
@@ -72,7 +72,7 @@ export const editorPaintState = (state, drawing) => ({
 });
 
 /**
- * The paint a Generate request draws (W15 §8.4), read as the request is built, so that an edit made while it runs
+ * The paint a Generate request draws, read as the request is built (its one producer), so that an edit made while it runs
  * is an edit since: `palette` is the one its commit applies, `bound` the drawing's paint with it as the request
  * starts, and `of` reads a drawing whose rows the request moved (OV-1949) with the same palette.
  * @param {DrawingState} drawing
@@ -87,7 +87,7 @@ export const requestPaintOf = (drawing, palette, originalLegendOrder) => {
 
 // A Generate keeps the fill edits that hold a color on a feature its Results
 // draw (`replaceFeatureFills`): the paint it drew names the fills it keeps, so
-// an edit it drops is no edit made since its request (W15 §8.4).
+// an edit it drops is no edit made since its request.
 /** @param {EditorPaintState} paint @param {unknown} fills The fills the Generate keeps. @returns {EditorPaintState} */
 export const withKeptFills = (paint, fills) => {
   const [rules, , legendFills] = /** @type {[unknown, unknown, unknown]} */ (JSON.parse(paint.colors[1]));
@@ -216,7 +216,7 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
      * A committed artifact: each Result without a record gets one, and
      * `displayed` is the Result mounted by the commit. A commit that `draws`
      * (`drawsResult`) has Results Python drew from the paint it names, read
-     * as its request was built (W15 §8.4): a label rerender draws the fills and visibility of the state it
+     * as its request was built: a label rerender draws the fills and visibility of the state it
      * started from (OV-346), so the displayed Result lacks those of an edit
      * made meanwhile (`lacking`) until they are shown. Any other commit (a
      * Session Load, a History restore, a rollback) keeps each Result's bytes
@@ -348,14 +348,13 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
       return recordOf(result)?.drawn;
     },
     /**
-     * Whether the Result was drawn with a Feature visibility other than `visibility`: a live edit no render drew
-     * since, so its input summary describes the render, not the figure (false while it has no record).
-     * @param {SvgResultEntry | undefined} result
+     * Whether the displayed Result was drawn with a Feature visibility other than `visibility`: a live edit no
+     * render drew since, so its input summary describes the render, not the figure (false while no Result is
+     * displayed).
      * @param {string} visibility `visibilityPaintState` of the drawing that shows it.
      */
-    drewOtherVisibility(result, visibility) {
-      const record = result ? recordOf(result) : undefined;
-      return record !== undefined && record.drawn.visibility !== visibility;
+    displayedDrewOtherVisibility(visibility) {
+      return bound !== null && bound.drawn.visibility !== visibility;
     },
     /**
      * The Label visibility On and Off the displayed Result was drawn with, by
@@ -384,6 +383,40 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
       results.forEach((result) => {
         const record = recordOf(result);
         if (record) record.drawn = moved;
+      });
+    },
+    /**
+     * What the bytes of `results` show now, in their order, for a figure
+     * History holds (OV-2436): a Result not displayed shows its record's
+     * `shown` (one without a record is recorded by its next display, as
+     * before); the displayed Result shows the current state but what it lacks, or,
+     * when `drawing` (a rerender's figure as its Legend is read, before an
+     * edit made while it ran is shown on it), the paint it was drawn with.
+     * @param {readonly SvgResultEntry[]} results
+     * @param {EditorPaintState} current
+     * @param {boolean} drawing
+     * @returns {EditorPaintState[]}
+     */
+    heldPaint(results, current, drawing) {
+      return results.map((result) => {
+        const record = recordOf(result);
+        if (!record) return unknownPaint(current);
+        if (record !== bound) return record.shown;
+        return drawing ? record.drawn : { ...current, ...behind };
+      });
+    },
+    /**
+     * A figure History holds shows again (OV-2436): its Results' bytes show
+     * `paints` (`heldPaint`, in their order), whatever their records said
+     * since, and left no drawing, so their next display shows the edits
+     * since. Called once the displayed Result has left (`depart`).
+     * @param {readonly SvgResultEntry[]} results
+     * @param {readonly EditorPaintState[]} paints
+     */
+    arrive(results, paints) {
+      results.forEach((result, index) => {
+        const record = recordOf(result);
+        if (record) Object.assign(record, { shown: paints[index], left: null });
       });
     },
     /** @param {SvgResultEntry} result The Result shown again with the intent it left with (E1). */
