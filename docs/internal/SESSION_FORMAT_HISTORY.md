@@ -588,6 +588,22 @@ Gallery and documentation reads. Vector: `tests/fixtures/record_order_row_vector
 `tests/web/record-draw-selection.test.mjs` and `tests/web/session-request.test.mjs`; Load test:
 `tests/web/stored-request-read.test.mjs`.
 
+The Web also reads which record each Linear token names as the renderer does (`resolve_record_row_positions`; Web
+`recordOrderPlaces`, `services/record-options.js`): `#N` names the N-th record, any other selector the one record whose
+selector names that record ID (the record of a file of one record, written with no selector, by the ID Load reads from
+its file), and a row lists its records in token order. The Web gave each card the row of the token at the card's own
+place, so a CLI Session with `#2@1,#1@2` drew record 1 first on the Web and record 2 first in the CLI (OV-3473); the card
+rows now take the row of the token that names them, and a row listed out of record order keeps that order as the cards'
+places in the row. Load leaves out the request, as the CLI refuses it, when a Linear request's records have `gridRow`
+on some records only (in a schema 8 or later request, naming the first record without one), carry `gridRow` beside
+tokens, or have tokens of another count, a record named twice, a `#N` past the records, or an ID no record's selector
+names when every record has a selector (`refusedLinearPlacement`, `services/session-request.js`). Load also leaves out
+two forms the Web's cards cannot hold, which no gbdraw writer writes: tokens beside a record of a whole file
+(`cardinality: all`), and a row listed out of record order beside a record drawn in several windows. Vector:
+`placements` in `tests/fixtures/record_order_row_vectors.json`; Python's `\s`, which the pattern and the selector's
+spaces read, reaches the Web as `PYTHON_SPACE_PATTERN` (OV-3760: the Web's copy of `str.strip` kept U+001C to U+001F
+and U+0085).
+
 ## Unreleased: a `#+N` record selector reads as record N
 
 No Session or request version changes, and no writer changes. `RECORD_INDEX_SELECTOR_PATTERN`

@@ -16,12 +16,18 @@ from gbdraw.io.record_select import RecordSelector, drawn_record_units, parse_re
 
 _PlacementCompatibility = Literal["linear", "circular"]
 
+# A space as Python's ``str.strip`` removes one (``\s`` matches exactly the characters ``str.isspace`` names): the
+# spaces :func:`parse_record_row_position` strips around a token, its selector and its row. The Web's one Python strip
+# reads it from the generated contracts (``PYTHON_SPACE_PATTERN``; ``pythonStrip`` in services/genbank-header.js), for
+# a token's selector (OV-3473) and the GenBank header values Biopython strips (OV-3760).
+PYTHON_SPACE_PATTERN = r"\s"
+
 # The row of a ``<selector>@<row>`` Record Order token, the text after its last ``@``, as
 # :func:`parse_record_row_position` reads it: spaces (``str.strip``'s, which are ``\s``'s) around it, an optional
 # ``+``, and ASCII digits, leading zeros allowed, at most as many as ``int()`` converts by default (4300, leading
 # zeros counted); the row is that number when it is above zero. The Web reads every token's row with this pattern from
 # the generated contracts (``RECORD_ROW_PATTERN``, OV-3313).
-RECORD_ROW_PATTERN = rf"\s*\+?([0-9]{{1,{sys.int_info.default_max_str_digits}}})\s*"
+RECORD_ROW_PATTERN = rf"{PYTHON_SPACE_PATTERN}*\+?([0-9]{{1,{sys.int_info.default_max_str_digits}}}){PYTHON_SPACE_PATTERN}*"
 _RECORD_ROW = re.compile(RECORD_ROW_PATTERN)
 
 

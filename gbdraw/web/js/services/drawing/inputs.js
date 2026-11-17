@@ -864,6 +864,18 @@ const MEMBER_OPS = Object.freeze({
 const MEMBERS = Object.freeze(['files', 'linearSeqs', 'circularSources', 'inputType', 'circularRecordList', 'circularRecordDiscovery']);
 
 /**
+ * Whether a drawing's inputs differ from a new drawing's: it binds a file in any slot (the one walk of a drawing's
+ * bindings, `visitDrawingFiles`) or reads another input type. Save writes such a drawing (R16-8, OV-3701).
+ * @param {BoundDrawingInputs & { readonly inputType: { readonly value: InputType } }} drawing
+ * @returns {boolean}
+ */
+export const drawingInputsDiffer = (drawing) => {
+  let bound = false;
+  visitDrawingFiles(drawing, () => { bound = true; });
+  return bound || drawing.inputType.value !== MEMBER_OPS.inputType.create().value;
+};
+
+/**
  * A new slice, or one over a drawing's existing members (a test fixture).
  * @param {Partial<InputsMembers>} [members]
  * @returns {{ handle: InputsSlice, view: InputsView }}

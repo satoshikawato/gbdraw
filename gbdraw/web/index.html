@@ -10263,7 +10263,7 @@
                     <li v-for="(line, index) in choicePrompt.lines" :key="index" class="flex items-center gap-2"><i class="ph" :class="line.icon" aria-hidden="true"></i><span>{{ line.text }}</span></li>
                 </ul>
                 <ul v-if="choicePrompt.items.length" class="mt-1 list-disc space-y-0.5 pl-5">
-                    <li v-for="(item, index) in choicePrompt.items" :key="index">{{ item }}</li>
+                    <li v-for="(item, index) in choicePrompt.items" :key="index"><template v-for="(part, at) in choicePromptItemParts(item)" :key="at"><wbr v-if="at">{{ part }}</template></li>
                 </ul>
                 <p v-if="choicePrompt.note" class="mt-2">{{ choicePrompt.note }}</p>
             </div>

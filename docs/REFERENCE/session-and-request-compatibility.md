@@ -721,6 +721,13 @@ Which records Web draws from a CLI session depends on the request:
   saved. An older Linear request (schema 2 to 5) reads each card's row the same
   way, and is refused, as the CLI refuses it, when some cards have a row and
   some none.
+- A Linear request's Record Order places each record in the row of the entry
+  that names it (`#2@1` puts record 2 in row 1; an entry may also name a
+  record ID), as the CLI draws it, and a row keeps the order of its entries.
+  Load refuses, as the CLI does, a Linear request whose records have a grid
+  row on some records only, grid rows together with Record Order entries, or
+  entries that name a record twice, a record past the records or an ID no
+  record has, or another number of records; the drawing then loads as above.
 - A Linear record, or the record of a single Circular request, can be drawn
   cropped or reverse-complemented. The session then stores its crop in source
   coordinates as `region` and its orientation as `region.reverseComplement` or

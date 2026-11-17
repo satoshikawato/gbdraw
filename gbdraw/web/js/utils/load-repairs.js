@@ -73,6 +73,7 @@ import { limitedList, moreLine } from './limited-list.js';
  * @property {string} title
  * @property {string} description
  * @property {string[]} items
+ * @property {string[]} breakPaths The listed records' paths, which the dialog may break after `.` and `[` (OV-3761).
  * @property {string} note
  */
 /**
@@ -370,6 +371,7 @@ export const describeLoadRepairs = (repairs) => {
     title: t('Load this file?'),
     description: t('Some parts of this file cannot be fully restored:'),
     items,
+    breakPaths: [...new Set(listed.map(({ path }) => path))],
     note: t('Save Session afterwards writes the current format. The file itself is not changed.')
   };
 };

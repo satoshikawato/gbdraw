@@ -1051,6 +1051,18 @@ assert.equal(implicitSingleCanonical.renderRequest.records[0].recordKey, 'record
 assert.equal(implicitSingleCanonical.renderRequest.records[0].selector, null);
 assert.equal(implicitSingleCanonical.renderRequest.output.prefix, 'single.id');
 assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
+// HANDOFF-W D-W-05: a crop of the file's only record names no record either, as the CLI writes it
+// (`_encode_records`: no selector for a record of a file of one record, windows or not); a Load of that request and
+// the next Generate write the same request.
+Object.assign(state.form, { circular_region_start: 3, circular_region_end: 9 });
+const singleCropCanonical = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(singleCropCanonical.renderRequest.records[0].selector, null);
+assert.deepEqual(singleCropCanonical.renderRequest.records[0].windows, [{ start: 3, end: 9, reverseComplement: false, column: null }]);
+const singleCropProjection = projectCanonicalSessionRequest(singleCropCanonical);
+Object.assign(state.form, singleCropProjection.config.form);
+assert.deepEqual(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.records,
+  singleCropCanonical.renderRequest.records);
+Object.assign(state.form, { circular_region_start: null, circular_region_end: null, circular_windows: [] });
 
 state.circularRecordList.value = [
   { selector: '#1', record_id: 'first-record', record_length: 12 },

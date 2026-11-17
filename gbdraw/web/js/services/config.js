@@ -17,7 +17,7 @@ import {
   restoreRightDrawerState
 } from './right-drawer-state.js';
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
-import { INPUTS_SLICE, bindDrawingCanonicalComparisons, createCircularSource, createLinearSeq, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, losatRecordGencode, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
+import { INPUTS_SLICE, bindDrawingCanonicalComparisons, createCircularSource, createLinearSeq, bindDrawingInputFileList, bindDrawingInputFileTree, bindLoadedInputs, collapseEmptyLinearSeqList, drawingInputsDiffer, idleCircularRecordDiscovery, losatRecordGencode, normalizeLinearSeqList, setConservationBlastsSource } from './drawing/inputs.js';
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from './input-types.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS, parseColorTable, userTableRows } from './file-imports.js';
@@ -61,7 +61,7 @@ import {
   readNamedCardRecords
 } from './record-draw-selection.js';
 import { circularRecordEntries } from './record-options.js';
-import { readCircularSourceRecords, readStoredRecordIdPlaces } from './record-discovery.js';
+import { readCircularSourceRecords, readStoredRecordIdPlaces, readStoredTokenRecordIds } from './record-discovery.js';
 import { isInputFileRef } from './history-files.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
@@ -1446,9 +1446,10 @@ const readStoredLeaves = async (data) => {
 };
 
 /**
- * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311),
+ * Adds to `readings` the place in its file of each stored record ID that a record text reads as a `#N` (OV-3311)
+ * and the record ID of each record a Linear Record Order token names by an ID the request does not hold (OV-3473),
  * read through `table`, the resources Load adopted, so a card's own read of the file is this one; `repairs` lists
- * each such ID Load could not place, which keeps its text.
+ * each record ID Load could not place, which keeps its text.
  * @param {SessionInput | Session51} data The Session Load reads, or the document of a stored drawing.
  * @param {ReturnType<typeof adoptCurrentSessionResources>} table
  * @param {Map<string, unknown>} readings `readStoredLeaves`'s.
@@ -1459,6 +1460,10 @@ const readStoredRecordIdReadings = async (data, table, readings, repairs) => {
     storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
     (resourceId) => createSessionResourceFileView(table, resourceId));
   places.forEach((place, key) => readings.set(key, place));
+  const tokenRecordIds = await readStoredTokenRecordIds(
+    storedResultSets(data).map(({ at, set }) => ({ at, renderRequest: set.renderRequest })),
+    (resourceId) => createSessionResourceFileView(table, resourceId));
+  tokenRecordIds.forEach((recordId, key) => readings.set(key, recordId));
   repairs.push(...unresolved.map(({ path, recordId }) => loadRepair({ code: 'record-id-unresolved', path, effect: 'changed', stored: recordId })));
 };
 
@@ -9455,11 +9460,12 @@ export const exportSession = (titleOverride = null, options) => {
     const namedRecords = new Map(savedDrawings.map((saved) => [saved.id, savedNamedRecordsOf(saved)]));
     const readArtifacts = () => sessionArtifactsByDrawing(drawing, options?.readKeptArtifacts?.() ?? []);
     let artifacts = readArtifacts();
-    // A drawing is written when it has an input file, a setting or an edit
-    // that differs from its mode's default, or a Result (R16-8, DESIGN §4.4).
+    // A drawing is written when it binds a file or reads another input type
+    // than a new drawing (OV-3701), has a setting or an edit that differs from
+    // its mode's default, or a Result (R16-8, DESIGN §4.4).
     /** @param {DrawingState} saved */
     const isUsed = (saved) => Boolean(savedArtifactOf(artifacts.get(saved.id) ?? null))
-      || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs, circularSources: saved.circularSources })
+      || drawingInputsDiffer(saved)
       || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
     const { drawings: writtenDrawings, activeDrawingId } = savedDrawingsOf(savedDrawings, drawing, isUsed);
     const shownArtifact = /** @type {SessionArtifactView} */ (artifacts.get(drawing.id));

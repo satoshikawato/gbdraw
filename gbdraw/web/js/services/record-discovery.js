@@ -9,10 +9,11 @@ import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { readRingScales } from './linear-units.js';
 import {
-  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec
+  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
 } from './input-types.js';
 import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
-import { storedRecordIdOf } from './stored-leaf-readings.js';
+import { storedOneRecordIdKey, storedRecordIdOf } from './stored-leaf-readings.js';
+import { recordOrderSelector } from './record-options.js';
 import { sessionResourceReadOwner } from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
@@ -1206,6 +1207,43 @@ export const readStoredRecordIdPlaces = async (requests, fileOf) => {
     }
   }
   return { places, unresolved };
+};
+
+/**
+ * The record ID of each stored Linear request record that names no record of its file (a file of one record, as the
+ * CLI writes it), by `storedOneRecordIdKey`, when a Record Order token of its request names a record by an ID no
+ * record's selector names: the renderer finds that record by the ID of its record (`record_order_selector`), so Load
+ * reads it, and the Linear projection gives the token's row to that record's card (`recordOrderPlaces`, OV-3473). Only
+ * such a request's files are read; a file that cannot be listed, or holds other than one record, gives no ID.
+ * @param {readonly { at: string, renderRequest: unknown }[]} requests Each stored request (`storedResultSets`).
+ * @param {(resourceId: string) => FileLike} fileOf As for `readStoredRecordIdPlaces`.
+ * @returns {Promise<Map<string, string>>}
+ */
+export const readStoredTokenRecordIds = async (requests, fileOf) => {
+  /** @type {Map<string, string>} */
+  const recordIds = new Map();
+  for (const { renderRequest } of requests) {
+    const request = /** @type {{ mode?: unknown, schema?: unknown, records?: unknown, layout?: { multiRecordPositions?: unknown } | null } | null} */ (
+      typeof renderRequest === 'object' ? renderRequest : null);
+    const tokens = request?.layout?.multiRecordPositions;
+    // Schemas 2 to 5 turn their tokens into card rows (`olderLinearCardRows` in session-request.js).
+    if (request?.mode !== 'linear' || Number(request.schema) < 6 || !Array.isArray(tokens) || !Array.isArray(request.records)) continue;
+    const records = /** @type {(UnreadStoredRecord | null)[]} */ (request.records);
+    const named = new Set(records.map((record) => storedRecordIdOf(record)?.recordId));
+    const byId = tokens.map(recordOrderSelector).some((selector) => selector && !selector.startsWith('#') && !named.has(selector));
+    if (!byId) continue;
+    for (const record of records) {
+      const key = storedOneRecordIdKey(record);
+      if (key === null || recordIds.has(key)) continue;
+      const [primaryFile, pairedFile] = storedRecordSourceResourceIds(record?.source);
+      const listed = await Promise.resolve()
+        .then(() => discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(record?.source?.kind)), fileOf(primaryFile),
+          pairedFile === undefined ? null : fileOf(pairedFile)))
+        .catch(() => []);
+      if (listed.length === 1 && typeof listed[0].recordId === 'string') recordIds.set(key, listed[0].recordId);
+    }
+  }
+  return recordIds;
 };
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */

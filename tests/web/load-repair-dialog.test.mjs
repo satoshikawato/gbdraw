@@ -125,6 +125,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
     title: 'Load this file?',
     description: 'Some parts of this file cannot be fully restored:',
     items: ['1 feature edit from an older Session could not be matched to a feature of its saved diagram and was dropped.'],
+    breakPaths: ['features'],
     note: 'Save Session afterwards writes the current format. The file itself is not changed.'
   }]);
   assert.equal(loadedState(), snapshot);
@@ -458,6 +459,9 @@ test('the dialog words each code once, in area order, at most 12 lines (12.3)', 
     'Specific colors: line 3 had extra cells, joined into the last column with one space.',
     'Label whitelist: lines 1, 2, 3, 4, 5, and 2 more lacked a required column and were dropped.'
   ]);
+  // OV-3761: the dialog may break a line inside each listed path, once per path.
+  assert.deepEqual(dialog.breakPaths, ['specific-colors', 'label-whitelist', 'features', 'editorState.legend.entries',
+    'editorState.legend.deletedEntries', 'modes.linear.editorState.legend.entries']);
   // D-43 (OV-300): each Legend entry dropped for its color is named once, a
   // row outside the shown list is marked, and the names are capped; a caption
   // is free text quoted as other user text is.

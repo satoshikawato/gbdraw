@@ -579,29 +579,6 @@ test('the guard reports exactly the member that a broken Duplicate or a broken S
 
 // Known defects: each case asserts today's outcome, and fails once the
 // defect is fixed; the fix removes the case and the workaround it names.
-// OV-3701: Save writes a drawing that has a file (R15), but not one whose
-// only change is a card file or the input type (`isUsed` in `exportSession`,
-// services/config.js).
-test('known defect OV-3701: Save drops a drawing whose only change is a card file or the input type', () => withBootPalettes(state, async () => {
-  await bootBases();
-  const changes = {
-    files: (drawing) => ({ ...captureMember(drawing, 'files'),
-      d_color: context.registerFile(new File(['CDS\t#123456\n'], 'ov-3701-colors.tsv', { lastModified: 1 })) }),
-    inputType: () => 'gff'
-  };
-  for (const mode of MODES) {
-    for (const [member, change] of Object.entries(changes)) {
-      assert.equal((await loadSession(bases.plain.blob)).asked, null);
-      const { drawingId: id } = app.drawingList.newDrawing(mode);
-      const sample = change(state.drawingOf(id));
-      await history.runUndoable(`Sample ${member}`, () => installMember(state.drawingOf(id), member, sample));
-      const [check] = await PATHS.saveLoad({ id, peer: bases.plain.peers[mode] }, member, { loaded: sample });
-      assert.equal(check.actual, `no drawing ${id}`, `${mode} ${member}: OV-3701 no longer reproduces. Remove this case and the two `
-        + '`needs: [\'records\']` marked OV-3701 in tests/web/helpers/drawing-member-samples.mjs.');
-    }
-  }
-}));
-
 // OV-3705: the Undo of choosing one circle leaves what one circle left
 // (`adv.one_circle_left`): a History restore merges the step's null under the
 // object and keeps it (`mergeStoredSettings`, services/config-field-readers.js).

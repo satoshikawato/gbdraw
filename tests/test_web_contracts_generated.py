@@ -761,6 +761,7 @@ def test_the_web_owner_reads_every_bmp_character_in_a_record_selector_as_python_
 _RECORD_ROW_VECTORS = json.loads((REPO_ROOT / "tests" / "fixtures" / "record_order_row_vectors.json").read_text())
 _RECORD_ROW_TOKENS = tuple((case["token"], case["row"]) for case in _RECORD_ROW_VECTORS["tokens"])
 _RECORD_ROW_LISTS = _RECORD_ROW_VECTORS["rowLists"]
+_RECORD_ORDER_PLACEMENTS = _RECORD_ROW_VECTORS["placements"]
 
 
 def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -791,6 +792,53 @@ def test_the_web_reads_a_record_order_row_with_the_renderer_s_pattern(monkeypatc
     monkeypatch.setattr(record_placement, "RECORD_ROW_PATTERN", r"([0-9]+)")
 
     assert "export const RECORD_ROW_PATTERN = '([0-9]+)';\n" in generator.render_web_contracts_module()
+
+
+def test_the_web_reads_a_record_order_token_s_record_with_the_renderer_s_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    # OV-3473: each list of the shared vectors draws its records in the order Python's renderer resolves
+    # (`resolve_record_row_positions` with `record_order_selector`), or Python refuses it; the Web test reads the same
+    # lists with `recordOrderPlaces`. The Web strips a selector with the space Python's `str.strip` removes, carried by
+    # the generator (`PYTHON_SPACE_PATTERN`).
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
+
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.layout import record_placement
+
+    assert len(_RECORD_ORDER_PLACEMENTS) >= 20
+    for case in _RECORD_ORDER_PLACEMENTS:
+        records = [SeqRecord(Seq("A"), id=record_id) for record_id in case["recordIds"]]
+        if case["order"] is None:
+            with pytest.raises(ValidationError):
+                record_placement.resolve_record_row_positions(records, case["tokens"])
+        else:
+            assert list(record_placement.resolve_record_row_positions(records, case["tokens"])[0]) == case["order"], case
+    assert all(chr(code).isspace() == bool(re.fullmatch(record_placement.PYTHON_SPACE_PATTERN, chr(code)))
+               for code in range(0x110000))
+    generator = _generator()
+    monkeypatch.setattr(record_placement, "PYTHON_SPACE_PATTERN", r" ")
+
+    assert "export const PYTHON_SPACE_PATTERN = ' ';\n" in generator.render_web_contracts_module()
+
+
+_PYTHON_STRIP_SCRIPT = """
+const { pythonStrip } = await import('./gbdraw/web/js/services/genbank-header.js');
+const read = [];
+for (let code = 0; code < 0x10000; code += 1) read.push(pythonStrip(`${String.fromCharCode(code)}a${String.fromCharCode(code)}`));
+process.stdout.write(JSON.stringify(read));
+"""
+
+
+@pytest.mark.browser
+def test_the_web_python_strip_removes_every_bmp_space_python_removes() -> None:
+    # OV-3760: `pythonStrip` (services/genbank-header.js), run by Node over the BMP, strips what `str.strip` strips.
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-e", _PYTHON_STRIP_SCRIPT],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True,
+    )
+    web = json.loads(completed.stdout)
+    python = [f"{chr(code)}a{chr(code)}".strip() for code in range(0x10000)]
+    assert [code for code in range(0x10000) if web[code] != python[code]] == []
 
 
 # Each BMP character around and inside a token's row (a space before and after the row; a digit), read by the Web owner.

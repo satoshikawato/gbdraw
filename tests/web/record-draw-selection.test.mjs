@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { pythonStrip } from '../../gbdraw/web/js/services/genbank-header.js';
 import {
   circularRecordDrawKey,
   circularRecordsToDraw,
@@ -19,6 +20,7 @@ import {
   recordOrderRows,
   recordSelectorNumber
 } from '../../gbdraw/web/js/services/record-draw-selection.js';
+import { recordOrderPlaces } from '../../gbdraw/web/js/services/record-options.js';
 
 const cards = ['a', 'b', 'c', 'd'].map((uid) => ({ uid }));
 
@@ -151,4 +153,41 @@ test('the rows of a Record Order list keep the order the renderer draws, beyond 
   }
   assert.deepEqual(recordOrderRows(['#1@9007199254740991', '#2@3']), [9007199254740991, 3]);
   assert.deepEqual(recordOrderRows(['#1@9007199254740993', '#2@3', '#3@3', '#4@x']), [2, 1, 1, null]);
+});
+
+// OV-3473: the record each Record Order token names reads as Python's renderer reads it (`resolve_record_row_positions`
+// with `record_order_selector`; tests/fixtures/record_order_row_vectors.json `placements`, which
+// tests/test_web_contracts_generated.py checks in Python): a `#N`, an ID (stripped of the spaces Python's `strip()`
+// removes), or a word that names no record when one record is drawn; the renderer draws a row in token order, which
+// `places` carries when it is not the records' order. An ID no known record has, while one record's ID is not known,
+// is not read.
+test('a Record Order token names the record the renderer places', () => {
+  /** @type {{ placements: { recordIds: string[], tokens: string[], order: number[] | null }[] }} */
+  const { placements } = JSON.parse(readFileSync(new URL('../fixtures/record_order_row_vectors.json', import.meta.url), 'utf8'));
+  assert.ok(placements.length >= 20);
+  for (const { recordIds, tokens, order } of placements) {
+    const placement = recordOrderPlaces(tokens, recordIds);
+    const at = JSON.stringify(tokens);
+    if (order === null) {
+      assert.equal(placement.kind, 'refused', at);
+      continue;
+    }
+    assert.equal(placement.kind, 'placed', at);
+    if (placement.kind !== 'placed') continue;
+    const { rows, places } = placement;
+    const drawn = recordIds.map((_id, index) => index)
+      .sort((left, right) => rows[left] - rows[right] || (places ? places[left] - places[right] : left - right));
+    assert.deepEqual(drawn, order, at);
+  }
+  assert.deepEqual(recordOrderPlaces(['#2@1', 'b@2'], [null, null]), { kind: 'unread' });
+  assert.deepEqual(recordOrderPlaces(['#2@1', 'a@2'], ['a', null]), { kind: 'placed', rows: [2, 1], places: null });
+  assert.deepEqual(recordOrderPlaces(['#2@1', '#1@1.0'], [null, null]), { kind: 'refused', at: 1 });
+});
+
+// OV-3760: the Web's Python strip, which reads a Record Order selector, removes the spaces Python's `str.strip` removes
+// (the generated `PYTHON_SPACE_PATTERN`, Python's `\s`): U+001C to U+001F and U+0085 too, which `String.trim` keeps;
+// U+FEFF stays, as in Python. tests/test_web_contracts_generated.py runs it over the BMP against Python.
+test('pythonStrip removes the spaces Python\'s str.strip removes', () => {
+  assert.equal(pythonStrip('\u001c\u0085 Escherichia coli \u001f\u3000'), 'Escherichia coli');
+  assert.equal(pythonStrip('\ufeffE. coli\ufeff'), '\ufeffE. coli\ufeff');
 });

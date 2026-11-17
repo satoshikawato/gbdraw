@@ -22,8 +22,9 @@ import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
 import {
-  cliRecordKey, expandedRecordKey, recordKeyExpansion, recordOrderRows, recordSelectorNumber
+  cliRecordKey, expandedRecordKey, recordKeyExpansion
 } from '../services/record-draw-selection.js';
+import { recordOrderPlaces } from '../services/record-options.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import {
   CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
@@ -1043,7 +1044,8 @@ const sourceSpec = (record) => {
 
 // The row of each record, and, when the order of the positions within a row is
 // not the record order (CI-02: Up/Down), each record's 1-based place in its row:
-// a records table orders a row by `column`, then by its record order.
+// a records table orders a row by `column`, then by its record order. The
+// renderer's reading of the tokens (`recordOrderPlaces`).
 /**
  * @param {CanonicalRenderRequest} request
  * @param {readonly CanonicalRecord[]} records
@@ -1057,50 +1059,15 @@ const layoutRows = (request, records) => {
     throw recipeUnavailable(msg('record placement is invalid.'));
   }
   if (positions.length === 0) return { rows: [], columns };
-  const rows = Array(records.length).fill(null);
-  /** @type {Map<number, number[]>} The records of each row, in position order. */
-  const rowMembers = new Map();
-  // Each row as the renderer reads it: from the token as stored (Python strips other spaces than `trim()`, OV-3313).
-  const tokenRows = recordOrderRows(positions);
-  positions.forEach((position, index) => {
-    const text = String(position || '').trim();
-    const separator = text.lastIndexOf('@');
-    const selector = separator > 0 ? text.slice(0, separator) : '';
-    const row = separator > 0 ? tokenRows[index] : null;
-    let recordIndex = -1;
-    const number = recordSelectorNumber(selector);
-    if (number !== null) {
-      if (number <= records.length) recordIndex = number - 1;
-    } else {
-      const matches = records
-        .map((record, index) => (
-          selectorText(record?.selector) === selector
-            ? index
-            : -1
-        ))
-        .filter((index) => index >= 0);
-      if (matches.length === 1) [recordIndex] = matches;
-    }
-    if (
-      recordIndex < 0 ||
-      row === null ||
-      rows[recordIndex] !== null
-    ) {
-      throw recipeUnavailable(msg('record placement cannot be projected into a records table.'));
-    }
-    rows[recordIndex] = row;
-    rowMembers.set(row, [...(rowMembers.get(row) || []), recordIndex]);
-  });
-  if (rows.some((row) => row === null)) {
-    throw recipeUnavailable(msg('record placement is incomplete for a records table.'));
+  // Each record as the renderer names it (`recordOrderPlaces`, OV-3473): by `#N` or by the ID its selector names.
+  const placement = recordOrderPlaces(positions, records.map((record) => (
+    isPlainObject(record?.selector) && record.selector.kind === 'recordId' ? String(record.selector.value) : null)));
+  if (placement.kind !== 'placed') {
+    throw recipeUnavailable(placement.kind === 'refused' && placement.at === null
+      ? msg('record placement is incomplete for a records table.')
+      : msg('record placement cannot be projected into a records table.'));
   }
-  const recordOrder = [...rowMembers.values()].every((members) => (
-    members.every((recordIndex, at) => at === 0 || recordIndex > members[at - 1])
-  ));
-  if (!recordOrder) {
-    rowMembers.forEach((members) => members.forEach((recordIndex, at) => { columns[recordIndex] = at + 1; }));
-  }
-  return { rows, columns };
+  return { rows: placement.rows, columns: placement.places ?? columns };
 };
 
 /**

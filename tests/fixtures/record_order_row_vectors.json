@@ -262,5 +262,339 @@
         2
       ]
     }
+  ],
+  "placementsDescription": "Record Order tokens of a request whose records have the IDs `recordIds`, and the order Python's renderer draws the records in (`resolve_record_row_positions` with `record_order_selector`, gbdraw/layout/record_placement.py), null where it refuses the list. The Web reads the same lists with `recordOrderPlaces` (services/record-options.js, OV-3473).",
+  "placements": [
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#2@1",
+        "#1@2",
+        "#3@3"
+      ],
+      "order": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "b@1",
+        "a@2",
+        "c@3"
+      ],
+      "order": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#2@1",
+        "#1@1",
+        "#3@2"
+      ],
+      "order": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#1@1",
+        "#2@1",
+        "#3@2"
+      ],
+      "order": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#3@1",
+        "b@1",
+        "#1@1"
+      ],
+      "order": [
+        2,
+        1,
+        0
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#02@2",
+        "#01@2",
+        "#3@1"
+      ],
+      "order": [
+        2,
+        1,
+        0
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        " \u001cb\u0085 @1",
+        "a@2",
+        "c@3"
+      ],
+      "order": [
+        1,
+        0,
+        2
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "\ufeffb@1",
+        "a@2",
+        "c@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#2@1",
+        "#2@2",
+        "#3@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "b@1",
+        "#2@2",
+        "#3@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#4@1",
+        "#1@2",
+        "#2@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#0@1",
+        "#1@2",
+        "#2@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#x@1",
+        "#1@2",
+        "#2@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#1@1",
+        "#2@2"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "#1@1",
+        "#2@2",
+        "#3@3",
+        "#3@4"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "x@1",
+        "#1@2",
+        "#2@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        " @1",
+        "#1@2",
+        "#2@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a",
+        "b",
+        "c"
+      ],
+      "tokens": [
+        "a",
+        "#2@2",
+        "#3@3"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a@b",
+        "c"
+      ],
+      "tokens": [
+        "a@b@2",
+        "c@1"
+      ],
+      "order": [
+        1,
+        0
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "a"
+      ],
+      "tokens": [
+        "a@1",
+        "#2@2"
+      ],
+      "order": null
+    },
+    {
+      "recordIds": [
+        "a"
+      ],
+      "tokens": [
+        "none@1"
+      ],
+      "order": [
+        0
+      ]
+    },
+    {
+      "recordIds": [
+        "a"
+      ],
+      "tokens": [
+        " - @3"
+      ],
+      "order": [
+        0
+      ]
+    },
+    {
+      "recordIds": [
+        "none"
+      ],
+      "tokens": [
+        "none@1"
+      ],
+      "order": [
+        0
+      ]
+    },
+    {
+      "recordIds": [
+        "a",
+        "b"
+      ],
+      "tokens": [
+        "none@1",
+        "b@2"
+      ],
+      "order": null
+    }
   ]
 }

@@ -339,6 +339,80 @@ test('a Record Order token refuses a request where the command line reads it and
   assert.deepEqual(circular('one_circle').value.layout.multiRecordPositions, ['#1@1.0']);
 });
 
+// OV-3473: a CLI Linear Session keeps the tokens its `--multi_record_position` names, and the renderer places each
+// record by the token whose selector names it (`resolve_record_row_positions`), not by the token's place in the list.
+// Load gives each card the row and the place in its row of the record its token names (`recordOrderPlaces`): a `#N`,
+// the ID of a record whose selector names it, or the ID Load reads from the file of a record of a file of one record,
+// which the CLI names by no selector. `gbdraw linear --gbk b_collide.gb regex_rules.gb forced_label_underlay.gb
+// --multi_record_position '#2@1' ...` draws REGEX first; the draft gave the first token's row to the first card.
+const LINEAR_TOKEN_SESSION = 'python-api-linear-pairs.v50.gbdraw-session.json.gz';
+const withLinearTokens = (tokens) => {
+  const session = read(`tests/fixtures/sessions/${LINEAR_TOKEN_SESSION}`);
+  session.renderRequest.layout = { recordGapPx: 24, multiRecordPositions: tokens, recordTranslations: [], similarityAlignment: null };
+  return session;
+};
+test('a CLI Linear Record Order gives each card the row of the token that names its record (OV-3473)', async () => {
+  const places = (tokens) => async () => {
+    const result = await importSession(await sessionLoadEvent(withLinearTokens(tokens)), {
+      transformLegacyResultSvg, confirmLoadRepairs: async () => true
+    });
+    assert.equal(result.status, 'ok', JSON.stringify(result.error));
+    assert.deepEqual(result.repairs, [], JSON.stringify(tokens));
+    return state.activeDrawing().linearRecordRows.map(({ uid, row, canonicalColumn }) => [uid, row, canonicalColumn ?? null]);
+  };
+  for (const tokens of [['#2@1', '#1@2', '#3@3'], ['REGEX.1@1', 'TESTA@2', 'FORCEDLBL@3'], ['#2@1', ' TESTA @2', '#3@3']]) {
+    assert.deepEqual(await places(tokens)(), [['record-1', 2, null], ['record-2', 1, null], ['record-3', 3, null]], JSON.stringify(tokens));
+  }
+  // A row drawn out of record order takes each record's place in its row, which the next Generate writes as its
+  // gridColumn (the renderer draws a row in token order).
+  assert.deepEqual(await places(['#2@1', '#1@1', '#3@2'])(), [['record-1', 1, 2], ['record-2', 1, 1], ['record-3', 2, 1]]);
+  assert.deepEqual(await places(['#1@1', '#2@1', '#3@2'])(), [['record-1', 1, null], ['record-2', 1, null], ['record-3', 2, null]]);
+});
+
+// OV-3313 fix round 2: a Linear request Python refuses for its record placement leaves no request to draw, as a
+// refused row does: a Record Order the renderer refuses (a token list of another length, a record named twice, a `#N`
+// past the records, an ID no record has; `resolve_record_row_positions`), a token list on a record of a file drawn
+// whole, whose records' rows the Web's one row per card cannot hold, a gridRow on some records only ("If one Linear
+// record has grid_row, every record must have it."), gridRows beside tokens ("Specify Linear placement in
+// RecordPresentation or layout, not both."), and, in a schema 2 to 5 request, a card whose token gives no row beside one
+// whose token or own presentation gives one (Python's promotion keeps a card's own gridRow).
+test('Load refuses a Linear request whose record placement Python refuses (OV-3313 fix round 2)', () => {
+  const dropped = (path, reason = 'unknown-record') => ({ kind: 'request-dropped', path: `renderRequest.${path}`, reason });
+  const tokens = (list) => {
+    const session = withLinearTokens(list);
+    return readStoredRenderRequest(clone(session.renderRequest), contextOf(session));
+  };
+  assert.deepEqual(tokens(['#2@1', '#1@2']), dropped('layout.multiRecordPositions'));
+  assert.deepEqual(tokens(['#2@1', '#2@2', '#3@3']), dropped('layout.multiRecordPositions[1]'));
+  assert.deepEqual(tokens(['#4@1', '#1@2', '#2@3']), dropped('layout.multiRecordPositions[0]'));
+  assert.deepEqual(tokens(['#2@1', '@2', '#3@3']), dropped('layout.multiRecordPositions[1]'));
+  // An ID the request names no record by is read at Load from the files (above); a record that names its ID refuses it.
+  assert.equal(tokens(['NOPE@1', '#1@2', '#3@3']).kind, undefined);
+  const named = withLinearTokens(['NOPE@1', '#1@2', '#3@3']);
+  named.renderRequest.records.forEach((record, index) => { record.selector = { kind: 'recordId', value: `R${index}` }; });
+  assert.deepEqual(readStoredRenderRequest(clone(named.renderRequest), contextOf(named)), dropped('layout.multiRecordPositions[0]'));
+  const whole = withLinearTokens(['#2@1', '#1@2', '#3@3']);
+  whole.renderRequest.records[1].cardinality = 'all';
+  assert.deepEqual(readStoredRenderRequest(clone(whole.renderRequest), contextOf(whole)), dropped('layout.multiRecordPositions', 'combination'));
+  const bgc = gallery('BGC0000708-BGC0000713');
+  assert.deepEqual(readRequest(bgc, (request) => { request.records[1].presentation.gridRow = null; }),
+    dropped('records[1].presentation.gridRow', 'combination'));
+  assert.deepEqual(readRequest(bgc, (request) => { request.layout.multiRecordPositions = request.records.map((_record, index) => `#${index + 1}@1`); }),
+    dropped('layout.multiRecordPositions', 'combination'));
+  const older = (tokenList, ownRows) => {
+    const session = read('tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json');
+    const request = clone(session.renderRequest);
+    request.layout = { recordGapPx: 10, multiRecordPositions: tokenList };
+    ownRows.forEach((row, index) => { request.records[index].presentation.gridRow = row; });
+    return readStoredRenderRequest(request, contextOf(session));
+  };
+  // Records 4 and 5 hold their own rows: every card has one.
+  assert.deepEqual(older(['#1@1', '#2@1', '#3@2'], [null, null, null, 3, 3]).value.records.map((record) => record.presentation.gridRow),
+    [1, 1, 2, 3, 3]);
+  // No token gives a row, but record 1 holds its own: the others have none.
+  assert.deepEqual(older(['#1@x', '#2@x', '#3@x', '#4@x', '#5@x'], [2]), dropped('layout.multiRecordPositions[1]', 'pattern'));
+});
+
 test('the reader turns only the layout owner\'s refusal into a dropped request; a programming error there is thrown (N2)', () => {
   const session = gallery('lambda_basic_linear');
   const request = clone(session.renderRequest);

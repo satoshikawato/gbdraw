@@ -1,4 +1,5 @@
 // @ts-check
+import { PYTHON_SPACE_PATTERN } from '../contracts/schema.generated.js';
 // The single JavaScript reader of GenBank record headers. Record discovery,
 // LOSAT FASTA extraction, and match sequences use it so their record IDs are
 // the ones gbdraw.io.genome reads with Biopython.
@@ -18,15 +19,19 @@ const GENBANK_LINEAGE_ROOTS = new Set([
 ]);
 const GENBANK_LOCUS_PATTERN = /^LOCUS {7} *(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/;
 
-// Python's str.strip and str.rstrip for the ORGANISM lines and the names the
-// loader reports: String.trim also removes U+FEFF, which Python keeps. The
-// U+FEFF stays in the organism and lineage, as Biopython reads them, so the
-// name fast path declines on it (BROWSER_EQUAL_TEXT in record-discovery.js;
-// OV-1833).
+// Python's str.strip and str.rstrip for the ORGANISM lines, the names the
+// loader reports and a Record Order token's selector, with the spaces Python's
+// `\s` names (`PYTHON_SPACE_PATTERN`, from gbdraw/layout/record_placement.py):
+// String.trim also removes U+FEFF, which Python keeps, and keeps U+001C-U+001F
+// and U+0085, which Python removes (OV-3760). The U+FEFF stays in the organism
+// and lineage, as Biopython reads them, so the name fast path declines on it
+// (BROWSER_EQUAL_TEXT in record-discovery.js; OV-1833).
+const PYTHON_SPACES = new RegExp(`^${PYTHON_SPACE_PATTERN}+|${PYTHON_SPACE_PATTERN}+$`, 'g');
+const PYTHON_TRAILING_SPACES = new RegExp(`${PYTHON_SPACE_PATTERN}+$`);
 /** @param {string} text */
-export const pythonStrip = (text) => text.replace(/^[^\S\uFEFF]+|[^\S\uFEFF]+$/g, '');
+export const pythonStrip = (text) => text.replace(PYTHON_SPACES, '');
 /** @param {string} text */
-const pythonStripEnd = (text) => text.replace(/[^\S\uFEFF]+$/, '');
+const pythonStripEnd = (text) => text.replace(PYTHON_TRAILING_SPACES, '');
 
 // One scan of a GenBank record header with the record ID and organism rules of
 // Biopython's _FeatureConsumer, which gbdraw.io.genome uses. Returns null for a

@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { LinearSeqWindow } from './drawing/inputs.js' */
-import { circularRecordsOff, circularRecordsToDraw } from './record-draw-selection.js';
+import { circularRecordsOff, circularRecordsToDraw, recordOrderRows, recordSelectorNumber } from './record-draw-selection.js';
+import { pythonStrip } from './genbank-header.js';
 /** @import { NamedCardRecords } from './record-draw-selection.js' */
 /** @import { CircularListRecord } from './record-discovery.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -16,6 +17,74 @@ const NULL_RECORD_SELECTOR_TOKENS = new Set([
 export const isUnspecifiedRecordSelectorValue = (value) => {
   const text = cleanText(value);
   return !text || NULL_RECORD_SELECTOR_TOKENS.has(text.toLowerCase());
+};
+
+/**
+ * The selector of a Record Order token `<selector>@<row>` as Python's renderer reads it (`parse_record_row_position`):
+ * the token's text before its last `@`, stripped of Python's spaces; '' for a token that is no text or has no `@`.
+ * @param {unknown} token
+ */
+export const recordOrderSelector = (token) => {
+  const text = typeof token === 'string' ? pythonStrip(token) : '';
+  return text.includes('@') ? pythonStrip(text.slice(0, text.lastIndexOf('@'))) : '';
+};
+
+/**
+ * The record, by its place in the request, that a Record Order selector names (`record_order_selector`), -1 where
+ * the renderer refuses it, null where it names an ID no known record has while some record's ID is not known.
+ * @param {string} selector A selector as `recordOrderSelector` reads it, not empty.
+ * @param {readonly (string | null)[]} recordIds
+ * @returns {number | null}
+ */
+const recordOfSelector = (selector, recordIds) => {
+  if (selector.startsWith('#')) {
+    const number = recordSelectorNumber(selector);
+    return number !== null && number <= recordIds.length ? number - 1 : -1;
+  }
+  const named = recordIds.flatMap((recordId, index) => (recordId === selector ? [index] : []));
+  if (named.length === 0 && recordIds.length === 1 && isUnspecifiedRecordSelectorValue(selector)) return 0;
+  if (named.length > 0) return named.length === 1 ? named[0] : -1;
+  return recordIds.includes(null) ? null : -1;
+};
+
+/**
+ * Where Record Order tokens place the records of a request each of whose records draws one record, as Python's
+ * renderer resolves them (`resolve_record_row_positions`, gbdraw/layout/record_placement.py): one token per record,
+ * each naming its record by `#N` (`recordSelectorNumber`), by its ID, or, when one record is drawn, by a word that
+ * names no record (`none`, `-`), with a row it reads (`recordOrderRows`). `placed`: each record's row, and each
+ * record's place in its row (from 1) when a row lists its records out of request order, since the renderer draws a
+ * row in token order (else `places` is null). `refused`: the list the renderer refuses, at the token it stops at (null
+ * for a list of another length). `unread`: a token names an ID no known record has while a record's ID is not known.
+ * The one Web reader of the record a token names (OV-3473): the Linear Load projection, Load's refusal of a request
+ * and the records table.
+ * @typedef {{ kind: 'placed', rows: number[], places: number[] | null } | { kind: 'refused', at: number | null }
+ *   | { kind: 'unread' }} RecordOrderPlacement
+ * @param {readonly unknown[]} tokens
+ * @param {readonly (string | null)[]} recordIds Each record's ID, in request order; null where it is not known.
+ * @returns {RecordOrderPlacement}
+ */
+export const recordOrderPlaces = (tokens, recordIds) => {
+  if (tokens.length !== recordIds.length) return { kind: 'refused', at: null };
+  const tokenRows = recordOrderRows(tokens);
+  /** @type {number[]} */
+  const recordAt = [];
+  for (const [at, token] of tokens.entries()) {
+    const selector = recordOrderSelector(token);
+    const record = tokenRows[at] === null || !selector ? -1 : recordOfSelector(selector, recordIds);
+    if (record === null) return { kind: 'unread' };
+    if (record < 0 || recordAt.includes(record)) return { kind: 'refused', at };
+    recordAt.push(record);
+  }
+  // Every row is read (above).
+  const rows = /** @type {number[]} */ (recordIds.map((_id, record) => tokenRows[recordAt.indexOf(record)]));
+  /** @type {Map<number, number[]>} The records of each row, in token order. */
+  const members = new Map();
+  recordAt.forEach((record) => members.set(rows[record], [...(members.get(rows[record]) || []), record]));
+  const inOrder = [...members.values()].every((row) => row.every((record, at) => at === 0 || record > row[at - 1]));
+  /** @type {number[]} */
+  const places = Array(recordIds.length).fill(0);
+  members.forEach((row) => row.forEach((record, at) => { places[record] = at + 1; }));
+  return { kind: 'placed', rows, places: inOrder ? null : places };
 };
 
 /** @param {unknown} value */
