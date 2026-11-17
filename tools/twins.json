@@ -1519,6 +1519,23 @@
       "retireWhen": "the Web reads a Session 46-51's file names through Python at Load, or no supported Session version holds a resource whose name carries its ID prefix without a stored name (the Web writer stores resourceOriginalNames for the tables gbdraw makes, and Sessions written before it are no longer read)",
       "source": "review r1 of fix/loaded-resource-names-one-owner (OV-3660); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)",
       "pending": true
+    },
+    {
+      "id": "vector:tests/fixtures/record_order_row_vectors.json",
+      "concern": "Record Order tokens: the row each `<selector>@<row>` token gives, and the record its selector names (OV-3313, OV-3473)",
+      "pythonOwner": [
+        "gbdraw/layout/record_placement.py:parse_record_row_position",
+        "gbdraw/layout/record_placement.py:resolve_record_row_positions"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/record-draw-selection.js:recordOrderRows",
+        "gbdraw/web/js/services/record-options.js:recordOrderPlaces"
+      ],
+      "vector": "tests/fixtures/record_order_row_vectors.json",
+      "reason": "Web Load projects a stored Linear request's Record Order into its card rows, and refuses the token lists the renderer refuses, without starting the Worker (a saved preview loads without Python); the records table of a Result reads the same tokens. The row pattern and Python's whitespace class are generated from Python (RECORD_ROW_PATTERN, PYTHON_SPACE_PATTERN in tools/generate_web_contracts.py); the selector rule (`#N`, a record ID, the record of a one-record file) reads each request's records and cannot be generated, so the shared vector pins both the rows and the placements.",
+      "retireWhen": "Web Load reads a stored request's record placement through Python",
+      "source": "twin.unregistered.v1 on fix/record-order-row-one-rule (OV-3313 fix round 2, 2026-11-17); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)",
+      "pending": true
     }
   ]
 }
