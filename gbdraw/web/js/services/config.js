@@ -4292,8 +4292,11 @@ const savedLegacyArtifacts = ({ legacyArtifacts }) => {
  * Session 27-50's one list its Linear part's (`legacy.drawingId`). An entry is read once and every drawing that saved
  * it holds the same value. A drawing lists an entry of its own kind (`losatEntryDrawingKind`, the rule Save writes by:
  * a ring entry of a Circular drawing, any other of a Linear one), once per key, by that drawing alone; a Session
- * 27-50's ring entries are its Circular part's (`ringDrawingId`); an entry of the other kind stays among the drawing's
- * searches and lists in no drawing (review 2 L1). The older Session's protein candidates go to `legacy.drawingId`.
+ * 27-50's ring entries are its Circular part's (`ringDrawingId`). A drawing never holds an entry of the other kind
+ * while the file has a drawing of that kind (a Session 27-44 that Python converted saved its one list into every
+ * drawing): it could never list the entry, and holding it would keep it for reuse after the Clear of the drawing that
+ * lists it (OV-3769). Only in a file without a drawing of its kind does such an entry stay among the drawing's
+ * searches, listed in no drawing (review 2 L1). The older Session's protein candidates go to `legacy.drawingId`.
  * @param {readonly {
  *   drawing: DrawingState, entries: unknown, derived: unknown, manifest: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
  *   ringDrawingId?: DrawingId | null
@@ -4319,24 +4322,23 @@ const loadedLosatEvidenceOf = (sources, { legacy, adoptCurrent = false, listed =
   /** @param {DrawingId} id */
   const of = (id) => drawings.get(id) ?? drawings.set(id, { rows: new Map(), cache: new Map(), derived: new Map() }).get(id);
   of(legacy.drawingId);
+  const fileModes = new Set(sources.map(({ drawing }) => drawing.mode));
   sources.forEach(({ drawing, entries, derived, manifest, places = new Map(), ringDrawingId = null }) => {
     const own = /** @type {NonNullable<ReturnType<typeof of>>} */ (of(drawing.id));
     (Array.isArray(entries) ? entries : []).forEach((entry, idx) => {
       const kind = savedLosatCacheEntryKind(entry);
       if (kind === 'legacy') legacyEntries.push(entry);
       if (kind !== 'current') return;
+      const drawingKind = losatEntryDrawingKind(entry);
+      const owner = drawing.mode === drawingKind ? drawing.id : drawingKind === 'circular' ? ringDrawingId : null;
+      if (owner === null && fileModes.has(drawingKind)) return;
       if (!values.has(entry.key)) values.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent));
       const value = /** @type {RawLosatCacheEntry} */ (values.get(entry.key));
       // The value an earlier drawing holds is also valid in this drawing's manifest (OV-3273).
       if (adoptCurrent) markValidatedWith(value, manifest);
-      own.cache.set(entry.key, value);
-      if (entry.display === false) return;
-      const drawingKind = losatEntryDrawingKind(entry);
-      const owner = drawing.mode === drawingKind ? drawing.id : drawingKind === 'circular' ? ringDrawingId : null;
-      if (owner === null) return;
-      const holder = /** @type {NonNullable<ReturnType<typeof of>>} */ (of(owner));
+      const holder = /** @type {NonNullable<ReturnType<typeof of>>} */ (of(owner ?? drawing.id));
       holder.cache.set(entry.key, value);
-      if (holder.rows.has(entry.key)) return;
+      if (entry.display === false || owner === null || holder.rows.has(entry.key)) return;
       holder.rows.set(entry.key, {
         key: entry.key,
         // A saved name that is no text is read as none (OV-981).

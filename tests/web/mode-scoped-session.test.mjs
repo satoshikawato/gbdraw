@@ -1774,6 +1774,31 @@ test('a Load gives a ring entry one cache-info row for each Circular drawing tha
     'a Session 27-50\'s ring entry names its Circular part');
 });
 
+// OV-3769: a drawing holds no search of the other kind while the file has a drawing of that kind (a Session 27-44
+// that Python converted saved its one list into every drawing). Held there, it would stay for reuse after the Clear
+// of the drawing that lists it, which the receipt of PD-OI-022 scenario revision 2 rules out.
+test('Load gives no drawing a search of the other kind while the file has a drawing of that kind (OV-3769)', async () => {
+  const ringKey = 'c'.repeat(64);
+  const { flow: _flow, ...linearKind } = ringCacheEntry();
+  const linearKey = 'd'.repeat(64);
+  const session = v49Session('drawings-circular-linear');
+  session.drawings.forEach((candidate) => {
+    candidate.losatCache.entries = [ringCacheEntry(), ...(candidate.mode === 'circular' ? [{ ...linearKind, key: linearKey }] : [])];
+  });
+  resetDrawings();
+  const outcome = await loadKeepingSlots(session);
+  assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+  assert.deepEqual(['circular', 'linear'].map((id) => [...loadedLosatEvidenceOf(id, outcome).losatCache.keys()]),
+    [[ringKey], []], 'each drawing holds the searches of its own kind only');
+  const legacy = fixtureSession('two-mode-linear-shown.v48');
+  legacy.losatCache.entries.push(ringCacheEntry());
+  resetDrawings();
+  const older = await loadKeepingSlots(legacy);
+  assert.equal(older.loaded.status, 'ok', JSON.stringify(older.loaded.error));
+  assert.deepEqual(state.drawingList().map(({ id, mode }) => [mode, loadedLosatEvidenceOf(id, older).losatCache.has(ringKey)]),
+    state.drawingList().map(({ mode }) => [mode, mode === 'circular']), 'a Session 27-50\'s ring search is its Circular part\'s alone');
+});
+
 // K-3: a ring's query hash is the SHA-256 of the FASTA the Python ring reader
 // (the Worker's) returns; node has no Worker, so the fixture's other ring is
 // hashed here through Python.
@@ -1947,12 +1972,17 @@ test('Load lists no entry of the other kind in a drawing, by that drawing alone 
   const { flow, ...linearKind } = circular.losatCache.entries[0];
   assert.ok(flow);
   circular.losatCache.entries.push({ ...linearKind, key: 'f'.repeat(64), display: true });
-  resetDrawings();
-  const loaded = await loadKeepingSlots(session);
-  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
-  const evidence = loadedLosatEvidenceOf('circular', loaded);
-  assert.deepEqual(evidence.losatCacheInfo.map(({ key }) => key), [keys.ring1, keys.ring2, keys.ring3]);
-  assert.ok(evidence.losatCache.has('f'.repeat(64)), 'the entry stays among the drawing\'s searches');
+  // With a Linear drawing in the file the entry is held by no drawing (OV-3769); without one it stays among the
+  // Circular drawing's searches.
+  for (const [files, held] of /** @type {const} */ ([['with a Linear drawing', false], ['Circular drawings only', true]])) {
+    if (held) session.drawings = session.drawings.filter(({ mode }) => mode === 'circular');
+    resetDrawings();
+    const loaded = await loadKeepingSlots(session);
+    assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+    const evidence = loadedLosatEvidenceOf('circular', loaded);
+    assert.deepEqual(evidence.losatCacheInfo.map(({ key }) => key), [keys.ring1, keys.ring2, keys.ring3], files);
+    assert.equal(evidence.losatCache.has('f'.repeat(64)), held, files);
+  }
 });
 
 // K-3 (D-15-124): a drawing's entries are its request's. A ring file bound in
