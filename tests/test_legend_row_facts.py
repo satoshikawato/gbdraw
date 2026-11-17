@@ -231,6 +231,86 @@ def test_linear_reports_its_rows(tmp_path):
     assert "repeat_region" not in facts["drawn"]
 
 
+def _two_record_file(tmp_path: Path) -> Path:
+    """T1 holds CDSs; T2 holds the file's only tRNA and the only CDS a ``Special`` rule colors."""
+    from Bio import SeqIO
+
+    t1 = _record("T1", repeats=False)
+    t2 = _record("T2", repeats=False)
+    t2.features.append(SeqFeature(SimpleLocation(1500, 1580, 1), type="tRNA", qualifiers={"product": ["tRNA-Gly"]}))
+    t2.features.append(SeqFeature(SimpleLocation(1000, 1100, 1), type="CDS", qualifiers={"product": ["special"]}))
+    path = tmp_path / "two.gb"
+    SeqIO.write([t1, t2], path, "genbank")
+    return path
+
+
+_SPECIAL_RULE = ("CDS", "product", "^special$", "#c83366", "Special")
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_row_only_a_record_left_out_names_is_suppressed_not_stale(tmp_path, mode):
+    """A Legend edit of a row that only a record of the file the selection leaves out names (a record the Web
+    draws OFF) waits for that record: Python reports the row suppressed (OV-3832, V-OD29 (a)). The drawn rows
+    stay the drawn record's."""
+    from gbdraw.api import GenBankInputSource, parse_record_selector
+
+    record = RecordInput(
+        source=GenBankInputSource(_two_record_file(tmp_path)), selector=parse_record_selector("T1"), record_key="T1"
+    )
+    output = RenderOutputRequest(output_prefix=mode, formats=("svg",), output_directory=tmp_path, overwrite=True)
+    colors = _color_table(_SPECIAL_RULE)
+    request = (
+        CircularDiagramRequest(records=(record,), options=CircularDiagramOptions(colors=colors), output=output)
+        if mode == "circular"
+        else LinearDiagramRequest(records=(record,), options=LinearDiagramOptions(colors=colors), output=output)
+    )
+    [(facts, svg_keys)] = _render(request, tmp_path)
+    assert facts["drawn"] == svg_keys
+    assert "CDS" in facts["drawn"]
+    assert not {"tRNA", "Special"} & set(facts["drawn"])
+    assert {"tRNA", "Special"} <= set(facts["suppressed"])
+    assert "Ghost" not in facts["drawn"] + facts["suppressed"]
+
+
+def test_a_left_out_gff3_record_is_flattened_only_when_the_facts_are_read(tmp_path, monkeypatch):
+    """Planning keeps references only: a render that never reads the facts (the CLI) flattens no left-out GFF3
+    record; reading ``suppressed`` flattens it to the request's types (``gene`` is not drawn, so not named)."""
+    import gbdraw.legend.row_facts as row_facts
+    from gbdraw.api import GffFastaInputSource, parse_record_selector
+
+    sequence = "ATGC" * 500
+    (tmp_path / "two.fasta").write_text(f">S1\n{sequence}\n>S2\n{sequence}\n", encoding="utf-8")
+    (tmp_path / "two.gff3").write_text(
+        "##gff-version 3\n"
+        "S1\t.\tCDS\t101\t400\t.\t+\t0\tID=c1\n"
+        "S2\t.\tCDS\t101\t400\t.\t+\t0\tID=c2\n"
+        "S2\t.\ttRNA\t1501\t1580\t.\t+\t.\tID=t1\n"
+        "S2\t.\tgene\t1001\t1100\t.\t+\t.\tID=g1\n",
+        encoding="utf-8",
+    )
+    flattened: list[str] = []
+    original = row_facts.filter_features_by_type
+    monkeypatch.setattr(
+        row_facts, "filter_features_by_type", lambda record, types: (flattened.append(record.id), original(record, types))[1]
+    )
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GffFastaInputSource(tmp_path / "two.gff3", tmp_path / "two.fasta"),
+                selector=parse_record_selector("S1"),
+                record_key="S1",
+            ),
+        ),
+        output=RenderOutputRequest(output_prefix="gff", formats=("svg",), output_directory=tmp_path, overwrite=True),
+    )
+    item = render_request(request)
+    assert flattened == []
+    facts = collect_legend_row_facts(item.drawing, result_index=0, result_name="gff.svg")
+    assert flattened == ["S2"]
+    assert "tRNA" in facts["suppressed"] and "tRNA" not in facts["drawn"]
+    assert "gene" not in facts["drawn"] + facts["suppressed"]
+
+
 def _linear(tmp_path: Path, **options):
     output = RenderOutputRequest(output_prefix="linear", formats=("svg",), output_directory=tmp_path, overwrite=True)
     record = _record("rec")

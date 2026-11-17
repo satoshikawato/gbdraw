@@ -15,3 +15,7 @@
   draw still write rules.
   A Legend name of a row that a Generate does not draw waits for the row,
   also when a File is replaced; before, replacing a File dropped it.
+- Fixed: A Legend name or color of a row that only a record drawn OFF has
+  (with **Draw this record** cleared) no longer makes **Generate** fail with
+  "The generated result could not be accepted"; the edit waits until the
+  record is drawn again.
