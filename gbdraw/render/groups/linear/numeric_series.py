@@ -34,7 +34,6 @@ class NumericSeriesGroup:
         row_shifts: Sequence[float] = (),
     ) -> None:
         plot = numeric_series_plot(config, frame)
-        origin = plot.linear_origin
         self.group: Group = draw_track_rows(
             Group(id=group_id),
             record_transform,
@@ -42,7 +41,7 @@ class NumericSeriesGroup:
             float(sequence_width),
             row_shifts,
             lambda group, length, width, row: draw_linear_series(
-                group, plot, LinearTrackFrame(origin, origin, length, width, track_height), group_id,
+                group, plot, LinearTrackFrame(0, 0, length, width, track_height), group_id,
                 record_transform, row,
             ),
         )

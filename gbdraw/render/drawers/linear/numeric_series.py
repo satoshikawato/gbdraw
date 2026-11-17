@@ -82,7 +82,7 @@ def _series_paths(plot: NumericSeriesPlot, desc: str, frame: LinearTrackFrame, g
 
     paint = plot.paint
     style = {"stroke": paint.stroke, "fill_opacity": paint.fill_opacity, "fill_rule": "evenodd"}
-    if paint.writes_stroke_width("linear"):
+    if paint.writes_stroke_width:
         style["stroke_width"] = paint.stroke_width
     main = Path(d=desc, fill=paint.fill, **style)
     if paint.below_fill is None:

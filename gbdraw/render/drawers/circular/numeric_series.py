@@ -88,7 +88,7 @@ def _frame_ink(frame: SeriesBandFrame, place: CircularTrackPlace) -> list[Circul
     if float(place.track_width) > 0 and frame.paints_background:
         inks.append(CircularInkRing(RadialBand(baseline_radius, outer_radius), *turns))
     if frame.paints_border:
-        half = 0.5 * frame.border_width
+        half = frame.border_overhang_px
         inks.extend(CircularInkRing(RadialBand(edge - half, edge + half), *turns) for edge in (baseline_radius, outer_radius))
     return inks
 
@@ -223,7 +223,7 @@ def _series_paths(plot: NumericSeriesPlot, desc: str, place: CircularTrackPlace,
         clip.add(Path(d=generate_circle_path_desc(place.radius, place.norm_factor), fill="white", stroke="none"))
         below = Path(d=desc, fill=paint.below_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero", **style)
         elements = [clip, main, below]
-    if paint.writes_stroke_width("circular"):
+    if paint.writes_stroke_width:
         for element in elements:
             if isinstance(element, Path):
                 element["stroke-width"] = paint.stroke_width

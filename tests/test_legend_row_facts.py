@@ -342,7 +342,7 @@ GENERATED_ROWS = json.loads(
 
 
 def _paint(fill: str, low_fill: str) -> SeriesPaint:
-    return SeriesPaint(fill, "none", 0, 1.0, low_fill, frozenset())
+    return SeriesPaint(fill, "none", 0, 1.0, low_fill)
 
 
 @pytest.mark.parametrize("case", GENERATED_ROWS, ids=[case["name"] for case in GENERATED_ROWS])

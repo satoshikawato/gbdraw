@@ -27,16 +27,12 @@ def _plots():
     }
 
 
-@pytest.mark.parametrize(
-    ("kind", "circular", "linear"),
-    [("gc_content", False, False), ("gc_skew", False, True), ("depth", True, True)],
-)
-def test_a_stroke_that_paints_nothing_writes_its_width_as_each_kind_did(kind: str, circular: bool, linear: bool) -> None:
-    paint = _plots()[kind].paint
-    assert (paint.writes_stroke_width("circular"), paint.writes_stroke_width("linear")) == (circular, linear)
+@pytest.mark.parametrize("kind", ["gc_content", "gc_skew", "depth"])
+def test_a_stroke_that_paints_nothing_writes_no_width_in_any_kind(kind: str) -> None:
+    assert not _plots()[kind].paint.writes_stroke_width
 
 
-def test_the_kinds_keep_their_line_ends_fills_and_origins() -> None:
+def test_the_kinds_keep_their_line_ends_and_fills() -> None:
     plots = _plots()
     closes = {kind: plot.samples.closes_at_record_end for kind, plot in plots.items() if plot.samples is not None}
     assert closes == {"gc_content": True, "gc_skew": False, "depth": False}
@@ -45,6 +41,3 @@ def test_the_kinds_keep_their_line_ends_fills_and_origins() -> None:
         "gc_content": None, "gc_skew": "#00f", "depth": None,
     }
     assert plots["gc_skew"].clip_key == "GC"
-    # svgwrite writes numbers as given: GC tracks place their Linear row at 0, depth at 0.0.
-    origins = {kind: repr(plot.linear_origin) for kind, plot in plots.items()}
-    assert origins == {"gc_content": "0", "gc_skew": "0", "depth": "0.0"}

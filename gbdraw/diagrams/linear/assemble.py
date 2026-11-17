@@ -238,7 +238,8 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
-from ...render.numeric_series import depth_axis, gc_content_axis
+from ...layout.circular_ink import stroke_pad_px
+from ...render.numeric_series import depth_axis, gc_content_axis, gc_content_band_frame
 from ...render.composition import CompositionPrimary, compose_drawing, place_legend, place_title
 
 from .builders import (
@@ -946,9 +947,10 @@ def _axis_text_overhang(axis: ScalarAxisStyle | None, track_height: float) -> fl
 
 
 def _stroke_overhang(paint: SeriesPaint) -> float:
-    """How far a series path's stroke paints past its band."""
+    """How far a series path's stroke paints past its band: half its width when it paints (``stroke_pad_px``, the
+    rule of the Circular ink), else nothing (OV-3744)."""
 
-    return 0.5 * max(0.0, float(paint.stroke_width))
+    return stroke_pad_px(paint.stroke, paint.stroke_width)
 
 
 def _linear_slot_footprints_for_record(
@@ -1025,11 +1027,11 @@ def _linear_slot_footprints_for_record(
 
         if slot.renderer == "dinucleotide_content":
             slot_gc_config = gc_config_of(slot.params, depth_by_index)
+            # The border keeps room only where it paints: in percent mode, the band frame (OV-3743).
+            band_frame = gc_content_band_frame(slot_gc_config)
             overhang = max(
                 _stroke_overhang(slot_gc_config.series_paint),
-                # Half the percent border width in either mode, though only percent mode draws the border (its
-                # band frame): reading the frame would move every figure with a deviation GC track (OV-3743).
-                0.5 * max(0.0, float(slot_gc_config.percent_border_width)),
+                0.0 if band_frame is None else band_frame.border_overhang_px,
                 _axis_text_overhang(slot_gc_config.axis_style, float(slot.height)),
             )
             expanded = body_band.expand(overhang)

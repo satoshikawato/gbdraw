@@ -494,8 +494,8 @@ def test_linear_to_slot_span_covers_the_nominal_lanes_of_an_underlay_only_record
         if slot["slotId"] == "gc"
     )
     assert spans[1] == pytest.approx(spans[0])
-    # A record without any lanes: the span keeps to the GC slot.
-    assert spans[2][0] > gc_top
+    # A record without any lanes: the span keeps to the GC slot, from its top.
+    assert spans[2][0] == pytest.approx(gc_top)
 
 
 _MARKS = ("highlight", "band", "bracket", "line")
@@ -876,7 +876,8 @@ def test_linear_annotation_to_slot_spans_from_one_slot_band_to_the_other() -> No
     bands = _linear_bands(_build_linear_span(*_SPAN_STACK, _span_slot()))
 
     hull = (bands["features"][0], bands["gc"][1])
-    assert bands["features"][1] < bands["gc"][0]
+    # The GC slot lies below the feature lanes (they meet: a deviation GC track keeps no room past its band).
+    assert bands["features"][1] <= bands["gc"][0]
     assert bands["regions"] == pytest.approx(hull)
     assert bands["drawn"] == pytest.approx(hull)
 

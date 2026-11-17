@@ -58,6 +58,13 @@ class SeriesBandFrame:
         return self.border_width > 0 and paint_shows(self.border_color)
 
     @property
+    def border_overhang_px(self) -> float:
+        """How far the border paints past each edge of the band: half its width when it paints, else nothing. The
+        Circular ink and the Linear slot footprint read it."""
+
+        return 0.5 * self.border_width if self.paints_border else 0.0
+
+    @property
     def paints_edges(self) -> bool:
         """Whether the track paints its band's edges: its background or its border shows. The tick labels next to
         the band keep their margin from it (OV-3116)."""
@@ -77,9 +84,6 @@ class NumericSeriesPlot:
     axis: ScalarAxis | None
     # The dinucleotide the clip id of the part below the baseline names (GC skew); empty without one.
     clip_key: str
-    # The top left corner of a Linear track in its group: GC tracks write it as 0 and depth as 0.0, which svgwrite
-    # writes as given, so the output keeps both.
-    linear_origin: float
 
 
 def gc_content_band_frame(config: GcContentConfigurator) -> SeriesBandFrame | None:
@@ -159,7 +163,7 @@ def gc_content_series(config: GcContentConfigurator, gc_df: DataFrame) -> Numeri
         samples = None if gc_df.empty else deviation_samples(
             gc_df[f"{config.dinucleotide} content"], closes_at_record_end=True
         )
-        return NumericSeriesPlot(samples, paint, None, None, "", 0)
+        return NumericSeriesPlot(samples, paint, None, None, "")
     axis_min, axis_max = _percent_bounds(config)
     plot_df = gc_content_percent_df(gc_df, dinucleotide=config.dinucleotide, min_percent=axis_min, max_percent=axis_max)
     return NumericSeriesPlot(
@@ -168,7 +172,6 @@ def gc_content_series(config: GcContentConfigurator, gc_df: DataFrame) -> Numeri
         gc_content_band_frame(config),
         gc_content_axis(config),
         "",
-        0,
     )
 
 
@@ -179,7 +182,7 @@ def gc_skew_series(config: GcSkewConfigurator, gc_df: DataFrame) -> NumericSerie
     samples = None if gc_df.empty else deviation_samples(
         gc_df[f"{config.dinucleotide} skew"], closes_at_record_end=False
     )
-    return NumericSeriesPlot(samples, config.series_paint, None, None, config.dinucleotide, 0)
+    return NumericSeriesPlot(samples, config.series_paint, None, None, config.dinucleotide)
 
 
 def depth_series(config: DepthConfigurator, depth_df: DataFrame) -> NumericSeriesPlot:
@@ -192,7 +195,6 @@ def depth_series(config: DepthConfigurator, depth_df: DataFrame) -> NumericSerie
         None,
         depth_axis(config, depth_df),
         "",
-        0.0,
     )
 
 

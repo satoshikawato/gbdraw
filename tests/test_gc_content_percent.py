@@ -326,6 +326,63 @@ def test_linear_gc_content_percent_mode_reserves_full_height_before_gc_skew() ->
     assert skew_y > gc_y + canvas_config.gc_height
 
 
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("overrides", "border_px"),
+    [
+        ({}, 0.0),
+        ({"objects.gc_content.mode": "percent", "objects.gc_content.show_axis": False}, 0.8),
+        (
+            {
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.show_axis": False,
+                "objects.gc_content.percent_border_color": "none",
+            },
+            0.0,
+        ),
+    ],
+    ids=["deviation", "percent", "percent-without-border-colour"],
+)
+def test_a_linear_gc_content_slot_keeps_room_only_for_the_border_it_paints(overrides, border_px) -> None:
+    # OV-3743: a deviation GC content slot kept half the percent border width above and below its band, though
+    # only percent mode draws the border; the room follows the drawn band frame (``gc_content_band_frame``).
+    canvas = assemble_linear_diagram_from_records(
+        [_make_record()],
+        LinearAssemblyInputs(
+            legend="none",
+            cfg=apply_config_overrides(None, {"canvas.show_gc": True, **overrides}),
+            window=20,
+            step=20,
+        ),
+    )
+    slots = {slot["slotId"]: slot for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]}
+    gc_slot = slots["gc_content"]
+    for band in ("paintBand", "reserveBand"):
+        height = gc_slot[band]["bottomPx"] - gc_slot[band]["topPx"]
+        assert height == pytest.approx(gc_slot["heightPx"] + border_px), band
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(("stroke_color", "stroke_px"), [("none", 0.0), ("#000000", 3.0)])
+@pytest.mark.parametrize("track", ["gc_content", "gc_skew"])
+def test_a_linear_series_slot_keeps_room_only_for_a_stroke_it_paints(track, stroke_color, stroke_px) -> None:
+    # OV-3744: a Linear series slot kept half its stroke width past its band though a stroke of colour ``none``
+    # paints nothing; the room follows the stroke's paint, as the Circular ink does (``stroke_pad_px``).
+    overrides = {
+        "canvas.show_gc": True,
+        "canvas.show_skew": True,
+        f"objects.{track}.stroke_color": stroke_color,
+        f"objects.{track}.stroke_width": 3.0,
+    }
+    canvas = assemble_linear_diagram_from_records(
+        [_make_record()],
+        LinearAssemblyInputs(legend="none", cfg=apply_config_overrides(None, overrides), window=20, step=20),
+    )
+    slots = {slot["slotId"]: slot for slot in canvas._gbdraw_track_slot_geometry["records"][0]["slots"]}
+    band = slots[track]["paintBand"]
+    assert band["bottomPx"] - band["topPx"] == pytest.approx(slots[track]["heightPx"] + stroke_px)
+
+
 def test_default_gc_content_deviation_mode_does_not_emit_percent_axis() -> None:
     circular_svg = assemble_circular_diagram_from_record(
         _make_record(),
