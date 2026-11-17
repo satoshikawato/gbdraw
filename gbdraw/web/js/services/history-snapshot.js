@@ -555,6 +555,16 @@ const getGeneratedArtifactRef = (target, fallback) => (
   target && typeof target === 'object' && 'value' in target ? target.value : fallback
 );
 
+/**
+ * The shown drawing's LOSAT evidence for an artifact owner set, by reference, key by key: the keys of
+ * `LOSAT_EVIDENCE_KEYS`, which the owner set's install, the artifact slot and Clear read too.
+ * @param {(key: (typeof LOSAT_EVIDENCE_KEYS)[number]) => unknown} valueOf The app state's value of a key.
+ * @returns {{ [K in keyof LosatEvidence]: LosatEvidence[K] | null }}
+ */
+const capturedLosatEvidence = (valueOf) => /** @type {{ [K in keyof LosatEvidence]: LosatEvidence[K] | null }} */ (
+  Object.fromEntries(LOSAT_EVIDENCE_KEYS.map((key) => [key, toRaw(valueOf(key))]))
+);
+
 /** @param {Record<string, any>} state */
 const buildDraftIntentData = (state) => ({
   selectedAnnotation: cloneJsonData(getRef(state.selectedAnnotation, null)),
@@ -1218,21 +1228,7 @@ export const createHistorySnapshotService = ({
       trackSlotResolvedGeometry: toRaw(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
-      proteinIdentityManifest: toRaw(
-        getGeneratedArtifactRef(state.proteinIdentityManifest, null)
-      ),
-      legacyProteinRawCandidates: toRaw(
-        getGeneratedArtifactRef(state.legacyProteinRawCandidates, null)
-      ),
-      legacyProteinDerivedEvidence: toRaw(
-        getGeneratedArtifactRef(state.legacyProteinDerivedEvidence, null)
-      ),
-      losatCache: toRaw(getGeneratedArtifactRef(state.losatCache, null)),
-      losatDerivedCache: toRaw(
-        getGeneratedArtifactRef(state.losatDerivedCache, null)
-      ),
-      losatCacheInfo: toRaw(getGeneratedArtifactRef(state.losatCacheInfo, null)),
-      losatNamedKeys: toRaw(getGeneratedArtifactRef(state.losatNamedKeys, null)),
+      ...capturedLosatEvidence((key) => getGeneratedArtifactRef(state[key], null)),
       lastRunInfo: toRaw(getGeneratedArtifactRef(state.lastRunInfo, null)),
       pairwiseMatchFactors: toRaw(
         getGeneratedArtifactRef(state.pairwiseMatchFactors, null)

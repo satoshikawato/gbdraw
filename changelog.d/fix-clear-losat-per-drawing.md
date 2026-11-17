@@ -5,8 +5,9 @@
   search another drawing's diagram uses is reused by the cleared drawing's next
   Generate instead of running LOSAT again; the result is the same. A search
   that another drawing only keeps from an earlier Generate is not reused, so
-  LOSAT runs it again. In a project with one drawing, Clear removes every LOSAT
-  result, as before.
+  LOSAT runs it again; this also holds after **Save Session** and Load for a
+  file this version saved. In a project with one drawing, Clear removes every
+  LOSAT result, as before.
 - Changed: **Clear LOSAT results** is a step in the drawing's History. **Undo**
   brings back the results it cleared, and **Redo** clears them again. It is
   unavailable while a diagram is being generated, as **Reset Settings** is;
@@ -17,6 +18,10 @@
   had, even after a Clear in another drawing; a Linear comparison edit in one
   drawing no longer removes another drawing's results; and **Save Session**
   writes into each drawing only the LOSAT results that drawing holds.
+- Changed: **Save Session** writes into each drawing only the LOSAT searches
+  its diagram uses, not one it only keeps from an earlier Generate under other
+  settings. After the file is opened again, a Generate under those earlier
+  settings runs LOSAT once more; the result is the same.
 - Changed: after **Undo** of a Generate, the next Generate runs the LOSAT
   searches the undone Generate had added again; it no longer takes them from
   the undone step.

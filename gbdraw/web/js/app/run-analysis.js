@@ -1038,6 +1038,20 @@ export const requireLegacyProteinReferencesMigrate = (idMap, ...values) => {
 const namedLosatKeysOf = (pairs, payloadKey) => new Set([...pairs.map(({ cacheKey }) => cacheKey), ...(payloadKey ? [payloadKey] : [])]);
 
 /**
+ * The LOSAT rows and named searches a Generate starts from. A Circular Generate writes both anew (OV-3201): its rings'
+ * searches. A Linear one starts from the committed artifact's (`ownerSet`, History's capture of it; the shown
+ * drawing's for a value the capture does not hold), so a Generate that reuses the committed protein result lists and
+ * names the same ones (OV-3785).
+ * @param {boolean} circular
+ * @param {Partial<Pick<LosatEvidence, 'losatCacheInfo' | 'losatNamedKeys'>> | null | undefined} ownerSet
+ * @param {Pick<LosatEvidence, 'losatCacheInfo' | 'losatNamedKeys'>} shown
+ * @returns {[readonly LosatCacheInfoEntry[], ReadonlySet<string>]}
+ */
+const startingLosatRowsOf = (circular, ownerSet, shown) => (circular
+  ? [[], new Set()]
+  : [ownerSet?.losatCacheInfo ?? shown.losatCacheInfo, ownerSet?.losatNamedKeys ?? shown.losatNamedKeys]);
+
+/**
  * The searches and payloads the drawings of the project hold now, read once, when a Generate's first lookup needs them
  * (D-224).
  * @param {() => readonly LosatEvidence[]} projectLosatEvidence
@@ -2971,13 +2985,8 @@ export const createRunAnalysis = ({
     // The identities of the committed request's records, kept with it when a Generate committed it.
     const previousRecordIdentities = previousRequestRecords.length > 0
       ? committedRecordIdentities.get(getCommittedCanonicalSession?.()?.resources ?? {}) ?? null : null;
-    // A Circular Generate writes its drawing's rows anew (OV-3201): its rings' searches.
-    // With them, the searches and payload its Result names (OV-3785): a Linear Generate that reuses the committed
-    // protein result names the same ones.
-    let workingLosatCacheInfo = /** @type {readonly LosatCacheInfoEntry[]} */ (mode.value === 'circular' ? []
-        : committedArtifactHandle?.ownerSet?.losatCacheInfo ?? losatCacheInfo.value),
-      workingLosatNamedKeys = /** @type {ReadonlySet<string>} */ (mode.value === 'circular' ? new Set()
-        : committedArtifactHandle?.ownerSet?.losatNamedKeys ?? losatNamedKeys.value);
+    let [workingLosatCacheInfo, workingLosatNamedKeys] = startingLosatRowsOf(mode.value === 'circular',
+      committedArtifactHandle?.ownerSet, { losatCacheInfo: losatCacheInfo.value, losatNamedKeys: losatNamedKeys.value });
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
@@ -3129,7 +3138,8 @@ export const createRunAnalysis = ({
     let commitProteinMigration = null;
     /**
      * This Generate's LOSAT evidence, committed with its Result: `namedKeys` are the searches and payload it uses.
-     * @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null, namedKeys: ReadonlySet<string> } | null}
+     * @type {{ cacheInfo: LosatCacheInfoEntry[], cacheMap: LosatEvidence['losatCache'],
+     *   derivedCacheMap: LosatEvidence['losatDerivedCache'] | null, namedKeys: ReadonlySet<string> } | null}
      */
     let pendingLosatCacheCommit = null;
 

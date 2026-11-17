@@ -531,10 +531,16 @@ test('a drawing\'s LOSAT values follow it through Generate, New, Duplicate, Dele
       assert.deepEqual(unsearched, [], `${where} (a'): ${id}'s rows whose search it does not hold`);
       const keys = rows.map(({ key }) => key);
       assert.equal(new Set(keys).size, keys.length, `${where} (b): ${id} holds one row per key: ${keys}`);
-      // OV-3785: a drawing names its rows' searches and only searches and payloads it holds; Clear names none.
-      const named = values.losatNamedKeys ?? new Set();
+      // OV-3785: a drawing names its rows' searches and only searches and payloads it holds; Clear names none. A drawing
+      // without an artifact slot holds no LOSAT value (`projectValues`: null); any other holds every one.
+      const { losatNamedKeys: named, losatCache, losatDerivedCache } = values;
+      if (named === null) {
+        assert.deepEqual([losatCache, rows], [null, []], `${where} (l): ${id} holds LOSAT values without a named set`);
+        continue;
+      }
+      assert.ok(named instanceof Set && losatCache instanceof Map && losatDerivedCache instanceof Map, `${where} (l): ${id}'s values`);
       assert.deepEqual(keys.filter((key) => !named.has(key)), [], `${where} (l): ${id}'s rows it does not name`);
-      assert.deepEqual([...named].filter((key) => !values.losatCache?.has(key) && !values.losatDerivedCache?.has(key)), [],
+      assert.deepEqual([...named].filter((key) => !losatCache.has(key) && !losatDerivedCache.has(key)), [],
         `${where} (l): ${id} names a search it does not hold`);
     }
     const shown = state.activeDrawing();

@@ -2559,6 +2559,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
     }];
     state.losatCacheInfo.value = structuredClone(warmCacheInfo);
+    const warmNamedKeys = new Set(['warm-cache', 'warm-reverse', 'warm-payload']);
+    state.losatNamedKeys.value = warmNamedKeys;
     state.activeDrawing().losatProgram.value = 'blastp';
     state.activeDrawing().losat.blastp.mode = 'pairwise';
     state.activeDrawing().losat.blastp.maxHits = 5;
@@ -2610,6 +2612,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
+    // OV-3785: the reused Result uses the same searches and payload, so the drawing still names them and another
+    // drawing's Generate after a Clear reuses them.
+    assert.deepEqual([...state.losatNamedKeys.value], [...warmNamedKeys]);
 
     // OV-1128 B (D-114): a Similarity groups Generate draws, records and keys with the stored
     // paralog links per group. The committed result was drawn with 3, so it is reused and the
@@ -3488,6 +3493,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   state.losatCache.value = dormantRawCache;
   state.losatDerivedCache.value = dormantDerivedCache;
   state.losatCacheInfo.value = [{ key: 'dormant-display-cache', drawingId: 'linear' }];
+  state.losatNamedKeys.value = new Set(['dormant-display-cache', 'dormant-raw']);
   modeDrawing(state, 'linear').files.linearCanonicalComparisons = [{
     kind: 'precomputed',
     edgeKey: 'linear-none-first->linear-none-second',
@@ -3630,6 +3636,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(dormantRawCache.probes, 0);
   assert.equal(dormantDerivedCache.probes, 0);
   assert.deepEqual(state.losatCacheInfo.value, []);
+  // A Generate without LOSAT intent lists no result, so its Result names no search for another drawing (OV-3785).
+  assert.deepEqual([...state.losatNamedKeys.value], []);
   assert.equal(annotationValidationCalls, 1);
   assert.equal(activePrimaryReads, primaryReadsBefore + 3);
   assert.equal(inactiveFileReads, inactiveReadsBefore);

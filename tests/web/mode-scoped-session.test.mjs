@@ -18,7 +18,7 @@ import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
 import {
-  emptyLosatEvidence, losatRowsOnePerKey, validateProteinRawEntryReferences
+  emptyLosatEvidence, losatRowsOnePerKey, projectLosatSearches, validateProteinRawEntryReferences
 } from '../../gbdraw/web/js/services/losat-cache.js';
 import { withArtifactSlotValues } from '../../gbdraw/web/js/services/artifact-slot.js';
 
@@ -1900,6 +1900,39 @@ test('a drawing whose shared ring searches were cleared writes none of them (OV-
   });
   assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
   assert.deepEqual(saved['circular-2'], [], 'circular-2 lists no result after its Clear');
+});
+
+// OV-3825 (review 5 M1, D-265 F1): Save writes the searches a drawing lists or names (`losatNamedKeys`), the rule
+// Generate commits and Load reads back, not every search it keeps. circular-2's Generate under other settings used
+// ring2 and other and kept ring1 unused (the pair its request records): the file holds no ring1 for it, so after the
+// reopened circular's Clear, circular-2 lends no ring1 and circular's next Generate searches it again.
+test('Save writes a drawing only the searches it lists or names, so a reopened drawing lends no kept one (OV-3825)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const generated = (slot) => {
+    if (slot?.drawingId !== 'circular-2') return slot;
+    const { losatCacheInfo } = slot.values;
+    return withArtifactSlotValues(slot, state.drawingOf('circular-2'), {
+      losatCacheInfo: losatCacheInfo.filter(({ key }) => key !== keys.ring1),
+      losatNamedKeys: new Set([keys.ring2, keys.other])
+    });
+  };
+  const generatedSlots = { opening: generated(loaded.opening), stashed: loaded.stashed.map(generated) };
+  assert.ok(loadedLosatEvidenceOf('circular-2', generatedSlots).losatCache.has(keys.ring1), 'circular-2 keeps ring1 unused');
+  const result = await exportSession('kept ring1', { readKeptArtifacts: () => [generatedSlots.opening, ...generatedSlots.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = await readSavedSession(result.blob);
+  const keysOf = (id) => saved.drawings.find((entry) => entry.id === id).losatCache.entries.map(({ key }) => key);
+  assert.deepEqual(keysOf('circular'), [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(keysOf('circular-2'), [keys.ring2, keys.other]);
+  resetDrawings();
+  const reopened = await loadKeepingSlots(saved);
+  assert.equal(reopened.loaded.status, 'ok', JSON.stringify(reopened.loaded.error));
+  const second = loadedLosatEvidenceOf('circular-2', reopened);
+  assert.deepEqual([...second.losatNamedKeys], [keys.ring2, keys.other]);
+  assert.equal(projectLosatSearches([second]).searches.has(keys.ring1), false, 'circular-2 lends no ring1 after Load');
 });
 
 // Review 2 M1, D-224: an older Session's protein candidates and derived evidence are written once each. A Duplicate

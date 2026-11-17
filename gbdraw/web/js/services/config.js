@@ -4089,13 +4089,14 @@ const restoredLosatCacheInfoIdentity = (drawing, entry, places) => {
 
 /**
  * The raw LOSAT entries of a drawing's evidence that Save writes (D-221: the drawing's own, never another drawing's,
- * OV-3475): one per listed key with the row's file name and edge (`losatRowsOnePerKey`), then every other search it
- * holds as `display: false`, with the manifests a current Session's Load validated each adopted protein entry with
- * (`validatedWith`; `losatEntriesResolvingIn` reuses them).
- * @param {Pick<LosatEvidence, 'losatCacheInfo' | 'losatCache'>} evidence
+ * OV-3475): one per listed key with the row's file name and edge (`losatRowsOnePerKey`), then every other search its
+ * Result uses (`losatNamedKeys`, the set Generate commits and Load reads back; OV-3825) as `display: false`, never one
+ * it only keeps for its own reuse under other settings, with the manifests a current Session's Load validated each
+ * adopted protein entry with (`validatedWith`; `losatEntriesResolvingIn` reuses them).
+ * @param {Pick<LosatEvidence, 'losatCacheInfo' | 'losatCache' | 'losatNamedKeys'>} evidence
  * @returns {{ entries: Record<string, unknown>[], validatedWith: WeakMap<object, ReadonlySet<unknown>> }}
  */
-const serializeLosatCache = ({ losatCacheInfo: info, losatCache: cacheMap }) => {
+const serializeLosatCache = ({ losatCacheInfo: info, losatCache: cacheMap, losatNamedKeys: named }) => {
   /** @type {WeakMap<object, ReadonlySet<unknown>>} */
   const validatedWith = new WeakMap();
   /** @type {Record<string, unknown>[]} */
@@ -4142,7 +4143,7 @@ const serializeLosatCache = ({ losatCacheInfo: info, losatCache: cacheMap }) => 
   });
 
   cacheMap.forEach((value, key) => {
-    if (seen.has(key) || !isCurrentRawLosatCacheEntry(value)) return;
+    if (seen.has(key) || !named.has(key) || !isCurrentRawLosatCacheEntry(value)) return;
     entries.push(buildEntry(String(key), /** @type {Record<string, unknown>} */ (value)));
   });
   return { entries, validatedWith };
@@ -4158,7 +4159,8 @@ const serializeLosatCache = ({ losatCacheInfo: info, losatCache: cacheMap }) => 
  * @returns {Record<string, unknown>[]}
  */
 const savedLosatEntriesOf = (artifact, { request, conservationPairs, catalog, manifest }) => {
-  const { entries, validatedWith } = serializeLosatCache({ losatCacheInfo: artifact.losatCacheInfo, losatCache: artifact.losatCache });
+  const { losatCacheInfo, losatCache, losatNamedKeys } = artifact;
+  const { entries, validatedWith } = serializeLosatCache({ losatCacheInfo, losatCache, losatNamedKeys });
   return losatEntriesResolvingIn(losatEntriesOfDrawing(request, conservationPairs, entries, catalog), manifest, validatedWith);
 };
 
@@ -4297,9 +4299,11 @@ const savedLegacyArtifacts = ({ legacyArtifacts }) => {
  * drawing): it could never list the entry, and holding it would keep it for reuse after the Clear of the drawing that
  * lists it (OV-3769). Only in a file without a drawing of its kind does such an entry stay among the drawing's
  * searches, listed in no drawing (review 2 L1). The older Session's protein candidates go to `legacy.drawingId`.
- * A drawing names (`losatNamedKeys`, OV-3785) each entry of its own kind it holds, the entries Save wrote for it because
- * its request names them, listed or not, and its saved converted payloads; it never names an entry of the other kind
- * (its Result cannot use it), so no other drawing's Generate reuses one.
+ * A drawing names (`losatNamedKeys`, OV-3785) each entry of its own kind it holds, listed or not, and its saved converted
+ * payloads: Save writes a drawing the searches it lists or names (`serializeLosatCache`, OV-3825), so these are the
+ * searches its Result used when the file was saved (a file an older writer saved may hold more, until the drawing's
+ * next Generate). It never names an entry of the other kind (its Result cannot use it), so no other drawing's Generate
+ * reuses one.
  * @param {readonly {
  *   drawing: DrawingState, entries: unknown, derived: unknown, manifest: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
  *   ringDrawingId?: DrawingId | null
