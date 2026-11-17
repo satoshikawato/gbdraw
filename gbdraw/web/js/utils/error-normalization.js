@@ -267,6 +267,9 @@ const WHOLE_FAILURE_REASONS = new Set(['REPLY_TOO_LARGE', 'INPUT_MEMORY']);
 // never translated, and inserted as a value so that a right-to-left UI keeps its order (OV-2790). A text has a
 // placeholder exactly when its entry here names it (tests/web/error-normalization.test.mjs).
 const SESSION_COMMANDS = Object.freeze({ circularCommand: 'gbdraw circular --session', linearCommand: 'gbdraw linear --session' });
+// The color forms a color correction names: the COLOR reason, and the annotation table's color cell refusal
+// (app/annotations/table-codec.js), which passes the two hex forms.
+export const COLOR_FORMS = Object.freeze({ rgbForm: 'rgb()', hslForm: 'hsl()', shortHexForm: '#RGB', longHexForm: '#RRGGBB' });
 /** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */
 const REASON_CODE_TEXT = Object.freeze({
   SELECTOR_NO_MATCH: { example: SELECTOR_TEXT.featureSelectorExample }, SELECTOR_AMBIGUOUS: { selector: SELECTOR_TEXT.featureSelectorForm },
@@ -274,7 +277,7 @@ const REASON_CODE_TEXT = Object.freeze({
   AMBIGUOUS: { selector: SELECTOR_TEXT.recordNumber }, SELECTOR_FORMAT: { selector: SELECTOR_TEXT.recordNumber },
   REGION_FORMAT: { form: 'record_id:start-end[:rc]', otherForm: `${SELECTOR_TEXT.recordNumber}:start-end[:rc]` },
   FILENAME: { signs: '/ \\ : * ? " < > |' }, OUTFMT7_FIELDS: { header: '# Fields:' },
-  COLOR: { rgbForm: 'rgb()', hslForm: 'hsl()', shortHexForm: '#RGB', longHexForm: '#RRGGBB' },
+  COLOR: COLOR_FORMS,
   REPLY_TOO_LARGE: SESSION_COMMANDS, FASTA_NO_ENTRIES: { sign: '>' }, FONT_FILE: { trueType: '.ttf', openType: '.otf', trueTypeCollection: '.ttc', openTypeCollection: '.otc' }
 });
 // What a decline names as changed under an evaluation of rule inputs (OV-447,

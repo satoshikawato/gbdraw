@@ -950,7 +950,7 @@ test('schema-3 migration writes the bounds its anchor profile read', () => {
     profile: feature.anchorProfile,
     intent: { placement: 'anchor', anchor: 'five-prime', offsetBp: 0, orientForward: false }
   });
-  assert.equal(resolved.eligibility.enabled, true, resolved.eligibility.message);
+  assert.equal(resolved.eligibility.enabled, true, resolved.eligibility.message?.text);
   assert.equal(resolved.startCoordinate, 2);
 });
 

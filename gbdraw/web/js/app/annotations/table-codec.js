@@ -15,7 +15,7 @@ import {
   featureTarget,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
-import { renderErrorText } from '../../utils/error-normalization.js';
+import { COLOR_FORMS, renderErrorText } from '../../utils/error-normalization.js';
 import { msg } from '../../utils/i18n.js';
 /** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
 
@@ -85,7 +85,8 @@ const validateStyle = (row, rowNumber) => {
   const fail = (column, reason) => { throw cellRefusal(rowNumber, column, { text: reason }); };
   for (const column of ['stroke', 'fill', 'hatch_color', 'label_color']) {
     if (row[column] && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(row[column]) && !SVG_COLOR_NAMES.has(row[column].toLowerCase())) {
-      fail(column, msg('expected an SVG color name, #RGB or #RRGGBB.'));
+      throw cellRefusal(rowNumber, column, { text: msg('expected an SVG color name, {shortHexForm} or {longHexForm}.'),
+        params: { shortHexForm: COLOR_FORMS.shortHexForm, longHexForm: COLOR_FORMS.longHexForm } });
     }
   }
   for (const column of ['stroke_width', 'fill_opacity', 'hatch_angle', 'hatch_spacing', 'hatch_width', 'label_font_size', 'label_offset', 'stroke_dasharray']) {

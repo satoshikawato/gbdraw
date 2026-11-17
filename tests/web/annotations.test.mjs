@@ -875,13 +875,13 @@ test('a refused table rewords inside the panel notice after a UI language change
     'Annotation table row {row}: {reason}': '注釈表の{row}行目：{reason}',
     "Annotation table row {row}, column '{column}': {reason}": '注釈表の{row}行目、列「{column}」：{reason}',
     'start and end must be positive integers (1-based coordinates).': 'startとendは1以上の整数にしてください。',
-    'expected an SVG color name, #RGB or #RRGGBB.': 'SVGの色名、#RGB、#RRGGBBのいずれかにしてください。',
-    'Invalid record selector {selector}. Use #<number> or record_id.': 'レコードの指定{selector}は使えません。'
+    'expected an SVG color name, {shortHexForm} or {longHexForm}.': 'SVGの色名、{shortHexForm}、{longHexForm}のいずれかにしてください。',
+    'Invalid record selector {selector}. Use {form} or record_id.': 'レコードの指定{selector}は使えません。{form}かrecord_idにしてください。'
   } }));
   try {
     assert.equal(span(), '注釈を読み込めませんでした：注釈表の2行目：startとendは1以上の整数にしてください。');
     assert.equal(cell(), '注釈を読み込めませんでした：注釈表の2行目、列「fill」：SVGの色名、#RGB、#RRGGBBのいずれかにしてください。');
-    assert.equal(selector(), '注釈を読み込めませんでした：注釈表の2行目、列「record」：レコードの指定"#x"は使えません。');
+    assert.equal(selector(), '注釈を読み込めませんでした：注釈表の2行目、列「record」：レコードの指定"#x"は使えません。#<number>かrecord_idにしてください。');
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

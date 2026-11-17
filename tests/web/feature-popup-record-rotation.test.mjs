@@ -34,6 +34,7 @@ const unrelatedGlobalSelection = [{
 const createHarness = ({
   strand = '+',
   precision = 'exact',
+  operator = 'single',
   committedReverseComplement = false
 } = {}) => {
   let applyCount = 0;
@@ -77,7 +78,7 @@ const createHarness = ({
           parts: [{ start: 1999, end: 2999, strand: strand === 'unstranded' ? 'undefined' : strand }],
           profile: {
             precision,
-            operator: 'single',
+            operator,
             partOrder: strand === 'unstranded' ? 'source-forward' : 'biological',
             strand
           },
@@ -125,7 +126,8 @@ const createHarness = ({
   };
 };
 
-const choiceStates = (choices) => choices.map(({ value, enabled, message }) => [value, enabled, message]);
+// A choice's reason as its key (`message` is an error text part, null when none).
+const choiceStates = (choices) => choices.map(({ value, enabled, message }) => [value, enabled, message?.text ?? null]);
 
 test('popup draft defaults to Start of the record for the explicitly opened feature', () => {
   const harness = createHarness();
@@ -235,17 +237,17 @@ test('unavailable choices are disabled with their own reason and the selection s
   assert.equal(draft.targetFailure, '');
   assert.deepEqual(choiceStates(draft.positionChoices), [
     ['start', false, 'Needs a known feature strand.'],
-    ['end', true, ''],
-    ['custom', true, '']
+    ['end', true, null],
+    ['custom', true, null]
   ]);
   assert.equal(draft.position, 'end', 'the first available choice replaces an unavailable one');
   assert.equal(draft.canApply, true);
   assert.equal(draft.orientCapability.enabled, false);
-  assert.match(draft.orientCapability.message, /needs a feature on the \+ or − strand/);
+  assert.match(draft.orientCapability.message.text, /needs a feature on the \+ or − strand/);
   assert.deepEqual(draft.referenceChoices.map(({ value, enabled }) => [value, enabled]), [
     ['five-prime', false], ['midpoint', true], ['three-prime', false], ['feature-end', true]
   ]);
-  assert.match(draft.referenceChoices[0].message, /known strand/);
+  assert.match(draft.referenceChoices[0].message.text, /known strand/);
 
   harness.workflow.setPosition('start');
   assert.equal(draft.position, 'end');
@@ -262,10 +264,23 @@ test('a location limit that disables every placement is one whole-target reason'
   assert.equal(draft.targetFailure, 'location-fuzzy');
   assert.equal(errorText(draft.disabledReason), 'This operation requires exact feature coordinates.');
   assert.ok([...draft.positionChoices, ...draft.referenceChoices]
-    .every(({ enabled, message }) => !enabled && message === ''));
-  assert.equal(draft.orientCapability.message, '');
+    .every(({ enabled, message }) => !enabled && message === null));
+  assert.equal(draft.orientCapability.message, null);
   assert.equal(draft.canApply, false);
   assert.equal(shown(draft.preview), '');
+});
+
+// OV-2790: a verdict's reason is an error text part, so the code text it names (the location operator) is a value
+// of its key, and the popup words it where it shows it.
+test('a location joined with order() is one whole-target reason that passes the operator as a value', () => {
+  const harness = createHarness({ operator: 'order' });
+  harness.workflow.open({ feature });
+  const { draft } = harness.workflow;
+  assert.equal(draft.targetFailure, 'location-order-ambiguous');
+  assert.deepEqual(draft.disabledReason, [
+    { text: 'Feature parts joined with {operator} do not define an exact path.', params: { operator: 'order()' } }
+  ]);
+  assert.equal(errorText(draft.disabledReason), 'Feature parts joined with order() do not define an exact path.');
 });
 
 test('Apply rechecks freshness, suppresses double submit, and rebinds stable identity', async () => {
@@ -454,7 +469,7 @@ test('Cancel discards only the ephemeral popup draft', () => {
 });
 
 const targetFailure = (kind, message) => recordTargetError(kind, [{ text: message }]);
-const enabled = { enabled: true, code: null, message: '' };
+const enabled = { enabled: true, code: null, message: null };
 const availableCapabilities = {
   featureStart: enabled,
   anchors: { 'five-prime': enabled, midpoint: enabled, 'three-prime': enabled },
@@ -481,7 +496,7 @@ const createDiscoveryHarness = ({ readResult = { discovered: true } } = {}) => {
         target: { recordId: 'NC_000001.1', recordKey: 'record-1', committedReverseComplement: false },
         resolved: {
           capabilities: availableCapabilities,
-          eligibility: { enabled: true, message: '' },
+          eligibility: { enabled: true, message: null },
           startCoordinate: 11,
           reverseComplement: false,
           displayedStrand: { before: '+', after: '+' }
@@ -509,8 +524,8 @@ test('unread records after Session Load are read once, then the draft is recompu
   assert.doesNotMatch(errorText(draft.disabledReason), /stale|ambiguous/);
   // A whole-target failure is one reason, not one copy per control (F4).
   assert.ok([...draft.positionChoices, ...draft.referenceChoices]
-    .every(({ message }) => message === ''));
-  assert.equal(draft.orientCapability.message, '');
+    .every(({ message }) => message === null));
+  assert.equal(draft.orientCapability.message, null);
   assert.equal(draft.canApply, false);
 
   const reading = harness.workflow.readRecords();
@@ -581,7 +596,7 @@ test('a limit that disables every control is one whole-target reason', () => {
   const limit = {
     enabled: false,
     code: 'record-not-circular',
-    message: 'Record rotation requires an effectively circular record.'
+    message: { text: 'Record rotation requires an effectively circular record.' }
   };
   const workflow = createFeatureRecordRotationWorkflow({
     action: {
@@ -611,15 +626,15 @@ test('a limit that disables every control is one whole-target reason', () => {
   const { draft } = workflow;
   assert.equal(draft.targetFailure, 'record-not-circular');
   assert.equal(draft.recordLabel, 'NC_001416.1');
-  assert.equal(errorText(draft.disabledReason), limit.message);
+  assert.equal(errorText(draft.disabledReason), limit.message.text);
   workflow.setPosition('custom');
   workflow.setOffset('x');
-  assert.equal(errorText(draft.disabledReason), limit.message, 'the hidden offset field adds no reason');
+  assert.equal(errorText(draft.disabledReason), limit.message.text, 'the hidden offset field adds no reason');
   assert.equal(draft.offsetError, '');
   assert.deepEqual(choiceStates(draft.positionChoices),
-    [['start', false, ''], ['end', false, ''], ['custom', false, '']]);
-  assert.ok(draft.referenceChoices.every(({ enabled, message }) => !enabled && message === ''));
-  assert.equal(draft.orientCapability.message, '');
+    [['start', false, null], ['end', false, null], ['custom', false, null]]);
+  assert.ok(draft.referenceChoices.every(({ enabled, message }) => !enabled && message === null));
+  assert.equal(draft.orientCapability.message, null);
   assert.equal(draft.canApply, false);
 });
 

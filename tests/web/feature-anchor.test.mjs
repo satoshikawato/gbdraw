@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
 import { validateAnchorIntent } from '../../gbdraw/web/js/services/record-display-model.js';
+import { renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const identity = { recordKey: 'record-1', biologicalFeatureId: 'feature-1' };
 
@@ -39,7 +40,7 @@ const inputFor = ({
 const resolve = (options = {}) => resolveFeatureAnchor(inputFor(options));
 const coordinate = (options = {}) => {
   const result = resolve(options);
-  assert.equal(result.eligibility.enabled, true, result.eligibility.message);
+  assert.equal(result.eligibility.enabled, true, result.eligibility.message?.text);
   return result.startCoordinate;
 };
 
@@ -165,10 +166,14 @@ test('ambiguous, fuzzy, and unordered locations disable only unsafe operations w
     precision: 'unavailable', operator: 'unknown', partOrder: 'ambiguous', strand: '+'
   } });
   assert.equal(legacyUnavailable.eligibility.code, 'feature-metadata-refresh-required');
-  assert.match(legacyUnavailable.eligibility.message, /Generate again/);
+  assert.match(legacyUnavailable.eligibility.message.text, /Generate again/);
 
   const ordered = resolve({ profile: { operator: 'order', partOrder: 'ambiguous' }, intent: { anchor: 'midpoint' } });
   assert.equal(ordered.eligibility.code, 'location-order-ambiguous');
+  // OV-2790: the operator is code text, a value of the key; the popup words the key where it shows it.
+  assert.deepEqual(ordered.eligibility.message,
+    { text: 'Feature parts joined with {operator} do not define an exact path.', params: { operator: 'order()' } });
+  assert.equal(renderErrorText([ordered.eligibility.message]), 'Feature parts joined with order() do not define an exact path.');
   const unknown = resolve({ profile: { operator: 'unknown', partOrder: 'ambiguous' }, intent: { anchor: 'midpoint' } });
   assert.equal(unknown.eligibility.code, 'location-operator-unknown');
 
@@ -231,7 +236,7 @@ const coveredBases = (parts) => parts.flatMap(({ start, end }) => (
 ));
 const assertFeatureAtDisplayStart = (options) => {
   const result = resolve({ ...options, intent: { placement: 'feature-start', anchor: null, ...options.intent } });
-  assert.equal(result.eligibility.enabled, true, result.eligibility.message);
+  assert.equal(result.eligibility.enabled, true, result.eligibility.message?.text);
   const parts = inputFor(options).parts;
   const positions = coveredBases(parts).map((base) => displayPosition(base, result));
   assert.equal(Math.min(...positions), 1, 'the feature starts at display base 1');

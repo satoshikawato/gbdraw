@@ -7676,7 +7676,7 @@
                                             <span>{{ tm(choice.label) }}</span>
                                         </label>
                                         <span v-if="!choice.enabled && choice.message" :id="`feature-record-rotation-${choice.value}-reason`"
-                                              class="text-[10px] text-amber-700">{{ tm(choice.message) }}</span>
+                                              class="text-[10px] text-amber-700">{{ errorText([choice.message]) }}</span>
                                     </div>
                                     <div v-if="featureRecordRotationDraft.position === 'custom'"
                                          class="mt-1 ms-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
@@ -7689,7 +7689,7 @@
                                             <option v-for="choice in featureRecordRotationDraft.referenceChoices"
                                                     :key="choice.value"
                                                     :value="choice.value"
-                                                    :disabled="!choice.enabled">{{ tm(choice.label) }}{{ choice.message ? ' — ' + tm(choice.message) : '' }}</option>
+                                                    :disabled="!choice.enabled">{{ tm(choice.label) }}{{ choice.message ? ' — ' + errorText([choice.message]) : '' }}</option>
                                         </select>
                                         <span class="inline-flex items-center gap-1">
                                             <label for="feature-record-rotation-offset">{{ t('shifted by') }}</label>
@@ -7723,7 +7723,7 @@
                                         <span>{{ t('Show this feature on the forward strand') }}</span>
                                     </label>
                                     <p id="feature-record-rotation-orient-note" class="ms-5 text-[10px]"
-                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : tm(featureRecordRotationDraft.orientCapability.message) }}</p>
+                                       :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : errorText(featureRecordRotationDraft.orientCapability.message ? [featureRecordRotationDraft.orientCapability.message] : []) }}</p>
                                 </div>
                                 <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
                                    class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview() }}</p>

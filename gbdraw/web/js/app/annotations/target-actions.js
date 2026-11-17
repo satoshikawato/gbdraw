@@ -4,6 +4,7 @@ import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { recordIndexNumber } from '../../services/record-draw-selection.js';
 import { renderErrorText } from '../../utils/error-normalization.js';
 import { msg } from '../../utils/i18n.js';
+import { SELECTOR_TEXT } from '../../utils/selector-syntax.js';
 /** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
 
 /**
@@ -36,7 +37,8 @@ export const parseAnnotationRecordSelectorValue = (value) => {
   if (number === null) {
     return {
       selector: null,
-      error: { text: msg('Invalid record selector {selector}. Use #<number> or record_id.'), params: { selector: JSON.stringify(text) } }
+      error: { text: msg('Invalid record selector {selector}. Use {form} or record_id.'),
+        params: { selector: JSON.stringify(text), form: SELECTOR_TEXT.recordNumber } }
     };
   }
   const index = number - 1;

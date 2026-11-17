@@ -27,7 +27,7 @@ for (const vector of VECTORS.cases) {
       assert.equal(result.eligibility.code, vector.refused);
       assert.equal(result.startCoordinate, null);
     } else {
-      assert.equal(result.eligibility.enabled, true, result.eligibility.message);
+      assert.equal(result.eligibility.enabled, true, result.eligibility.message?.text);
       assert.equal(result.startCoordinate, vector.startCoordinate);
       assert.equal(result.reverseComplement, vector.reverseComplement);
     }

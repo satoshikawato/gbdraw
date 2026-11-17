@@ -1,6 +1,7 @@
 // @ts-check
 import { locationPartBound } from '../../services/feature-utils.js';
 import { msg } from '../../utils/i18n.js';
+/** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
 
 /**
  * One capability verdict of the anchor resolver. `basis` is set on the offset
@@ -8,8 +9,8 @@ import { msg } from '../../utils/i18n.js';
  * @typedef {object} AnchorCapability
  * @property {boolean} enabled
  * @property {string | null} code
- * @property {string} message Why it is unavailable: an English catalog key (`msg`) that the popup words with `tm`
- *   where it shows it, '' when it is available.
+ * @property {ErrorTextPart | null} message Why it is unavailable: an English catalog key (`msg`) and the code text
+ *   its placeholders name, which the popup words with `errorText` where it shows it; null when it is available.
  * @property {string} [basis]
  */
 
@@ -73,14 +74,14 @@ import { msg } from '../../utils/i18n.js';
  * @param {{ basis?: string }} [extra]
  * @returns {AnchorCapability}
  */
-const available = (extra = {}) => ({ enabled: true, code: null, message: '', ...extra });
+const available = (extra = {}) => ({ enabled: true, code: null, message: null, ...extra });
 /**
  * @param {string} code
- * @param {string} message
- * @param {{ basis?: string }} [extra]
+ * @param {string} text An English catalog key (`msg`).
+ * @param {Readonly<Record<string, string>>} [params] The code text its placeholders name (OV-2790).
  * @returns {AnchorCapability}
  */
-const unavailable = (code, message, extra = {}) => ({ enabled: false, code, message, ...extra });
+const unavailable = (code, text, params) => ({ enabled: false, code, message: params ? { text, params } : { text } });
 
 /**
  * @param {AnchorCapability[]} operations
@@ -222,7 +223,9 @@ const positionalCapability = (record, profileState, partsState, profile) => {
     return unavailable('location-fuzzy', msg('This operation requires exact feature coordinates.'));
   }
   if (profile.operator === 'order') {
-    return unavailable('location-order-ambiguous', msg('Feature parts joined with order() do not define an exact path.'));
+    // The operator as the location writes it (`order(...)`), a value of the key.
+    return unavailable('location-order-ambiguous', msg('Feature parts joined with {operator} do not define an exact path.'),
+      { operator: `${profile.operator}()` });
   }
   if (profile.operator === 'unknown') {
     return unavailable('location-operator-unknown', msg('Cannot determine how the feature parts are connected.'));

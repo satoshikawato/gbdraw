@@ -775,7 +775,8 @@ test('OV-2790: a key with its code text as a value shows the English it showed b
   assert.equal(tn(1, '{count} annotation of a selected feature was written as {recordSelector} and {featureSelector}. It names the same feature only while the record order stays as drawn.',
     '{count} annotations of selected features were written as {recordSelector} and {featureSelector}. They name the same features only while the record order stays as drawn.', selectors),
   '1 annotation of a selected feature was written as record=#<position> and feature_selector=hash=<feature hash>. It names the same feature only while the record order stays as drawn.');
-  assert.equal(ANNOTATION_TARGET_MIGRATION_NOTICE(2),
+  // A wording (dev d6aa4e069): the notice is worded where it shows, so a language change rewords it.
+  assert.equal(ANNOTATION_TARGET_MIGRATION_NOTICE(2)(),
     '2 annotations from an older Session named a feature by hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.');
   assert.ok(describeLoadRepairs([{ code: 'hash-selector-unmapped', path: 'config.rules', effect: 'changed', count: 1 }])?.items.includes(
     '1 hash= value from an older Session could not be renamed to the hash of a feature in its source record: the saved diagram drew a cropped or reverse-complemented record, and the value names features of several source hashes there, or the sources were not read again. hash= now names a feature by its hash in the source record, so the value may now match another feature or none.'));

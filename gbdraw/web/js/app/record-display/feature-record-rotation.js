@@ -12,9 +12,9 @@ import { msg, numberText, t } from '../../utils/i18n.js';
 /** @import { CommittedCanonicalSession, RecordTransformInput, RecordTransformTarget } from '../../services/session-request.js' */
 
 /**
- * One capability verdict as the popup shows it. `message` is the English catalog key of why it is unavailable
- * (`msg`, '' when none); the popup words it with `tm`.
- * @typedef {{ enabled: boolean, code: string | null, message: string }} CapabilityView
+ * One capability verdict as the popup shows it. `message` is why it is unavailable, an error text part (its English
+ * catalog key and the code text its placeholders name; null when none); the popup words it with `errorText`.
+ * @typedef {{ enabled: boolean, code: string | null, message: ErrorTextPart | null }} CapabilityView
  */
 /**
  * One choice of the section: its value, the English catalog key of its name (`msg`, worded with `tm`), and its verdict.
@@ -138,7 +138,7 @@ export const createFeatureRecordRotationAction = ({
   const resolveEligible = ({ feature, intent }) => {
     const snapshot = resolve({ feature, intent });
     if (!snapshot.resolved.eligibility.enabled) {
-      throw recordTargetError('unavailable', [{ text: snapshot.resolved.eligibility.message }]);
+      throw recordTargetError('unavailable', reasonParts(snapshot.resolved.eligibility.message));
     }
     return snapshot;
   };
@@ -219,16 +219,16 @@ const parseSignedOffset = (value) => {
 };
 
 /** @returns {CapabilityView} */
-const emptyCapability = () => ({ enabled: false, code: null, message: '' });
+const emptyCapability = () => ({ enabled: false, code: null, message: null });
 
 /**
- * @param {{ enabled?: unknown, code?: string | null, message?: unknown } | null | undefined} capability
+ * @param {{ enabled?: unknown, code?: string | null, message?: ErrorTextPart | null } | null | undefined} capability
  * @returns {CapabilityView}
  */
 const copyCapability = (capability) => ({
   enabled: Boolean(capability?.enabled),
   code: capability?.code || null,
-  message: String(capability?.message || '')
+  message: capability?.message || null
 });
 
 // "Put this feature at": each choice names an outcome. Custom exposes the raw
@@ -366,6 +366,8 @@ const pendingStartFor = (target) => {
 
 /** @param {string} key An English catalog key, or '' for none. @returns {ErrorTextPart[]} */
 const keyParts = (key) => (key ? [{ text: key }] : []);
+/** @param {ErrorTextPart | null} reason A verdict's reason, null for none. @returns {ErrorTextPart[]} */
+const reasonParts = (reason) => (reason ? [reason] : []);
 /**
  * The sentences of a caught failure: a record target failure's own, else the normalized model's, never the raw
  * message (`normalizeCaughtError`).
@@ -415,8 +417,9 @@ const pendingLine = (pending, recordLabel, committedReverseComplement) => {
 /**
  * The popup's record rotation draft. It lives only while the popup is open (History never holds it), and its texts
  * keep what they are made of, so the popup words them where it shows them and a language change rewords them:
- * `offsetError` and each verdict's `message` are English catalog keys (`tm`), `disabledReason` and `status` are
- * sentences (`errorText`; empty when none), and the previews are wordings (null when none).
+ * `offsetError` is an English catalog key (`tm`), each verdict's `message` is an error text part (`errorText`; null
+ * when none), `disabledReason` and `status` are sentences (`errorText`; empty when none), and the previews are wordings
+ * (null when none).
  */
 const initialDraft = () => ({
   active: false,
@@ -494,10 +497,10 @@ export const createFeatureRecordRotationWorkflow = ({
         ? placements.find((/** @type {CapabilityView | undefined} */ capability) => capability?.message) || placements[0] || emptyCapability()
         : null;
       draft.targetFailure = targetLimit ? String(targetLimit.code || 'unavailable') : '';
-      /** @param {{ enabled?: unknown, code?: string | null, message?: unknown } | null | undefined} capability */
+      /** @param {CapabilityView | null | undefined} capability */
       const controlCapability = (capability) => ({
         ...copyCapability(capability),
-        ...(targetLimit ? { message: '' } : {})
+        ...(targetLimit ? { message: null } : {})
       });
       draft.positionChoices = choicesFrom(POSITION_CHOICES, (position) => (
         controlCapability(positionCapability(capabilities, position))
@@ -522,7 +525,7 @@ export const createFeatureRecordRotationWorkflow = ({
         : { valid: true, message: '' };
       const { eligibility } = snapshot.resolved;
       draft.offsetError = offset.message;
-      draft.disabledReason = keyParts(targetLimit?.message || (offset.valid ? eligibility.message || '' : ''));
+      draft.disabledReason = reasonParts(targetLimit?.message || (offset.valid ? eligibility.message : null));
       draft.canApply = offset.valid && eligibility.enabled && !draft.pending;
       draft.startCoordinate = snapshot.resolved.startCoordinate;
       const { committedReverseComplement } = snapshot.target;
