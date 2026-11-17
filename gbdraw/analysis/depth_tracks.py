@@ -827,12 +827,7 @@ def sync_depth_track_legend_entries(
         track = tracks_by_index.get(depth_slot_track_index(slot.id, slot.params))
         if track is None:
             continue
-        out.add_source(slot_legend_label(slot, depth_track_legend_name(track, track_count)), {
-            "type": "solid",
-            "fill": track.paint.fill,
-            "stroke": track.paint.stroke,
-            "width": track.paint.stroke_width,
-        })
+        out.add_numeric_source(slot_legend_label(slot, depth_track_legend_name(track, track_count)), track.paint)
     return out
 
 

@@ -21,9 +21,10 @@ from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
     ComparisonLegendSource,
     DepthLegendSource,
-    DinucleotideLegendSource,
     FeatureDensityLegendSource,
     FeatureLegendSource,
+    GcContentLegendSource,
+    GcSkewLegendSource,
 )
 from gbdraw.layout.series_style import SeriesPaint
 from gbdraw.tracks.parsing import SlotView, feature_density_slot_track_id, slot_legend_label
@@ -190,7 +191,8 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
         self._add(name, entry, _unique_legend_key([*self._rows, *self._shared_keys], name))
 
     def add_numeric_source(self, name: str, paint: SeriesPaint) -> None:
-        """Add a content or skew slot's rows (``series_legend_rows``)."""
+        """Add the rows of a numeric series slot (GC content, GC skew, depth) named ``name``
+        (``series_legend_rows``)."""
 
         for row_name, entry in series_legend_rows(name, paint):
             self.add_source(row_name, entry)
@@ -710,8 +712,8 @@ def _generated_legend_rows(
     *,
     used_color_rules: Optional[Set[Tuple[str, str]]],
     default_used_features: Set[str],
-    gc: DinucleotideLegendSource,
-    skew: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
+    skew: GcSkewLegendSource,
     depth: DepthLegendSource | None,
     show_gc: bool,
     show_skew: bool,
@@ -729,7 +731,7 @@ def _generated_legend_rows(
         )
     }
     if show_depth and depth is not None:
-        rows["Depth"] = _solid_legend_entry(depth.paint.fill, depth.paint.stroke, depth.paint.stroke_width)
+        rows.update(series_legend_rows("Depth", depth.paint))
     for show, source in ((show_gc, gc), (show_skew, skew)):
         if show:
             rows.update(series_legend_rows(source.name, source.paint))
@@ -737,8 +739,8 @@ def _generated_legend_rows(
 
 
 def prepare_legend_table(
-    gc: DinucleotideLegendSource,
-    skew: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
+    skew: GcSkewLegendSource,
     features: FeatureLegendSource,
     features_present: List[str],
     *,

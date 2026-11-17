@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -100,19 +100,13 @@ def feature_legend_presence(
 class DinucleotideLegendSource:
     """The rows of a GC content or GC skew track: named ``<dinucleotide> content`` or ``<dinucleotide> skew``
     (``row_name``), in the paint the track draws with (its configurator's ``series_paint``). A paint of one fill
-    shows one row; one whose fill below its baseline differs (GC skew) shows a ``(+)`` and a ``(-)`` row."""
+    shows one row; one whose fill below its baseline differs (GC skew) shows a ``(+)`` and a ``(-)`` row. Each kind
+    is a type of its own (``GcContentLegendSource``, ``GcSkewLegendSource``), so a source of one kind passed where
+    the other is expected fails the type check."""
 
-    kind: Literal["content", "skew"]
     dinucleotide: str
     paint: SeriesPaint
-
-    @classmethod
-    def gc_content(cls, config: GcContentConfigurator) -> DinucleotideLegendSource:
-        return cls("content", config.dinucleotide, config.series_paint)
-
-    @classmethod
-    def gc_skew(cls, config: GcSkewConfigurator) -> DinucleotideLegendSource:
-        return cls("skew", config.dinucleotide, config.series_paint)
+    kind: ClassVar[Literal["content", "skew"]]
 
     def row_name(self, dinucleotide: str) -> str:
         """The name of the track's rows for a slot of ``dinucleotide``, before its ``legend_label``."""
@@ -126,10 +120,35 @@ class DinucleotideLegendSource:
         return self.row_name(self.dinucleotide)
 
     def slot_paint(self, slot: LegendSlotSource) -> SeriesPaint:
-        """The paint a slot of this track draws with: a skew slot's own fills (``slot_skew_fill_colors``)."""
+        """The paint a slot of this track draws with."""
 
-        if self.kind == "content":
-            return self.paint
+        return self.paint
+
+
+@dataclass(frozen=True)
+class GcContentLegendSource(DinucleotideLegendSource):
+    """The rows of a GC content track; every slot draws in the track's paint."""
+
+    kind: ClassVar[Literal["content", "skew"]] = "content"
+
+    @classmethod
+    def of(cls, config: GcContentConfigurator) -> GcContentLegendSource:
+        return cls(config.dinucleotide, config.series_paint)
+
+
+@dataclass(frozen=True)
+class GcSkewLegendSource(DinucleotideLegendSource):
+    """The rows of a GC skew track; a slot draws in its own fills (``slot_skew_fill_colors``)."""
+
+    kind: ClassVar[Literal["content", "skew"]] = "skew"
+
+    @classmethod
+    def of(cls, config: GcSkewConfigurator) -> GcSkewLegendSource:
+        return cls(config.dinucleotide, config.series_paint)
+
+    def slot_paint(self, slot: LegendSlotSource) -> SeriesPaint:
+        """The paint a slot of this track draws with: its own fills (``slot_skew_fill_colors``)."""
+
         fill, below_fill = slot_skew_fill_colors(slot, self.paint.fill, self.paint.low_fill)
         return replace(self.paint, fill=fill, below_fill=below_fill)
 
@@ -183,8 +202,8 @@ class LegendSources:
     """The feature, GC content, GC skew and feature density sources of one drawing's legend."""
 
     features: FeatureLegendSource
-    gc: DinucleotideLegendSource
-    skew: DinucleotideLegendSource
+    gc: GcContentLegendSource
+    skew: GcSkewLegendSource
     feature_density: tuple[FeatureDensityLegendSource, ...] = ()
 
     @classmethod
@@ -197,8 +216,8 @@ class LegendSources:
     ) -> LegendSources:
         return cls(
             FeatureLegendSource.of(feature_config),
-            DinucleotideLegendSource.gc_content(gc_config),
-            DinucleotideLegendSource.gc_skew(skew_config),
+            GcContentLegendSource.of(gc_config),
+            GcSkewLegendSource.of(skew_config),
             tuple(feature_density),
         )
 
@@ -278,6 +297,8 @@ __all__ = [
     "DinucleotideLegendSource",
     "FeatureDensityLegendSource",
     "FeatureLegendSource",
+    "GcContentLegendSource",
+    "GcSkewLegendSource",
     "LegendSlotSource",
     "LegendSources",
     "SidedSlotView",

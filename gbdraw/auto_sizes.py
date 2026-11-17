@@ -346,6 +346,14 @@ def depth_axis_tick_font_size_px(axis: TickFontSource, track_width_px: float) ->
     return scalar_axis_tick_font_size("circular", track_width_px)
 
 
+def gc_axis_takes_depth_font(gc: TickFontSource, depth: TickedAxisSource) -> bool:
+    """Whether a Percent GC axis ``gc`` takes its tick font from the depth axis ``depth`` beside it: it sets no size
+    of its own and the depth axis draws its ticks. The one reading of this rule in both modes: Circular
+    (``gc_axis_tick_font_size_of_depth``) and Linear (the GC content configuration a Linear slot is drawn with)."""
+
+    return gc.tick_font_size is None and depth.show_axis and depth.show_ticks
+
+
 def gc_axis_tick_font_size_of_depth(
     gc: TickFontSource, depth: TickedAxisSource | None, depth_track_width_px: float | None
 ) -> float | None:
@@ -356,9 +364,8 @@ def gc_axis_tick_font_size_of_depth(
     the drawing draws it in it, and ``auto_setting_values`` gives it as the GC axis's Auto tick font."""
 
     if (
-        gc.tick_font_size is not None
-        or depth is None
-        or not (depth.show_axis and depth.show_ticks)
+        depth is None
+        or not gc_axis_takes_depth_font(gc, depth)
         or depth_track_width_px is None
         or depth_track_width_px <= 0
     ):
@@ -763,6 +770,7 @@ __all__ = [
     "depth_sliding_window",
     "feature_density_windows",
     "determine_length_parameter",
+    "gc_axis_takes_depth_font",
     "gc_axis_tick_font_size_of_depth",
     "gc_axis_tick_font_size_of_depth_rows",
     "linear_label_font_size",

@@ -45,7 +45,7 @@ from ...analysis.depth_tracks import (
     representative_depth_tracks,
     sync_depth_track_legend_entries,
 )
-from ...auto_sizes import linear_tick_interval
+from ...auto_sizes import gc_axis_takes_depth_font, linear_tick_interval
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import (
     GbdrawConfig,
@@ -87,6 +87,8 @@ from ...legend.sources import (
     ComparisonLegendSource,
     DepthLegendSource,
     DinucleotideLegendSource,
+    GcContentLegendSource,
+    GcSkewLegendSource,
     LegendSlotSource,
     LegendSources,
     depth_legend_sources,
@@ -563,8 +565,8 @@ def _sync_legend_table_for_linear_slots(
     legend_table: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: DinucleotideLegendSource,
-    skew: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
+    skew: GcSkewLegendSource,
     depth_tracks: Sequence[DepthLegendSource] | None,
 ) -> LegendTable:
     """Replace singleton numeric legends with slot-authoritative entries.
@@ -847,18 +849,16 @@ def _gc_config_matching_linear_depth_axis_font_size(
     depth_height: float,
     depth_enabled: bool,
 ) -> GcContentConfigurator:
-    if (
-        not depth_enabled
-        or depth_config is None
-        or str(getattr(gc_config, "mode", "deviation")).strip().lower() != "percent"
-        or getattr(gc_config, "tick_font_size", None) is not None
-        or not bool(getattr(depth_config, "show_axis", True))
-        or not bool(getattr(depth_config, "show_ticks", True))
-    ):
+    """``gc_config`` with the depth axis's tick font when its Percent axis takes it (``gc_axis_takes_depth_font``,
+    the rule Circular reads): that of the record's primary depth track at ``depth_height``."""
+
+    gc_axis = gc_config.axis_style
+    depth_axis_style = depth_config.axis_style if depth_enabled and depth_config is not None else None
+    if gc_axis is None or depth_axis_style is None or not gc_axis_takes_depth_font(gc_axis, depth_axis_style):
         return gc_config
 
     cloned = copy.copy(gc_config)
-    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_config, depth_height)
+    cloned.tick_font_size = linear_scalar_axis_tick_font_size_px(depth_axis_style, depth_height)
     return cloned
 
 
@@ -1709,7 +1709,6 @@ def _linear_scalar_axis_left_room(
     *,
     gc_config_of: LinearGcConfigOf,
     depth_by_index: Mapping[int, DepthTrackData],
-    cfg: GbdrawConfig,
 ) -> LinearScalarAxisLeftRoom:
     """One record's left-facing scalar axes as the drawers draw them, measured once from the resolved
     data with the drawn (SVG) text width: the figure bound and the definition column read it (OV-1399,
@@ -1916,8 +1915,8 @@ def _collect_linear_primary_bounds(
         float(axis_stroke),
         float(feature_config.block_stroke_width),
         float(feature_config.line_stroke_width),
-        float(gc_config.stroke_width),
-        float(skew_config.stroke_width),
+        float(gc_config.series_paint.stroke_width),
+        float(skew_config.series_paint.stroke_width),
     )
     horizontal_offset = float(canvas_config.horizontal_offset)
     bounds: list[Aabb] = []
@@ -2796,7 +2795,6 @@ def _linear_depth_data(
     definition column keeps its gap from them (LP-D122, OV-1399).
     """
 
-    cfg = canvas_config.profile.config
     records = record_inputs.records
     gc_config = configurators.gc
     depth_config = configurators.depth
@@ -2854,7 +2852,6 @@ def _linear_depth_data(
             tracks.linear_track_layout.slots,
             gc_config_of=drawn_gc_config,
             depth_by_index=depth_by_index,
-            cfg=cfg,
         )
         for depth_by_index in record_depth_by_index
     ]

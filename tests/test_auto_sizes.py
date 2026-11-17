@@ -38,9 +38,9 @@ from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_tra
 from gbdraw.diagrams.linear.precalc import _resolve_linear_diagram_label_font_size
 from gbdraw.layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from gbdraw.layout.circular_depth_axis import CircularScalarAxes, DepthSlotWidth
-from gbdraw.layout.series_style import ScalarAxisStyle
 from gbdraw.analysis.depth_tracks import DepthTrackStyle, depth_track_config
-from gbdraw.configurators import DepthConfigurator
+from gbdraw.configurators import DepthConfigurator, GcContentConfigurator
+from gbdraw.io.colors import load_default_colors
 from gbdraw.mode_profiles import DiagramMode
 from gbdraw.svg.circular_ticks import get_circular_tick_intervals
 from gbdraw.web_support.mode_profile_data import mode_profiles_payload
@@ -511,13 +511,13 @@ def test_the_gc_axis_tick_font_vectors_are_the_fonts_the_circular_drawing_draws(
         index: depth_track_config(DepthTrackStyle(None, None, None, track["tickFontSize"]), base, 10, 10, None)
         for index, track in enumerate(case.get("depthTracks", [{"tickFontSize": None}]))
     }
-    gc = cfg.objects.gc_content
+    gc_axis = GcContentConfigurator(10, 10, "GC", profile, load_default_colors("", "default")).axis_style
     axes = CircularScalarAxes.of(
         base.axis_style if case["showDepth"] else None,
-        ScalarAxisStyle.of(gc) if gc.mode == "percent" else None,
+        gc_axis,
         {index: track.axis_style for index, track in tracks.items()},
     )
-    gc_font = axes.gc_tick_font_size(gc, slots) if gc.mode == "percent" else None
+    gc_font = None if gc_axis is None else axes.gc_tick_font_size(gc_axis, slots)
     if gc_font is None:
         gc_font = scalar_axis_tick_font_size(
             "circular", float(thickness.get("gc_content", auto["circularSlot.gc_content.width"]))

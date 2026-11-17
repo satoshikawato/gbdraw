@@ -141,7 +141,8 @@ from ...comparisons.identity_scale import IdentityColorDomain, identity_color_do
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     DepthLegendSource,
-    DinucleotideLegendSource,
+    GcContentLegendSource,
+    GcSkewLegendSource,
     LegendSlotSource,
     LegendSources,
     depth_legend_sources,
@@ -1724,11 +1725,11 @@ def _primary_radial_half_stroke_px(
         ),
         float(feature_config.block_stroke_width),
         float(feature_config.line_stroke_width),
-        float(gc_config.stroke_width),
-        float(skew_config.stroke_width),
+        float(gc_config.series_paint.stroke_width),
+        float(skew_config.series_paint.stroke_width),
     ]
     if depth_config is not None:
-        widths.append(float(depth_config.stroke_width))
+        widths.append(float(depth_config.series_paint.stroke_width))
     conservation = getattr(cfg.objects, "conservation", None)
     if conservation is not None:
         widths.append(float(getattr(conservation, "stroke_width", 0.0)))
@@ -2362,11 +2363,11 @@ def _gc_content_axis_font_size(
     """The tick font the Percent GC axis takes from the first drawn depth axis, as the radial layout kept its room
     for it."""
 
-    gc = configurators.gc
-    if gc.axis_style is None:
+    gc_axis = configurators.gc.axis_style
+    if gc_axis is None:
         return None
     return scalar_axes.gc_tick_font_size(
-        gc,
+        gc_axis,
         (
             DepthSlotWidth(depth_slot_track_index(str(slot.id), slot.params), float(slot.requested_width_px))
             for slot in resolved_track_slots
@@ -2637,8 +2638,8 @@ def _sync_legend_table_for_circular_slots(
     out: LegendTable,
     *,
     slots: Sequence[LegendSlotSource] | None,
-    gc: DinucleotideLegendSource,
-    skew: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
+    skew: GcSkewLegendSource,
     depth: DepthLegendSource | None,
     depth_tracks: Sequence[DepthLegendSource] | None = None,
     conservation_legend: Sequence[ConservationLegendSource] = (),
@@ -2681,12 +2682,7 @@ def _sync_legend_table_for_circular_slots(
             else:
                 swatch = depth
                 label = slot_legend_label(slot, "Depth")
-            out.add_source(label, {
-                "type": "solid",
-                "fill": swatch.paint.fill,
-                "stroke": swatch.paint.stroke,
-                "width": swatch.paint.stroke_width,
-            })
+            out.add_numeric_source(label, swatch.paint)
         elif renderer in ("dinucleotide_content", "dinucleotide_skew"):
             source = gc if renderer == "dinucleotide_content" else skew
             nt = slot_dinucleotide(slot.params, default_nt)
@@ -4661,7 +4657,7 @@ def _circular_legend_slots(
     *,
     show_gc: bool,
     show_skew: bool,
-    gc: DinucleotideLegendSource,
+    gc: GcContentLegendSource,
 ) -> tuple[LegendSlotSource, ...] | None:
     """The slots whose order the legend's track rows follow: the explicit ones, else, with Depth series, the
     default stack the rings are drawn in (``default_circular_track_slots``), so the Depth rows stand between
