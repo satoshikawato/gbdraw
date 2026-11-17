@@ -1245,15 +1245,16 @@ await test('every drawing of a Session 49 draws the CLI figure after a Web Load,
         assert.equal(saved.status, 'saved', saved.error?.message);
         const webSave = path.join(directory, entry.id, `${drawingId} web-save.gbdraw`);
         await writeFile(webSave, Buffer.from(await saved.blob.arrayBuffer()));
-        // A Web Save writes into each drawing the entries its request's inputs name (DESIGN §1): each drawing keeps
-        // its request, and gets every entry of the file whose two rows its request names, so a drawing whose request
-        // names another drawing's rows gets that drawing's entries too (OV-1884).
+        // A Web Save writes into each drawing the entries it holds whose two rows its request names: each drawing
+        // keeps its request and its own LOSAT results (D-221). Flipped from OV-1884's "a drawing whose request names
+        // another drawing's rows gets that drawing's entries too": that rule gave a drawing results it never held,
+        // and brought back a drawing's results after its Clear, Save and Load (OV-3475, PD-OI-022 scenario revision 2).
         const savedSession = JSON.parse(await sessionJsonBytes(await readFile(webSave)));
-        const storedEntries = stored.drawings.flatMap(drawing => drawing.losatCache?.entries ?? []);
+        const storedEntriesOf = (id) => stored.drawings.find(drawing => drawing.id === id)?.losatCache?.entries ?? [];
         const requestOf = (session, id) => session.drawings.find(drawing => drawing.id === id)?.renderRequest ?? null;
         const expectedEntries = Object.fromEntries(savedSession.drawings.map(({ id }) => {
           const rows = new Set(requestOf(stored, id)?.records.map(record => record.recordKey) ?? []);
-          return [id, [...new Set(storedEntries.filter(item => rows.has(item.queryUid) && rows.has(item.subjectUid))
+          return [id, [...new Set(storedEntriesOf(id).filter(item => rows.has(item.queryUid) && rows.has(item.subjectUid))
             .map(item => item.key))].sort()];
         }));
         assert.deepEqual(Object.fromEntries(Object.entries(entriesOf(savedSession)).map(([id, keys]) => [id, [...keys].sort()])),

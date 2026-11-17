@@ -245,6 +245,7 @@ under "Cited ids without a record".
   - `tests/web/losat-rows-walk.test.mjs`
   - `tests/web/run-analysis-derived-cache.test.mjs`
   - `tests/web/run-analysis-simple-path.test.mjs`
+  - `tests/web/session-cli-compatibility.test.mjs`
 
 - [PD-OI-023](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-023-lossless-protein-paths-during-normal-generation-and-saving): Lossless protein paths during normal generation and saving. ACCEPTED, concern `protein-comparison.path-representation`, scenario revision 1.
 
