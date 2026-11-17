@@ -203,13 +203,18 @@ test('a Linear Session 30 Load keeps its fills and Legend entries on the drawing
     ['Transport-related genes', '#577edb', 'gene_kind', 'transport'],
     ['Regulatory genes', '#57b767', 'gene_kind', 'regulatory']
   ];
+  // Its rows hold no color: the swatches the Session recorded are Python's (OV-282), which the rows show.
   assert.deepEqual(shown, {
     linear: {
       active: true, fills: {}, rules,
-      legend: [...rules.map(([caption, color]) => [caption, color]), ['other proteins', '#dddddd']]
+      legend: [...rules.map(([caption]) => [caption, undefined]), ['other proteins', undefined]]
     },
     circular: { active: false, fills: {}, rules, legend: [] }
   });
+  const { displayedLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
+  const colors = displayedLegendRowColors(state, state.activeDrawing(), []);
+  assert.deepEqual(state.activeDrawing().legendEntries.value.map((entry) => [entry.caption, colors.listed(entry)]),
+    [...rules.map(([caption, color]) => [caption, color]), ['other proteins', '#dddddd']]);
 });
 
 test('a request-less Session 30 shows its alignment target and saves a file Python reads (OV-2006, OV-2047)', async () => {
