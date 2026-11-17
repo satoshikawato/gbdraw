@@ -10615,6 +10615,18 @@ Decision date: 2026-10-09
 }
 ```
 
+#### Revision #2108
+
+For the Reset fill color dialog, the preservation term
+「ポップアップの色・Legend 名・Reset fill color の各ダイアログの選択肢と結果」 of the
+receipt above follows `PD-OI-2108` (concern
+`web.reset-fill-color-dialog-grouping`): the Reset fill color dialog names
+and counts the clicked feature's Legend row and opens only when that row
+draws another feature, so a feature alone in its row resets at once as
+**This feature only**, as that record's receipt says. The receipt above keeps
+its text and its SHA-256; its other terms and `OIC-028` are unchanged. The
+approval is quoted in the Revision #2108 entry of `PD-OI-2108`.
+
 ### PD-OI-089: Default colors a user edits win over the palette
 
 - Concern key: `web.default-colors-over-palette`
@@ -14926,6 +14938,79 @@ Decision date: 2026-11-08
   "decisionDate": "2026-11-08"
 }
 ```
+
+### PD-OI-2108: Reset fill color dialog asks by the feature's Legend row
+
+- Concern key: `web.reset-fill-color-dialog-grouping`
+- Scenario revision: `1`
+- Supersedes: none. It narrows one preservation term of `PD-OI-088` (the
+  choices and results of the Reset fill color dialog) as its receipt's May
+  retire says; the Revision #2108 entry of `PD-OI-088` records this.
+- Status: `ACCEPTED`
+- Selected outcome: `A / ROW_SIBLINGS`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: its Revision #2108 entry below. The receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `bada1af0d14c613a9eac0ce8ec1ca45add85cff0c072eb0da44b61f6fdcdab14`.
+
+```text
+PRODUCT_DECISION
+Concern: web.reset-fill-color-dialog-grouping
+Scenario revision: 1
+Choice: A / ROW_SIBLINGS
+Rationale: Reset fill color のダイアログが示す名前と数、尋ねるかどうかを、「Reset all」がリセットする Legend の行で決め、示す数とリセットされる feature の数を一致させる。行の数え方は Color Change Scope ダイアログの「Legend item」と同じにする。
+Must preserve: 各選択の結果（Reset all はその Legend の行を描く色ルールを外す。This only + add legend entry はその feature をその行の名前のままパレットの色に戻す。This feature only はその feature だけをパレットの色に戻す）。尋ねないときは This feature only と同じ結果になること。ダイアログの 3 つの選択肢と Cancel。1 回の選択が History の 1 ステップで、Cancel は History に記録しないこと、適用中のダイアログの表示（PD-OI-088）。Session の形式。
+May retire: ダイアログがラベルの同じ feature を数えること。すなわち、Legend の行にほかの feature がないのに、別の行にラベルの同じ feature があるためダイアログを開き、このボタンから Reset all と This only + add legend entry を選べること。Legend の行にほかの feature があるのに、ラベルが一意のためダイアログを開かずにすぐリセットすること（今後は尋ね、This feature only で同じ結果になる）。ラベルの名前と数をダイアログに示すこと。PD-OI-088 が保つ「Reset fill color のダイアログの選択肢と結果」は、この範囲でこの決定に従う。
+Accepted residual risk: Legend の行にほかの feature がない feature では、このボタンから Reset all（その行の色ルールを外す）と This only + add legend entry を選べない。ラベルが一意の feature では今もそうである。その行の色ルールは SPECIFIC RULES の表の Delete rule で消せる。
+Owner: satoshikawato
+Decision date: 2026-11-17
+```
+
+```json
+{
+  "concern": "web.reset-fill-color-dialog-grouping",
+  "scenarioRevision": 1,
+  "choice": "A / ROW_SIBLINGS",
+  "rationale": "Reset fill color のダイアログが示す名前と数、尋ねるかどうかを、「Reset all」がリセットする Legend の行で決め、示す数とリセットされる feature の数を一致させる。行の数え方は Color Change Scope ダイアログの「Legend item」と同じにする。",
+  "mustPreserve": "各選択の結果（Reset all はその Legend の行を描く色ルールを外す。This only + add legend entry はその feature をその行の名前のままパレットの色に戻す。This feature only はその feature だけをパレットの色に戻す）。尋ねないときは This feature only と同じ結果になること。ダイアログの 3 つの選択肢と Cancel。1 回の選択が History の 1 ステップで、Cancel は History に記録しないこと、適用中のダイアログの表示（PD-OI-088）。Session の形式。",
+  "mayRetire": "ダイアログがラベルの同じ feature を数えること。すなわち、Legend の行にほかの feature がないのに、別の行にラベルの同じ feature があるためダイアログを開き、このボタンから Reset all と This only + add legend entry を選べること。Legend の行にほかの feature があるのに、ラベルが一意のためダイアログを開かずにすぐリセットすること（今後は尋ね、This feature only で同じ結果になる）。ラベルの名前と数をダイアログに示すこと。PD-OI-088 が保つ「Reset fill color のダイアログの選択肢と結果」は、この範囲でこの決定に従う。",
+  "acceptedResidualRisk": "Legend の行にほかの feature がない feature では、このボタンから Reset all（その行の色ルールを外す）と This only + add legend entry を選べない。ラベルが一意の feature では今もそうである。その行の色ルールは SPECIFIC RULES の表の Delete rule で消せる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-17"
+}
+```
+
+#### Revision #2108
+
+`PD-OI-2108` is added (`A / ROW_SIBLINGS`, concern
+`web.reset-fill-color-dialog-grouping`). It comes from the Product Decision
+Owner `satoshikawato`'s replies to the campaign `ci-review-20261110/D`
+(`DECISIONS.md` `D-28`, "Q1 Owner answer" and "Q3 Owner answer").
+
+- Q2 (`2026-11-17`). The Claude Code session `6443ef3b` asked
+  「Q2: OV-3498 の Reset ダイアログを A・B・C のどれにしますか。推奨は A（凡例行で数える）。」,
+  with a decision packet and images of four states; A counts by the
+  feature's Legend row, B keeps the count by label and says "label" in the
+  text, and C counts by the row and also asks when color rules draw the row.
+  The Owner answered 「推奨通り」 (session board message
+  `52e36ef5-4b20-40f5-a3c6-9f079347513b`, 16:57 JST, relayed by another
+  session), which chose A.
+- Q3 (`2026-11-17`). The Claude Code session `a64da1a1` showed the complete
+  text of the receipt below and asked
+  「Q3：OV-3498 の receipt 全文を承認しますか。」. The Owner answered
+  「推奨通り」 (session board message `a7e82b47-35b1-4934-aa76-619cc25afeb4`,
+  17:21 JST, relayed by another session).
+- The receipt's SHA-256 is `bada1af0d14c613a9eac0ce8ec1ca45add85cff0c072eb0da44b61f6fdcdab14`. It narrows one preservation term of
+  `PD-OI-088`, as the Revision #2108 entry of that record says. No other record
+  is amended or retired.
+- This change is a static Product Contract co-change: the runtime and tests
+  that implement it are in the same pull request, and the Review is
+  `REQUIRED`.
 
 ## Acceptance contract catalog
 

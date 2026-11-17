@@ -944,6 +944,10 @@ under "Cited ids without a record".
 - [PD-OI-128](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-128-feature-sequences-read-from-python-on-demand): Feature sequences read from Python on demand. ACCEPTED, concern `web.feature-sequence.on-demand`, scenario revision 1.
   - `tests/web/export-lazy-loading.playwright.spec.js`
 
+- [PD-OI-2108](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-2108-reset-fill-color-dialog-asks-by-the-features-legend-row): Reset fill color dialog asks by the feature's Legend row. ACCEPTED, concern `web.reset-fill-color-dialog-grouping`, scenario revision 1.
+  - `tests/web/feature-color-actions.test.mjs`
+  - `tests/web/gui-audit-20260930-editor.playwright.spec.js`
+
 ### Cited ids without a record
 
 - `PD-OI-086`: no record. Records that mention it: [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette), [PD-OI-090](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-090-project-with-drawings).

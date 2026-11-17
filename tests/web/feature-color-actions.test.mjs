@@ -896,6 +896,11 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const resetDialog = { show: false, caption: '', siblingCount: 0 };
   const resetClicked = ref(null);
   const resetFeatures = ref([trnaA, trnaB, rrna]);
+  // The Legend row that draws each feature (the row owner's answer): its type
+  // unless a case names another row.
+  /** @type {Map<string, string>} */
+  const resetRows = new Map();
+  const resetRowOf = (feature) => resetRows.get(feature.svg_id) ?? feature.type;
   const resetPreparation = createRulePreparation({
     state: withDrawings({ ...preparationMembers(), extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules }),
     evaluate: evaluatePythonRules,
@@ -907,7 +912,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       results: ref([]),
       svgContent: ref(null),
       selectedResultIndex: ref(0),
-      appliedPaletteColors: ref({ tRNA: '#e8b441', rRNA: '#71ee7d' }),
+      appliedPaletteColors: ref({ tRNA: '#e8b441', rRNA: '#71ee7d', CDS: '#cccccc' }),
       manualSpecificRules: resetRules,
       extractedFeatures: resetFeatures,
       biologicalFeatures: resetFeatures,
@@ -934,11 +939,13 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       committed.push((await next(resetRules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
       return true;
     },
-    effectiveLegendCaptions: () => (feature) => feature.type,
+    effectiveLegendCaptions: () => resetRowOf,
     getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
     otherLegendRowType: () => null,
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-    findFeaturesWithSameLegendItem: () => [],
+    // rule-actions.js: the other drawn features of the feature's Legend row.
+    findFeaturesWithSameLegendItem: (current, caption = null) => resetFeatures.value
+      .filter((other) => other.svg_id !== current.svg_id && resetRowOf(other) === (caption || resetRowOf(current))),
     findFeaturesWithSameDisplayedLabel: () => [],
     findFeaturesWithSameIndividualLabel: () => [],
     getDisplayedFeatureLabel: (feature) => feature.product,
@@ -972,6 +979,37 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   await resetActions.resetClickedFeatureFillColor();
   assert.equal(resetDialog.show, false, 'a type that names an inherited member opens no Reset dialog');
   assert.deepEqual(committed, [], 'and Reset writes no rule for it');
+
+  // OV-3498 (PD-OI-2108, Owner choice A 2026-11-17): the Reset dialog asks by
+  // the feature's Legend row, the row its "Reset all" resets. (a) A feature
+  // that shares its label with a feature of another row, alone in its own row,
+  // resets at once as "This feature only".
+  resetFeatures.value = [trnaA, trnaB, rrna];
+  resetRows.set(trnaA.svg_id, 'Leu 1');
+  const leuRule = { feat: 'tRNA', qual: 'hash', val: `^${trnaA.svg_id}@record-1$`, color: '#123456', cap: 'Leu 1' };
+  resetRules.push(leuRule);
+  resetDialog.show = false;
+  committed.length = 0;
+  resetClicked.value = { svg_id: trnaA.svg_id, feat: trnaA };
+  await resetActions.resetClickedFeatureFillColor();
+  assert.equal(resetDialog.show, false, 'a feature alone in its Legend row opens no Reset dialog, whatever its label');
+  assert.deepEqual(committed, [resetRules.filter((rule) => rule !== leuRule)], 'and resets as "This feature only"');
+  resetRules.splice(resetRules.indexOf(leuRule), 1);
+  // (b) A feature with a label of its own whose row draws other features asks,
+  // naming that row and counting its other features.
+  const ndA = feature('nd-a', 'CDS', 'NADH dehydrogenase subunit 1', 1000, 1900);
+  const ndB = feature('nd-b', 'CDS', 'NADH dehydrogenase subunit 2', 2000, 2900);
+  const ndC = feature('nd-c', 'CDS', 'NADH dehydrogenase subunit 3', 3000, 3300);
+  resetFeatures.value = [trnaA, trnaB, rrna, ndA, ndB, ndC];
+  for (const nd of [ndA, ndB, ndC]) resetRows.set(nd.svg_id, 'NADH');
+  committed.length = 0;
+  resetClicked.value = { svg_id: ndA.svg_id, feat: ndA };
+  await resetActions.resetClickedFeatureFillColor();
+  assert.deepEqual({ show: resetDialog.show, caption: resetDialog.caption, siblingCount: resetDialog.siblingCount },
+    { show: true, caption: 'NADH', siblingCount: 2 }, 'the Reset dialog names the Legend row and counts its other features');
+  assert.deepEqual(committed, [], 'and writes nothing before a choice');
+  await resetActions.handleResetColorChoice('cancel');
+  resetRows.clear();
 }
 
 // PV-02 and PV-04 (D-06, PD-OI-061): Legend editor renames.

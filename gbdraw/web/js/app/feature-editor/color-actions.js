@@ -11,7 +11,7 @@ import { draftLegendRows } from '../../services/legend-draft-rows.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
-import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
+import { getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue, literalPatternText, namedFeatureInstance } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
@@ -1614,12 +1614,11 @@ export const createFeatureColorActions = ({
       return;
     }
 
-    const caption = getFeatureCaption(feat);
-    const clickedSvgId = clickedFeature.value.svg_id;
-
-    const siblings = /** @type {ColorFeature[]} */ (extractedFeatures.value).filter(
-      (f) => getFeatureCaption(f) === caption && f.svg_id !== clickedSvgId
-    );
+    // The dialog asks by the feature's Legend row, the row "Reset all" resets
+    // (OV-3498): its name, and the row's other drawn features, as the Color
+    // Change Scope dialog counts them.
+    const caption = normalizeCaption(getEffectiveLegendCaption(feat));
+    const siblings = findFeaturesWithSameLegendItem(feat, caption);
 
     if (siblings.length > 0) {
       resetColorDialog.show = true;

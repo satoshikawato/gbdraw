@@ -368,8 +368,9 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
     });
 
     // The rRNA rows of the Legend; and that the editor reads s-rRNA and l-rRNA
-    // in the one row "rRNA": each popup names it, and a color change of each
-    // offers that Legend item with its one other feature (Cancel changes nothing).
+    // in the one row "rRNA": each popup names it, and a color change and a Reset
+    // fill of each offer that Legend item with its one other feature, although
+    // their labels differ (OV-3498, PD-OI-2108; Cancel changes nothing).
     const rrnaRows = async (options) => (await legendCaptions(page, options)).filter((caption) => /rRNA/.test(caption));
     const expectRrnaRowSiblings = async () => {
       for (const product of ['s-rRNA', 'l-rRNA']) {
@@ -385,6 +386,14 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
           return { show, legendName, siblingCount };
         }), product).toEqual({ show: true, legendName: 'rRNA', siblingCount: 1 });
         await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleFeatureStyleScopeChoice('cancel'));
+        await settle(page);
+        await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.resetClickedFeatureFillColor());
+        await settle(page);
+        expect(await page.evaluate(() => {
+          const { show, caption, siblingCount } = window.__GBDRAW_APP__.resetColorDialog;
+          return { show, caption, siblingCount };
+        }), product).toEqual({ show: true, caption: 'rRNA', siblingCount: 1 });
+        await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleResetColorChoice('cancel'));
         await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
         await settle(page);
       }
