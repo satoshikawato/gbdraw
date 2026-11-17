@@ -2,9 +2,10 @@
 // The canvas slice of a drawing: its canvas padding (Session 46
 // `modes.<m>.ui.canvasPadding`). A drawing shows the padding under its member
 // name, read-only to the type checker; only this module writes it, through the
-// slice's handle (`drawing.slices.canvas`). Load, a History restore, and Reset
-// Layout write it with `install` and `reset`; Save and a History capture read
-// it with `capture`.
+// slice's handle (`drawing.slices.canvas`). Load, a History restore, Reset
+// Layout, and Reset Settings (a drawing's reset, services/reset.js) write it
+// with `install` and `reset`; Save and a History capture read it with
+// `capture`.
 import { reactive } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
 import { normalizeCanvasPadding } from '../canvas-padding.js';

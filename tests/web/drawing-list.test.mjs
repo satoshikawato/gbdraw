@@ -111,6 +111,35 @@ test('a drawing\'s reset leaves the other drawing and the Session values; the pr
   linear.form.plot_title = '';
 });
 
+// OV-3707: the canvas padding is a slice of the drawing (R15), so a drawing's reset returns it to a new drawing's
+// with the other settings, as one step that Undo restores; Reset all drawings resets every drawing's.
+test('Reset this drawing and Reset all drawings return the canvas padding to a new drawing\'s; Undo restores it', async () => {
+  const { CANVAS_SLICE } = await import('../../gbdraw/web/js/services/drawing/canvas.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  if (!state.drawingTabs.value.some((tab) => tab.id === 'linear')) app.drawingBar.newDrawing('linear');
+  app.selectDrawing('circular');
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
+  const PADDED = { top: 40, right: 0, bottom: 12, left: 0 };
+  const ZERO = { top: 0, right: 0, bottom: 0, left: 0 };
+  CANVAS_SLICE.install(circular.slices.canvas, { canvasPadding: PADDED });
+  CANVAS_SLICE.install(linear.slices.canvas, { canvasPadding: PADDED });
+  await app.resetShownDrawing();
+  assert.deepEqual({ ...circular.canvasPadding }, ZERO, 'Reset this drawing resets its padding');
+  assert.deepEqual({ ...linear.canvasPadding }, PADDED, 'the other drawing keeps its padding');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset this drawing');
+  await history.undo();
+  assert.deepEqual({ ...circular.canvasPadding }, PADDED, 'Undo restores the padding');
+  await app.resetSettings();
+  assert.deepEqual([{ ...circular.canvasPadding }, { ...linear.canvasPadding }], [ZERO, ZERO],
+    'Reset all drawings resets every drawing\'s padding');
+  await history.undo();
+  assert.deepEqual([{ ...circular.canvasPadding }, { ...linear.canvasPadding }], [PADDED, PADDED]);
+  CANVAS_SLICE.reset(circular.slices.canvas);
+  CANVAS_SLICE.reset(linear.slices.canvas);
+});
+
 // The follow-ups run for every drawing by its mode, not for the drawing of a
 // mode: a third drawing gets its Record Order rows and its comparison rings.
 test('Reset all gives a second Circular drawing its Record Order rows and comparison rings', async () => {
