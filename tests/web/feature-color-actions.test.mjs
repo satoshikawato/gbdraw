@@ -1211,6 +1211,14 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.notEqual(renamedNoRow.legendRenameDialog.show, true, 'no scope to ask: the feature alone');
   assert.deepEqual(renamedNoRow.committed.map((rules) => rules.filter(({ cap }) => cap === 'Cytochrome').map(({ val }) => val)),
     [['^CYTB$']], 'one rule names the feature');
+  // No fill names the feature's rule as a color does: by the row the figure
+  // draws the feature in, and a feature of no row by its own label, never by
+  // its type's row ('CDS', a row it is not drawn in).
+  const noFill = noRow();
+  await noFill.renameActions.setFeatureColorValue(cytb, 'none');
+  await noFill.renameActions.setFeatureColorValue(cds('c1', 'COX1', 'other proteins'), 'none');
+  assert.deepEqual(noFill.committed.map((rules) => rules.filter(({ color }) => color === 'none').map(({ cap }) => cap)),
+    [['CYTB'], ['other proteins']], 'No fill captions a feature of no row by its label, an "other" feature by its row');
   // OV-294 residual: a renamed row's rules are read by its Python key, not by
   // the caption it shows, so renaming a row that shows a rule's caption
   // renames the row and leaves that rule alone.

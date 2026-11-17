@@ -1811,6 +1811,7 @@ export const createFeatureColorActions = ({
     const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!feature || !getFeatureQualifier(feature)) return false;
+    // The name given, else the feature's own label (a feature of no Legend row, D-26, has no name to give).
     const caption = legendRowName(normalizeCaption(customCaption || getIndividualFeatureLabel(feature)));
     if (!caption || featureColorAssignmentMatches(drawing, feature, color, caption)) return false;
     return applyColorToFeatureGroup(drawing, [feature], caption, resolveColorToHex(color) || color, 'features');
@@ -1825,7 +1826,8 @@ export const createFeatureColorActions = ({
       return commitRuleWrite(groupColorRules([feature], '', '', 'reset'), msg('Reset feature color'), { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
-      return applyColorToFeatureGroup(drawing, [feature], legendRowName(normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type)), 'none', 'features');
+      // No fill is a color: its rule is named by the row the figure draws the feature in ('' for none).
+      return setFeatureColor(drawing, feature, 'none', customCaption || legendRowName(getEffectiveLegendCaption(feature)));
     }
     return setFeatureColor(drawing, feature, value, customCaption);
   };

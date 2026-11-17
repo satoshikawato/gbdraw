@@ -460,7 +460,7 @@ test('a feature of a caption written in two colors belongs to the row of its col
 // A feature that a captioned rule matches and whose color edit names another
 // row: Python ranks the edit's `hash` rule above a qualifier rule whatever the
 // table order (`iter_specific_color_rules`), so it draws the feature in the
-// edit's row (tests/test_legend_row_facts.py), and so does the editor. An edit
+// edit's row (tests/test_specific_color_captions.py), and so does the editor. An edit
 // that no rule draws (its `hash` rule gone) is not in Python's table: Python
 // draws the feature in the matching rule's row, and so does the editor.
 test('a color edit over a matching captioned rule puts its feature in the row Python draws it in', async () => {
