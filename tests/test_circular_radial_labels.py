@@ -69,6 +69,49 @@ def test_radial_dense_seam_cluster_is_collision_free_and_deterministic() -> None
     assert all(len(label["oriented_corners"]) == 4 for label in first.labels)
 
 
+def _label_on_feature(index: int, angle_deg: float, *, inner: bool) -> dict:
+    """A label whose leader starts on its own feature, at the feature's angle (no shared anchor)."""
+
+    label = _label(index, angle_deg, inner=inner)
+    direction = math.radians(angle_deg) - 0.5 * math.pi
+    anchor_radius, elbow_radius = (300.0, 280.0) if inner else (340.0, 380.0)
+    label["feature_anchor_x"] = anchor_radius * math.cos(direction)
+    label["feature_anchor_y"] = anchor_radius * math.sin(direction)
+    label["middle_x"] = elbow_radius * math.cos(direction)
+    label["middle_y"] = elbow_radius * math.sin(direction)
+    return label
+
+
+@pytest.mark.parametrize("inner", [False, True])
+def test_radial_crowded_cluster_spreads_to_both_sides_of_its_features(inner: bool) -> None:
+    """A cluster too crowded for its features' angles spreads around them, not one way only (OV-3648).
+
+    Clockwise packing alone keeps the first label on its feature and pushes every other one clockwise, which slants
+    the leaders of the whole cluster; whether it ran alone used to depend on whether its leaders crossed, so a small
+    change of leader ends turned a cluster by several degrees.
+    """
+
+    angles = [90.0 + 0.25 * index for index in range(9)]
+    labels = [_label_on_feature(index, angle, inner=inner) for index, angle in enumerate(angles)]
+    result = place_radial_labels(
+        () if inner else labels,
+        labels if inner else (),
+        total_length=10_000,
+        spacing_px=3.0,
+        outer_reserved_radius_px=360.0,
+        inner_reserved_outer_radius_px=100.0,
+    )
+    assert result.collision_free
+    offsets = {
+        label["stable_id"]: ((label["placed_angle_deg"] - label["preferred_angle_deg"] + 180.0) % 360.0) - 180.0
+        for label in result.labels
+    }
+    spread = max(offsets.values()) - min(offsets.values())
+    assert spread > 1.0, offsets  # the cluster had to spread
+    assert min(offsets.values()) < -0.25 * spread and max(offsets.values()) > 0.25 * spread, offsets
+    assert abs(sum(offsets.values()) / len(offsets)) < 0.1 * spread, offsets
+
+
 def test_long_inner_label_reports_required_radius_growth_without_truncation() -> None:
     inner = _label(0, 45.0, inner=True, width=500.0)
     result = place_radial_labels(
@@ -190,3 +233,86 @@ def test_candidate_extraction_runs_once_across_inner_radius_preflight(
     run_circular_from_namespace(args)
 
     assert calls == 1
+
+
+# The ribosomal protein cluster under ycf2 in the rotated tobacco plastome (docs recipe H-CLI-14, OV-3648).
+_TOBACCO_SOUTH_CLUSTER = {
+    "rpoA", "rps11", "rpl36", "rps8", "rpl14", "rpl16", "rps3", "rpl22", "rps19", "rpl2", "rpl23", "tRNA-Ile",
+}
+
+
+def test_rotated_tobacco_plastome_keeps_its_south_inner_labels_over_their_features(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """H-CLI-14's inner labels below ycf2 spread around their features (OV-3648).
+
+    The recipe places one feature outward, so inner leaders start on each feature's drawn outline; that removed a
+    leader crossing from the clockwise packing, and the packing alone then turned the whole cluster up to 12 degrees
+    one way, slanting every leader. The cluster spreads to both sides of its features instead.
+    """
+
+    results = []
+    original = circular_labels_module.place_radial_labels
+
+    def captured(*args, **kwargs):
+        result = original(*args, **kwargs)
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(circular_labels_module, "place_radial_labels", captured)
+    repository = Path(__file__).parents[1]
+    placements = tmp_path / "placements.tsv"
+    placements.write_text(
+        "record\tfeature_selector\tplacement\tlevel\nNC_001879.2\tprotein_id=NP_054479.1\toutward\t1\n",
+        encoding="utf-8",
+    )
+    priority = tmp_path / "qualifier_priority.tsv"
+    priority.write_text("CDS\tgene,old_locus_tag\n", encoding="utf-8")
+    args = _get_args(
+        [
+            "--gbk", str(repository / "tests/test_inputs/NC_001879.gbk"),
+            "-t", "builtin:plastid",
+            "-k", "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin",
+            "--track_type", "tuckin",
+            "--display_start_coordinate", "5500",
+            "--feature_placement_table", str(placements),
+            "--feature_overlap_tolerance_bp", "1",
+            "--resolve_overlaps",
+            "--gc",
+            "--no-skew",
+            "--labels", "both",
+            "--label_placement", "radial",
+            "--outer_label_x_radius_offset", "0.9",
+            "--outer_label_y_radius_offset", "0.9",
+            "--inner_label_x_radius_offset", "0.975",
+            "--inner_label_y_radius_offset", "0.975",
+            "--qualifier_priority", str(priority),
+            "--annotation_table", str(repository / "examples/nicotiana-tabacum-regions.tsv"),
+            "--circular_track_slot", "features:features@side=overlay,lane_direction=split",
+            "--circular_track_slot",
+            "plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,"
+            "outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress",
+            "--circular_track_slot",
+            "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content",
+            "--legend", "none",
+            "--format", "svg",
+            "--output", str(tmp_path / "rotated_placed_chloroplast"),
+        ]
+    )
+
+    run_circular_from_namespace(args)
+
+    cluster = [
+        label for label in results[-1].labels
+        if label.get("is_inner") and label["label_text"] in _TOBACCO_SOUTH_CLUSTER
+        and 170.0 <= float(label["preferred_angle_deg"]) <= 195.0
+    ]
+    assert len(cluster) == len(_TOBACCO_SOUTH_CLUSTER)
+    offsets = [
+        ((float(label["placed_angle_deg"]) - float(label["preferred_angle_deg"]) + 180.0) % 360.0) - 180.0
+        for label in cluster
+    ]
+    # Before the fix: every offset 0 to +12 degrees, mean +5.6. Spread around the features: -6 to +6, mean 0.
+    assert min(offsets) < -2.0 and max(offsets) < 8.0, offsets
+    assert abs(sum(offsets) / len(offsets)) < 2.0, offsets

@@ -327,3 +327,44 @@ def test_outer_label_text_stays_off_the_features(
         )
     )
     assert on_features == []
+
+
+def test_an_embedded_label_fits_its_feature_at_the_radius_it_is_drawn_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OV-3646: the embed test measured a label at the axis radius, so on a lane well inside the axis (the inner copy
+    of two features slots) "AAA family ATPase", "integrase" and "ea47" were embedded and ran past their features.
+    Each embedded label's span, at the lane centre its text is drawn on, holds the label's width."""
+
+    from gbdraw.diagrams.circular import assemble
+
+    measured: list[list[dict]] = []
+    original = assemble.prepare_label_list
+
+    def capture(*args, **kwargs):
+        labels = original(*args, **kwargs)
+        measured.append(labels)
+        return labels
+
+    monkeypatch.setattr(assemble, "prepare_label_list", capture)
+    _draw(
+        tmp_path,
+        "outer:features@side=outside,lane_direction=outside",
+        "ticks:ticks",
+        "features:features",
+        options=("--labels", "both", "--label_placement", "radial", "--label_font_size", "8.5"),
+    )
+
+    embedded = [label for label in measured[-1] if label["is_embedded"]]
+    assert {label["feature_center_radius_px"] for label in embedded} != set()
+    record_length = 48_502
+    short = {
+        label["label_text"]: round(
+            2 * math.pi * float(label["feature_center_radius_px"]) * (float(label["end"]) - float(label["start"]))
+            / record_length - float(label["width_px"]), 1,
+        )
+        for label in embedded
+        if 2 * math.pi * float(label["feature_center_radius_px"]) * (float(label["end"]) - float(label["start"]))
+        / record_length < float(label["width_px"])
+    }
+    assert short == {}
