@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import re
 import xml.etree.ElementTree as ET
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -32,6 +31,7 @@ from gbdraw.linear_comparison import LinearComparison
 from gbdraw.render.drawers.circular.numeric_series import draw_circular_series
 from gbdraw.render.drawers.linear.numeric_series import draw_linear_series
 from gbdraw.render.numeric_series import gc_skew_series
+from tests.utils.series_configs import gc_skew_config
 from gbdraw.svg.circular_tracks import CircularTrackPlace
 from gbdraw.svg.linear_tracks import LinearTrackFrame
 from gbdraw.render.groups.linear.legend import LegendGroup
@@ -75,14 +75,9 @@ def _assert_unique_ids_and_resolved_references(svg: str) -> None:
     assert references <= known_ids
 
 
-def _skew_config() -> SimpleNamespace:
-    return SimpleNamespace(
-        high_fill_color="#ef4444",
-        low_fill_color="#3b82f6",
-        stroke_color="none",
-        stroke_width=0.0,
-        fill_opacity=1.0,
-        dinucleotide="GC",
+def _skew_config():
+    return gc_skew_config(
+        high_fill_color="#ef4444", low_fill_color="#3b82f6", stroke_color="none", stroke_width=0.0, fill_opacity=1.0
     )
 
 

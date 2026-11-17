@@ -148,7 +148,7 @@ def capture_case(
         slots=radial_plan.slots,
         feature_dict=_feature_dict(record, cfg),
         preferred_anchor_slot_ids=radial_plan.preferred_anchor_slot_ids,
-        scalar_axes=CircularScalarAxes.of(depth_config, None),
+        scalar_axes=CircularScalarAxes.of(None if depth_config is None else depth_config.axis_style, None),
     )
     return {
         "input": str(input_path),
