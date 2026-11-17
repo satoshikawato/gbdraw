@@ -2960,14 +2960,14 @@ so, in Latin letters when the field keeps it Latin. These are drafts; nothing he
   the text for exactly 1; the `other` key is a plain string that reads right at 0 and at 2 ("0 فائلیں"). For a pair whose
   `one` has no `{count}`, the `one` text is the exactly-1 sentence and carries no number.
 - **Agreement**: the number takes the plural of a feminine noun (فائلیں) and an unchanged masculine loanword (ریکارڈ); a
-  masculine noun in -ہ takes the Arabic or -ے plural. Prefer a noun phrase with the count first so no verb must agree.
+  masculine noun in -ہ takes the Arabic or -ے plural. Prefer a noun phrase with the count before the noun it counts, so no verb must agree. A count stands where an adjective stands (22.2 Word order): in a genitive phrase it follows the genitive, next to the noun it counts: رنگ کے {count} قواعد, تشریحات کے {count} سیٹ, خطوں کے {count} لیبل. Before the genitive it counts the first noun, as prose writes پانچ سال کا بیٹا and دس سال کی عمر.
 - Examples (exactly 1 / at 0 / at 2):
   1. `{count} record`: one "{count} ریکارڈ"; other "{count} ریکارڈ": 1 ریکارڈ / 0 ریکارڈ / 2 ریکارڈ.
   2. `{count} selected pair`: one "{count} منتخب جوڑی"; other "{count} منتخب جوڑیاں": 1 منتخب جوڑی / 0 منتخب جوڑیاں / 2 منتخب جوڑیاں.
-  3. `{count} color rule`: one "{count} رنگ کا قاعدہ"; other "{count} رنگ کے قواعد": 1 رنگ کا قاعدہ / 0 رنگ کے قواعد / 2 رنگ کے قواعد.
+  3. `{count} color rule`: one "رنگ کا {count} قاعدہ"; other "رنگ کے {count} قواعد": رنگ کا 1 قاعدہ / رنگ کے 0 قواعد / رنگ کے 2 قواعد.
   4. `Undo {count} step` (button, no `۔`): one "{count} مرحلہ کالعدم کریں"; other "{count} مراحل کالعدم کریں": … 1 مرحلہ / 0 مراحل / 2 مراحل.
   5. `Importing it removes the annotation set.` / `… the {count} annotation sets.` (no `{count}` in `one`): one "اسے درآمد
-     کرنے سے تشریحات کا سیٹ ہٹ جاتا ہے۔"; other "اسے درآمد کرنے سے {count} تشریحات کے سیٹ ہٹ جاتے ہیں۔": 2 تشریحات کے سیٹ ہٹ جاتے ہیں۔
+     کرنے سے تشریحات کا سیٹ ہٹ جاتا ہے۔"; other "اسے درآمد کرنے سے تشریحات کے {count} سیٹ ہٹ جاتے ہیں۔": تشریحات کے 2 سیٹ ہٹ جاتے ہیں۔
 
 ### 22.6 Length
 
