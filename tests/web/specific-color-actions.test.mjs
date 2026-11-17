@@ -379,8 +379,9 @@ test('the rules a Legend row draws follow Python\'s rows, also after a live reco
   const rows = (entries) => new Map(entries.map(([key, color]) => [key, { key, color }]));
   const fl2 = { type: 'CDS', svg_id: 'fl2', fill_color: '#2266aa', qualifiers: {} };
   const named = { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'repeat_region' };
+  const palette = { CDS: '#54bcf8', default: '#d3d3d3' };
   const generated = {
-    rules: [named], features: [fl2], originalLegendOrder: ['CDS', 'repeat_region', 'repeat_region [#2266aa]'],
+    rules: [named], features: [fl2], palette, originalLegendOrder: ['CDS', 'repeat_region', 'repeat_region [#2266aa]'],
     pythonRows: rows([['CDS', '#54bcf8'], ['repeat_region', '#d3d3d3'], ['repeat_region [#2266aa]', '#2266aa']])
   };
   recordRuleMatches([fl2], [ruleKey(named)], () => ({ matched: [0], priorities: [0], declined: [] }));
@@ -390,7 +391,7 @@ test('the rules a Legend row draws follow Python\'s rows, also after a live reco
   const recolored = { ...named, cap: 'Group', color: '#11aa55' };
   recordRuleMatches([fl2], [ruleKey(recolored)], () => ({ matched: [0], priorities: [0], declined: [] }));
   const group = {
-    rules: [recolored], features: [fl2], originalLegendOrder: ['CDS', 'Group'],
+    rules: [recolored], features: [fl2], palette, originalLegendOrder: ['CDS', 'Group'],
     pythonRows: rows([['CDS', '#54bcf8'], ['Group', '#2266aa']])
   };
   assert.deepEqual(legendRowRules('Group', group), [recolored], 'Python drew the row for the rule');

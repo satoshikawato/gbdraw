@@ -374,6 +374,7 @@ def test_identity_100_legend_is_a_safe_zero_span_at_the_maximum_color() -> None:
             [("CDS", "#54bcf8"), ("default", "#d3d3d3")],
             columns=["feature_type", "color"],
         ),
+        default_color_map={"CDS": "#54bcf8", "default": "#d3d3d3"},
         block_stroke_color="none",
         block_stroke_width=0,
     )

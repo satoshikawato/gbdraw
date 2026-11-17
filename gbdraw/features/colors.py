@@ -7,6 +7,9 @@ from typing import Any, Iterable, Mapping, Optional, Tuple, cast
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
+from gbdraw.core.color import normalize_hex_color
+from gbdraw.exceptions import ValidationError
+
 from .ids import compute_feature_hash as compute_feature_hash
 from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
@@ -54,6 +57,28 @@ def feature_type_color(default_color_map: Mapping[str, str], feature_type: str) 
     if feature_type in default_color_map:
         return default_color_map[feature_type]
     return default_color_map.get("default", "#d3d3d3")
+
+
+def color_identity(color: object) -> str:
+    """The identity two colors compare by (a name equals its hex), as a Legend compares fills."""
+
+    from gbdraw.io.colors import resolve_color_to_hex
+
+    text = str(color or "").strip()
+    if text.lower() == "none":
+        return "none"
+    try:
+        return normalize_hex_color(resolve_color_to_hex(text))
+    except (ValueError, ValidationError):
+        return text.lower()
+
+
+def other_feature_row_name(feature_type: str) -> str:
+    """The name of a type's "other" Legend row, of its features drawn in the
+    type's color beside a captioned rule of the type: "other proteins" for CDS,
+    else "other <type>s"."""
+
+    return "other proteins" if feature_type == "CDS" else f"other {feature_type}s"
 
 
 def get_color_with_info(
@@ -113,9 +138,22 @@ RuleUse = tuple[str, str]
 TypeRuleUse = tuple[str, str, str]
 
 
-def legend_rule_use(drawn: Iterable[tuple[str, Optional[RuleUse]]]) -> tuple[set[TypeRuleUse], set[str]]:
+def is_other_row_rule(feature_type: str, rule: RuleUse, palette: Mapping[str, str]) -> bool:
+    """Whether a rule draws a feature of the type as its "other" row would: it
+    is named like that row (``other_feature_row_name``) and colors in the type's
+    palette color (``feature_type_color``). Reset fill color writes such a rule
+    for a feature another rule still colors."""
+
+    return rule[0] == other_feature_row_name(feature_type) and color_identity(rule[1]) == color_identity(
+        feature_type_color(palette, feature_type))
+
+
+def legend_rule_use(
+    drawn: Iterable[tuple[str, Optional[RuleUse]]], palette: Mapping[str, str]
+) -> tuple[set[TypeRuleUse], set[str]]:
     """Which color rules a Legend counts as used, per drawn type, from each drawn
-    feature's type and the rule it takes (None: no rule, its type's color).
+    feature's type and the rule it takes (None: no rule, its type's color), and
+    the type colors of the palette.
 
     The one reading of the drawn features for the Legend (Generate's
     ``precompute_used_color_rules``, the Web's Legend order and the row of each
@@ -123,16 +161,26 @@ def legend_rule_use(drawn: Iterable[tuple[str, Optional[RuleUse]]]) -> tuple[set
     (type, caption, color), and the types of the features no rule colors. A
     rule is used for a type only when features of that type take it, so a
     type it colors none of keeps its own row (Legend contract 05A4-04 L-C3,
-    OV-3465). An uncaptioned rule names no row.
+    OV-3465). An uncaptioned rule names no row. A feature of a rule drawn as
+    its type's "other" row (``is_other_row_rule``) counts as drawn in its
+    type's color while no other captioned rule is used for its type, so the
+    type keeps its own row (OV-3350, Owner 2026-11-11).
     """
 
     used: set[TypeRuleUse] = set()
+    other_rows: set[TypeRuleUse] = set()
     default_types: set[str] = set()
     for feature_type, winner in drawn:
         if winner is None:
             default_types.add(feature_type)
         elif winner[0]:
-            used.add((feature_type, *winner))
+            (other_rows if is_other_row_rule(feature_type, winner, palette) else used).add((feature_type, *winner))
+    ruled = {feature_type for feature_type, _, _ in used}
+    for use in other_rows:
+        if use[0] in ruled:
+            used.add(use)
+        else:
+            default_types.add(use[0])
     return used, default_types
 
 
@@ -193,7 +241,7 @@ def precompute_used_color_rules(
                 feature, color_map, default_color_map, record_id=record.id, instance=instance
             )
             drawn.append((feature.type, None if caption is None else (caption, color)))
-    return legend_rule_use(drawn)
+    return legend_rule_use(drawn, default_color_map)
 
 
 __all__ = [
@@ -207,6 +255,9 @@ __all__ = [
     "precompute_used_color_rules",
     "build_default_color_map",
     "build_specific_color_rules",
+    "color_identity",
     "feature_type_color",
+    "is_other_row_rule",
+    "other_feature_row_name",
     "preprocess_color_tables",
 ]

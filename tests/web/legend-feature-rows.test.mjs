@@ -9,10 +9,10 @@ import { featureLegendRows, isTrackLegendKey, legendRowType } from '../../gbdraw
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
 
 test('each drawn feature is in the row Python draws for it', () => {
-  for (const { name, rules, drawn, feature_rows: featureRows, type_rows: typeRows } of fixture.feature_rows) {
+  for (const { name, palette, rules, drawn, feature_rows: featureRows, type_rows: typeRows } of fixture.feature_rows) {
     const table = rules.map(([feat, cap, color]) => ({ feat, qual: 'product', val: '.*', color, cap }));
     const uses = drawn.map(([type, winner]) => ({ type, winner: winner === null ? null : table[winner] }));
-    const rows = featureLegendRows(table, uses);
+    const rows = featureLegendRows(table, uses, palette);
     const answer = (/** @type {ReturnType<typeof rows.rowOf>} */ row) => (row && typeof row === 'object' ? [row.cap, row.color] : row);
     assert.deepEqual(uses.map(({ type, winner }) => answer(rows.rowOf(type, winner))), featureRows, name);
     assert.deepEqual(Object.fromEntries(rows.present.map((type) => [type, rows.typeRow(type)])), typeRows, name);

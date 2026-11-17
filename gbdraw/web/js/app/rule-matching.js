@@ -4,6 +4,7 @@ import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.j
 import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
+import { appliedFeatureColors } from '../utils/color-utils.js';
 import { featureVisibilityRows } from '../services/feature-visibility.js';
 import {
   recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
@@ -273,7 +274,9 @@ export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? 
 /**
  * @typedef {object} RulePreparationOptions
  * @property {Pick<WebState, 'activeDrawing' | 'biologicalFeatures' | 'extractedFeatures' | 'mode' | 'results'
- *   | 'selectedResultIndex' | 'sessionOperationAvailability' | 'svgResultIdentity'>} state
+ *   | 'selectedResultIndex' | 'sessionOperationAvailability' | 'svgResultIdentity' | 'paletteDefinitions'
+ *   | 'appliedPaletteName' | 'appliedPaletteColors'>} state The applied palette gives the type colors the Legend
+ *   order Python answers reads (`synthesizeGroup`).
  * @property {(payload: RuleEvaluationRequest, options?: RuleEvaluationOptions) => Promise<RuleEvaluationResult>} evaluate
  *   The diagram helper that matches rules against feature payloads (R7).
  * @property {(request: SynthesizeColorRulesRequest) => Promise<SynthesizedColorRules>} synthesize
@@ -357,12 +360,13 @@ const inputAndMembers = (input) => (Array.isArray(input) ? [input, ...input.flat
  * @param {readonly RuleFeature[]} targets
  * @param {GroupColorEdit} edit
  * @param {readonly SpecificColorRule[]} rules
+ * @param {SynthesizeColorRulesRequest['palette']} palette The type colors of the displayed Result.
  * @param {RulePreparationOptions['synthesize']} synthesize
  * @param {RulePreparationOptions['synthesisQualifiers']} synthesisQualifiers
  * @returns {Promise<SynthesizedColorRules>}
  */
 const synthesizeGroupOver = async (targets, { scope, features: selected, labels, color, caption, joins, drawn }, rules,
-  synthesize, synthesisQualifiers) => {
+  palette, synthesize, synthesisQualifiers) => {
   /** @type {Map<object, number>} */
   const indexOf = new Map(targets.map((feature, index) => [feature, index]));
   /** @type {Map<string, string[]>} */
@@ -389,7 +393,8 @@ const synthesizeGroupOver = async (targets, { scope, features: selected, labels,
     drawn: [...drawn].flatMap((feature) => {
       const index = indexOf.get(feature);
       return index === undefined ? [] : [index];
-    })
+    }),
+    palette
   });
 };
 
@@ -587,7 +592,8 @@ export const createRulePreparation = ({
     return await prepare(candidate, options) && isCurrent(before) ? { rules: candidate, snapshot: before } : null;
   };
   /** @type {RulePreparation['synthesizeGroup']} */
-  const synthesizeGroup = (edit, rules) => synthesizeGroupOver(features(), edit, rules, synthesize, synthesisQualifiers);
+  const synthesizeGroup = (edit, rules) => synthesizeGroupOver(features(), edit, rules, appliedFeatureColors(state), synthesize,
+    synthesisQualifiers);
   return {
     prepare, retain, prepareDrawn, isPrepared, prepareCandidate, synthesizeGroup, snapshot,
     isCurrent, pending

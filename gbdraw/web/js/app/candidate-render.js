@@ -16,7 +16,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -285,8 +285,10 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   const trackRows = trackLegendRows(drawnTracks, pythonRows, sharedLegendKeys);
   const drawnTypes = new Set(Array.from(features, (feature) => text(feature?.type)));
   // Read once for both readers: the row keys (`rowsLeftOut`) and the rules that draw a row.
-  const ruleMatches = rules.some((rule) => text(rule?.cap)) ? drawnRuleMatches({ rules, features }) : undefined;
-  const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] }, ruleMatches);
+  const ruleMatches = rules.some((rule) => text(rule?.cap)) ? drawnRuleMatches({ rules, features, palette: paletteColors }) : undefined;
+  const rowOf = ruleLegendCaptions({
+    rules: [...rules], pythonRows, features, palette: paletteColors, originalLegendOrder: [...originalLegendOrder]
+  }, ruleMatches);
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
   // A rule whose group colors no drawn feature draws no row: its caption's
@@ -645,7 +647,7 @@ const compilePlanBundle = ({
   // compiles before it reads Python's rows) the key the rule table alone
   // allocates, which is the key of every caption written in several colors.
   const ruleRowOf = draftRowColors?.rowOf
-    || ruleLegendCaptions({ rules: [...rules], pythonRows: new Map(), features: [], originalLegendOrder: [...originalCaptions] });
+    || ruleLegendCaptions({ rules: [...rules], pythonRows: new Map(), ...NO_DRAWN_FEATURES, originalLegendOrder: [...originalCaptions] });
 
   runStage('legend', () => {
     // A listed row is a rule's row by its key, never by the rule's name: a

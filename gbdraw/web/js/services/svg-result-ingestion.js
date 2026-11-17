@@ -40,7 +40,7 @@ import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
-import { ruleLegendCaptions } from './specific-color-rules.js';
+import { NO_DRAWN_FEATURES, ruleLegendCaptions } from './specific-color-rules.js';
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1616,7 +1616,7 @@ const SAVED_COLOR_ID = / \[(?:#[0-9a-f]{6}|none)\]/;
 /** @param {SvgResultRoot} svg @param {SavedResultEdits} edits @returns {boolean} */
 const nameSavedRuleRows = (svg, edits) => {
   const keyOf = ruleLegendCaptions({
-    rules: edits.rules, pythonRows: pythonLegendRows(svg), features: [], originalLegendOrder: edits.originalLegendOrder
+    rules: edits.rules, pythonRows: pythonLegendRows(svg), ...NO_DRAWN_FEATURES, originalLegendOrder: edits.originalLegendOrder
   });
   /** @type {Map<string, string>} */
   const names = new Map(edits.rules.filter((rule) => text(rule.cap)).map((rule) => [keyOf(rule), text(rule.cap)]));

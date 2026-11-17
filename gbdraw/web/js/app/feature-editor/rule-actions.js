@@ -10,7 +10,7 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { joinedLegendRow, runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { settleCommittedField } from '../committed-value.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
@@ -153,23 +153,25 @@ const PRESET_UNAVAILABLE_NOTICE = Object.freeze({ text: () => t('That rule prese
 const captionKey = (caption) => /** @type {PythonLegendKey} */ (String(caption || '').trim());
 
 /**
- * The row Generate draws a feature of no captioned rule in: its type's own
- * row, its type's "other" row, or no row (''), as `featureLegendRows` says; a
- * feature without a type, the row its label names. The drawn features' rows
- * are read once, when the first typed feature asks.
+ * The row Generate draws a feature in, by the rule it takes, as
+ * `featureLegendRows` says: null for its captioned rule's row; else its
+ * type's own row, its type's "other" row (also for a rule drawn as that row,
+ * OV-3350), or no row (''); a feature without a type, its captioned rule's row
+ * (null) or the row its label names. The drawn features' rows are read once,
+ * when the first typed feature asks.
  * @param {Parameters<typeof drawnRuleMatches>[0]} context
  * @param {(feat: ColorFeature) => string} labelOf
  */
 const featureRowReader = (context, labelOf) => {
   /** @type {FeatureLegendRows | null} */
   let rows = null;
-  /** @param {ColorFeature} feat @param {Parameters<FeatureLegendRows['rowOf']>[1]} rule */
+  /** @param {ColorFeature} feat @param {Parameters<FeatureLegendRows['rowOf']>[1]} rule @returns {PythonLegendKey | null} */
   return (feat, rule) => {
     const type = String(feat.type || '').trim();
-    if (!type) return captionKey(labelOf(feat));
+    if (!type) return rule && captionKey(rule.cap) ? null : captionKey(labelOf(feat));
     rows ||= drawnRuleMatches(context).rows;
     const row = rows.rowOf(type, rule);
-    return captionKey(typeof row === 'string' ? row : '');
+    return typeof row === 'string' ? captionKey(row) : row ? null : captionKey('');
   };
 };
 
@@ -257,7 +259,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     /** @param {SpecificColorRule} rule @returns {{ caption: PythonLegendKey, color: string }} */
     const rowOf = (rule) => ({ caption: currentCaption(rule), color: rule.color });
     const ruleRows = captioned.map(rowOf);
-    const currentMatches = drawnRuleMatches({ rules: drawing.manualSpecificRules, features: displayed.features });
+    const currentMatches = drawnRuleMatches({ rules: drawing.manualSpecificRules, features: displayed.features, palette: displayed.palette });
     // OV-2265 (OV-61): a rule row with a Legend color of its own shows that
     // color, as Generate draws it, until a commit recolors the row's rule:
     // that commit retires the Legend color (`supersededLegendColors`).
@@ -295,7 +297,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   /** @param {DrawingState} drawing @param {readonly Partial<SpecificColorRule>[]} rules */
   const legendSourceContext = (drawing, rules) => ({
     ...featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions }),
-    colorRules: rules
+    colorRules: rules,
+    palette: appliedFeatureColors(state)
   });
   // OV-152: rules that recolor a whole type keep its caption, so their Legend
   // row is that of the type's default row and the live Legend follows them.
@@ -814,7 +817,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return (feat) => {
       if (!feat) return captionKey('');
       const rule = ruleMatches.first(feat);
-      if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
+      if (rule && normalizeCaption(rule.cap)) return featureRow(feat, rule) ?? legendCaption(rule);
 
       // A color edit carries a name (its rule's caption): its row is the one
       // the rules of that caption and color draw, else the row it names. A
@@ -823,7 +826,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       const overrideCaption = typeof override === 'object' && normalizeCaption(override.caption);
       if (overrideCaption) return legendCaption({ cap: overrideCaption, color: override.color });
 
-      return featureRow(feat, rule);
+      return featureRow(feat, rule) ?? captionKey('');
     };
   };
   /** @param {ColorFeature | null | undefined} feat */

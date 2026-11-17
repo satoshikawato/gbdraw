@@ -242,6 +242,13 @@ remainder row, and each type it colors none of keeps its caption. The same rule
 applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
+**Reset fill color** in the Web app gives a feature its palette color back; when
+another rule still colors that feature, the reset writes a rule in the palette
+color named like the type's remainder row (`other proteins` for CDS,
+`other <feature type>s` for other types). Such a rule counts as the default
+color: while no other rule with a caption colors a drawn feature of the type,
+the legend keeps the plain caption (`rRNA`), and once one does, the feature
+belongs to the `other rRNAs` row.
 
 Legend rows that have one name follow one rule in the CLI, the Python API, and
 the Web app:

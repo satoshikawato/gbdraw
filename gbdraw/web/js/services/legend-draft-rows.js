@@ -9,7 +9,7 @@
 import {
   getVisibleFeatureLegendGroup, isLegendOrderEdited, pythonLegendKey, pythonOrderedLegendRows, resultLegendRows
 } from './legend-svg.js';
-import { ruleLegendCaptions } from './specific-color-rules.js';
+import { NO_DRAWN_FEATURES, ruleLegendCaptions } from './specific-color-rules.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
@@ -232,7 +232,7 @@ export const pythonLegendRowKeys = (inventory, results, parser = globalThis.DOMP
 export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ...legend }) => {
   const rows = draftLegendRows({ ...legend, originalLegendOrder: pythonRowKeys });
   const ruleRowOf = ruleLegendCaptions({
-    rules: [...rules], pythonRows: new Map(), features: [], originalLegendOrder: [...rows.originalCaptions]
+    rules: [...rules], pythonRows: new Map(), ...NO_DRAWN_FEATURES, originalLegendOrder: [...rows.originalCaptions]
   });
   const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map(ruleRowOf));
   const pythonRows = rows.currentEntries.filter((entry) => rows.originalCaptions.has(entry.originalCaption));

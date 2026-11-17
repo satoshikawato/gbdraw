@@ -13,6 +13,7 @@ import {
   updateFeatureOverride
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
+import { appliedFeatureColors } from '../utils/color-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { pythonLegendRows } from './legend-svg.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
@@ -827,8 +828,8 @@ export const displayedDrawnFeatures = (state, drawing) => ({
 
 /**
  * What `displayedLegendRowContext` reads of the app state.
- * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & Pick<WebState, 'svgContainer' | 'originalLegendOrder'>}
- *   DisplayedLegendState
+ * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & Parameters<typeof appliedFeatureColors>[0]
+ *   & Pick<WebState, 'svgContainer' | 'originalLegendOrder'>} DisplayedLegendState
  */
 
 /** @type {ReadonlySet<PythonLegendKey>} */
@@ -852,6 +853,7 @@ export const displayedLegendRowContext = (state, drawing) => ({
   rules: drawing.manualSpecificRules,
   pythonRows: pythonLegendRows(state.svgContainer.value?.querySelector('svg')),
   features: displayedDrawnFeatures(state, drawing),
+  palette: appliedFeatureColors(state),
   originalLegendOrder: state.originalLegendOrder.value,
   sharedLegendKeys: /** @type {ReadonlySet<PythonLegendKey> | undefined} */ (state.displayedResultMetadata()?.legendRowFacts?.suppressed)
     ?? NO_LEGEND_KEYS
@@ -1048,14 +1050,15 @@ export const sameLegendSources = (left, right) => left.length === right.length
 // D-15-38: a restored table whose caption is written in several colors shows
 // its rows live, accepted residual OV-357).
 /**
- * @param {LegendCatalogFeatures} catalogFeatures @param {FeatureDrawnContext} context
+ * @param {LegendCatalogFeatures} catalogFeatures @param {LegendRowKeysContext} context
  * @param {{ byColor: boolean }} options
  */
 const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
   const drawn = drawnLegendFeatures(catalogFeatures, context, { asRendered: false });
   if (!drawn || context.colorRules.some((rule) => rule?.feat === '*' && legendRuleCaption(rule))) return null;
   // A feature whose match was not read is of a type no captioned rule is for: its row is its type's.
-  const rows = featureLegendRows(context.colorRules, drawn.map(({ type, winner }) => ({ type, winner: winner ?? null })));
+  const rows = featureLegendRows(context.colorRules, drawn.map(({ type, winner }) => ({ type, winner: winner ?? null })),
+    context.palette);
   const ruleRowKey = byColor ? createRuleLegendCaptions(context.colorRules) : legendRuleCaption;
   /** @type {Map<string, string | null>} */
   const keys = new Map();
@@ -1072,7 +1075,11 @@ const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
 // a Result without a catalog); `byColor`: as `legendRowKeysOf`; `mode`: as
 // `resultLegendSources`.
 /**
- * @param {{ results?: { value?: unknown } }} state @param {string} mode @param {FeatureDrawnContext} context
+ * What the row keys of a Result read: whether each feature is drawn, and the type colors of the drawing.
+ * @typedef {FeatureDrawnContext & Pick<LegendRowContext, 'palette'>} LegendRowKeysContext
+ */
+/**
+ * @param {{ results?: { value?: unknown } }} state @param {string} mode @param {LegendRowKeysContext} context
  * @param {{ byColor?: boolean }} [options]
  */
 export const resultLegendRowKeys = (state, mode, context, { byColor = true } = {}) => {

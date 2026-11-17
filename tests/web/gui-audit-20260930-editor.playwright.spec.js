@@ -367,6 +367,29 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
       expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show)).toBe(false);
     });
 
+    // The rRNA rows of the Legend; and that the editor reads s-rRNA and l-rRNA
+    // in the one row "rRNA": each popup names it, and a color change of each
+    // offers that Legend item with its one other feature (Cancel changes nothing).
+    const rrnaRows = async (options) => (await legendCaptions(page, options)).filter((caption) => /rRNA/.test(caption));
+    const expectRrnaRowSiblings = async () => {
+      for (const product of ['s-rRNA', 'l-rRNA']) {
+        await evaluateWithRetainedPromise(page, async (name) => {
+          const app = window.__GBDRAW_APP__;
+          await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === name), null);
+        }, product);
+        await expect(page.getByLabel('Feature legend name', { exact: true }), product).toHaveValue('rRNA');
+        await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.updateClickedFeatureColor('#123456'));
+        await settle(page);
+        expect(await page.evaluate(() => {
+          const { show, legendName, siblingCount } = window.__GBDRAW_APP__.featureStyleScopeDialog;
+          return { show, legendName, siblingCount };
+        }), product).toEqual({ show: true, legendName: 'rRNA', siblingCount: 1 });
+        await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleFeatureStyleScopeChoice('cancel'));
+        await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+        await settle(page);
+      }
+    };
+
     // Its color rule makes the rRNA legend entry "other rRNAs", so it runs after the
     // conflict step, which renames tRNA to the rRNA caption of the loaded Session.
     await test.step('Reset fill after a canceled reset dialog uses the reset feature type default', async () => {
@@ -397,7 +420,40 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
       await settle(page);
       const rrnaDefault = await page.evaluate(() => window.__GBDRAW_APP__.appliedPaletteColors.rRNA);
       await expect.poll(() => fill('s-rRNA'), { timeout: 10_000 }).toBe(rrnaDefault);
+      // OV-3350 (Owner D-15 = B): no other captioned rule draws an rRNA, so the
+      // Legend keeps the type's caption, live and after Generate, and the editor
+      // puts both rRNAs in that one row: a Reset fill on l-rRNA asks about s-rRNA.
+      await expect.poll(() => rrnaRows()).toEqual(['rRNA']);
+      await expectRrnaRowSiblings();
       await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+      await generate(page);
+      expect(await rrnaRows({ source: 'result' })).toEqual(['rRNA']);
+    });
+
+    // OV-3350: a later rule that colors l-rRNA brings the "other" row back; a
+    // Reset fill of l-rRNA too leaves every rRNA in the palette color with a
+    // reset rule, and the Legend draws the type's caption again.
+    await test.step('Reset fill keeps the other row while another rule colors the type (OV-3350)', async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        Object.assign(app.newSpecRule, { feat: 'rRNA', qual: 'product', val: '^l-rRNA$', color: '#0055ff', cap: 'large rRNA' });
+        await app.addSpecificRule();
+      });
+      await settle(page);
+      await expect.poll(async () => (await rrnaRows()).sort()).toEqual(['large rRNA', 'other rRNAs']);
+      await generate(page);
+      expect((await rrnaRows({ source: 'result' })).sort()).toEqual(['large rRNA', 'other rRNAs']);
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === 'l-rRNA'), null);
+        await app.resetClickedFeatureFillColor();
+      });
+      await settle(page);
+      await expect.poll(() => rrnaRows()).toEqual(['rRNA']);
+      await expectRrnaRowSiblings();
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+      await generate(page);
+      expect(await rrnaRows({ source: 'result' })).toEqual(['rRNA']);
     });
 
     // N-16 (D-11, PD-OI-066): a label reflow renders the committed Session with
