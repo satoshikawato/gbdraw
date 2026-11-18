@@ -1246,7 +1246,7 @@ def _mode_scoped_document_of_request(
     created_at: datetime | None,
 ) -> SessionDocument:
     """:func:`_mode_scoped_document` of one request, resolved here unless ``resolved``
-    (:func:`gbdraw.session_io.build_session_json` builds on it)."""
+    (:func:`gbdraw.cli_utils.session.build_session_json` builds on it)."""
 
     (build,) = (
         (_DrawingBuild(mode=_diagram_request_mode(request), request=request, state={}),)

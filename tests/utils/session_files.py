@@ -158,7 +158,8 @@ def build_session_payload(*args: Any, **kwargs: Any) -> dict[str, Any]:
 
     import dataclasses
 
-    from gbdraw.session_io import SessionBuildContext, build_session_json
+    from gbdraw.session_io import SessionBuildContext
+    from gbdraw.cli_utils.session import build_session_json
 
     context = args[0] if args else kwargs.get("context")
     source = getattr(context, "source_session", None)

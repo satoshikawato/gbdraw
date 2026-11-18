@@ -14,7 +14,6 @@ import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -68,7 +67,6 @@ from .io.input_text import GZIP_ERRORS, open_input_text
 from .exceptions import GbdrawError, SessionFormatError, ValidationError
 from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
-from .render.formats import normalize_format_token
 from .session_container import (
     SESSION_FILE_UNREADABLE,
     SESSION_JSON_INVALID,
@@ -121,7 +119,6 @@ from .web_support.mode_scoped_settings import (
 
 if TYPE_CHECKING:
     from .analysis.protein_colinearity import ProteinIdentityManifest
-    from .api.requests import DiagramRequest
     from .session_drawings import ModeScopedSourceFacts
 
 SESSION_FORMAT = "gbdraw-session"
@@ -6053,183 +6050,6 @@ def _rebound_web_files(
     return web_files
 
 
-
-def _canonical_session_document(
-    canonical_request: DiagramRequest, *, resolved: bool, created_at: datetime
-) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
-    """The mode-scoped Session document of a CLI run's canonical request, and the sources of its resources' bytes."""
-    from .session import _mode_scoped_document_of_request
-
-    document = _mode_scoped_document_of_request(
-        canonical_request, resolved=resolved, created_at=created_at
-    )
-    return document.to_dict(), dict(document.resources.sources)
-
-
-def build_session_json(
-    context: SessionBuildContext,
-    *,
-    svg_results: Sequence[tuple[str, str]],
-    embedded_files: Mapping[str, object],
-    generated_at: datetime,
-    feature_catalog: Mapping[str, object] | None = None,
-    losat_cache_entries: Sequence[Mapping[str, object]] | None = None,
-    losat_derived_cache_entries: Sequence[Mapping[str, object]] | None = None,
-    protein_identity_manifest: Mapping[str, object] | None = None,
-    legacy_protein_raw_candidates: Sequence[Mapping[str, object]] | None = None,
-    legacy_protein_derived_evidence: Sequence[Mapping[str, object]] | None = None,
-    canonical_request: DiagramRequest | None = None,
-    _canonical_request_is_resolved: bool = False,
-) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
-    """Build a GUI-loadable Session document from a CLI run, and the sources of its resources' bytes."""
-
-    source_version: int | None = None
-    if context.source_session is not None:
-        validate_session(context.source_session, resource_sources=dict(context.source_resources or {}))
-        source_version = int(context.source_session["version"])
-        payload: dict[str, Any] = json_clone(context.source_session)
-    else:
-        payload = {}
-
-    payload["format"] = SESSION_FORMAT
-    # The payload is built in the mode-scoped layout and moved to drawings last.
-    payload["version"] = MODE_SCOPED_SESSION_MAX_VERSION
-    payload["createdAt"] = generated_at.isoformat()
-    if context.output_prefix:
-        payload["title"] = Path(str(context.output_prefix)).name
-    else:
-        payload.setdefault("title", "gbdraw")
-
-    if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
-        from .session_migration import (
-            log_session_draft_migration,
-            read_request_less_source_features,
-        )
-
-        # The migrations read the version of the Session they migrate; the
-        # hash rules of a Session 27-30 read its sources again (OV-2043).
-        source = {**payload, "version": source_version}
-        migration = migrate_session_flat_draft(
-            source, source_features=read_request_less_source_features(source)
-        )
-        log_session_draft_migration(migration, source_version)
-        payload = {**migration.session, "version": MODE_SCOPED_SESSION_MAX_VERSION}
-    config = payload.get("config")
-    if not isinstance(config, dict):
-        config = dict(config) if isinstance(config, Mapping) else {}
-
-    ui = payload.get("ui")
-    ui = dict(ui) if isinstance(ui, Mapping) else {}
-    payload["ui"] = ui
-    ui["mode"] = context.mode
-    ui.pop("blastSource", None)
-    ui.setdefault("zoom", 1)
-    ui.setdefault("selectedResultIndex", 0)
-    ui.setdefault("canvasPan", {"x": 0, "y": 0})
-
-    payload["files"] = json_clone(embedded_files)
-    payload["results"] = [
-        {"name": name or f"Result {index + 1}", "content": content}
-        for index, (name, content) in enumerate(svg_results)
-    ]
-    if context.run_metadata is not None:
-        payload["runMetadata"] = json_clone(context.run_metadata)
-    else:
-        payload.pop("runMetadata", None)
-    editor_state = payload.get("editorState")
-    editor_state = (
-        dict(editor_state) if isinstance(editor_state, Mapping) else {}
-    )
-    editor_state["featureCatalog"] = json_clone(
-        feature_catalog
-        if feature_catalog is not None
-        else {
-            "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
-            "items": [
-                {
-                    "resultIndex": index,
-                    "resultName": result["name"],
-                    "recordKeys": [],
-                    "features": [],
-                    "biologicalFeatures": [],
-                    "orthogroups": [],
-                    "annotations": [],
-                    "comparisonMatches": [],
-                }
-                for index, result in enumerate(payload["results"])
-            ],
-        }
-    )
-    payload["editorState"] = editor_state
-
-    orthogroup_state = payload.get("orthogroupState")
-    orthogroup_state = (
-        dict(orthogroup_state)
-        if isinstance(orthogroup_state, Mapping)
-        else {}
-    )
-    orthogroup_state.pop("groups", None)
-    orthogroup_state.pop("selectedOrthogroupAlignmentFeature", None)
-    payload["orthogroupState"] = orthogroup_state
-    payload["cliInvocation"] = {
-        "schema": 1,
-        "mode": context.mode,
-        "args": [str(arg) for arg in context.cli_invocation_args],
-        "renderFormats": [normalize_format_token(fmt) for fmt in context.render_formats],
-        "fileBindings": [_binding_to_json(binding) for binding in context.file_bindings],
-        "generatedBy": "gbdraw",
-    }
-    if canonical_request is None:
-        raise ValidationError(
-            f"A canonical typed request is required to write a version {CURRENT_SESSION_VERSION} session."
-        )
-    canonical, sources = _canonical_session_document(
-        canonical_request, resolved=_canonical_request_is_resolved, created_at=generated_at
-    )
-    payload["renderRequest"] = canonical["renderRequest"]
-    payload["resources"] = canonical["resources"]
-    files_value = payload.get("files")
-    files_for_web = files_value if isinstance(files_value, Mapping) else {}
-    if source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
-        force_web_comparison_draft = (
-            isinstance(config.get("linearRecordLayout"), Mapping)
-            or isinstance(config.get("linearComparisonPlan"), Mapping)
-            or not isinstance(config.get("cliOptions"), Mapping)
-        )
-        config, files_for_web = migrate_legacy_linear_comparison_draft_for_current_writer(
-            config,
-            files_for_web,
-            force_web_draft=force_web_comparison_draft,
-        )
-        payload["config"] = config
-    if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
-        # The flat draft of an older source goes to the mode slices (Session 46).
-        payload = split_draft_into_modes(
-            payload,
-            committed_mode=context.mode,
-            depth_sources=session_depth_source_widths(files_for_web),
-            palette_colors=mode_split_palette_colors(payload.get("config")),
-        )
-    if source_version is not None and source_version < ROW_KEYED_LEGEND_SESSION_MIN_VERSION:
-        payload, _outcomes = session_legend_edits_by_row_key(payload)
-    _attach_current_web_file_bindings(payload, files_for_web, sources)
-    payload.pop("files", None)
-    normalize_current_session_artifacts(
-        payload,
-        losat_cache_entries=losat_cache_entries,
-        losat_derived_cache_entries=losat_derived_cache_entries,
-        protein_identity_manifest=protein_identity_manifest,
-        legacy_protein_raw_candidates=legacy_protein_raw_candidates,
-        legacy_protein_derived_evidence=legacy_protein_derived_evidence,
-    )
-    # One check, of the Session 51 returned (OV-1815): the mode-scoped payload
-    # is this builder's own and moves unchecked.
-    drawings, _source_facts = drawings_document_of_mode_scoped(payload)
-    sources = {resource_id: sources[resource_id] for resource_id in drawings["resources"]}
-    validate_session(drawings, resource_sources=sources)
-    return dict(drawings), sources
-
-
 def drawings_document_of_mode_scoped(
     data: Mapping[str, object],
     *,
@@ -6419,7 +6239,6 @@ __all__ = [
     "SessionBuildContext",
     "SessionFileBinding",
     "SessionRunSpec",
-    "build_session_json",
     "classify_raw_losat_cache_entry",
     "compact_session_feature_catalog",
     "decode_depth_payload",
