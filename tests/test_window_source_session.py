@@ -636,9 +636,10 @@ def test_a_place_read_past_the_origin_is_wrapped_onto_the_circle_with_its_partia
     points exact and the outer ends keeping their partial positions, and reading it round the origin gives the place
     back (OV-3262)."""
 
-    from gbdraw.io.regions import _unwrapped_location, _wrapped_location
+    from gbdraw.core.record_metadata import location_on_one_turn
+    from gbdraw.io.regions import _unwrapped_location
 
-    wrapped = _wrapped_location(location, 60_000)
+    wrapped = location_on_one_turn(location, 60_000)
     assert str(wrapped) == expected
     if isinstance(wrapped, CompoundLocation):
         assert str(_unwrapped_location(wrapped, 60_000)) == str(location)

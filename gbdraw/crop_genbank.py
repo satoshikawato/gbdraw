@@ -13,6 +13,7 @@ from Bio.SeqFeature import (
 )
 from gbdraw.core.numeric import argparse_integer
 from gbdraw.core.record_metadata import (
+    location_over_origin,
     _copy_source_feature_identity,
     _feature_source_index_map,
 )
@@ -122,13 +123,16 @@ def crop_and_shift_features(
     coord_base=1,
     coord_step=1,
     period=None,
+    record_length=None,
     _source_indexes=None,
 ):
     """
     Iterates over old features, crops/shifts them relative to the
     crop window (start_0, end_0), and returns a new list of features.
     ``coord_base``, ``coord_step`` and ``period`` are the coordinate map of
-    the record the features belong to.
+    the record the features belong to. With ``record_length`` (given for a
+    record drawn circular only), a part past the record's end that fits it is
+    read as the span over its origin it is (``location_over_origin``).
     """
     new_features_list = []
     source_indexes = (
@@ -138,10 +142,13 @@ def crop_and_shift_features(
     )
     for old_feature in original_features:
 
-        if not (old_feature.location.start < end_0 and old_feature.location.end > start_0):
+        old_loc = (
+            location_over_origin(old_feature.location, record_length)
+            if record_length is not None else old_feature.location
+        )
+        if not (old_loc.start < end_0 and old_loc.end > start_0):
             continue
 
-        old_loc = old_feature.location
         new_location = None
 
         if isinstance(old_loc, CompoundLocation):

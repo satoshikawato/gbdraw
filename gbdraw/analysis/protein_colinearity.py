@@ -65,7 +65,9 @@ from gbdraw.comparisons.losat_runtime import (
     run_losat_search,
 )
 from gbdraw.core.numeric import compensated_sum
-from gbdraw.core.record_metadata import WINDOW_OF_ANNOTATION, _feature_source_index_map, _read_coord_map
+from gbdraw.core.record_metadata import (
+    WINDOW_OF_ANNOTATION, _feature_source_index_map, _read_coord_map, location_over_origin,
+)
 from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts, source_feature_hash_and_parts
@@ -3284,7 +3286,8 @@ def _resolve_gene_parent_id(
 
 def _translate_cds_feature(record: SeqRecord, feature: SeqFeature) -> str | None:
     try:
-        protein = translate_cds(feature, feature.extract(record.seq))
+        # A part past the origin of a record drawn circular reads as the join it is (OV-3724).
+        protein = translate_cds(feature, location_over_origin(feature.location, len(record.seq)).extract(record.seq))
     except Exception as exc:
         logger.debug(
             "Skipping CDS feature %s on %s: translation failed: %s",

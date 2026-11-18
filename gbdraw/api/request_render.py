@@ -132,7 +132,7 @@ from gbdraw.io.comparison_sequences import (
     read_comparison_sequence_file,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
-from gbdraw.io.genome import load_fasta, parse_gff_fasta, source_genome_length
+from gbdraw.io.genome import fit_features_to_record, load_fasta, parse_gff_fasta, source_genome_length
 from gbdraw.io.record_select import select_record_units
 from gbdraw.labels.filtering import (
     read_filter_list_file,
@@ -142,7 +142,7 @@ from gbdraw.labels.filtering import (
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
 from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import detected_topology
+from gbdraw.layout.record_transform import detected_topology, reads_over_origin
 from gbdraw.layout.record_units import left_off_circle, record_units
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
@@ -1509,8 +1509,10 @@ def _normalize_request_records(
             gff_loader=gff_loader,
             fasta_loader=fasta_loader,
             parsed_sources=inputs.parsed_sources,
+            circle_diagram=circle_diagram,
         )
 
+    circle_diagram = not isinstance(request, LinearDiagramRequest)
     if not prepared_input_cache_active():
         return resolve()
     source_specs = tuple(
@@ -1546,12 +1548,23 @@ def _normalize_request_records(
     gff_type_key = None if gff_types is None else tuple(sorted(gff_types))
     input_keys = tuple(_record_input_preparation_key(item) for item in request.records)
     collection_key = _record_collection_preparation_key(request.record_options)
+    # Whether each record reads a feature part past its end over its origin decides whether that part fits, by the
+    # rule record planning fits by (``reads_over_origin``); a record read alike in both modes keeps its hit across a
+    # mode switch.
+    circle_key = tuple(
+        tuple(
+            reads_over_origin(circle_diagram, item.display.is_circular, record, _source_details(item.source)[0])
+            for record in load_render_source_records(item.source).records
+        )
+        for item in request.records
+    )
     key = (
         "resolved-records-v1",
         tuple(source_key for source_key, _identities in typed_source_specs),
         input_keys,
         collection_key,
         gff_type_key,
+        circle_key,
     )
     collection = get_or_build_resolved_records(key, resource_identities, resolve)
     # Per-record identity (design 2.1, M1): the elements of the key above that
@@ -1573,6 +1586,8 @@ def _normalize_request_records(
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
                 # Each window of a record is its own drawn record (D-01).
                 *(() if provenance.window is None else (provenance.window.index,)),
+                # The features fitting the record left out, which the circle key decides.
+                *(() if not provenance.features_outside_record else (provenance.features_outside_record,)),
             )
             if default_collection
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)
@@ -2460,7 +2475,8 @@ def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
     file's; an in-memory crop, the record it was cut from, as its genome length does), with the proteins LOSATP's
     extraction takes under the drawing's visibility rules and the request's feature edits of each drawn record,
     bound to the uncropped record, so an edit outside a crop or window counts too (an undrawn record has none):
-    ``source_protein_letters``, read once per source.
+    ``source_protein_letters``, read once per source. Each record counts the features the drawing takes
+    (``fit_features_to_record``, by the rule record planning fits by), so a feature outside its record adds none.
     """
 
     collection, inputs = loaded.collection, loaded.inputs
@@ -2487,8 +2503,15 @@ def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
         for other in provenance:
             if source_of(other) == key:
                 drawn.setdefault(other.source_record_index, other)
+        source_kind = _source_details(source)[0]
+        fitted = [
+            fit_features_to_record(record, over_origin=reads_over_origin(
+                False, drawn[index].display.is_circular if index in drawn else None, record, source_kind,
+            )).record
+            for index, record in enumerate(source_records)
+        ]
         letters[key] = source_protein_letters(
-            source_records,
+            fitted,
             feature_visibility_rules=inputs.features.feature_visibility_rules,
             feature_overrides=_source_record_edits(edits, source_records, drawn),
         )
