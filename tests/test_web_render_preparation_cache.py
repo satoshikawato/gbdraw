@@ -64,7 +64,6 @@ from gbdraw.io.regions import parse_region_spec
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.session import build_session_document
 from tests.utils.session_files import embedded_session, read_session_payload
-from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
