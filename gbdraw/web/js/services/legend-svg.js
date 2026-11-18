@@ -353,9 +353,6 @@ export const drawnBlockStroke = (svg) => {
   return { color: pythonDrawnAttribute(block, 'stroke'), width: Number.isFinite(width) ? width : null };
 };
 
-/** @param {unknown} value */
-const paintKey = (value) => String(value ?? '').trim().toLowerCase();
-
 /**
  * Whether a feature stroke edit (the feature popup) sets a stroke color or width.
  * @param {unknown} override
@@ -576,47 +573,51 @@ export const namedLegends = (svg) => {
 
 /**
  * What the editor intent says of the features a stroked Legend row reaches in
- * one Result; Python's row gives the rest (`legendRowFeatureIds`).
+ * one Result; the row each feature is in gives the rest (`legendRowFeatureIds`).
  * @typedef {object} LegendRowReach
  * @property {readonly RenderedFeatureId[]} listedIds The features the row lists (`featureIds`, kept by older
  *   Sessions); when there are any, the row reaches only them.
  * @property {readonly RenderedFeatureId[]} namedIds The features a feature color edit names into the row.
  * @property {readonly RenderedFeatureId[]} ownStrokeIds The features with a stroke edit of their own.
- * @property {SwatchColor | null} draftColor The color the draft gives the row's features where the Result
- *   predates it (a live preview of the row's rule or palette color); null: Python's row color. Used only
- *   where the Result draws the row.
+ */
+
+/**
+ * The key of the Legend row each feature a Result draws is in (`drawnFeatureRowKeys` in
+ * specific-color-rules.js): null for none, undefined while it is not known.
+ * @typedef {Iterable<readonly [RenderedFeatureId, PythonLegendKey | null | undefined]>} FeatureRowKeys
  */
 
 // The features a stroke on a Legend row reaches in one Result (R3, PD-OI-066,
 // OV-123, OV-288): the features the row lists, else the features a feature
-// color edit names into the row and the features drawn in the color the
-// renderer gives the row's features, Python's row color (R15-4), never the
-// color the row's swatch shows. A row the Result does not draw reaches no
-// feature by color, whatever color the draft gives its key, as Generate draws
-// it (OV-1987). A feature with a stroke edit of its own keeps it: the
-// explicit per-feature edit wins over the row. The executor reads it
-// for every Result it styles (services/svg-result-ingestion.js), and the
-// feature popup for the feature it shows.
+// color edit names into the row and the features in the row, by the key of
+// the row each feature is in (`featureRows`), never by a color: two rows of
+// one color keep their own features (Owner 2026-11-14). A row the Result does
+// not draw (`rowKey` null) reaches no feature by its row, as Generate draws it
+// (OV-1987). A feature with a stroke edit of its own keeps it: the explicit
+// per-feature edit wins over the row. A feature whose row is not known yet is
+// `pending`: the executor keeps what it shows (services/svg-result-ingestion.js).
+// The executor reads it for every Result it styles, and the feature popup for
+// the feature it shows.
 /**
  * @param {LegendRowReach} reach
- * @param {SwatchColor | null} pythonColor Python's row color in this Result; null without the row.
- * @param {Iterable<readonly [RenderedFeatureId, string]>} drawnFills The fill each drawn feature shows.
- * @returns {RenderedFeatureId[]}
+ * @param {PythonLegendKey | null} rowKey The row's key where this Result draws the row, else null.
+ * @param {FeatureRowKeys} featureRows
+ * @returns {{ reached: RenderedFeatureId[], pending: RenderedFeatureId[] }}
  */
-export const legendRowFeatureIds = ({ listedIds, namedIds, ownStrokeIds, draftColor }, pythonColor, drawnFills) => {
+export const legendRowFeatureIds = ({ listedIds, namedIds, ownStrokeIds }, rowKey, featureRows) => {
   const listed = new Set(listedIds);
   const named = new Set(namedIds);
   const own = new Set(ownStrokeIds);
-  const color = pythonColor === null ? null : paintKey(draftColor ?? pythonColor);
   /** @type {Set<RenderedFeatureId>} */
   const reached = new Set();
-  for (const [id, fill] of drawnFills) {
+  /** @type {Set<RenderedFeatureId>} */
+  const pending = new Set();
+  for (const [id, key] of featureRows) {
     if (!id || own.has(id)) continue;
-    if (listed.size > 0
-      ? listed.has(id)
-      : named.has(id) || (color && color !== 'none' && paintKey(fill) === color)) reached.add(id);
+    if (listed.size > 0 ? listed.has(id) : named.has(id) || (rowKey !== null && key === rowKey)) reached.add(id);
+    else if (listed.size === 0 && rowKey !== null && key === undefined) pending.add(id);
   }
-  return [...reached];
+  return { reached: [...reached], pending: [...pending] };
 };
 
 /**

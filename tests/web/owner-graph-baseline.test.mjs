@@ -46,7 +46,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|listLegendRows|shown-join': 1,
   'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|namedBy|shown-join': 1,
   'owner-graph.identity-from-display.v1|app/legend/entry-actions.js|prepareFileLegendEntries|paint-join': 1,
-  'owner-graph.identity-from-display.v1|services/legend-svg.js|legendRowFeatureIds|paint-join': 1,
   'owner-graph.identity-from-display.v1|services/specific-color-rules.js|captionFills|paint-join': 1,
   'owner-graph.identity-from-display.v1|services/specific-color-rules.js|createRuleLegendCaptions|paint-join': 1,
   'owner-graph.identity-from-display.v1|services/specific-color-rules.js|isSavedResetRule|paint-join': 1,

@@ -1285,8 +1285,8 @@ export const createAppSetup = () => {
   /** @param {boolean} saving */
   const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
   // The domains a display of the feature fills shows. A Legend row's stroke
-  // reaches the features drawn in the row's color (`legendRowFeatureIds`), so a
-  // fill edit can change which features it reaches, and a rule commit can move
+  // reaches the features in the row (`legendRowFeatureIds`), so a rule or
+  // color edit can change which features it reaches, and a rule commit can move
   // the row to another key: while the drawing holds a Legend row stroke, a fill
   // display also shows the strokes (OV-1985, OV-1986).
   /** @param {DrawingState} drawing @returns {readonly string[]} */
@@ -2502,7 +2502,9 @@ export const createAppSetup = () => {
     applyEditorOperations: previewRuntime.applyEditorOperations,
     readLegendRowNames: legendActions.readLegendRowNames,
     onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
-    runUndoable: history.runUndoable
+    runUndoable: history.runUndoable,
+    isRulePrepared: rulePreparation.isPrepared,
+    projectPaletteAndRules
   });
   const {
     projectMountedEditorIntent, drawReturningLegendRows, restoreLegendRows, restoreLegendItems, whenLegendFactsCurrent

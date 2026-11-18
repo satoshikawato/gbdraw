@@ -81,6 +81,9 @@ const drawnPaintOf = ({ phase, bindingOptions }) => {
  * @property {() => unknown} readLegendRowNames Reads the Legend rows' names (Legend owner).
  * @property {(options?: { commit?: boolean }) => unknown} onLegendGeometryChanged Lays the Legend out (Legend owner).
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable One History step (History).
+ * @property {() => boolean} isRulePrepared Whether the active drawing's rule matches are prepared (rule preparation).
+ * @property {() => unknown} projectPaletteAndRules Prepares the rule matches, then shows the fills and the
+ *   strokes (the root's palette and rules projection).
  */
 
 /**
@@ -92,7 +95,7 @@ const drawnPaintOf = ({ phase, bindingOptions }) => {
 export const createEditorIntentShow = ({
   state, results, extractedFeatures, originalLegendOrder, svgContainer, selectedResultIndex, readDrawnTracks,
   getCommittedCanonicalRenderRequest, getActiveRuntime, applyEditorOperations, readLegendRowNames, onLegendGeometryChanged,
-  runUndoable
+  runUndoable, isRulePrepared, projectPaletteAndRules
 }) => {
   // What the live compile reads of the displayed Result's Legend state.
   /** @param {DisplayedLegendRowContext} context */
@@ -170,7 +173,7 @@ export const createEditorIntentShow = ({
         return false;
       }
     }
-    return applyEditorOperations(shown, {
+    const applied = applyEditorOperations(shown, {
       domains,
       // The Legend is laid out without its own commit: the display commits
       // the Result once (S4).
@@ -180,6 +183,12 @@ export const createEditorIntentShow = ({
         onLegendGeometryChanged({ commit: false });
       }
     });
+    // A Legend row stroke reaches the features in the row, which their rule
+    // matches decide; until they are prepared (a Result just loaded), a
+    // feature keeps the stroke it shows. The palette and rules projection
+    // prepares them and shows the strokes again, once: it shows them prepared.
+    if (shown && shown.legendStrokes.length > 0 && !isRulePrepared()) void projectPaletteAndRules();
+    return applied;
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
   const {

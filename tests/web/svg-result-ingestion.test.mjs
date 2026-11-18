@@ -2090,46 +2090,48 @@ test('a Result without a feature catalog takes Python\'s fills from the displaye
     catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0, mounted),
     legendEntries: [{ caption: 'CDS', color: '#aaaaaa' }],
     legendStrokeOverrides: { CDS: { strokeColor: '#e63946' } },
-    livePreview: { drawnTracks: [], domains, paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
+    livePreview: { drawnTracks: [], domains, paletteColors: { CDS: '#AAAAAA' }, drawnContext: null, features: [feature] }
   }).operationsByResult[0];
   assert.deepEqual(operations.featureFills, []);
   reconcileMountedResult(mounted, operations, { domains });
   assert.equal(mounted.querySelector('[data-gbdraw-feature-id]').getAttribute('stroke'), '#e63946');
 });
 
-// OV-288 (R15-4): the executor reaches a Legend row's features by the color
-// the renderer gives them, Python's row color (or the draft's where the
-// Result predates it), never the color the row's swatch shows; a feature drawn
-// in another color by this pass is not reached.
-test('a Legend row stroke reaches the features in Python\'s row color, not in the swatch color', () => {
+// OV-288 (Owner 2026-11-14): the executor reaches a Legend row's features by
+// the row each feature is in (the reach's keys), never by a color: neither
+// the swatch's color nor a fill this pass gives the feature decides. A feature
+// whose row is not known yet keeps the stroke it shows, and restores no base.
+test('a Legend row stroke reaches the features in the row, whatever color the row or the feature shows', () => {
   const mounted = buildSvgRoot();
   const feature = mounted.querySelector('[data-gbdraw-feature-id]');
   const swatch = mounted.querySelector('g[data-legend-key]').querySelector('path');
   const domains = ['featureFills', 'legendFills', 'legendStrokes'];
-  const operations = ({ draftColor = null, featureFills = [] } = {}) => ({
+  // `key`: the row the reach puts f0001 in; undefined: not known.
+  const operations = ({ key, featureFills = [] }) => ({
     ...createEmptySvgMutationPlan(1).operationsByResult[0],
     featureFills,
     legendFills: [{ caption: 'CDS', color: '#7b2cbf' }],
     legendStrokes: [{
       caption: 'CDS', strokeColor: '#e63946', strokeWidth: null,
-      reach: { listedIds: [], namedIds: [], ownStrokeIds: [], draftColor }
+      reach: { listedIds: [], namedIds: [], ownStrokeIds: [], featureRows: () => [['f0001', key]] }
     }]
   });
-  reconcileMountedResult(mounted, operations(), { domains });
+  reconcileMountedResult(mounted, operations({ key: 'CDS' }), { domains });
   assert.deepEqual([swatch.getAttribute('fill'), feature.getAttribute('stroke')], ['#7b2cbf', '#e63946']);
-  reconcileMountedResult(mounted, operations({ draftColor: '#123456' }), { domains });
-  assert.equal(feature.getAttribute('stroke'), null, 'a draft color the Result predates decides');
-  reconcileMountedResult(mounted, operations({ featureFills: [{ renderedId: 'f0001', color: '#123456' }] }), { domains });
-  assert.equal(feature.getAttribute('stroke'), null, 'a feature this pass draws in another color');
-  reconcileMountedResult(mounted, operations({ draftColor: '#123456', featureFills: [{ renderedId: 'f0001', color: '#123456' }] }), { domains });
-  assert.equal(feature.getAttribute('stroke'), '#e63946', 'the draft recolors the row and its feature alike');
+  reconcileMountedResult(mounted, operations({ key: 'CDS', featureFills: [{ renderedId: 'f0001', color: '#123456' }] }), { domains });
+  assert.equal(feature.getAttribute('stroke'), '#e63946', 'a fill this pass gives the feature leaves it in its row');
+  reconcileMountedResult(mounted, operations({ key: undefined }), { domains });
+  assert.equal(feature.getAttribute('stroke'), '#e63946', 'a feature whose row is not known keeps what it shows');
+  reconcileMountedResult(mounted, operations({ key: 'Complex I' }), { domains });
+  assert.equal(feature.getAttribute('stroke'), null, 'a feature of another row returns to Python\'s stroke');
+  reconcileMountedResult(mounted, operations({ key: undefined }), { domains });
+  assert.equal(feature.getAttribute('stroke'), null, 'nor does a feature whose row is not known take the stroke');
 });
 
 // Review L3 of OV-288: one compile gives every Result of a batch the row's
-// stroke, and the executor reaches in each Result the features drawn in the
-// color Python gave the row there. Result 2 draws the row in another color
-// (a rule's row of that caption): the same fills are reached in one Result
-// and not in the other; a feature with its own stroke keeps it.
+// stroke, and the executor reaches in each Result the features in the row
+// there, whatever color they are drawn in: Result 2 draws the row in another
+// color; a feature with its own stroke keeps it.
 test('a Legend row stroke reaches in each Result of a batch the features of Python\'s row there', () => {
   const resultRoot = (rowColor, features) => {
     const root = new FakeElement('svg', { xmlns: 'http://www.w3.org/2000/svg' });
@@ -2153,7 +2155,11 @@ test('a Legend row stroke reaches in each Result of a batch the features of Pyth
     catalogAdmission: {
       resultNames: ['record-a.svg', 'record-b.svg'],
       renderedTargetsByOverrideKey: new Map([['stable-a', [{ resultIndex: 0, renderedId: 'f0001' }]]]),
-      resultIndexesByRenderedId: new Map([['f0001', new Set([0])]])
+      resultIndexesByRenderedId: new Map([['f0001', new Set([0])]]),
+      renderedFeaturesByResult: [
+        new Map([['f0001', 'CDS'], ['f0003', 'CDS'], ['f0004', 'tRNA']].map(([svg_id, type]) => [svg_id, { svg_id, type }])),
+        new Map([['f0002', 'CDS'], ['f0005', 'tRNA']].map(([svg_id, type]) => [svg_id, { svg_id, type }]))
+      ]
     },
     featureStrokeOverrides: { 'stable-a': { strokeColor: '#2a9d8f' } },
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#7b2cbf' }],
@@ -2378,7 +2384,7 @@ test('a Legend swatch of fill none is still the row\'s swatch, and live fills af
   reconcileMountedResult(svg, legendOperations({
     legendStrokes: [{
       caption: 'CDS', strokeColor: '#e63946', strokeWidth: 2,
-      reach: { listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }
+      reach: { listedIds: [], namedIds: [], ownStrokeIds: [], featureRows: () => [] }
     }]
   }), { domains });
   assert.equal(legendSwatch(cds()).getAttribute('stroke'), '#e63946', 'a live stroke after none reaches the swatch');
@@ -2537,4 +2543,164 @@ test('editor rows follow the order of their additions', () => {
   reconcileMountedResult(svg, legendOperations({ legendAdds: [add('A'), add('B')] }), { domains: LEGEND_STRUCTURE });
   assert.equal(legendRowsChanged(svg, legendOperations({ legendAdds: [add('A2'), add('B')] }), { domains: LEGEND_STRUCTURE }), true);
   assert.deepEqual(legendRows(svg).map(([key]) => key), ['CDS', 'tRNA', 'rRNA', 'A2', 'B']);
+});
+
+// A Legend row stroke reaches only the features in that row, by the row each
+// feature is in, never every feature drawn in the row's color (Owner
+// 2026-11-14). Two figures: two color rules of one color ("Complex I" ^ND and
+// "Complex IV" ^COX, both #2266aa), and a rule in a feature type's color
+// ("Complex I" in the tRNA color #e8b441). Each feature's rule match is
+// recorded as the rule preparation records Python's answers.
+const OWN_ROW_STROKE = { strokeColor: '#e63946', strokeWidth: 2 };
+const ownRowFigure = (color, rows, features) => {
+  const paths = features.map(([id, , , fill = color]) => `<path id="${id}" data-gbdraw-feature-id="${id}" data-gbdraw-feature-part="block" `
+    + `data-gbdraw-record-index="0" fill="${fill}" stroke="gray" stroke-width="0.5"></path>`);
+  const legend = rows.map((key) => `<g data-legend-key="${key}"><path fill="${color}" stroke="gray" stroke-width="0.5"></path><text>${key}</text></g>`);
+  const content = `<svg>${paths.join('')}<g id="legend"><g id="feature_legend">${legend.join('')}</g></g></svg>`;
+  const catalog = {
+    schema: FEATURE_CATALOG_SCHEMA,
+    items: [{
+      resultIndex: 0, resultName: 'diagram.svg', recordKeys: ['record-a'],
+      features: features.map(([id, , , fill = color]) => ({
+        svgId: id, recordKey: 'record-a', biologicalFeatureId: id, fillColor: fill,
+        drawnSelector: { hash: id, location: '0..3', recordLocation: 'record-a:0..3:+' }
+      })),
+      biologicalFeatures: features.map(([id, type, gene], index) => ({
+        recordKey: 'record-a', biologicalFeatureId: id, stableFeatureId: `stable-${id}`, record_id: 'record-a', type, gene,
+        start: index * 10, end: index * 10 + 3, strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' }
+      })),
+      orthogroups: [], annotations: [], comparisonMatches: []
+    }]
+  };
+  const results = [{ name: 'diagram.svg', content }];
+  return { content, catalog, results, admit: () => admitFeatureCatalog(catalog, results, { adopt: true, mode: 'linear' }) };
+};
+const geneRule = (val, cap, color) => ({ feat: 'CDS', qual: 'gene', val, color, cap });
+// Records each rule's match on the admitted features, as the rule preparation does.
+const recordGeneMatches = (admission, rules) => {
+  const features = [...admission.renderedFeaturesByResult[0].values()];
+  recordRuleMatches(features, rules.map(ruleKey), (index) => {
+    const matched = rules.flatMap((rule, ruleIndex) => (
+      rule.feat === features[index].type && new RegExp(rule.val).test(features[index].gene) ? [ruleIndex] : []
+    ));
+    return { matched, priorities: matched.map(() => 0), declined: [] };
+  });
+  return features;
+};
+const strokedIds = (svg) => svg.querySelectorAll('[data-gbdraw-feature-id]')
+  .filter((element) => element.getAttribute('stroke') === OWN_ROW_STROKE.strokeColor).map((element) => element.id);
+const ownRowEdits = (rows, rules, strokedRow) => ({
+  legendEntries: rows.map((key) => ({ caption: key, originalCaption: key, color: '#000000' })),
+  originalLegendOrder: rows,
+  legendStrokeOverrides: { [strokedRow]: OWN_ROW_STROKE },
+  manualSpecificRules: rules
+});
+const SVG_TEXT_PARSER = class { parseFromString(content) { return { documentElement: parseSvgText(content), querySelector: () => null }; } };
+// The live preview strokes the displayed Result; Generate's admission strokes
+// the Result Python drew, compiled without the preview.
+const strokeOwnRow = ({ figure, rows, rules, strokedRow }) => {
+  const admission = figure.admit();
+  const features = recordGeneMatches(admission, rules);
+  const live = parseSvgText(figure.content);
+  const domains = ['legendStrokes'];
+  reconcileMountedResult(live, compileDirectEditorMutationPlan({
+    catalogAdmission: admission, ...ownRowEdits(rows, rules, strokedRow),
+    livePreview: { domains, paletteColors: {}, drawnTracks: [], drawnContext: null, features }
+  }).operationsByResult[0], { domains });
+  const [admitted] = admitCurrentGeneratedResults(normalizeGenerationResponse({
+    results: figure.results, metadata: {}, featureCatalog: figure.catalog
+  }), {
+    catalogAdmission: admission,
+    mutationPlan: compileDirectEditorMutationPlan({ catalogAdmission: admission, ...ownRowEdits(rows, rules, strokedRow) }),
+    sanitizer: { sanitize: (value) => value },
+    parser: SVG_TEXT_PARSER
+  });
+  return { live: strokedIds(live), generate: strokedIds(parseSvgText(getCommittedSvgContent(admitted))) };
+};
+const ND = ['ND1', 'ND2', 'ND3', 'ND4', 'ND4L', 'ND5', 'ND6'];
+const COX = ['COX1', 'COX2', 'COX3'];
+// f11 is in no stroked row: Load reads Python's block stroke from it.
+const complexFigure = () => ownRowFigure('#2266aa', ['Complex I', 'Complex IV'], [
+  ...[...ND, ...COX].map((gene, index) => [`f${String(index + 1).padStart(2, '0')}`, 'CDS', gene]),
+  ['f11', 'rRNA', 'rrnL', '#7cecd5']
+]);
+const COMPLEX_RULES = [geneRule('^ND', 'Complex I', '#2266aa'), geneRule('^COX', 'Complex IV', '#2266aa')];
+const ND_IDS = ['f01', 'f02', 'f03', 'f04', 'f05', 'f06', 'f07'];
+
+test('a stroke on one of two rule rows of one color reaches only that row\'s features, live and at Generate', () => {
+  const stroked = strokeOwnRow({ figure: complexFigure(), rows: ['Complex I', 'Complex IV'], rules: COMPLEX_RULES, strokedRow: 'Complex I' });
+  assert.deepEqual(stroked, { live: ND_IDS, generate: ND_IDS });
+});
+
+test('a stroke on a feature type\'s row reaches no feature of a rule row in the type\'s color, live and at Generate', () => {
+  const figure = ownRowFigure('#e8b441', ['tRNA', 'Complex I'], [
+    ['t1', 'tRNA', 'trnA'], ['t2', 'tRNA', 'trnC'], ['n1', 'CDS', 'ND1'], ['n2', 'CDS', 'ND2'], ['t3', 'tRNA', 'trnD']
+  ]);
+  const stroked = strokeOwnRow({ figure, rows: ['tRNA', 'Complex I'], rules: [geneRule('^ND', 'Complex I', '#e8b441')], strokedRow: 'tRNA' });
+  assert.deepEqual(stroked, { live: ['t1', 't2', 't3'], generate: ['t1', 't2', 't3'] });
+});
+
+// While a feature's rule match is not known, its row is not: the live
+// preview keeps the stroke each such feature shows and returns no base.
+test('a Legend row stroke keeps what a feature shows while its rule match is not known', () => {
+  const figure = complexFigure();
+  const admission = figure.admit();
+  const svg = parseSvgText(figure.content);
+  const domains = ['featureStrokes', 'legendStrokes'];
+  const ids = [...ND_IDS, 'f08', 'f09', 'f10', 'f11'];
+  const shown = '#111111';
+  reconcileMountedResult(svg, {
+    ...createEmptySvgMutationPlan(1).operationsByResult[0],
+    featureStrokes: ids.map((renderedId) => ({ renderedId, strokeColor: shown, strokeWidth: null }))
+  }, { domains });
+  const features = [...admission.renderedFeaturesByResult[0].values()];
+  reconcileMountedResult(svg, compileDirectEditorMutationPlan({
+    catalogAdmission: admission, ...ownRowEdits(['Complex I', 'Complex IV'], COMPLEX_RULES, 'Complex I'),
+    livePreview: { domains, paletteColors: {}, drawnTracks: [], drawnContext: null, features }
+  }).operationsByResult[0], { domains });
+  // f11 (rRNA, a type no rule names) is known to be in its type's row: it returns to Python's stroke.
+  assert.deepEqual(svg.querySelectorAll('[data-gbdraw-feature-id]').map((element) => element.getAttribute('stroke')),
+    [...ids.slice(0, 10).map(() => shown), 'gray'], 'each CDS feature keeps its stroke; none takes the row\'s, none returns to Python\'s');
+});
+
+// A Result a Session older than 46 saved shows its Legend row strokes drawn in
+// (here by the former color reach, on every feature of the row's color) with
+// no record of Python's. Load cannot know the features' rows (no match is
+// known yet), so it records Python's stroke on each feature that may be in the
+// row; once the matches are known, a show of the saved stroke (an Undo of a
+// later stroke edit) strokes only the row's own features and returns the
+// others to Python's stroke.
+test('after Load, a shown Legend row stroke leaves the other row\'s features once the matches are known', () => {
+  const figure = complexFigure();
+  const saved = figure.content.replace(/(data-gbdraw-feature-part="block" data-gbdraw-record-index="0" fill="#2266aa") stroke="gray" stroke-width="0.5"/g,
+    `$1 stroke="${OWN_ROW_STROKE.strokeColor}" stroke-width="${OWN_ROW_STROKE.strokeWidth}"`);
+  const results = [{ name: 'diagram.svg', content: saved }];
+  const admission = admitFeatureCatalog(figure.catalog, results, { adopt: true, mode: 'linear' });
+  const rows = ['Complex I', 'Complex IV'];
+  const plan = createSavedResultPlan(results, admission, {
+    featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {},
+    legendStrokeOverrides: { 'Complex I': OWN_ROW_STROKE }, originalLegendColors: {}, originalLegendOrder: rows,
+    rules: COMPLEX_RULES, mode: 'linear', resultsRecordPythonPaint: false
+  });
+  const svg = parseSvgText(saved);
+  plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
+  const strokes = () => svg.querySelectorAll('[data-gbdraw-feature-id]').map((element) => element.getAttribute('stroke'));
+  const savedStrokes = [...Array(10).fill(OWN_ROW_STROKE.strokeColor), 'gray'];
+  assert.deepEqual(strokes(), savedStrokes, 'as saved');
+  const domains = ['legendStrokes'];
+  const show = (strokeColor, features) => reconcileMountedResult(svg, compileDirectEditorMutationPlan({
+    catalogAdmission: admission, ...ownRowEdits(rows, COMPLEX_RULES, 'Complex I'),
+    legendStrokeOverrides: { 'Complex I': { ...OWN_ROW_STROKE, strokeColor } },
+    livePreview: { domains, paletteColors: {}, drawnTracks: [], drawnContext: null, features }
+  }).operationsByResult[0], { domains });
+  const features = [...admission.renderedFeaturesByResult[0].values()];
+  show('#2a9d8f', features);
+  assert.deepEqual(strokes(), savedStrokes, 'a stroke edit before the matches are known keeps what is shown');
+  recordGeneMatches(admission, COMPLEX_RULES);
+  show(OWN_ROW_STROKE.strokeColor, features);
+  assert.deepEqual(strokes(), [...ND_IDS.map(() => OWN_ROW_STROKE.strokeColor), 'gray', 'gray', 'gray', 'gray'],
+    'the Undo shows the saved stroke on the row\'s own features only');
+  show(OWN_ROW_STROKE.strokeColor, features);
+  assert.equal(strokes().filter((stroke) => stroke === 'gray').length, 4, 'a second show changes nothing');
 });

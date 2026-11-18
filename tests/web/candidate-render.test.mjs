@@ -428,10 +428,10 @@ test('a Legend row with no known features stays required in each Result of a bat
     [{ caption: 'other proteins', color: '#00aa00', allowMissing: false }]
   ]);
   assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
-    ({ allowMissing, reach }) => ({ allowMissing, ...reach })
+    ({ allowMissing, reach: { listedIds, namedIds, ownStrokeIds } }) => ({ allowMissing, listedIds, namedIds, ownStrokeIds })
   )), [
-    [{ allowMissing: false, listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }],
-    [{ allowMissing: false, listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }]
+    [{ allowMissing: false, listedIds: [], namedIds: [], ownStrokeIds: [] }],
+    [{ allowMissing: false, listedIds: [], namedIds: [], ownStrokeIds: [] }]
   ]);
 });
 
@@ -513,22 +513,22 @@ test('a renamed Depth row the request left out may miss its row, rename and styl
   assert.deepEqual(pairs(hidden.legendStrokes, 'caption'), [['depth', true]]);
 });
 
-// OV-123, OV-288 (R3, R15-4, PD-OI-066): one rule says which features a
-// Legend row's stroke reaches: the listed ones, else the named ones and those
-// drawn in the color the renderer gives the row's features (the draft's where
-// the Result predates it, else Python's row color), never the swatch's.
-test('a Legend row stroke reaches the listed, named, and same-colored features without their own stroke', () => {
-  const drawnFills = [['f1', '#54BCF8'], ['f1', '#54bcf8'], ['f2', '#d3d3d3'], ['f3', '#54bcf8'], ['f4', '#123456']];
-  const reach = (fields = {}) => ({ listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null, ...fields });
-  assert.deepEqual(legendRowFeatureIds(reach(), '#54bcf8', drawnFills), ['f1', 'f3']);
-  assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f4'], ownStrokeIds: ['f3'] }), '#54bcf8', drawnFills), ['f1', 'f4']);
-  assert.deepEqual(legendRowFeatureIds(reach({ listedIds: ['f2', 'f9'] }), '#54bcf8', drawnFills), ['f2']);
-  assert.deepEqual(legendRowFeatureIds(reach(), 'none', drawnFills), []);
-  assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f2'] }), null, drawnFills), ['f2']);
-  assert.deepEqual(legendRowFeatureIds(reach({ draftColor: '#d3d3d3' }), '#54bcf8', drawnFills), ['f2']);
-  // A row the Result does not draw reaches no feature by color, whatever color
-  // the draft gives the key, as Generate draws it (OV-1987).
-  assert.deepEqual(legendRowFeatureIds(reach({ draftColor: '#54bcf8' }), null, drawnFills), []);
+// OV-123, OV-288 (R3, PD-OI-066; Owner 2026-11-14): one rule says which
+// features a Legend row's stroke reaches: the listed ones, else the named ones
+// and those in the row, by the key of the row each feature is in, never by a
+// color; a feature whose row is not known yet is pending.
+test('a Legend row stroke reaches the listed, named, and own-row features without their own stroke', () => {
+  const featureRows = [['f1', 'CDS'], ['f1', 'CDS'], ['f2', 'Complex I'], ['f3', 'CDS'], ['f4', null], ['f5', undefined]];
+  const reach = (fields = {}) => ({ listedIds: [], namedIds: [], ownStrokeIds: [], ...fields });
+  assert.deepEqual(legendRowFeatureIds(reach(), 'CDS', featureRows), { reached: ['f1', 'f3'], pending: ['f5'] });
+  assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f4'], ownStrokeIds: ['f3', 'f5'] }), 'CDS', featureRows),
+    { reached: ['f1', 'f4'], pending: [] });
+  assert.deepEqual(legendRowFeatureIds(reach({ listedIds: ['f2', 'f5', 'f9'] }), 'CDS', featureRows), { reached: ['f2', 'f5'], pending: [] });
+  assert.deepEqual(legendRowFeatureIds(reach(), 'Complex I', featureRows), { reached: ['f2'], pending: ['f5'] });
+  assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f2'] }), null, featureRows), { reached: ['f2'], pending: [] });
+  // A row the Result does not draw reaches no feature by its row, as Generate
+  // draws it (OV-1987), and leaves none pending.
+  assert.deepEqual(legendRowFeatureIds(reach(), null, featureRows), { reached: [], pending: [] });
 });
 
 test('a stroke on a generated Legend row gives each Result the features that keep their own stroke', () => {
@@ -542,24 +542,26 @@ test('a stroke on a generated Legend row gives each Result the features that kee
       ]),
       resultIndexesByRenderedId: new Map([['f0001', new Set([0])], ['f0002', new Set([1])]]),
       renderedFeaturesByResult: [
-        new Map([['f0001', { fill_color: '#54bcf8' }], ['f0003', { fill_color: '#54bcf8' }], ['f0004', { fill_color: '#d3d3d3' }]]),
-        new Map([['f0002', { fill_color: '#d3d3d3' }], ['f0005', { fill_color: '#54bcf8' }]])
+        new Map(['f0001', 'f0003', 'f0004'].map((svg_id) => [svg_id, { svg_id, type: 'CDS', fill_color: '#54bcf8' }])),
+        new Map([['f0002', { svg_id: 'f0002', type: 'CDS', fill_color: '#d3d3d3' }], ['f0005', { svg_id: 'f0005', type: 'tRNA', fill_color: '#54bcf8' }]])
       ]
     },
-    // f0001 keeps its own stroke; f0002 is drawn in the row's color by its fill edit.
+    // f0001 keeps its own stroke; f0002 has a fill edit of its own, which leaves it in its type's row.
     featureStrokeOverrides: { [stableKey]: { strokeColor: '#2a9d8f' } },
     featureColorOverrides: { [featureB]: { color: '#54bcf8' } },
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }],
     originalLegendOrder: ['CDS'],
     legendStrokeOverrides: { CDS: { strokeColor: '#e63946', strokeWidth: 3 } }
   });
-  // The executor finds the row's features in each Result from Python's row
-  // there; the compile gives each Result the features with their own stroke.
+  // The executor keys each Result's features against Python's rows there; the
+  // compile gives each Result the features with their own stroke and the row
+  // each of its catalog features is in.
+  const pythonRows = new Map([['CDS', { key: 'CDS', color: '#54bcf8' }], ['tRNA', { key: 'tRNA', color: '#54bcf8' }]]);
   assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
-    ({ caption, allowMissing, reach }) => ({ caption, allowMissing, ownStrokeIds: reach.ownStrokeIds, draftColor: reach.draftColor })
+    ({ caption, allowMissing, reach }) => ({ caption, allowMissing, ownStrokeIds: reach.ownStrokeIds, rows: [...reach.featureRows(pythonRows)] })
   )), [
-    [{ caption: 'CDS', allowMissing: false, ownStrokeIds: ['f0001'], draftColor: null }],
-    [{ caption: 'CDS', allowMissing: false, ownStrokeIds: [], draftColor: null }]
+    [{ caption: 'CDS', allowMissing: false, ownStrokeIds: ['f0001'], rows: [['f0001', 'CDS'], ['f0003', 'CDS'], ['f0004', 'CDS']] }],
+    [{ caption: 'CDS', allowMissing: false, ownStrokeIds: [], rows: [['f0002', 'CDS'], ['f0005', 'tRNA']] }]
   ]);
 });
 

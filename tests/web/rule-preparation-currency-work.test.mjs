@@ -135,3 +135,52 @@ test('an edit outside the inputs keeps a snapshot current', () => {
   drawings.circular.featureOverrides.row.labelText = 'b';
   assert.equal(preparation.isCurrent(before), true);
 });
+
+// A render prepares the rule matches of the features of the catalog it admits
+// before its commit (app/run-analysis.js `legendRowMatchesPort`): they are the
+// objects the commit's Legend row stroke reads (each Result's rendered
+// features) and, once committed, the page's features, so the page's next
+// preparation finds them prepared and asks Python nothing.
+test('the matches a render prepares on its admitted catalog are the matches the page reads after the commit', async () => {
+  const { FEATURE_CATALOG_SCHEMA, admitFeatureCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const { ruleTargets } = await import('../../gbdraw/web/js/app/rule-matching.js');
+  const { ruleMatcher } = await import('../../gbdraw/web/js/services/rule-matchers.js');
+  const ids = ['f1', 'f2'];
+  const catalog = {
+    schema: FEATURE_CATALOG_SCHEMA,
+    items: [{
+      resultIndex: 0, resultName: 'diagram.svg', recordKeys: ['r'],
+      features: ids.map((id) => ({ svgId: id, recordKey: 'r', biologicalFeatureId: id, fillColor: '#111111',
+        drawnSelector: { hash: id, location: '0..3', recordLocation: 'r:0..3:+' } })),
+      biologicalFeatures: [...ids, 'f3'].map((id, index) => ({
+        recordKey: 'r', biologicalFeatureId: id, stableFeatureId: `s-${id}`, record_id: 'r', type: 'CDS',
+        start: index * 10, end: index * 10 + 3, strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' }
+      })),
+      orthogroups: [], annotations: [], comparisonMatches: []
+    }]
+  };
+  const { featureState } = admitFeatureCatalog(catalog, [{ name: 'diagram.svg', content: '<svg/>' }], { adopt: true, mode: 'circular' });
+  const { state } = setup();
+  let evaluations = 0;
+  const preparation = createRulePreparation({
+    state,
+    evaluate: async ({ features }) => {
+      evaluations += 1;
+      return { matches: features.map(() => [0]), priorities: features.map(() => [0]) };
+    }
+  });
+  const rules = [{ feat: 'CDS', qual: 'product', val: 'p0', color: '#111111', cap: 'CDS' }];
+  const targets = ruleTargets(featureState);
+  const rendered = [...featureState.renderedFeaturesByResult[0].values()];
+  assert.ok(rendered.every((feature) => targets.includes(feature)), 'the commit reads the prepared objects');
+  assert.equal(await preparation.prepare(rules, { targets }), true);
+  assert.equal(evaluations, 1);
+  assert.ok(rendered.every((feature) => ruleMatcher(rules).firstIfKnown(feature) !== undefined));
+  // The commit makes the admitted features the page's.
+  state.extractedFeatures.value = featureState.extractedFeatures;
+  state.biologicalFeatures.value = featureState.biologicalFeatures;
+  assert.equal(preparation.isPrepared(rules), true);
+  assert.equal(preparation.prepare(rules), true, 'the page\'s preparation finds them prepared');
+  assert.equal(evaluations, 1);
+});

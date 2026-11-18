@@ -254,6 +254,7 @@ const {
   buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate,
+  legendRowMatchesPort,
   requireLegacyProteinReferencesMigrate,
   showDiagramProgress
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
@@ -684,6 +685,55 @@ test('superseded canonical execution stops before catalog and SVG admission', as
   assert.equal(outcome.status, 'superseded');
   assert.equal(admissions, 0);
   assert.equal(commits, 0);
+});
+
+// A Legend row stroke reaches the features in the row, which their rule
+// matches decide: a render whose drawing holds one prepares the matches on the
+// catalog it admits before its commit reads them, and is superseded when the
+// run went stale meanwhile.
+test('a render prepares the admitted catalog\'s matches before its commit, and is superseded when stale after it', async () => {
+  const order = [];
+  const run = (prepareAdmittedMatches, shouldAdmit = () => true) => executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} },
+    mode: 'linear',
+    generationExecutor: async () => ({ results: [{ name: 'out.svg', content: '<svg/>' }], metadata: {} }),
+    shouldAdmit,
+    catalogAdmission: () => { order.push('admit'); return { catalog: null, featureState: {} }; },
+    prepareAdmittedMatches,
+    prepareCommit: () => { order.push('commit'); return {}; }
+  });
+  assert.equal((await run(async () => { order.push('prepare'); return true; })).status, 'ok');
+  assert.deepEqual(order.splice(0), ['admit', 'prepare', 'commit']);
+  let current = true;
+  assert.equal((await run(async () => { current = false; return true; }, () => current)).status, 'superseded');
+  assert.deepEqual(order.splice(0), ['admit'], 'the run went stale during the preparation');
+  assert.equal((await run(async () => false)).status, 'superseded');
+  assert.deepEqual(order.splice(0), ['admit'], 'the preparation went stale');
+  assert.equal((await run(null)).status, 'ok');
+  assert.deepEqual(order.splice(0), ['admit', 'commit'], 'a render without the port commits at once');
+});
+
+test('only a drawing with a Legend row stroke prepares the admitted features, with the rules the render draws', async () => {
+  const calls = [];
+  const prepare = async (...args) => { calls.push(args); return { rules: [] }; };
+  const drawing = { id: 'drawing-1' };
+  const rules = [{ feat: 'CDS', qual: 'gene', val: '^ND', color: '#2266aa', cap: 'Complex I' }];
+  assert.equal(legendRowMatchesPort(prepare, drawing, { legendStrokeOverrides: {}, manualSpecificRules: rules }), null);
+  assert.equal(legendRowMatchesPort(prepare, drawing, {}), null);
+  const port = legendRowMatchesPort(prepare, drawing, { legendStrokeOverrides: { 'Complex I': { strokeColor: '#e63946' } }, manualSpecificRules: rules });
+  const extracted = [{ svg_id: 'f1' }];
+  const biological = [{ id: 'b1' }, extracted[0]];
+  assert.equal(await port({ featureState: { extractedFeatures: extracted, biologicalFeatures: biological } }), true);
+  assert.equal(calls.length, 1);
+  const [preparedDrawing, isCurrent, , preparation] = calls[0];
+  assert.equal(preparedDrawing, drawing);
+  assert.equal(isCurrent(), true);
+  assert.equal(preparation.rules, rules);
+  assert.equal(preparation.asGiven, true);
+  assert.deepEqual(preparation.targets, [extracted[0], biological[0]]);
+  assert.ok(preparation.targets[0] === extracted[0] && preparation.targets[1] === biological[0], 'the admitted objects themselves');
+  const stale = legendRowMatchesPort(async () => null, drawing, { legendStrokeOverrides: { 'Complex I': {} }, manualSpecificRules: rules });
+  assert.equal(await stale({ featureState: { extractedFeatures: [], biologicalFeatures: [] } }), false);
 });
 
 test('canonical execution carries the Worker comparison table ID warnings to the committed Result', async () => {

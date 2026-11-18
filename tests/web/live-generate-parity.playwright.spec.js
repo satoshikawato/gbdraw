@@ -973,6 +973,30 @@ test('Reset Settings from the other drawing after a Load shows the removed color
   await loaded.context().close();
 });
 
+// A stroke on one of two rule rows of one color reaches only the features in
+// that row: a Session saved with it opens as saved, and its next Generate
+// strokes the same features.
+test('U3a Legend parity (13) Save and Load of a stroke on one of two rule rows of one color (circular)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, FL1_ALPHA);
+  await addColorRule(page, { ...FL1_ALPHA, val: '^FL2$', cap: 'beta' });
+  await generate(page);
+  const strokeColor = '#123456';
+  const fl1 = await page.evaluate(() => window.__GBDRAW_APP__.filteredFeatures.find((item) => item.locus_tag === 'FL1').svg_id);
+  const stroked = (snapshot) => Object.entries(snapshot.features)
+    .filter(([, feature]) => feature.stroke.includes(strokeColor)).map(([id]) => id);
+  await legendRowStrokeColor(page, 'alpha', strokeColor);
+  expect(stroked(await semanticSnapshot(page)), 'the stroke reaches FL1 only').toEqual([fl1]);
+  const saved = testInfo.outputPath('row-stroke-own-row.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  expect(stroked(await semanticSnapshot(loaded)), 'Load shows the stroke as saved').toEqual([fl1]);
+  const { generated } = await expectLiveEqualsGenerate(loaded, { label: 'a stroke on one of two rule rows of one color, after Save and Load' });
+  expect(stroked(generated), 'Generate after Load strokes FL1 only').toEqual([fl1]);
+  await loaded.context().close();
+});
+
 // OV-2293: when a displayed Result asks for the rerender. A drawn label edit left
 // its drawing while the Result was not shown, on a feature that Result draws, or
 // a feature it lacks is drawn again; once, with Auto Reflow on or off. Nothing
