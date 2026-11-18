@@ -232,6 +232,7 @@ export const createEditorIntentShow = ({
  * @property {readonly string[]} VISIBILITY_DOMAINS
  * @property {(options: { domains: readonly string[] }) => unknown} showEditorIntent
  * @property {() => unknown} requestAutomaticRerender Asks Python to draw the Result again (feature editor).
+ * @property {() => Promise<void>} whenRedrawn Resolves once the shown drawing is drawn from its current edits (feature editor).
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable One History step (History).
  */
 
@@ -242,7 +243,7 @@ export const createEditorIntentShow = ({
  */
 export const createMountedEditorIntentProjection = ({
   state, svgContainer, projectPaletteAndRules, projectFeatureVisibility, reconcileLabelOverrides, fillDomainsOf,
-  VISIBILITY_DOMAINS, showEditorIntent, requestAutomaticRerender, runUndoable
+  VISIBILITY_DOMAINS, showEditorIntent, requestAutomaticRerender, whenRedrawn, runUndoable
 }) => {
   // One projection of the canonical editor intent onto the mounted Result,
   // shared by History apply, the display of another batch Result, and Load
@@ -307,9 +308,16 @@ export const createMountedEditorIntentProjection = ({
     drawReturningLegendRows(restored);
     return true;
   };
+  // OV-2412: a Restore reads Python's Legend row facts of the committed Results (`legendKeyIsStale`), so it runs
+  // once they are the facts of the drawing's current edits: a Restore pressed while a Generate or the rerender of
+  // an edit runs applies after it. Every Restore of deleted rows waits here.
+  const whenLegendFactsCurrent = () => whenRedrawn();
   /** @param {string} label @param {() => unknown} restore */
-  const restoreLegendItems = (label, restore) => runUndoable(label, () => restoreLegendRows(restore));
-  return { projectMountedEditorIntent, drawReturningLegendRows, restoreLegendRows, restoreLegendItems };
+  const restoreLegendItems = async (label, restore) => {
+    await whenLegendFactsCurrent();
+    return runUndoable(label, () => restoreLegendRows(restore));
+  };
+  return { projectMountedEditorIntent, drawReturningLegendRows, restoreLegendRows, restoreLegendItems, whenLegendFactsCurrent };
 };
 
 /**

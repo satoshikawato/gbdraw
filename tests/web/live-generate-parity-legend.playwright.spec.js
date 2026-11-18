@@ -19,7 +19,8 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
   FL1_OFF, legendRowColor, FL1_ALPHA, DEPTH_TSV, colorLegendRow, openCanvas, renameRow,
-  legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow
+  legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow, holdNextRerender, insideHeldRerender,
+  releaseRerender
 } = require('./helpers/live-generate-parity-steps.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -2375,6 +2376,72 @@ for (const { mode, route, edit } of [
     expect((await legendEditorState(page)).listed, 'Generate lists the rows Restore listed').toEqual(restored.listed);
   });
 }
+
+// The color-rule group of a stale deleted row is still offered in the popup's
+// Legend name list (its rule stays): a pick by another feature of its type asks
+// Restore and merge, whose Restore takes the stale row off the deleted list
+// unlisted; the merge then joins the group as a rule-only target, so Python
+// draws the row again for the joined feature, with its stroke (OV-2412).
+test('a pick of a stale deleted row\'s group from the popup list restores and merges it as Generate draws it (OV-2412)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  const row = await STALE_ROWS.stroke(page);
+  await deleteLegendRow(page, row);
+  await generate(page);
+  await STALE_ROUTES['its feature renamed in the popup'](page, row);
+  const before = await legendEditorState(page);
+  const list = await openPopup(page, { locus_tag: 'FL2' });
+  await list.selectOption({ label: row });
+  // FL2 shares its row (`other proteins`): the pick asks its scope first.
+  await page.waitForFunction(() => window.__GBDRAW_APP__.legendRenameDialog.show, null, { timeout: 30_000 });
+  await choose(page, 'single');
+  await conflictAsked(page);
+  await expect(restoreMergeButton(page), 'Restore and merge is offered').toHaveCount(1);
+  await choose(page, 'merge');
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+  const merged = await legendEditorState(page);
+  expect(merged.listed.filter((caption) => caption === row), 'the joined feature draws the row, listed once').toHaveLength(1);
+  expect(merged.deleted, 'the row left the deleted list').toEqual([]);
+  expect(merged.edits, 'its stroke stays under its key').toEqual(before.edits);
+  expect(await featureFill(page, { locus_tag: 'FL2' }), 'the feature takes the group\'s color').toEqual([STALE_ALPHA_RULE.color]);
+  expect((await semanticSnapshot(page)).legend.find(({ caption }) => caption === row)?.stroke?.toLowerCase(),
+    'the row is drawn with its stroke').toBe('#7b2cbf');
+  await history(page, 'undo');
+  expect(await legendEditorState(page), 'one Undo returns the rows before the pick').toEqual(before);
+  await history(page, 'redo');
+  expect(await legendEditorState(page), 'Redo restores and merges again').toEqual(merged);
+  await expectLiveEqualsGenerate(page, { label: 'the pick of a stale deleted row\'s group' });
+  expect((await legendEditorState(page)).listed, 'Generate lists the rows the merge listed').toEqual(merged.listed);
+});
+
+// A Restore pressed while the automatic rerender of the rule removal runs (its
+// reply held) would read Python's facts from before the removal, which still
+// report the deleted row's key; it applies once that rerender commits, so the
+// editor lists what Generate lists and Generate succeeds (OV-2412).
+test('a Restore pressed inside the rerender of a stale row\'s rule removal lists what Generate lists (OV-2412)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  const row = await STALE_ROWS.stroke(page);
+  await deleteLegendRow(page, row);
+  await generate(page);
+  const before = await legendEditorState(page);
+  const index = await ruleIndex(page, row);
+  await holdNextRerender(page);
+  await page.evaluate((rule) => { void window.__GBDRAW_APP__.removeSpecificRule(rule); }, index);
+  await insideHeldRerender(page);
+  await page.evaluate(() => { window.__heldRestore = window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  expect((await legendEditorState(page)).deleted, 'the Restore waits for the rerender').toEqual([row]);
+  await releaseRerender(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__heldRestore; delete window.__heldRestore; });
+  await settleLive(page);
+  const restored = await legendEditorState(page);
+  expect({ ...restored, listed: restored.listed.includes(row) },
+    'Restore applies once the rerender commits: it lists no row for the stale key and keeps its edits').toEqual({
+    listed: false, deleted: [], edits: before.edits
+  });
+  await expectLiveEqualsGenerate(page, { label: 'the Restore inside the rule removal\'s rerender' });
+  expect((await legendEditorState(page)).listed, 'Generate lists the rows Restore listed').toEqual(restored.listed);
+});
 
 // PD-OI-114 scenario revision 2 (issue #1427): a Legend rename, deletion,
 // Restore, Move, and Sort, and Canvas padding, reach Python through the

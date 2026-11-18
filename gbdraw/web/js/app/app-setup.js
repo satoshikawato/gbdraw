@@ -576,6 +576,18 @@ const alignmentPortsBeforeOwner = (state) => ({
   endReviewOutside: () => {}
 });
 
+// The Restore of the shown drawing's deleted Legend row at `index` when clicked, by that row wherever it stands once
+// the Restore runs (a Restore may wait, `restoreLegendItems`); a row that left the list restores nothing.
+/**
+ * @param {Pick<WebState, 'activeDrawing'>} state
+ * @param {number} index
+ * @param {(indexes: number[]) => unknown} restore
+ */
+const restoreOfDeletedRow = (state, index, restore) => {
+  const row = state.activeDrawing().deletedLegendEntries.value[index];
+  return () => restore([state.activeDrawing().deletedLegendEntries.value.indexOf(row)]);
+};
+
 export const createAppSetup = () => {
   provideSettingNoteReaders();
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
@@ -2470,7 +2482,7 @@ export const createAppSetup = () => {
     runUndoable: history.runUndoable
   });
   const {
-    projectMountedEditorIntent, drawReturningLegendRows, restoreLegendRows, restoreLegendItems
+    projectMountedEditorIntent, drawReturningLegendRows, restoreLegendRows, restoreLegendItems, whenLegendFactsCurrent
   } = createMountedEditorIntentProjection({
     state,
     svgContainer,
@@ -2481,6 +2493,7 @@ export const createAppSetup = () => {
     VISIBILITY_DOMAINS,
     showEditorIntent,
     requestAutomaticRerender: featureActions.requestAutomaticRerender,
+    whenRedrawn: featureActions.whenRedrawn,
     runUndoable: history.runUndoable
   });
 
@@ -2755,7 +2768,7 @@ export const createAppSetup = () => {
   } = createLegendEditHistory({
     state, undoableAction, scopeChoiceWithHistory, runUndoableCheckpoint: history.runUndoableCheckpoint,
     handleLegendNameCommit, joinLegendGroup, moveLegendEntry, handleLegendRenameChoice, restoreLegendRows,
-    restoreDeletedLegendEntries, cancelLegendRename, handlePaletteColorsChoice: resultsManager.handlePaletteColorsChoice,
+    restoreDeletedLegendEntries, whenLegendFactsCurrent, cancelLegendRename, handlePaletteColorsChoice: resultsManager.handlePaletteColorsChoice,
     cancelPaletteColorsDialog: resultsManager.cancelPaletteColorsDialog, handleResetColorChoice, cancelResetColor
   });
   const {
@@ -4361,9 +4374,8 @@ export const createAppSetup = () => {
     // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),
-    restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems(
-      msg('Restore legend item'), () => restoreDeletedLegendEntries([index])
-    ),
+    restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems(msg('Restore legend item'),
+      restoreOfDeletedRow(state, index, restoreDeletedLegendEntries)),
     restoreAllDeletedLegendEntries: () => restoreLegendItems(msg('Restore legend items'), () => restoreDeletedLegendEntries(null)),
     moveLegendEntry,
     legendReorder,

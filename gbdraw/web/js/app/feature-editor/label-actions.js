@@ -748,6 +748,25 @@ const onLabelMissing = (drawing, drawn, labelled, catalogOf, hidden) => {
   });
 };
 
+// Resolves once no Generate or rerender runs (`busy`) and, as far as one can draw it, the shown drawing owes no
+// redraw: its committed Results, and Python's facts about them, are then those of its current edits. An owed redraw
+// that no run draws (its rerender failed) is asked for once more (OV-2412).
+/**
+ * @param {{ busy: { readonly value: boolean }, owed: () => boolean, requestAutomaticRerender: () => boolean,
+ *   watch: FeatureLabelActionsOptions['watch'], nextTick: () => Promise<unknown> }} ports
+ * @returns {Promise<void>}
+ */
+const untilRedrawn = async ({ busy, owed, requestAutomaticRerender, watch, nextTick }) => {
+  await nextTick();
+  if (!busy.value && owed() && requestAutomaticRerender()) await nextTick();
+  while (busy.value && watch) {
+    await /** @type {Promise<void>} */ (new Promise((resolve) => {
+      const stop = watch(busy, (running) => { if (!running) { stop(); resolve(); } });
+    }));
+    await nextTick();
+  }
+};
+
 /** @param {FeatureLabelActionsOptions} options */
 export const createFeatureLabelActions = ({
   state,
@@ -1775,6 +1794,10 @@ export const createFeatureLabelActions = ({
     isRedrawOwed,
     redrawShown,
     redrawRestored,
+    whenRedrawn: () => untilRedrawn({
+      busy: computed(() => state.processing.value || labelReflowProcessing.value),
+      owed: () => redrawOwed.has(state.activeDrawing()), requestAutomaticRerender, watch, nextTick
+    }),
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,
