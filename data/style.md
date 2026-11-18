@@ -171,8 +171,9 @@ nothing states that they are reviewed.
 ### 1.5 Length
 
 - CJK glyphs are about twice as wide as Latin letters at the same size, and
-  the CJK CSS raises 10–11 px text to 12 px. Count width, not characters.
-- Rail short names (52 px entries; 10 px, CJK 12 px, Thai 12 px): prefer a
+  CJK text keeps the English sizes (no CJK rule raises 10–11 px text). Count
+  width, not characters.
+- Rail short names (52 px entries; 10 px, CJK too, Thai 12 px): prefer a
   name that fits on one line (CJK at most 4 full-width glyphs, 5 at most;
   Latin about nine letters). A name never breaks inside a word in any
   locale: CJK words keep their glyphs together (`keep-all`) and Latin words
@@ -696,8 +697,8 @@ papers for the science. The Language menu entry is **한국어** (PD-OI-106).
 - Labels take the short forms: 적용 안 됨 (not 적용되지 않음), 자동(기본값),
   필수, 누락, 없음, 켬 / 끔; full sentences belong in help and notices, which
   may be as long as needed.
-- Korean wraps at word spaces: give `:lang(ko)` `word-break: keep-all` and
-  the CJK 12 px floor, so a word is never split between syllables.
+- Korean wraps at word spaces: `:lang(ko)` has `word-break: keep-all`, so a
+  word is never split between syllables.
 
 ## 6. Spanish (`es`, international usage)
 
