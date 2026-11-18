@@ -34,6 +34,8 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritSavedComparison, inheritUnitPlans
 } from './imported-comparison-intent.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
+import { circularTrackAxisIndexOf } from './circular-track-slot-model.js';
+import { linearTrackAxisIndexOf } from './linear-track-slot-model.js';
 const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
@@ -486,7 +488,9 @@ const tracksAsLoaded = (tracks, mode, trackType) => {
     normalizeAnnotationSlotParams(params, `${slotsKey}[${index}].params`);
     return { ...slot, params: canonicalAnnotationParams(params) };
   });
-  const axis = tracks[axisKey] ?? validateCustomTrackPlan({ mode, slots: read, axisIndex: null, trackType }).emittedAxisIndex;
+  // The index the Load reads an unset one as, written as the request writes it (`emittedAxisIndex`).
+  const readAs = mode === 'circular' ? circularTrackAxisIndexOf(read, null, trackType) : linearTrackAxisIndexOf(read, null);
+  const axis = tracks[axisKey] ?? validateCustomTrackPlan({ mode, slots: read, axisIndex: readAs, trackType }).emittedAxisIndex;
   return { ...tracks, [slotsKey]: read, [axisKey]: axis };
 };
 /**

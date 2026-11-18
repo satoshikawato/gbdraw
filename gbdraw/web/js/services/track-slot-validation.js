@@ -69,7 +69,9 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
  * @typedef {object} CustomTrackPlanInput What the plan validator reads of a draft.
  * @property {string} [mode] 'circular' or 'linear'; any other value is reported.
  * @property {unknown} [slots] The rows; a non-array is reported.
- * @property {unknown} [axisIndex] The Axis boundary; blank infers it.
+ * @property {unknown} [axisIndex] The Axis boundary. A caller that checks a drawn stack passes the index it is placed
+ *   about (`circularTrackAxisIndexOf`, `linearTrackAxisIndexOf`: an unset one read from the rows); blank checks no row
+ *   against an Axis.
  * @property {unknown} [trackType] The track preset or Linear layout.
  * @property {number | null} [depthTrackCount] null or undefined skips the Depth range check.
  * @property {unknown} [depthSourcedTrackIndexes] The Depth series that have a source; a non-array skips that check.
@@ -1252,39 +1254,6 @@ const defaultSideForSlot = (slot, mode, trackType) => {
 };
 
 /**
- * @param {TrackSlotRow[]} slots
- * @param {string} mode
- * @param {unknown} trackType
- * @returns {number}
- */
-const inferredCustomTrackAxisIndex = (slots, mode, trackType) => {
-  const onAxisIndex = slots.findIndex((slot) => (
-    slot?.enabled !== false &&
-    normalizedString(slot?.side || defaultSideForSlot(slot, mode, trackType)) === 'overlay' &&
-    normalizedString(slot?.renderer) !== 'annotations'
-  ));
-  if (onAxisIndex >= 0) return onAxisIndex;
-
-  const featureIndex = slots.findIndex((slot) => (
-    slot?.enabled !== false && normalizedString(slot?.renderer) === 'features'
-  ));
-  if (featureIndex >= 0) {
-    const side = normalizedString(
-      slots[featureIndex]?.side || defaultSideForSlot(slots[featureIndex], mode, trackType)
-    );
-    return side === (mode === 'linear' ? 'above' : 'outside')
-      ? featureIndex + 1
-      : featureIndex;
-  }
-
-  const outerSide = mode === 'linear' ? 'above' : 'outside';
-  const firstInner = slots.findIndex((slot) => (
-    normalizedString(slot?.side || defaultSideForSlot(slot, mode, trackType)) !== outerSide
-  ));
-  return firstInner < 0 ? slots.length : firstInner;
-};
-
-/**
  * @param {unknown} value
  * @returns {number | null} NaN for an invalid value.
  */
@@ -1394,7 +1363,8 @@ export const placesTrackStack = (adv, stack) => (
  * The Axis index of a placed Circular or Linear stack after a change that is no edit of the stack (a managed-row
  * reconcile, Hide GC Content, a Depth or ring source, the reconciles that end a Load): the index it placed the rows
  * about, except that an unset index stays unset while the rows read as that index from their features row, so Save and
- * Load give it back unset and the request builder reads it as before (R11). Rows that join before the features row read
+ * Load give it back unset and the request builder and the stack checks read the same index from the rows
+ * (`circularTrackAxisIndexOf`, `linearTrackAxisIndexOf`; R11). Rows that join before the features row read
  * as another index, so the index is set and no row crosses the Axis (R10).
  * @param {unknown} stored The index before the change.
  * @param {number | null} placed
@@ -1632,18 +1602,11 @@ const collectCustomTrackIssues = ({
     }));
   }
 
-  /** @type {number | null} */
-  let resolvedAxisIndex = null;
-  if (axisIndex === null || axisIndex === undefined || axisIndex === '') {
-    resolvedAxisIndex = inferredCustomTrackAxisIndex(draftSlots, mode, trackType);
-  } else if (
-    typeof axisIndex !== 'boolean' &&
-    Number.isSafeInteger(Number(axisIndex)) &&
-    Number(axisIndex) >= 0 &&
-    Number(axisIndex) <= draftSlots.length
-  ) {
-    resolvedAxisIndex = Number(axisIndex);
-  } else {
+  // An unset index checks no row against an Axis; a drawn stack's caller passes the index it is placed about.
+  const axisInRange = typeof axisIndex !== 'boolean' && Number.isSafeInteger(Number(axisIndex))
+    && Number(axisIndex) >= 0 && Number(axisIndex) <= draftSlots.length;
+  const resolvedAxisIndex = !isUnsetValue(axisIndex) && axisInRange ? Number(axisIndex) : null;
+  if (!isUnsetValue(axisIndex) && !axisInRange) {
     globalIssues.push(globalIssue({
       code: 'axis_out_of_range',
       field: 'axisIndex',

@@ -80,6 +80,7 @@ import {
 import {
   applyCircularGeometryShortcuts,
   applyCircularTrackOrderPlacements,
+  circularTrackAxisIndexOf,
   cloneParams,
   createDefaultCircularTrackSlots,
   circularStacksNoSessionSaved,
@@ -813,7 +814,7 @@ export const createCircularTrackSlotEditor = ({
   const circularTrackValidationPlan = (drawing) => validateCustomTrackPlan({
     mode: 'circular',
     slots: drawing.adv.circular_track_slots,
-    axisIndex: drawing.adv.circular_track_slots_axis_index,
+    axisIndex: circularTrackAxisIndexOf(drawing.adv.circular_track_slots, drawing.adv.circular_track_slots_axis_index, drawing.form.track_type),
     trackType: drawing.form.track_type,
     depthTrackCount: circularAvailableDepthTrackCount(drawing),
     depthSourcedTrackIndexes: circularSourcedDepthTrackIndexes(drawing),

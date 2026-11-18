@@ -61,6 +61,7 @@ import {
   normalizeNt,
   placeCircularStackForGenerate,
   hasCircularGeometryShortcuts,
+  circularTrackAxisIndexOf,
   inferLegacyAxisIndexFromFeature,
   parseCircularTrackSlotSpecs,
   effectiveSlotPlacement,
@@ -77,6 +78,7 @@ import {
   LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   effectiveLinearSlotPlacement,
+  linearTrackAxisIndexOf,
   migrateLinearTrackSlotsToCurrentSchema,
   parseLinearTrackSlotSpecs,
   placeLinearStackForGenerate
@@ -3955,7 +3957,7 @@ const buildTrackPlan = ({
     const validation = assertedCustomTrackPlan({
       mode: 'circular',
       slots: drawing.adv.circular_track_slots,
-      axisIndex: drawing.adv.circular_track_slots_axis_index,
+      axisIndex: circularTrackAxisIndexOf(drawing.adv.circular_track_slots, drawing.adv.circular_track_slots_axis_index, drawing.form.track_type),
       trackType: drawing.form.track_type,
       depthTrackCount,
       annotationSetIds,
@@ -3987,7 +3989,7 @@ const buildTrackPlan = ({
     const validation = assertedCustomTrackPlan({
       mode: 'linear',
       slots: drawing.adv.linear_track_slots,
-      axisIndex: drawing.adv.linear_track_slots_axis_index,
+      axisIndex: linearTrackAxisIndexOf(drawing.adv.linear_track_slots, drawing.adv.linear_track_slots_axis_index),
       trackType: drawing.form.linear_track_layout,
       depthTrackCount,
       annotationSetIds,

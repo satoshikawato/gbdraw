@@ -40,6 +40,7 @@ import {
   enforceSingleLinearOnAxisSlot,
   inferLinearTrackAxisIndexFromSlots,
   linearStacksNoSessionSaved,
+  linearTrackAxisIndexOf,
   normalizeColorParam,
   normalizeLinearTrackSlots,
   normalizeNt,
@@ -351,7 +352,7 @@ export const createLinearTrackSlotEditor = ({
   const linearTrackValidationPlan = (drawing) => validateCustomTrackPlan({
     mode: 'linear',
     slots: drawing.adv.linear_track_slots,
-    axisIndex: drawing.adv.linear_track_slots_axis_index,
+    axisIndex: linearTrackAxisIndexOf(drawing.adv.linear_track_slots, drawing.adv.linear_track_slots_axis_index),
     trackType: drawing.form.linear_track_layout,
     depthTrackCount: linearAvailableDepthTrackCountForDrawing(drawing),
     depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForDrawing(drawing),

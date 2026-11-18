@@ -145,7 +145,7 @@ const FUNCTION_STATEMENTS = {
   'services/session-resources.js::buildSessionDrawingResources': 205,
   'services/svg-result-ingestion.js::applyLegendOperations': 96,
   'services/svg-result-ingestion.js::recordSavedEditBases': 94,
-  'services/track-slot-validation.js::collectCustomTrackIssues': 192,
+  'services/track-slot-validation.js::collectCustomTrackIssues': 190,
   'services/track-slot-validation.js::collectCustomTrackIssues.forEach()': 104,
   'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 98,
   'utils/contract-repair.js::repairPlace': 121,
