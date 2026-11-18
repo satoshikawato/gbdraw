@@ -4404,7 +4404,9 @@ def test_corner_legend_that_grows_the_canvas_does_not_move_labels(tmp_path: Path
 
 @pytest.mark.circular
 def test_corner_legend_that_fits_beside_the_circle_still_moves_labels(tmp_path: Path) -> None:
-    """The Legend takes the corner the label pass freed for it (C-MT-upper_left)."""
+    """The Legend takes the corner the label pass freed for it (C-MT-upper_left, on the tuckin lanes: on the middle
+    lanes ND4's label fits inside ND4 since OV-3649, the figure's left edge moves in and Upper Left no longer fits
+    beside the circle)."""
     import json
     import xml.etree.ElementTree as ET
 
@@ -4414,7 +4416,7 @@ def test_corner_legend_that_fits_beside_the_circle_still_moves_labels(tmp_path: 
         output = tmp_path / f"mt_{legend}"
         circular_cli_module.circular_main(
             [
-                "--gbk", "tests/test_inputs/HmmtDNA.gbk", "--separate_strands", "--track_type", "middle",
+                "--gbk", "tests/test_inputs/HmmtDNA.gbk", "--separate_strands", "--track_type", "tuckin",
                 "--labels", "out", "--species", "<i>Homo sapiens</i>", "-l", legend,
                 "-f", "svg", "-o", str(output),
             ]

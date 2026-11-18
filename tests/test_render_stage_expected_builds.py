@@ -187,6 +187,10 @@ _CIRCULAR_LABEL_OPTIONS = (
 # The placed labels and the two contents that draw them.
 _CIRCULAR_LABELS = frozenset({"circular_labels", "label_leaders_content", "label_text_content"})
 
+# The arrow geometry draws the outline an embedded Circular label's glyphs must stay inside (OV-3649): a longer head
+# or a narrower shaft puts a label outside its feature, which moves the content bounds the Legend wraps at.
+_CIRCULAR_EMBED_OUTLINE_OPTIONS = frozenset({"arrow_head_length_ratio", "arrow_shaft_width_ratio"})
+
 # The options that move the Circular radial layout: the centre definition
 # reserve (its text and font), the tick band, the depth axis footprint, and the
 # feature lanes; the GC content mode, as the tick labels keep their margin from
@@ -363,6 +367,7 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
         | (frozenset({record_content}) if option_id in record_content_options else frozenset())
         | (_CIRCULAR_LABELS if option_id in _CIRCULAR_LABEL_OPTIONS else frozenset())
         | (_RADIAL_LAYOUT_STAGES if option_id in _RADIAL_LAYOUT_OPTIONS else frozenset())
+        | (_LEGEND_LAYOUT if mode == "circular" and option_id in _CIRCULAR_EMBED_OUTLINE_OPTIONS else frozenset())
     )
     # The tick content is the tick layout with the numbers the leaders back: a stage that rebuilds the ticks
     # rebuilds the layout too, and only the layout reads the settings.

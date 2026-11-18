@@ -516,54 +516,73 @@ def reproduced_arrow_geometry_variants(
         reproducer.close()
 
 
+_SVG_NS = "{http://www.w3.org/2000/svg}"
+
+
+def _feature_path_data(path: Path) -> dict[tuple[str | None, str | None], list[str]]:
+    """The path data of each feature path, by feature id and part, in drawing order."""
+
+    paths: dict[tuple[str | None, str | None], list[str]] = {}
+    for element in ElementTree.parse(path).getroot().iter(f"{_SVG_NS}path"):
+        if element.get("data-gbdraw-feature-id"):
+            key = (element.get("data-gbdraw-feature-id"), element.get("data-gbdraw-feature-part"))
+            paths.setdefault(key, []).append(element.get("d", ""))
+    return paths
+
+
+def _embedded_label_feature_ids(path: Path) -> set[str]:
+    return {
+        text.get("data-label-feature-id", "")
+        for text in ElementTree.parse(path).getroot().iter(f"{_SVG_NS}text")
+        if text.find(f"{_SVG_NS}textPath") is not None and text.get("data-label-feature-id")
+    }
+
+
 def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
     reproduced_arrow_geometry_variants: dict[str, Path],
 ) -> None:
-    pairs = (
-        (
-            reproduced_arrow_geometry_variants[
-                "tutorial_9_arrow_geometry_circular_current_baseline"
-            ],
-            reproduced_arrow_geometry_variants[
-                "tutorial_9_arrow_geometry_circular"
-            ],
-            15,
-        ),
-        (
-            reproduced_arrow_geometry_variants[
-                "tutorial_9_arrow_geometry_linear_current_baseline"
-            ],
-            reproduced_arrow_geometry_variants[
-                "tutorial_9_arrow_geometry_linear"
-            ],
-            # The BGC Session draws shaft 0.6 and head 0.64; the variant draws
-            # shaft 0.5 and the Auto head. Features short enough to be drawn as
-            # a head only in the Session have no shaft or head to change. The five
-            # CDS with a partial end add an outline path each, and the three of them
-            # short enough for a head only are a shaft instead.
-            126,
-        ),
+    """The variants change feature paths and nothing else, except the Circular labels whose glyphs no longer fit
+    the narrower outline: they go outside their features (OV-3649)."""
+
+    # Circular: shaft 0.75 and the Auto head instead of the Session's full-width arrows.
+    source_path = reproduced_arrow_geometry_variants["tutorial_9_arrow_geometry_circular_current_baseline"]
+    variant_path = reproduced_arrow_geometry_variants["tutorial_9_arrow_geometry_circular"]
+    source_paths, variant_paths = _feature_path_data(source_path), _feature_path_data(variant_path)
+    assert source_paths.keys() == variant_paths.keys()
+    assert sum(
+        source != variant
+        for key in source_paths
+        for source, variant in zip(source_paths[key], variant_paths[key], strict=True)
+    ) == 15
+    # ND3 of HmmtDNA, whose glyphs would cross the narrowed head.
+    assert _embedded_label_feature_ids(source_path) - _embedded_label_feature_ids(variant_path) == {"f9b1f5604"}
+    assert _embedded_label_feature_ids(variant_path) <= _embedded_label_feature_ids(source_path)
+
+    # Linear: the BGC Session draws shaft 0.6 and head 0.64; the variant draws shaft 0.5 and the Auto head. Features
+    # short enough to be drawn as a head only in the Session have no shaft or head to change. The five CDS with a
+    # partial end add an outline path each, and the three of them short enough for a head only are a shaft instead.
+    source_elements = list(
+        ElementTree.parse(reproduced_arrow_geometry_variants["tutorial_9_arrow_geometry_linear_current_baseline"])
+        .getroot().iter()
     )
-    for source_path, variant_path, expected_changed_paths in pairs:
-        source_elements = list(ElementTree.parse(source_path).getroot().iter())
-        variant_elements = list(ElementTree.parse(variant_path).getroot().iter())
-        assert len(source_elements) == len(variant_elements)
-
-        changed_paths = 0
-        for source, variant in zip(source_elements, variant_elements, strict=True):
-            assert source.tag == variant.tag
-            assert source.text == variant.text
-            assert source.tail == variant.tail
-            source_attributes = dict(source.attrib)
-            variant_attributes = dict(variant.attrib)
-            source_path_data = source_attributes.pop("d", None)
-            variant_path_data = variant_attributes.pop("d", None)
-            assert source_attributes == variant_attributes
-            if source_path_data != variant_path_data:
-                assert source.tag.endswith("path")
-                changed_paths += 1
-
-        assert changed_paths == expected_changed_paths
+    variant_elements = list(
+        ElementTree.parse(reproduced_arrow_geometry_variants["tutorial_9_arrow_geometry_linear"]).getroot().iter()
+    )
+    assert len(source_elements) == len(variant_elements)
+    changed_paths = 0
+    for source, variant in zip(source_elements, variant_elements, strict=True):
+        assert source.tag == variant.tag
+        assert source.text == variant.text
+        assert source.tail == variant.tail
+        source_attributes = dict(source.attrib)
+        variant_attributes = dict(variant.attrib)
+        source_path_data = source_attributes.pop("d", None)
+        variant_path_data = variant_attributes.pop("d", None)
+        assert source_attributes == variant_attributes
+        if source_path_data != variant_path_data:
+            assert source.tag.endswith("path")
+            changed_paths += 1
+    assert changed_paths == 126
 
 
 def _check_run(

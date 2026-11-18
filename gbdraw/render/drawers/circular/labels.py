@@ -4,15 +4,14 @@
 from typing import Tuple
 
 from gbdraw.svg.elements import Path, Text, TextPath
-from gbdraw.svg.circular_arcs import circle_arc, position_angle, position_turn_angle, span_angle
+from gbdraw.svg.circular_arcs import circle_arc, position_angle, span_angle
 
 from ....config.models import CircularRenderProfile
 from ....auto_sizes import determine_length_parameter
-from ....layout.circular import calculate_feature_position_factors_circular
-from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
 from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment, rim_text_placement
+from ....labels.circular import embedded_text_path
 from ....labels.circular_types import CircularLabel
 from ...label_binding import bind_label_part
 
@@ -37,49 +36,22 @@ class LabelDrawer:
         self,
         group,
         label: CircularLabel,
-        radius,
         record_length,
-        track_ratio,
-        feature_track_ratio_factor_override: float | None = None,
     ):
-        length_param = determine_length_parameter(record_length, self._cfg.labels.length_threshold.circular)
-        track_ratio_factor = (
-            float(feature_track_ratio_factor_override)
-            if feature_track_ratio_factor_override is not None
-            else float(self._cfg.canvas.circular.track_ratio_factors[length_param][0])
+        track_id = label["track_id"]
+        # The text path the embed test read (``embedded_text_path``), in reading order: clockwise from the label
+        # start, or anticlockwise from its end in the lower half so the text stays upright.
+        path = embedded_text_path(
+            label["feature_center_radius_px"], label["height_px"], label["middle"], record_length
         )
-        cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
-        # Get track_id from label for overlap resolution
-        track_id = label.get("track_id", 0)
-        explicit_center_radius = label.get("feature_center_radius_px")
-        if explicit_center_radius is None:
-            factors: list[float] = calculate_feature_position_factors_circular(
-                record_length,
-                label["strand"],
-                track_ratio,
-                cds_ratio,
-                offset,
-                self.track_type,
-                self.strandedness,
-                track_id,
-            )
-            label_radius = float(radius) * float(factors[1])
-        else:
-            label_radius = float(explicit_center_radius)
-        angle = position_turn_angle(label["middle"], record_length)
-        # A quarter of the label's line box: the same offset for every label of one face and size (OV-1743).
-        center_offset = float(label["height_px"]) / 4
-
-        # The text path runs in reading order: clockwise from the label start, or anticlockwise from its end
-        # in the lower half so the text stays upright.
         span = span_angle(float(label["end"]) - float(label["start"]), record_length)
-        if 90 <= angle < 270:
+        if path.reverse:
             label_axis_path_desc = circle_arc(
-                label_radius + center_offset, position_angle(label["end"], record_length), -span
+                path.baseline_radius_px, position_angle(label["end"], record_length), -span
             )
         else:
             label_axis_path_desc = circle_arc(
-                label_radius - center_offset, position_angle(label["start"], record_length), span
+                path.baseline_radius_px, position_angle(label["start"], record_length), span
             )
 
         group_identifier = str(getattr(group, "attribs", {}).get("id", "labels"))
@@ -153,17 +125,9 @@ class LabelDrawer:
         fallback_font_size = cfg.labels.font_size.for_length_param(length_param)
         self.font_size = label.get("font_size", fallback_font_size)
         self.font_family = label.get("font_family", cfg.objects.text.font_family)
-        self.track_type = str(track_preset or label.get("track_preset") or cfg.canvas.circular.track_type)
         self.strandedness = self._profile.strandedness
         if label["is_embedded"] is True:
-            group = self.embed_label(
-                group,
-                label,
-                radius,
-                record_length,
-                track_ratio,
-                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-            )
+            group = self.embed_label(group, label, record_length)
         else:
             group = self.add_label_on_the_rim(group, label, radius, record_length)
         # Each branch appends its text last. Bind that label to the same logical
