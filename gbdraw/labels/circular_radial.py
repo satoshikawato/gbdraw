@@ -163,6 +163,58 @@ def _aim_side(labels: Sequence[CircularLabel], anchor_radius_px: float, *, is_in
     return moved
 
 
+def _leader_ends_in_order(placed: Sequence[CircularLabel], angles: Sequence[float]) -> list[CircularLabel]:
+    """The packed labels with each leader ending, clockwise, no earlier on the circle than the leader before it.
+
+    A leader ends at the point of its feature's facing edge nearest its elbow (``_leader_anchor``). On the slanted
+    edges of two overlapping arrowheads the nearest points are their tips, which lie in the opposite order of the
+    labels: the two leaders crossed, and no larger circle uncrossed them, so packing never converged (OV-3841). The
+    labels come in their packed order with their unwrapped ``angles``. Where a leader's end lies before the end of
+    the leader before it, the two ends are chosen again from their edge points: in order, after the end before
+    them, and nearest their elbows in sum. Leaders of features that do not overlap end in order already and keep
+    their ends."""
+
+    ordered = [label.copy() for label in placed]
+    ends: list[float | None] = []
+
+    def unwrapped(point: tuple[float, float], angle: float) -> float:
+        turn = math.atan2(point[1], point[0]) + 0.5 * math.pi
+        return angle + ((turn - angle + math.pi) % _TAU) - math.pi
+
+    def anchor_of(label: CircularLabel) -> tuple[float, float]:
+        return float(label["feature_anchor_x"]), float(label["feature_anchor_y"])
+
+    def elbow_of(label: CircularLabel) -> tuple[float, float]:
+        return float(label["middle_x"]), float(label["middle_y"])
+
+    for index, (label, angle) in enumerate(zip(ordered, angles, strict=True)):
+        points = label.get("feature_edge_points")
+        if not points:
+            ends.append(None)
+            continue
+        end = unwrapped(anchor_of(label), angle)
+        before = ends[index - 1] if index else None
+        if before is not None and end < before - _ANGLE_EPSILON:
+            previous, previous_angle = ordered[index - 1], angles[index - 1]
+            earlier = ends[index - 2] if index > 1 else None
+            floor = -math.inf if earlier is None else earlier
+            pairs = [
+                (math.dist(first, elbow_of(previous)) + math.dist(second, elbow_of(label)), first, second)
+                for first in previous["feature_edge_points"]
+                if unwrapped(first, previous_angle) >= floor - _ANGLE_EPSILON
+                for second in points
+                if unwrapped(second, angle) >= unwrapped(first, previous_angle) - _ANGLE_EPSILON
+            ]
+            if pairs:
+                _total, first, second = min(pairs, key=lambda pair: pair[0])
+                previous["feature_anchor_x"], previous["feature_anchor_y"] = first
+                label["feature_anchor_x"], label["feature_anchor_y"] = second
+                ends[index - 1] = unwrapped(first, previous_angle)
+                end = unwrapped(second, angle)
+        ends.append(end)
+    return ordered
+
+
 def _leader_room_text_radius(label: CircularLabel, placed_angle_rad: float, *, is_inner: bool) -> float:
     """The text radius whose leader keeps outside the feature band (OV-3841), for a label placed at ``placed_angle_rad``.
 
@@ -483,15 +535,18 @@ def _place_side(
             ordered = _seam_order(ordered, total_length)
             base_anchors = side_base_anchors()
         angles = _pack_angles(ordered, total_length, collision_radius, spacing_px)
-        placed = [
-            _make_placed_label(
-                label,
-                total_length=total_length,
-                placed_angle_rad=angle,
-                text_anchor_radius_px=anchor_radius,
-            )
-            for label, angle in zip(ordered, angles, strict=True)
-        ]
+        placed = _leader_ends_in_order(
+            [
+                _make_placed_label(
+                    label,
+                    total_length=total_length,
+                    placed_angle_rad=angle,
+                    text_anchor_radius_px=anchor_radius,
+                )
+                for label, angle in zip(ordered, angles, strict=True)
+            ],
+            angles,
+        )
         # The leaders' room at the packed angles (OV-3841): inner text moves inward to it while it may, else the
         # radius must grow; outer text moves outward to it.
         room = [

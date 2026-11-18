@@ -12,6 +12,7 @@ from gbdraw.api.config import apply_config_overrides, load_default_config
 from gbdraw.circular import _get_args, run_circular_from_namespace
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.circular_leaders import leader_polyline
+from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_radial import place_radial_labels, radial_text_orientation
 
 
@@ -433,6 +434,42 @@ def test_radial_leaders_run_outside_the_feature_band(
         if hidden > 0.0:
             buried[(label["feature_id"], label["label_text"])] = round(hidden, 1)
     assert not buried, buried
+
+
+# Two overlapping hypothetical proteins of the tobacco plastome (NC_001879.gbk) drawn in one lane as arrowheads that
+# point at each other.
+TOBACCO_OVERLAPPING_HEADS = ("f8ec4b35c", "fa1b8e657")
+
+
+def test_leaders_of_overlapping_arrowheads_end_in_the_order_of_their_labels(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3841: the nearest points of two overlapping arrowheads' slanted edges are their tips, in the opposite order
+    of the labels; the leaders crossed at every radius and packing never converged, so the tobacco plastome with
+    radial labels outside, drawn before, was refused. Their leaders now end in the order of their labels."""
+
+    results = []
+    original = circular_labels_module.place_radial_labels
+
+    def captured(*args, **kwargs):
+        result = original(*args, **kwargs)
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(circular_labels_module, "place_radial_labels", captured)
+    run_circular_from_namespace(
+        _get_args(
+            [
+                "--gbk", str(Path(__file__).parents[1] / "tests/test_inputs/NC_001879.gbk"),
+                "--labels", "out", "--label_placement", "radial", "--label_font_size", "10",
+                "--format", "svg", "--output", str(tmp_path / "tobacco"),
+            ]
+        )
+    )
+
+    by_id = {label["feature_id"]: label for label in results[-1].labels}
+    first, second = (by_id[feature_id] for feature_id in TOBACCO_OVERLAPPING_HEADS)
+    assert crossing_pairs([leader_polyline(first), leader_polyline(second)]) == []
 
 
 # Feature id of "AAA family ATPase" in lambda (NC_001416.gb).
