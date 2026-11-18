@@ -814,9 +814,7 @@ NATIVE_VALIDATIONS.set('Current session active configuration config.form.keep_de
   { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' } });
 NATIVE_VALIDATIONS.set('Canonical renderRequest records are required.',
   { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'RECORDS_REQUIRED' } });
-for (const message of ['The preserved comparison is missing a required resource.',
-  'The saved comparison is missing a required resource.',
-  'The saved Circular comparison is missing a required resource.']) NATIVE_VALIDATIONS.set(message,
+NATIVE_VALIDATIONS.set('The saved comparison is missing a required resource.',
   { code: 'COMPARISON_INPUT', stage: 'request-validation', context: { field: 'comparison', reason: 'REQUIRED' } });
 /**
  * @param {unknown} message

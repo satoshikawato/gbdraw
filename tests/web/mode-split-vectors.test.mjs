@@ -22,6 +22,7 @@ import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { sessionLoadEvent } from './helpers/session-documents.mjs';
+import { renameRuntimeIdentities } from './helpers/drawing-slice-hashes.mjs';
 
 globalThis.window = {
   Vue: {
@@ -281,15 +282,10 @@ for (const vector of VECTORS.cases) {
       await load(converted);
       assert.equal(conversions.length, 0, 'a Session 49 is not converted');
       const direct = Object.fromEntries(converted.drawings.map(({ id, mode }) => [mode, savedSlice(state.drawingOf(id))]));
-      // The File card a drawing without stored cards gets is new in each Load, and its row names it (OV-3714).
+      // The File card a drawing without stored cards gets is new in each Load, and its row names it (OV-3714):
+      // the runtime identities are renamed as the round-trip test renames them.
       /** @param {unknown} value */
-      const renamed = (value) => {
-        const names = new Map();
-        return canonical(value).replace(/(?:linear-seq|circular-source)-[0-9a-f]+(?:-[0-9a-f]+)*/g, (identity) => {
-          if (!names.has(identity)) names.set(identity, `runtime-identity-${names.size + 1}`);
-          return names.get(identity);
-        });
-      };
+      const renamed = (value) => renameRuntimeIdentities(canonical(value));
       for (const mode of Object.keys(modes)) {
         if (renamed(modes[mode]) !== renamed(direct[mode])) mismatches.push(`/modes/${mode}: differs from a Load of Python's Session 49`);
       }

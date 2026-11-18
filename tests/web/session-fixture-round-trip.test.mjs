@@ -12,6 +12,10 @@
 // Each state is read after the record read a user makes after a Load (Reload
 // Records in each drawing, Product Contract PD-OI-044: a Load of a preview
 // reads no records), so a Load that loses a value that read rewrites fails.
+// Each Circular drawing's read must end ready (or idle, with no input); the
+// fixtures whose read needs the diagram Worker, which node lacks, are listed
+// (`RECORDS_NEED_DIAGRAM_WORKER`): their read fails in both Loads alike, so
+// they compare the state before the record read.
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { createHash } from 'node:crypto';
@@ -22,6 +26,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { readSavedSession } from './helpers/session-documents.mjs';
 import { drawingSliceTexts } from './helpers/drawing-slice-hashes.mjs';
+import { circularDiscoveryForInput } from '../../gbdraw/web/js/services/record-discovery.js';
 
 globalThis.window = {
   Vue: {
@@ -87,8 +92,13 @@ const load = async (bytes, name) => {
 };
 
 // Reload Records in each drawing, shown by its drawing ID, as a user does
-// after a Load; the drawing shown before is shown again.
+// after a Load; the drawing shown before is shown again. Returns each Circular
+// drawing whose read did not end ready (`circularDiscoveryForInput`; idle is a
+// drawing with no input), with its status and error code.
+/** @returns {Promise<string[]>} */
 const readRecords = async () => {
+  /** @type {string[]} */
+  const unread = [];
   const shown = state.activeDrawingId.value;
   /** @param {string} id */
   const show = async (id) => {
@@ -102,8 +112,12 @@ const readRecords = async () => {
     const outcome = drawing.mode === 'circular' ? await app.inspectCircularSourceRecords() : await app.refreshLinearRecordSelectors();
     assert.notEqual(outcome?.status, 'busy', `Reload Records in drawing ${drawing.id}: ${JSON.stringify(outcome)}`);
     await settle();
+    if (drawing.mode !== 'circular') continue;
+    const { status, error } = circularDiscoveryForInput(state.drawingOf(drawing.id));
+    if (status !== 'ready' && status !== 'idle') unread.push(`${drawing.id} ${status} ${typeof error === 'object' && error ? error.code : error}`);
   }
   await show(shown);
+  return unread;
 };
 
 // The mark a Load sets on the Circular File cards an older Session's flat
@@ -198,14 +212,58 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz'
 ]);
 
+// The slice reader names a runtime identity by one name across a drawing's
+// slices: a Load that gives a drawing new cards and keeps rows naming other
+// cards reads differently from a Load whose rows name its own cards, though
+// each slice alone reads the same (OV-3714's channel: the request places a
+// card by the row that names it).
+test('a drawing whose record rows name cards it does not hold reads differently from one whose rows name its cards', () => {
+  const asCaptured = { capture: (/** @type {unknown} */ handle) => handle };
+  /** @param {string[]} cards @param {string[]} rowCards */
+  const renamed = (cards, rowCards) => drawingSliceTexts({
+    activeDrawing: () => ({ id: 'linear' }),
+    drawingList: () => [{ id: 'linear', slices: {
+      settings: { linearRecordRows: rowCards.map((uid) => ({ uid, row: 1 })) }, inputs: { linearSeqs: cards.map((uid) => ({ uid })) }
+    } }]
+  }, { settings: asCaptured, inputs: asCaptured }).renamed.linear;
+  const first = renamed(['linear-seq-a1', 'linear-seq-b1'], ['linear-seq-a1', 'linear-seq-b1']);
+  assert.deepEqual(renamed(['linear-seq-a2', 'linear-seq-b2'], ['linear-seq-a2', 'linear-seq-b2']), first);
+  assert.notDeepEqual(renamed(['linear-seq-a2', 'linear-seq-b2'], ['linear-seq-c2', 'linear-seq-d2']), first);
+});
+
+// The fixtures whose record read needs the diagram Worker: a Circular FASTA
+// card's records are listed by Python (`listSequenceRecords`), so in node the
+// read ends with WORKER_INIT in both Loads. The browser specs read them
+// (circular-multi-file-input).
+const RECORDS_NEED_DIAGRAM_WORKER = new Set(['cli-circular-fasta.v51.gbdraw']);
+
+// The Sessions: every Session file (`.gbdraw`) and every JSON file (`.json`,
+// `.json.gz`) that holds a Session envelope (`format` 'gbdraw-session' and an
+// integer `version`, `SessionEnvelope` of contracts/session.generated.js; a
+// provenance file names the format but holds no version), at any depth of the
+// folders. tests/fixtures/performance/ is left out for CI time: its one
+// Session, an 11 MB Session 40 of the Gallery's hepatoplasmataceae_collinear
+// (whose current Session file the corpus holds), takes 23 s and 2.4 GB of
+// memory for its round trip alone in node.
+/** @param {string} dir */
+const sessionsIn = async (dir) => {
+  const root = new URL(dir, import.meta.url);
+  /** @type {{ name: string, bytes: Buffer, session: Record<string, any> }[]} */
+  const found = [];
+  for (const path of readdirSync(root, { recursive: true, encoding: 'utf8' }).sort()) {
+    if (!/\.(gbdraw|json|json\.gz)$/.test(path)) continue;
+    const bytes = readFileSync(new URL(path, root));
+    const session = await readSavedSession(new Blob([bytes]));
+    if (path.endsWith('.gbdraw') || (session?.format === 'gbdraw-session' && Number.isInteger(session.version))) found.push({ name: path, bytes, session });
+  }
+  return found;
+};
+// A Session 27-39 with a Result is saved only after a Generate (PD-OI-079).
+/** @param {Record<string, any>} session */
+const savedOnlyAfterGenerate = (session) => session.version < 40 && Array.isArray(session.results) && session.results.length > 0;
+
 test('every Session fixture and Gallery Session loads without a repair (G3), its Save reads again without a document repair (G2b), and a second Load gives the same drawings', async () => {
-  /** @param {string} dir @param {(name: string) => boolean} keep */
-  const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).sort()
-    .map((name) => /** @type {const} */ ([name, new URL(`${dir}${name}`, import.meta.url)]));
-  const corpus = [
-    ...sessions('../fixtures/sessions/', (name) => /\.(json(\.gz)?|gbdraw)$/.test(name) && !/provenance|expected|evidence|vectors/.test(name)),
-    ...sessions('../../gbdraw/web/gallery/sessions/', (name) => /\.(json(\.gz)?|gbdraw)$/.test(name))
-  ];
+  const corpus = [...await sessionsIn('../fixtures/sessions/'), ...await sessionsIn('../../gbdraw/web/gallery/sessions/')];
   assert.ok(corpus.length > 100, String(corpus.length));
   const versions = new Set();
   const ImportWorker = globalThis.Worker;
@@ -220,8 +278,6 @@ test('every Session fixture and Gallery Session loads without a repair (G3), its
   const askedProteinConversion = new Set();
   let current = '';
   setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
-  /** @type {string[]} */
-  const notSaved = [];
   // What each fixture did that the check forbids, all reported at the end.
   /** @type {{ fixture: string, step: string, found: unknown }[]} */
   const findings = [];
@@ -229,10 +285,27 @@ test('every Session fixture and Gallery Session loads without a repair (G3), its
   const note = (fixture, step, found) => { findings.push({ fixture, step, found }); };
   /** @param {LoadOutcome} loaded */
   const rows = (loaded) => loaded.repairs.map(({ code, path }) => `${code} ${path}`);
+  // The record read of a Load: every Circular drawing ends ready, or, for a
+  // fixture whose read needs the diagram Worker, asks it and fails to start it.
+  // Each Linear record row then names a card of its drawing (a row naming
+  // another card is a stale row that a Save would write).
+  /** @param {string} name @param {string} step */
+  const readRecordsOf = async (name, step) => {
+    askedDiagramWorker = false;
+    const unread = await readRecords();
+    for (const { id, linearSeqs, linearRecordRows } of state.drawingList()) {
+      const cards = new Set(linearSeqs.map(({ uid }) => uid));
+      const stale = linearRecordRows.filter(({ uid }) => !cards.has(uid));
+      if (stale.length) note(name, step, `${id}: record rows name no card of the drawing: ${JSON.stringify(stale)}`);
+    }
+    const needsWorker = RECORDS_NEED_DIAGRAM_WORKER.has(name);
+    if (askedDiagramWorker !== needsWorker) note(name, step, `the record read asked the diagram Worker: ${askedDiagramWorker}`);
+    if (needsWorker ? !unread.length || unread.some((entry) => !entry.endsWith(' error WORKER_INIT')) : unread.length) {
+      note(name, step, `record read not ready: ${unread.join('; ') || '(none failed)'}`);
+    }
+  };
   try {
-    for (const [name, url] of corpus) {
-      const bytes = readFileSync(url);
-      const session = await readSavedSession(new Blob([bytes]));
+    for (const { name, bytes, session } of corpus) {
       versions.add(session.version);
       askedDiagramWorker = false;
       current = name;
@@ -242,20 +315,25 @@ test('every Session fixture and Gallery Session loads without a repair (G3), its
       const expected = [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly];
       if (JSON.stringify(first.loaded.repairs.map(({ code }) => code)) !== JSON.stringify(expected)) note(name, 'Load (G3)', rows(first.loaded));
       if (askedDiagramWorker !== nodeOnly.length > 0) note(name, 'Load', `asked the diagram Worker: ${askedDiagramWorker}`);
-      await readRecords();
+      await readRecordsOf(name, 'Reload Records after the Load');
       const before = await loadedState();
-      // A Session 27-39 with a Result is saved only after a Generate (PD-OI-079).
       const written = await exportSession(`round trip ${name}`, { askChoice: async () => 'download', readKeptArtifacts: () => first.kept })
-        .catch((error) => (error?.code === 'SESSION_SAVE_REQUIRES_GENERATE' && session.version < 40 ? null : { status: 'error', error }));
-      if (!written) { notSaved.push(name); continue; }
+        .catch((error) => ({ status: 'error', error }));
+      if (savedOnlyAfterGenerate(session)) {
+        // Node cannot Generate: such a Session gets the checks of the first Load.
+        if (written.error?.code !== 'SESSION_SAVE_REQUIRES_GENERATE') note(name, 'Save (PD-OI-079)', written.error?.code ?? written.status);
+        continue;
+      }
       if (written.status !== 'saved') { note(name, 'Save', written.error?.code ?? written); continue; }
       const documentRepairs = readSessionDocument(await readSavedSession(written.blob)).repairs;
       if (documentRepairs.length) note(name, 'Save (G2b)', documentRepairs);
       current = `${name} (saved)`;
+      askedDiagramWorker = false;
       const second = await load(written.blob, `${name}.gbdraw`);
       if (second.loaded.status !== 'ok') { note(name, 'Load of the saved file', second.loaded.error ?? second.loaded.status); continue; }
       if (second.loaded.repairs.length) note(name, 'Load of the saved file', rows(second.loaded));
-      await readRecords();
+      if (askedDiagramWorker) note(name, 'Load of the saved file', 'asked the diagram Worker');
+      await readRecordsOf(name, 'Reload Records after the Load of the saved file');
       const found = differences(before, await loadedState());
       if (found.length) note(name, 'Load, Save and Load', found);
     }
@@ -268,6 +346,5 @@ test('every Session fixture and Gallery Session loads without a repair (G3), its
   ]);
   // Sessions 27 and 28 included (the oldest versions Load reads).
   assert.ok(versions.has(27) && versions.has(28), [...versions].sort().join());
-  assert.ok(notSaved.length < corpus.length / 2, notSaved.join());
   assert.deepEqual(findings, [], 'each fixture loads, saves and loads again to the same drawings');
 });

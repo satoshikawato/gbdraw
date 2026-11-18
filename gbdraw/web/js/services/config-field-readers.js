@@ -735,7 +735,8 @@ const LOSAT_SEARCH_ROWS = Object.freeze([
   row('collinearAnchorMode', readCollinearAnchorMode),
   row('collinearMergeOrientation', readCollinearMergeOrientation),
   row('collinearSearchScope', readCollinearSearchScope),
-  // The Web of Sessions 27 and 28 wrote the merge gaps 50 and 25 and had no control for them (#193 to #257).
+  // From #193 to #256 the Web app wrote the merge gaps 50 and 25 into each Session it saved
+  // (Sessions 18 to 27) and had no control for them; Session 28's Web writer (#257) never wrote them.
   { field: 'collinearBlockMergeGap', read: retiredField(50), retired: true },
   { field: 'collinearSingletonMergeGap', read: retiredField(25), retired: true },
   { field: 'orthogroupHitPolicy', read: retiredField(), retired: true },

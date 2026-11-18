@@ -5514,8 +5514,8 @@ const applyFiles = (filesData, {
   targetState.linearReorderNotice.value = '';
   /**
    * The rows of the cards Load gives: each card its saved row, else a row of its own, the one reconciliation of rows
-   * and cards, whether the file stores the cards or not (OV-3714). A settings-only Load resolves no record inputs
-   * and keeps the saved rows.
+   * and cards, whether the file stores the cards or not (OV-3714). A settings-only Load resolves no record inputs:
+   * it keeps the saved rows of the cards a file stores, and a file with no inputs leaves no rows.
    * @param {readonly { uid: string }[]} cards
    */
   const reconcileRows = (cards) => {
@@ -5526,7 +5526,9 @@ const applyFiles = (filesData, {
 
   if (!filesData) {
     const linearSeqs = normalizeLinearSeqList([]);
-    reconcileRows(linearSeqs);
+    // The saved rows name cards this Load does not give.
+    if (resolveRecordInputs) reconcileRows(linearSeqs);
+    else SETTINGS_SLICE.install(targetDrawing.slices.settings, { linearRecordRows: [] });
     installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs));
     return { collapsedLinearSeqs: false, linearSeqs, circularSources: [] };
   }

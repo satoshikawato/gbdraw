@@ -1549,8 +1549,9 @@ test('a stored label style outside its list reads as its mode\'s default and is 
 });
 
 // A retired protein-search field that holds the value every writer of it
-// wrote (the Web of Sessions 27 and 28 wrote the merge gaps 50 and 25 and had
-// no control for them) loses no setting: it is not listed (OV-3925), as
+// wrote (from #193 to #256 the Web app wrote the merge gaps 50 and 25 into each
+// Session it saved, Sessions 18 to 27, and had no control for them; Session 28's Web writer never wrote
+// them) loses no setting: it is not listed (OV-3925), as
 // Python's replay of such a Session warns of nothing. Another value is listed,
 // and so is any value of a retired field no writer wrote.
 test('a retired field that holds the value its writers always wrote is not listed; another value is', async () => {
