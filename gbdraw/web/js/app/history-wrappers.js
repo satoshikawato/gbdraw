@@ -306,7 +306,7 @@ export const createLegendEditHistory = ({
     if (!await whenLegendFactsCurrent()) return false;
     return runUndoableCheckpoint(msg('Rename legend item'), async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
-      const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === key);
+      const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => legendEntryKey(entry) === key);
       if (index >= 0) restoreLegendRows(() => restoreDeletedLegendEntries([index]));
       return handleLegendRenameChoice(choice);
     });

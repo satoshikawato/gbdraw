@@ -2005,14 +2005,15 @@ export const createRunAnalysis = ({
    * Generate, a committed rerender and a label reflow render the shown
    * drawing: they name its feature catalog, so a reused build keeps it, and
    * the children texts its Results keep sanitized, so Python omits them.
+   * Each reports to the label owner, once its Results are committed, that they carry Python's Legend row facts of
+   * the edits read into the request (`legendFactsDrawn`, OV-2412): from the start of the run that read them, which
+   * Generate gives (it reads the edits before the awaits of its request build), else from now.
    * @param {DrawingState} drawing The drawing the run renders, given by its caller.
    * @param {CanonicalRenderCandidateExecutionOptions} options
+   * @param {() => void} [legendFactsDrawn]
    */
-  // Each reports to the label owner, once its Results are committed, that they carry Python's Legend row facts of
-  // the edits read into the request (`legendFactsDrawn`, OV-2412).
-  const executeShownDrawingCandidate = async (drawing, options) => {
+  const executeShownDrawingCandidate = async (drawing, options, legendFactsDrawn = startLegendFactsDraw(drawing)) => {
     const shown = captureGeneratedArtifactOwnerSet(drawing);
-    const legendFactsDrawn = startLegendFactsDraw(drawing);
     return { ...await executeCanonicalRenderCandidate({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
@@ -2898,16 +2899,18 @@ export const createRunAnalysis = ({
    * @param {DrawingState} drawing
    * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
    *   generatedArtifactHandle?: HistoryArtifactHandle | null, comparisonExecution?: Record<string, any> | null,
-   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} [options]
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean, legendFactsDrawn: () => void }} options
+   *   `legendFactsDrawn`: started before the run reads the drawing's edits (`startLegendFactsDraw`, OV-2412).
    */
   const runAnalysisInternal = async (drawing, {
+    legendFactsDrawn,
     decorationContinuity = null,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
     comparisonExecution = null,
     isCurrentOperation = () => true,
     isCurrentAlert = () => true
-  } = {}) => {
+  }) => {
     /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
     let candidateRules = drawing.manualSpecificRules;
@@ -5304,7 +5307,7 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         },
         timingEntries: postGbdrawTimingEntries
-      });
+      }, legendFactsDrawn);
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
       setProcessingStatus(t('Preparing preview...'));
       await nextTick();
@@ -5720,7 +5723,7 @@ export const createRunAnalysis = ({
         runDraftIsShown = readRunDraftIsShown();
         return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
-          comparisonExecution, isCurrentOperation, isCurrentAlert
+          comparisonExecution, isCurrentOperation, isCurrentAlert, legendFactsDrawn: startLegendFactsDraw(drawing)
         });
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'

@@ -2479,6 +2479,50 @@ test('a Restore all that waits for a rerender restores only the rows deleted whe
   await expectLiveEqualsGenerate(page, { label: 'Restore all after a delete inside its wait' });
 });
 
+// An edit that only Python can draw, made while Generate prepares its
+// request (after the request read the edits), is drawn by the rerender that
+// follows Generate, not by Generate. When that rerender fails, and so does the
+// one Restore asks for, the facts are still owed and Restore is refused (OV-2412).
+test('a Restore after an edit made while Generate built its request, whose rerender fails, is refused', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await installPageProbe(page, () => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const probe = { responses: 0, edited: false };
+    window.__EDIT_DURING_BUILD__ = probe;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      onSessionLifecycleEvent: (event) => {
+        hooks.onSessionLifecycleEvent?.(event);
+        if (event.name !== 'canonical-request-built' || probe.edited) return;
+        probe.edited = true;
+        void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0);
+      },
+      // Generate draws; every later run fails.
+      beforeDiagramGenerationResponse: async () => {
+        probe.responses += 1;
+        if (probe.responses > 1) throw new Error('The rerender fails (test hook).');
+      }
+    };
+    return () => {
+      window.__GBDRAW_TEST_HOOKS__ = hooks;
+      delete window.__EDIT_DURING_BUILD__;
+    };
+  });
+  await generateAndWaitForResult(page);
+  await settleLive(page);
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const restored = await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries();
+    const { edited, responses } = window.__EDIT_DURING_BUILD__;
+    return { edited, failedRuns: responses > 2, restored, notice: window.__GBDRAW_APP__.notice.text };
+  }), 'the Restore is refused with the reason').toEqual({
+    edited: true, failedRuns: true, restored: false, notice: 'Updating diagram. Retry after the update finishes.'
+  });
+  expect((await legendEditorState(page)).deleted, 'the row stays deleted').toEqual(['repeat_region']);
+});
+
 // A Restore of one row that waits for a rerender finds that row by its key
 // once it runs: a write of the Legend paint during the wait (a History apply
 // of editor state, a rule commit that re-keys a row) copies every deleted row,
@@ -2636,9 +2680,9 @@ test('a Restore after Session Load draws the figure the same Restore drew before
 });
 
 // A Result loaded from a Session of versions 27 to 30 has no render request:
-// nothing can draw it again before a Generate, so a Restore asks for no
-// rerender and is not refused, also after a Legend rename that only Python
-// could draw (its rerender waits for Generate), and lists the row as before (OV-2412).
+// nothing can draw it again before a Generate, so a Restore draws no diagram
+// and is not refused, also after a Legend rename that only Python could draw
+// (its rerender waits for Generate), and lists the row as before (OV-2412).
 test('a Restore on a Session 29 Result loaded without a request restores at once, without a rerender', async ({ browser }) => {
   test.setTimeout(300_000);
   const page = await load(browser, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v29.gbdraw-session.json.gz');
@@ -2657,7 +2701,7 @@ test('a Restore on a Session 29 Result loaded without a request restores at once
     expect(restored, 'the Restore applies, not refused').toEqual({ result: true, refused: false });
     const after = await legendEditorState(page);
     expect({ first: after.listed[0], deleted: after.deleted }, 'the row is listed again').toEqual({ first: 'Renamed row', deleted: [] });
-    expect(await renders(), 'no rerender is asked for').toBe(0);
+    expect(await renders(), 'no diagram is drawn').toBe(0);
   } finally {
     await page.context().close();
   }
