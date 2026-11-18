@@ -1332,47 +1332,58 @@ test('the Web finds the labels Python bound to features only by the drawn-groups
 });
 
 // OV-2438: one projection of the label intent reads each label's parts from
-// one index of the SVG, so its DOM work grows with the labels and their parts,
-// not with their product (4,713 labels blocked the page for many seconds).
-// Counted, not timed: the whole-tree queries and the attribute reads of one
-// projection at two sizes.
-test('one label projection does DOM work linear in the labels', () => {
-  const PARTS_PER_LABEL = 3;
-  const manyLabelSvg = (count) => new DOMParser().parseFromString([
-    '<svg>',
-    ...Array.from({ length: count }, (_, index) => [
-      `<text data-label-editable="true" data-label-key="label-${index + 1}" `,
-      `data-label-feature-id="f-${index}" data-gbdraw-label-binding-schema="1" data-label-source-text="L${index}">L${index}</text>`,
-      ...Array.from({ length: PARTS_PER_LABEL - 1 }, () => `<line data-label-feature-id="f-${index}" />`),
-      '<path d="M0 0" />'
-    ].join('')),
-    '</svg>'
-  ].join(''), 'image/svg+xml').documentElement;
-  const work = (count) => {
-    const hiddenId = 'f-0';
-    const svg = manyLabelSvg(count);
-    const harness = buildHarness({ svg, featureId: hiddenId, visibilityOverrides: { [hiddenId]: 'off' } });
-    const proto = Object.getPrototypeOf(svg.children[0]);
-    const counts = { queries: 0, reads: 0 };
-    const originals = Object.fromEntries(['querySelectorAll', 'getAttribute', 'hasAttribute']
-      .map((name) => [name, proto[name]]));
-    proto.querySelectorAll = function (...args) { counts.queries += 1; return originals.querySelectorAll.apply(this, args); };
-    proto.getAttribute = function (...args) { counts.reads += 1; return originals.getAttribute.apply(this, args); };
-    proto.hasAttribute = function (...args) { counts.reads += 1; return originals.hasAttribute.apply(this, args); };
-    try {
-      harness.actions.reconcileLabelOverrides();
-    } finally {
-      Object.assign(proto, originals);
-    }
-    // The projection did its work: the hidden label's parts are hidden.
-    assert.equal(exactParts(svg, hiddenId).filter((part) => part.getAttribute('display') === 'none').length,
-      PARTS_PER_LABEL);
-    return counts;
-  };
-  const small = work(1000);
-  const large = work(2000);
-  for (const kind of ['queries', 'reads']) {
-    assert.ok(large[kind] <= 2.2 * small[kind],
-      `${kind} grow linearly with the labels: ${small[kind]} for 1000 labels, ${large[kind]} for 2000`);
+// one index of the SVG, and the binder reads each label's candidate features
+// from one set per candidate list, so the work of a projection grows with the
+// labels and their parts, not with their product (4,713 labels blocked the
+// page for many seconds). Counted, not timed: the queries, the attribute
+// reads, and the array elements mapped by one projection at two sizes.
+const PARTS_PER_LABEL = 3;
+const manyLabelSvg = (count) => new DOMParser().parseFromString([
+  '<svg><g id="records">',
+  ...Array.from({ length: count }, (_, index) => [
+    `<path data-gbdraw-feature-id="f-${index}" d="M0 0" />`,
+    `<text dominant-baseline="central" data-label-editable="true" data-label-key="label-${index + 1}" `,
+    `data-label-feature-id="f-${index}" data-gbdraw-label-binding-schema="1" data-label-source-text="L${index}">L${index}</text>`,
+    ...Array.from({ length: PARTS_PER_LABEL - 1 }, () => `<line data-label-feature-id="f-${index}" />`)
+  ].join('')),
+  '</g></svg>'
+].join(''), 'image/svg+xml').documentElement;
+const projectionWork = (count, project) => {
+  const hiddenId = 'f-0';
+  const svg = manyLabelSvg(count);
+  const harness = buildHarness({ svg, featureId: hiddenId, visibilityOverrides: { [hiddenId]: 'off' } });
+  const proto = Object.getPrototypeOf(svg.children[0]);
+  const counts = { queries: 0, reads: 0, mapped: 0 };
+  const originals = Object.fromEntries(['querySelectorAll', 'getAttribute', 'hasAttribute']
+    .map((name) => [name, proto[name]]));
+  const arrayMap = Array.prototype.map;
+  proto.querySelectorAll = function (...args) { counts.queries += 1; return originals.querySelectorAll.apply(this, args); };
+  proto.getAttribute = function (...args) { counts.reads += 1; return originals.getAttribute.apply(this, args); };
+  proto.hasAttribute = function (...args) { counts.reads += 1; return originals.hasAttribute.apply(this, args); };
+  // eslint-disable-next-line no-extend-native
+  Array.prototype.map = function (...args) { counts.mapped += this.length; return arrayMap.apply(this, args); };
+  try {
+    project(harness.actions);
+  } finally {
+    Object.assign(proto, originals);
+    // eslint-disable-next-line no-extend-native
+    Array.prototype.map = arrayMap;
   }
-});
+  // The projection did its work: the hidden label's parts are hidden.
+  assert.equal(exactParts(svg, hiddenId).filter((part) => part.getAttribute('display') === 'none').length,
+    PARTS_PER_LABEL);
+  return counts;
+};
+for (const [name, project] of [
+  ['the label intent', (actions) => actions.reconcileLabelOverrides()],
+  ['the label binding and intent', (actions) => actions.syncLabelEditor()]
+]) {
+  test(`one projection of ${name} does work linear in the labels`, () => {
+    const small = projectionWork(1000, project);
+    const large = projectionWork(2000, project);
+    for (const kind of ['queries', 'reads', 'mapped']) {
+      assert.ok(large[kind] <= 2.2 * small[kind],
+        `${kind} grow linearly with the labels: ${small[kind]} for 1000 labels, ${large[kind]} for 2000`);
+    }
+  });
+}

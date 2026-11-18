@@ -45,7 +45,7 @@ import {
  * @typedef {{ text: string, sourceText: string, visibility: string, hasEditableLabel: boolean }} LabelPopupEdit
  */
 /** @typedef {(options?: { forceReflow?: boolean }) => unknown} LabelApply */
-/** @typedef {{ textEl: SVGTextElement, referencePoint: LabelPoint, candidates: FeatureCentroid[], candidateById: Map<string, FeatureCentroid>, kind: string }} LabelMeta */
+/** @typedef {{ textEl: SVGTextElement, referencePoint: LabelPoint, candidates: FeatureCentroid[], candidateIds: ReadonlySet<string>, kind: string }} LabelMeta */
 /** @import { LabelImportEdit, LabelImportTarget } from '../../services/label-import-plan.js' */
 
 // The groups whose text is never a feature label. A Linear Result draws a
@@ -565,6 +565,18 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
   const featureIds = new Set(featureGeometry.all.map((feature) => feature.id));
   /** @type {Set<string>} */
   const usedFeatureIds = new Set();
+  // The ids of each candidate list (all features, or one group's), made once
+  // per binding: labels share the lists (OV-2438).
+  /** @type {Map<FeatureCentroid[], ReadonlySet<string>>} */
+  const idsByCandidates = new Map();
+  /** @param {FeatureCentroid[]} candidates */
+  const candidateIdsOf = (candidates) => {
+    const known = idsByCandidates.get(candidates);
+    if (known) return known;
+    const ids = new Set(candidates.map((candidate) => candidate.id));
+    idsByCandidates.set(candidates, ids);
+    return ids;
+  };
   // `filter(Boolean)` drops the nulls the callback returns.
   const labelMeta = /** @type {LabelMeta[]} */ (labelElements
     .map((textEl) => {
@@ -575,7 +587,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
         textEl,
         referencePoint,
         candidates,
-        candidateById: new Map(candidates.map((candidate) => [candidate.id, candidate])),
+        candidateIds: candidateIdsOf(candidates),
         kind: textEl.querySelector('textPath') ? 'embedded' : 'regular'
       };
     })
@@ -584,7 +596,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
   labelMeta.forEach((meta) => {
     const existingId = String(meta.textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
     if (!existingId || !featureIds.has(existingId)) return;
-    if (!meta.candidateById.has(existingId)) return;
+    if (!meta.candidateIds.has(existingId)) return;
     if (usedFeatureIds.has(existingId)) return;
     assignments.set(meta.textEl, existingId);
     usedFeatureIds.add(existingId);
