@@ -218,6 +218,7 @@ import { pythonLegendRowKeys, stepRefitsDrawnLegend } from '../services/legend-d
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE,
+  layoutChangesOf,
   normalizeLegacyComposition,
   normalizeStoredLegendSide,
   requestedCanvasOf,
@@ -298,7 +299,7 @@ import {
   removeDepthTrackColumnAt,
   depthSeriesRemovalLoss
 } from '../services/depth-track-state.js';
-/** @import { HistoryManagerOptions } from '../services/history.js' */
+/** @import { HistoryIntentChange, HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
@@ -2484,29 +2485,28 @@ export const createAppSetup = () => {
     runUndoable: history.runUndoable
   });
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string, figure?: boolean }} */ { domains, changes, direction, figure = false } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: HistoryIntentChange[], direction?: string, figure?: boolean }} */ { domains, changes, direction, figure = false } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     // B17: restore the offsets of each Result whose composition this step changed.
-    const compositionResults = new Set();
-    (Array.isArray(changes) ? changes : []).forEach(({ path, before, after } = {}) => {
-      if (path?.[0] !== 'ui' || path[1] !== 'compositionUserDeltas') return;
-      if (path.length > 2) compositionResults.add(path[2]);
-      else [before, after].forEach((record) => Object.keys(record || {}).forEach((key) => compositionResults.add(key)));
-    });
-    if (compositionResults.size > 0) {
-      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas, compositionResults);
+    const layoutChanges = layoutChangesOf(changes);
+    if (layoutChanges.compositionResults.size > 0) {
+      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas, layoutChanges.compositionResults);
     }
+    // The canvas padding this step restored shows on the displayed Result through its one owner, as the edit did
+    // (OV-3709). A held figure arriving next was drawn with it; a drawing not shown shows its padding when its Result
+    // is next displayed (the binder applies it).
+    if (!figure && layoutChanges.canvasPadding) legendLayout.applyCanvasPadding();
     const colors = changedDomains.has('config') || changedDomains.has('features');
     const rulesChanged = Array.isArray(changes) && changes.some((change) => (
-      change?.path?.[0] === 'config' && change.path[1] === 'rules'
+      change.path[0] === 'config' && change.path[1] === 'rules'
     ));
     const editorState = changedDomains.has('editorState');
     // The Legend side of this step: `from`, the list the step leaves. A step
     // made on another batch Result restores that Result's list, so the Legend
     // owner writes the displayed Result's list before it shows (B19).
-    const legendChange = (Array.isArray(changes) ? changes : []).find(({ path } = {}) => (
-      path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
+    const legendChange = (Array.isArray(changes) ? changes : []).find(({ path }) => (
+      path.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
     ));
     if (legendChange) legendActions.adoptRestoredLegend({ from: legendChange[direction === 'undo' ? 'after' : 'before'] });
     // A held figure arrives next and shows the intent as its Result is displayed (one projection, R3).

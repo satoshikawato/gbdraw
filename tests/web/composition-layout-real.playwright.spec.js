@@ -6,6 +6,7 @@ const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { settle } = require('./helpers/audit-browser.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -960,6 +961,117 @@ test('real Circular render with Canvas padding: a Legend dragged into the paddin
   expect(rightGap(generated), 'Generate keeps the Canvas padding outside the moved Legend').toBeCloseTo(generated.edge + PADDING, 6);
   const extent = (state) => state.root.viewBox.split(' ').slice(2).map(Number);
   extent(generated).forEach((value, index) => expect(value, 'Generate draws the canvas the drop showed').toBeCloseTo(extent(dropped)[index], 6));
+  expect(externalRequests).toEqual([]);
+});
+
+// OV-3709: Undo and Redo of a step that changes the Canvas padding (a padding field, Reset Layout, Reset this drawing,
+// Reset all drawings) restore the padding and show it on the displayed Result, as the step did: the figure shows the
+// padding Generate draws for the restored state. A copy made while padded and shown again after Reset all drawings
+// shows its own padding, unpadded and uncropped.
+test('real Circular render: Undo and Redo of Canvas padding steps show the restored padding on the figure', async ({ page, baseURL }) => {
+  test.setTimeout(600000);
+  const externalRequests = await blockExternalHttpRequests(page, baseURL);
+  await openApp(page);
+  await renderRealDiagram(page, 'circular', readFileSync(genbankPath, 'utf8'), { legendSide: 'right' });
+  // The padding the figure shows on each side: the drawn frame (the automatic canvas less the padding Python drew,
+  // which its composition metadata records) to the shown viewBox.
+  const shown = () => page.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    const numbers = (text) => text.split(/\s+/).map(Number);
+    const viewBox = numbers(svg.getAttribute('viewBox'));
+    const [bx, by, bw, bh] = numbers(svg.getAttribute('data-original-view-box') || svg.getAttribute('viewBox'));
+    const drawn = { top: 0, right: 0, bottom: 0, left: 0, ...JSON.parse(svg.getAttribute('data-gbdraw-composition')).spacing.canvasPadding };
+    const [fx, fy] = [bx + drawn.left, by + drawn.top];
+    const [fw, fh] = [bw - drawn.left - drawn.right, bh - drawn.top - drawn.bottom];
+    const round = (value) => Math.round(value * 1e6) / 1e6;
+    return {
+      padding: { ...window.__GBDRAW_APP__.canvasPadding },
+      shownPadding: {
+        top: round(fy - viewBox[1]), right: round(viewBox[0] + viewBox[2] - fx - fw),
+        bottom: round(viewBox[1] + viewBox[3] - fy - fh), left: round(fx - viewBox[0])
+      },
+      viewBox,
+      size: [svg.getAttribute('width'), svg.getAttribute('height')].map((value) => Number.parseFloat(value))
+    };
+  });
+  const act = async (fn, arg) => { await evaluateWithRetainedPromise(page, fn, arg); await settle(page); };
+  const undo = () => act(() => window.__GBDRAW_HISTORY__.undo());
+  const redo = () => act(() => window.__GBDRAW_HISTORY__.redo());
+  const loaded = await shown();
+  const [x, y, width, height] = loaded.viewBox;
+  // The figure the Web shows for a padding of `top` and `left` on the drawn figure.
+  const padded = (top, left) => ({ viewBox: [x - left, y - top, width + left, height + top], size: [width + left, height + top] });
+  const expectShowsPadding = async (message) => {
+    const figure = await shown();
+    expect(figure.shownPadding, `${message}: the figure shows the drawing's padding (${JSON.stringify(figure)})`)
+      .toEqual(figure.padding);
+    return figure;
+  };
+  const expectUnpadded = async (message) => {
+    const figure = await expectShowsPadding(message);
+    expect(figure.padding, message).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
+    return figure;
+  };
+  // Every figure shows the drawing's padding; `expected` is the figure of that padding, or its extent only for a
+  // figure Python drew with the padding.
+  /** @param {{ viewBox: number[], size: number[] }} expected */
+  const expectFigure = async (expected, message, extentOnly = false) => {
+    const figure = await expectShowsPadding(message);
+    const [vx, vy, ...extent] = figure.viewBox;
+    (extentOnly ? extent : [vx, vy, ...extent]).forEach((value, index) => expect(value, `${message}: ${JSON.stringify(figure)}`)
+      .toBeCloseTo((extentOnly ? expected.viewBox.slice(2) : expected.viewBox)[index], 6));
+    figure.size.forEach((value, index) => expect(value, message).toBeCloseTo(expected.size[index], 6));
+    return figure;
+  };
+  await page.evaluate(() => { window.__GBDRAW_APP__.showCanvasControls = true; });
+  for (const [side, value] of [['top', 40], ['left', 30]]) {
+    const field = page.locator(`#canvas-padding-${side}`);
+    await field.fill(String(value));
+    await field.press('Tab');
+    await settle(page);
+  }
+  await expectFigure(padded(40, 30), 'the padding edits show at once');
+  expect(await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  await settle(page);
+  await expectFigure(padded(40, 30), 'Generate draws the canvas the edits showed', true);
+  await undo();
+
+  await undo();
+  await expectFigure(padded(40, 0), 'Undo of the Left edit shows the Top padding alone');
+  await undo();
+  await expectFigure(loaded, 'Undo of the Top edit shows the figure as drawn');
+  await redo();
+  await expectFigure(padded(40, 0), 'Redo of the Top edit');
+  await redo();
+  await expectFigure(padded(40, 30), 'Redo of the Left edit');
+
+  await act(() => window.__GBDRAW_APP__.resetLayout());
+  await expectFigure(loaded, 'Reset Layout shows the figure as drawn');
+  await undo();
+  await expectFigure(padded(40, 30), 'Undo of Reset Layout');
+  await redo();
+  await expectFigure(loaded, 'Redo of Reset Layout');
+  await undo();
+
+  await act(() => window.__GBDRAW_APP__.resetShownDrawing());
+  const reset = await expectUnpadded('Reset this drawing');
+  await undo();
+  await expectFigure(padded(40, 30), 'Undo of Reset this drawing shows the padding Generate draws', true);
+  await redo();
+  await expectFigure({ viewBox: reset.viewBox, size: reset.size }, 'Redo of Reset this drawing');
+  await undo();
+
+  const source = await page.evaluate(async () => (await import('./js/state.js')).state.activeDrawingId.value);
+  const copy = await page.evaluate((id) => window.__GBDRAW_APP__.drawingList.duplicateDrawing(id).drawingId, source);
+  await settle(page);
+  await expectFigure(padded(40, 30), 'the copy shows the padding it was made with', true);
+  await act((id) => window.__GBDRAW_APP__.selectDrawing(id), source);
+  await expectFigure(padded(40, 30), 'the source shows its padding again', true);
+  await act(() => window.__GBDRAW_APP__.resetSettings());
+  await expectUnpadded('Reset all drawings: the source');
+  await act((id) => window.__GBDRAW_APP__.selectDrawing(id), copy);
+  await expectUnpadded('Reset all drawings: the copy, shown again');
+  await expectFigure(loaded, 'the copy shows its drawn figure without padding, uncropped', true);
   expect(externalRequests).toEqual([]);
 });
 

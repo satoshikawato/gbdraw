@@ -8,6 +8,8 @@ import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { withBootPalettes } from './helpers/boot-palettes.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { gallerySessionDocument } from './helpers/session-documents.mjs';
 
 globalThis.window = {
   Vue: {
@@ -109,6 +111,68 @@ test('a drawing\'s reset leaves the other drawing and the Session values; the pr
   assert.deepEqual(sessionValues(), JSON.parse(JSON.stringify(DEFAULT_SESSION_VALUES)));
   assert.equal(linear.form.plot_title, 'Linear title', 'the project reset writes no drawing');
   linear.form.plot_title = '';
+});
+
+// OV-3707: the canvas padding is a slice of the drawing (R15), so a drawing's reset returns it to a new drawing's
+// with the other settings, as one step that Undo restores; Reset all drawings resets every drawing's.
+test('Reset this drawing and Reset all drawings return the canvas padding to a new drawing\'s; Undo restores it', async () => {
+  const { CANVAS_SLICE } = await import('../../gbdraw/web/js/services/drawing/canvas.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  if (!state.drawingTabs.value.some((tab) => tab.id === 'linear')) app.drawingBar.newDrawing('linear');
+  app.selectDrawing('circular');
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
+  const PADDED = { top: 40, right: 0, bottom: 12, left: 0 };
+  const ZERO = { top: 0, right: 0, bottom: 0, left: 0 };
+  CANVAS_SLICE.install(circular.slices.canvas, { canvasPadding: PADDED });
+  CANVAS_SLICE.install(linear.slices.canvas, { canvasPadding: PADDED });
+  await app.resetShownDrawing();
+  assert.deepEqual({ ...circular.canvasPadding }, ZERO, 'Reset this drawing resets its padding');
+  assert.deepEqual({ ...linear.canvasPadding }, PADDED, 'the other drawing keeps its padding');
+  assert.equal(history.timeline().undo[0]?.label, 'Reset this drawing');
+  await history.undo();
+  assert.deepEqual({ ...circular.canvasPadding }, PADDED, 'Undo restores the padding');
+  await app.resetSettings();
+  assert.deepEqual([{ ...circular.canvasPadding }, { ...linear.canvasPadding }], [ZERO, ZERO],
+    'Reset all drawings resets every drawing\'s padding');
+  await history.undo();
+  assert.deepEqual([{ ...circular.canvasPadding }, { ...linear.canvasPadding }], [PADDED, PADDED]);
+  CANVAS_SLICE.reset(circular.slices.canvas);
+  CANVAS_SLICE.reset(linear.slices.canvas);
+});
+
+// OV-3709: Undo and Redo of a padding edit restore the canvas slice, and the displayed Result shows that padding
+// through the Legend layout's one padding owner, as the edit did; without it the figure kept the padding it had.
+const COMPOSITION = 'data-gbdraw-composition';
+test('Undo and Redo of a canvas padding edit show the restored padding on the displayed Result', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  app.selectDrawing('circular');
+  const saved = await gallerySessionDocument('HmmtDNA_basic_circular');
+  const root = new DOMParser().parseFromString(savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content,
+    'image/svg+xml').documentElement;
+  root.setAttribute(COMPOSITION, root.getAttribute(COMPOSITION).replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  const [x, y, width, height] = root.getAttribute('viewBox').split(/\s+/).map(Number);
+  const base = root.getAttribute('viewBox');
+  const padded = (top, left) => [x - left, y - top, width + left, height + top].join(' ');
+  const container = state.svgContainer.value;
+  state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? root : null) };
+  try {
+    await history.runUndoable('Canvas padding', () => app.setCanvasPaddingSide('top', 10));
+    await history.runUndoable('Canvas padding', () => app.setCanvasPaddingSide('left', 20));
+    const shown = () => root.getAttribute('viewBox');
+    assert.equal(shown(), padded(10, 20), 'the edits show at once');
+    await history.undo();
+    assert.equal(shown(), padded(10, 0), 'Undo shows the padding it restores');
+    await history.undo();
+    assert.equal(shown(), base, 'Undo back to no padding shows the figure as drawn');
+    await history.redo();
+    assert.equal(shown(), padded(10, 0), 'Redo shows the padding it restores');
+    await history.undo();
+  } finally {
+    state.svgContainer.value = container;
+  }
 });
 
 // The follow-ups run for every drawing by its mode, not for the drawing of a
