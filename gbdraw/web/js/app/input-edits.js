@@ -12,6 +12,7 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { LinearComparisonPair } from '../services/linear-comparisons.js' */
+/** @import { DrawingInputSite, ReplacementQuestion } from './drawing-list.js' */
 
 /**
  * A mode panel's mutating handler: the session's busy answer, nothing when the
@@ -26,9 +27,14 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
 /**
  * @typedef {object} InputUploadsPorts
  * @property {ShownAction} shownAction
- * @property {<T>(previous: InputFileRef | null, file: InputFileCandidate | InputFileRef | null, writeShown: () => T) => T | Promise<unknown>} replaceFromShownDrawing
- *   Writes `file` in place of `previous` with the uploader's own write, after asking when another drawing uses `previous`.
+ * @property {<T>(previous: InputFileRef | null, file: InputFileCandidate | InputFileRef | null, writeShown: () => T,
+ *   question?: ReplacementQuestion) => T | Promise<unknown>} replaceFromShownDrawing
+ *   Writes `file` in place of `previous` with the uploader's own write, after asking when another drawing uses `previous`
+ *   and then the uploader's `question`.
  * @property {(drawing: DrawingState, uid: string, field: 'gb' | 'gff' | 'fasta', value: InputFileCandidate | InputFileRef | null) => void} replaceCircularSourceFile
+ * @property {(sites: readonly DrawingInputSite[], value: NonNullable<InputFileCandidate> | InputFileRef, pickHolds: () => boolean) => Promise<boolean> | null} askCircularSourceReplacement
+ *   Asks before the source card files at `sites` are replaced when Depth files would leave with their records; null
+ *   when nothing is asked.
  * @property {(drawing: DrawingState, index: number, file: InputFileCandidate | InputFileRef) => unknown} replaceCircularDepthFile
  * @property {(drawing: DrawingState, rowUid: string, field: 'gb' | 'gff' | 'fasta', value: InputFileCandidate | InputFileRef) => unknown} replaceLinearSourceFile
  * @property {(drawing: DrawingState, sequences: LinearSeq[], index: number, file: InputFileCandidate | InputFileRef | null) => unknown} setLinearDepthFiles
@@ -42,13 +48,21 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
  * @param {InputUploadsPorts} ports
  */
 export const createInputUploads = ({
-  shownAction, replaceFromShownDrawing, replaceCircularSourceFile, replaceCircularDepthFile, replaceLinearSourceFile,
-  setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
+  shownAction, replaceFromShownDrawing, replaceCircularSourceFile, askCircularSourceReplacement,
+  replaceCircularDepthFile, replaceLinearSourceFile, setLinearDepthFiles, setLinearSourceDepthFile,
+  linearComparisonPairForEdgeKey, setLinearComparisonCardFile
 }) => {
-  /** One file of a Circular source card, by the card's uid. @param {string} uid @param {'gb' | 'gff' | 'fasta'} field @param {File | null} file */
+  /**
+   * One file of a Circular source card, by the card's uid. A Replace that would remove Depth files, in the shown
+   * drawing or in another one the chosen scope replaces the file in, asks first (OV-2318).
+   * @param {string} uid @param {'gb' | 'gff' | 'fasta'} field @param {File | null} file
+   */
   const uploadCircularSourceFile = (uid, field, file) => shownAction('circular', (drawing) => {
     const card = drawing.circularSources.find((source) => source.uid === uid);
-    return card ? replaceFromShownDrawing(card[field], file, () => replaceCircularSourceFile(drawing, uid, field, file)) : undefined;
+    return card ? replaceFromShownDrawing(card[field], file, () => replaceCircularSourceFile(drawing, uid, field, file), {
+      site: { drawingId: drawing.id, slot: `source.${field}`, rowUid: uid, edgeId: null },
+      confirm: (sites, pickHolds) => (file ? askCircularSourceReplacement(sites, file, pickHolds) : null)
+    }) : undefined;
   });
   /** @param {number} index @param {File | null} file */
   const uploadCircularDepthFile = (index, file) => shownAction('circular', (drawing) => (

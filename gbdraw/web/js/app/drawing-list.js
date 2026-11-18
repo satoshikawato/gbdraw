@@ -339,6 +339,11 @@ export const createDrawingList = ({
  *   drawing's reactions to its new source; every slot a site names has a writer.
  * @typedef {(label: string, apply: () => void) => unknown} RunReplacementStep One History step that runs `apply`.
  * @typedef {'drawing' | 'all'} InputReplacementScope The shown drawing only, or every drawing that uses the file.
+ * @typedef {object} ReplacementQuestion An uploader's own question before its replacement writes.
+ * @property {DrawingInputSite} site The place the uploader writes in the shown drawing.
+ * @property {(sites: readonly DrawingInputSite[], pickHolds: () => boolean) => Promise<boolean> | null} confirm Asked,
+ *   after the scope, with every site the chosen scope writes; whether to write, or null when it asks nothing.
+ *   `pickHolds`: false once another drawing is shown or History changed since the pick; the question then ends.
  * @typedef {object} InputReplacementPorts
  * @property {ReadDrawingTabs} drawingTabs
  * @property {ReadShownDrawingId} shownDrawingId
@@ -350,6 +355,7 @@ export const createDrawingList = ({
  * @property {(previous: InputFileRef, otherDrawingIds: readonly DrawingId[]) => Promise<InputReplacementScope | null>} askScope
  *   Asks "This drawing only" / "Every drawing that uses this file"; null is Cancel.
  * @property {(busy: SwitchBusy) => void} onBusy Shows why "Every drawing" wrote nothing: the drawing switch waits (D-15-186).
+ * @property {() => number} historyRevision Changes with every History step recorded, undone or redone.
  */
 
 /**
@@ -360,7 +366,8 @@ export const createDrawingList = ({
  * @param {InputReplacementPorts} ports
  */
 export const createInputReplacement = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope, onBusy
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope, onBusy,
+  historyRevision
 }) => {
   /** @param {string} fileId @returns {DrawingInputSite[]} every site of `fileId`, in every drawing */
   const sitesOf = (fileId) => projectInputReplacement(
@@ -406,24 +413,52 @@ export const createInputReplacement = ({
    * An uploader of the shown drawing writes a new file in place of `previous`
    * (PD-OI-090 〔入力ファイル〕). Its control always gets the uploader's own
    * write `writeShown` (R17-30), in the uploader's step when nothing is asked.
-   * When another drawing uses `previous`, the scope is asked first, after
-   * which the uploader's step has ended: Cancel records nothing; "This drawing
-   * only" is that write alone, a step of the shown drawing; "Every drawing that
-   * uses this file" is `replaceInputFile` with it, which swaps every other
-   * site. A Remove (`file` null) is not a replacement and never asks. The only
-   * place that asks.
+   * When another drawing uses `previous`, the scope is asked first; then the
+   * uploader's own `question`, with the sites that scope writes (the shown
+   * site alone, or every site of `previous`). The question may read files
+   * with no dialog open: a drawing switch, or a History step, Undo or Redo,
+   * before it settles ends the replacement without writing, as the pick no
+   * longer holds. After an answer the uploader's
+   * step has ended: Cancel records nothing; "This drawing only" is that write
+   * alone, a step of the shown drawing; "Every drawing that uses this file" is
+   * `replaceInputFile` with it, which swaps every other site. A Remove (`file`
+   * null) is not a replacement and never asks. The only place that asks the
+   * scope.
    * @template T
    * @param {InputFileRef | null} previous the file the uploader binds now
    * @param {InputFileCandidate | InputFileRef | null} file
    * @param {() => T} writeShown
+   * @param {ReplacementQuestion} [question]
    * @returns {T | Promise<unknown>}
    */
-  const replaceFromShownDrawing = (previous, file, writeShown) => {
+  const replaceFromShownDrawing = (previous, file, writeShown, question) => {
     const others = previous && file && previous !== file ? otherDrawingsUsing(previous.fileId) : [];
-    if (!previous || !file || !others.length) return writeShown();
-    return askScope(previous, others).then((scope) => {
-      if (scope === 'drawing') return runDrawingStep(msg('Replace input file'), writeShown);
-      return scope === 'all' ? replaceInputFile(previous.fileId, file, writeShown) : null;
+    // Whether the pick still holds once the question settles: the same drawing shown and no History change since it
+    // started (after the scope's answer, when the scope is asked).
+    /** @type {unknown[]} */
+    let picked = [];
+    const pickHolds = () => shownDrawingId() === picked[0] && historyRevision() === picked[1];
+    /** @param {InputReplacementScope} scope @returns {Promise<boolean> | null} */
+    const confirmed = (scope) => {
+      if (!question) return null;
+      picked = [shownDrawingId(), historyRevision()];
+      const { site } = question;
+      const sites = scope === 'all' && previous ? [site, ...sitesOf(previous.fileId).filter((other) => (
+        other.drawingId !== site.drawingId || other.slot !== site.slot || other.rowUid !== site.rowUid || other.edgeId !== site.edgeId
+      ))] : [site];
+      return question.confirm(sites, pickHolds);
+    };
+    if (!file) return writeShown();
+    if (!previous || !others.length) {
+      const asked = confirmed('drawing');
+      return asked === null ? writeShown()
+        : asked.then((write) => (write && pickHolds() ? runDrawingStep(msg('Replace input file'), writeShown) : null));
+    }
+    return askScope(previous, others).then(async (scope) => {
+      if (scope === null) return null;
+      const asked = confirmed(scope);
+      if (asked !== null && !((await asked) && pickHolds())) return null;
+      return scope === 'drawing' ? runDrawingStep(msg('Replace input file'), writeShown) : replaceInputFile(previous.fileId, file, writeShown);
     });
   };
   return { replaceInputFile, otherDrawingsUsing, replaceFromShownDrawing };

@@ -33,6 +33,15 @@ import { listText, t, tn } from '../utils/i18n.js';
  */
 
 /**
+ * The names of the drawings `drawingIds`, in the drawing bar's order, as their tabs show them (a default name in the
+ * UI language): the one naming of a drawing in a replacement's questions.
+ * @param {readonly (DrawingBarTab | DrawingBarOffer)[]} tabs @param {readonly DrawingId[]} drawingIds
+ * @returns {string[]}
+ */
+export const drawingTabLabels = (tabs, drawingIds) => tabs.flatMap((tab) => (
+  tab.kind === 'drawing' && drawingIds.includes(tab.id) ? [tab.label] : []));
+
+/**
  * Registers nothing. The root creates it right before the input replacement,
  * once every writer it reaches exists.
  * @param {InputReplacementPortsPorts} ports
@@ -84,9 +93,7 @@ export const createInputReplacementPorts = ({
    * @returns {Promise<InputReplacementScope | null>}
    */
   const askScope = async (previous, otherDrawingIds) => {
-    // Named as their tabs show them: a default name in the UI language.
-    const others = barTabs().flatMap((tab) => (
-      tab.kind === 'drawing' && otherDrawingIds.includes(tab.id) ? [tab.label] : []));
+    const others = drawingTabLabels(barTabs(), otherDrawingIds);
     const choice = await askChoice({
       title: t('Replace input file?'),
       description: tn(others.length, '{name} is also used in {drawings}.', '{name} is also used in {count} drawings: {drawings}.', {

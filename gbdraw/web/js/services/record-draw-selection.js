@@ -744,10 +744,34 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
  * @param {() => R} empty
  * @returns {R[]}
  */
-export const resliceCardRows = (rows, marked, now, empty) => {
-  /** @param {readonly { uid: string, recordCount: number }[]} cards */
-  const keysOf = (cards) => cards.flatMap(({ uid, recordCount }) => Array.from({ length: recordCount }, (_unused, index) => expandedRecordKey(uid, index + 1)));
-  return resliceRecordRows(rows, keysOf(marked), keysOf(now), empty);
+export const resliceCardRows = (rows, marked, now, empty) => resliceRecordRows(rows, cardRecordKeys(marked), cardRecordKeys(now), empty);
+
+/**
+ * Each record of `cards`, in row order: a record is its card's record at its
+ * place in the file (`k`, its key `<uid>:<k>`). The one mapping of a card
+ * edit's rows (`resliceCardRows`, `cardRowsLeaving`).
+ * @param {readonly { uid: string, recordCount: number }[]} cards
+ * @returns {{ uid: string, k: number, key: string }[]}
+ */
+const cardRecords = (cards) => cards.flatMap(({ uid, recordCount }) => Array.from(
+  { length: recordCount }, (_unused, index) => ({ uid, k: index + 1, key: expandedRecordKey(uid, index + 1) })
+));
+/** @param {readonly { uid: string, recordCount: number }[]} cards */
+const cardRecordKeys = (cards) => cardRecords(cards).map(({ key }) => key);
+
+/**
+ * The rows `resliceCardRows` leaves out when the cards change from `marked`
+ * to `now`: those of the records `now` no longer has (a card removed, or a
+ * Replace whose new file has fewer records), with the record each stands for.
+ * @template R
+ * @param {readonly R[]} rows one per record of `marked`, in its order
+ * @param {readonly { uid: string, recordCount: number }[]} marked
+ * @param {readonly { uid: string, recordCount: number }[]} now
+ * @returns {{ uid: string, k: number, row: R }[]}
+ */
+export const cardRowsLeaving = (rows, marked, now) => {
+  const kept = new Set(cardRecordKeys(now));
+  return cardRecords(marked).flatMap(({ uid, k, key }, index) => (kept.has(key) || index >= rows.length ? [] : [{ uid, k, row: rows[index] }]));
 };
 
 /**

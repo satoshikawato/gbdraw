@@ -81,7 +81,7 @@ def _is_label_capacity(key: str, value: object) -> bool:
 _FIGURE_SIZE_LENGTH_KEYS = frozenset(("requested", "minimum", "atWidth", *FIGURE_SIZE_PARTS))
 _FIGURE_SIZE_LENGTH = re.compile(rf"[0-9]{{1,30}}(\.[0-9]{{1,6}})? ({'|'.join(FIGURE_LENGTH_UNITS)})")
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
-    "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
+    "row column columnCount seriesIndex slotIndex slotWidthPx innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
     "subjectRecordIndex limit width height rowLength dpi codepoint".split()
 )
 # A record named in a diagnostic (a FASTA-only record gbdraw cannot draw): its ID when the ID is one line of
