@@ -108,19 +108,22 @@ their numbers. Fixtures: the `v51` files that hold a Circular drawing in
 `tests/fixtures/sessions/`.
 
 Session 51 also names the File card of each Linear row (OV-3703): a row of
-`webFiles.bindings.linearSeqs` may hold `fileUid`, a non-empty trimmed text, the
-uid of its File card (the card's first row's uid). Save stores equal file bytes
+`webFiles.bindings.linearSeqs` may hold `fileUid`, a non-empty string, the uid
+of its File card (the card's first row's uid). Save stores equal file bytes
 once, so two cards whose files have the same bytes name one resource; Load gives
 the rows of one `fileUid` one file, which is a source of its own, so the cards
 stay two Files (`applyWebFileBindings` in `services/session-request.js`) and
 Generate writes each card's file as a resource of its own, as it did before Save
-(`sessionResourceSourceKey` in `services/session-resource-backing.js`). A row
+(`sessionResourceSourceKey` in `services/session-resource-backing.js`); a
+loaded Result still names the stored resource each card reads, so it matches its
+cards until the next Generate (`sessionResourceStoredDescriptor`). A row
 without the key (a Session written before it, or moved from 41 to 50) keeps the
 earlier rule: the rows that name one resource are one File. The Web writes it
 for every row; the CLI writes `cli-seq-<n>`, the row's own uid, since each
 `--gbk` value or `--gff`/`--fasta` pair is a card; Python keeps it when it writes
 a Session again (`_web_card_binding`) and refuses a value that is no non-empty
-trimmed text, which Web Load drops with its repair row. Session 51 has not
+string, which Web Load drops with its repair row (the values both readers
+accept and refuse: `tests/fixtures/linear-file-uid-vectors.json`). Session 51 has not
 reached `main`, so the version does not change. Positive fixture:
 `tests/fixtures/sessions/web-linear-equal-file-cards.v51.gbdraw`.
 

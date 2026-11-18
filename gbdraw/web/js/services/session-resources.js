@@ -641,15 +641,25 @@ export const buildSessionDrawingResources = async (state, sets) => {
     )
   });
   /**
-   * @param {SessionBindingDrawing} drawing Its rows: each names its File card (`fileUid`, the card's uid), since
-   *   Save stores equal bytes once and Load would otherwise read two cards of equal files as one (OV-3703).
+   * One Linear row binding as Save writes it (`webFiles.bindings.linearSeqs[i]`; Python's `WebLinearRowBinding`):
+   * the row's uid and its File card's (`fileUid`), since Save stores equal bytes once and Load would otherwise read
+   * two cards of equal files as one (OV-3703); each record file a binding or null, and the row's own fields.
+   * @typedef {{
+   *   uid: string, fileUid: string, gb: unknown, gff: unknown, fasta: unknown, depth: unknown,
+   *   losat_gencode: number | null, definition: string, record_subtitle: string, file_definition: string,
+   *   file_subtitle: string, inferred_definition: string, region_record_id: string,
+   *   region_start: unknown, region_end: unknown, region_reverse: boolean, windows: object[]
+   * }} WrittenLinearRowBinding
+   */
+  /**
+   * @param {SessionBindingDrawing} drawing Its rows, one `WrittenLinearRowBinding` each.
    * @param {unknown} renderRequest The request this drawing's Session entry writes.
    * @param {(sequence: Readonly<LinearSeq>) => string} [fileUidOf] The File card uid of each row.
    */
   const linearBindings = async (
     { files, linearSeqs, linearComparisonPlan }, renderRequest, fileUidOf = linearSourceUidOf(linearSeqs)
   ) => ({
-    linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => ({
+    linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => /** @satisfies {WrittenLinearRowBinding} */ ({
       uid: String(sequence?.uid || ''),
       fileUid: fileUidOf(sequence),
       gb: await bindFile(sequence?.gb),

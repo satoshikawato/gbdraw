@@ -1,5 +1,5 @@
 // @ts-check
-import { sessionResourceSourceKey } from './session-resource-backing.js';
+import { sessionResourceSourceKey, sessionResourceStoredDescriptor } from './session-resource-backing.js';
 import { recordSourceOf } from './input-types.js';
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
@@ -73,10 +73,22 @@ export const getResourcePayloadIdentity = (value) => {
 };
 
 /**
+ * The payload identity of the bytes `file` holds in the page: its stored resource's for a Session resource view
+ * (`sessionResourceStoredDescriptor`), so two Linear File cards that read one stored resource hold its bytes once;
+ * else its own (`getResourcePayloadIdentity`). The History file estimate counts each once (`inputFilePayload`).
+ * @param {object} file
+ * @returns {object}
+ */
+export const storedPayloadIdentity = (file) => getResourcePayloadIdentity(sessionResourceStoredDescriptor(file) || file);
+
+/**
  * The id of the resource of `resources` whose bytes `file` stands for (the
- * File the user chose, or a Session resource view), of this kind, or null. A
- * request that names it stages the bytes the Worker holds under that id
- * (OV-1555).
+ * File the user chose, or a Session resource view), of this kind, or null: a
+ * resource described from it (`getResourcePayloadIdentity`), or the stored
+ * resource it reads, as a Load gives it (`sessionResourceStoredDescriptor`):
+ * a Linear File card's view stands for itself in a new request, and still
+ * reads the resource its loaded Result names. A request that names it stages
+ * the bytes the Worker holds under that id (OV-1555).
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {object | null | undefined} file
  * @param {string} kind
@@ -85,10 +97,12 @@ export const getResourcePayloadIdentity = (value) => {
 export const resourceIdOwnedBy = (resources, file, kind) => {
   if (!resources || !file) return null;
   const identity = getResourcePayloadIdentity(file);
+  const stored = sessionResourceStoredDescriptor(file);
   return Object.keys(resources).find((resourceId) => {
     const descriptor = resources[resourceId];
     return typeof descriptor === 'object' && descriptor !== null
-      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadIdentity(descriptor) === identity;
+      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind
+      && (descriptor === stored || getResourcePayloadIdentity(descriptor) === identity);
   }) ?? null;
 };
 

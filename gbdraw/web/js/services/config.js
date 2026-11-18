@@ -288,7 +288,7 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
-import { getResourcePayloadIdentity, getResourcePayloadOwner, setResourcePayloadOwner } from './resource-payload-owner.js';
+import { getResourcePayloadIdentity, getResourcePayloadOwner, setResourcePayloadOwner, storedPayloadIdentity } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
   readStoredSimilarityAlignmentResetReceipt,
@@ -3866,13 +3866,14 @@ const sessionViewDescriptor = (file) => {
 };
 
 /**
- * The object whose bytes a bound input file stands for (`getResourcePayloadIdentity`): the File the
- * user chose, for that File and for every view a Generate bound of it. The History file estimate
- * counts each once (the composition root gives it to `InputFileStore.estimateBytes`).
+ * The object whose bytes a bound input file holds in the page (`storedPayloadIdentity`): the File the
+ * user chose, for that File and for every view a Generate bound of it, and one stored resource for the
+ * views of it that two Linear File cards read. The History file estimate counts each once (the
+ * composition root gives it to `InputFileStore.estimateBytes`).
  * @param {object} file A `File` or a Session resource view.
  * @returns {object}
  */
-export const inputFilePayload = (file) => getResourcePayloadIdentity(file);
+export const inputFilePayload = (file) => storedPayloadIdentity(file);
 
 /**
  * The descriptor of a file slot's value: the one owner of what Generate's request and a Session say of a File (its

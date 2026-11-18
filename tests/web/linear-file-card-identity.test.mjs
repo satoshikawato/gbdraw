@@ -5,7 +5,12 @@
 // Save (OV-3710). A Session without `fileUid` keeps the rule of one source per resource.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import {
@@ -90,6 +95,8 @@ test('two File cards of equal bytes stay two after Save and Load', async () => {
   const [a, a2, b] = linear().linearSeqs;
   assert.equal(a.gb, a2.gb, 'the rows of one card share its file');
   assert.notEqual(a.gb.sourceId, b.gb.sourceId);
+  // The page holds the stored bytes once: the History estimate counts the two cards' files as one payload.
+  assert.equal(sessionConfig.inputFilePayload(state.inputFiles.fileOf(a.gb)), sessionConfig.inputFilePayload(state.inputFiles.fileOf(b.gb)));
   assert.deepEqual([a.gb.name, b.gb.name], ['a.gb', 'b.gb']);
   // A second Save of the loaded drawing writes the same cards.
   assert.deepEqual(linearBindings(await save()).map(({ fileUid }) => fileUid), ['card-a', 'card-a', 'card-b']);
@@ -156,6 +163,62 @@ test('the positive fixture, a Web Save of two cards of equal bytes, loads as two
   assert.deepEqual(linear().linearSeqs.map(({ gb }) => gb.name), ['a.gb', 'b.gb']);
 });
 
+/**
+ * Whether the loaded Result still matches the File cards that draw it: each committed record has its card
+ * (`committedLinearRecordCards`, which the record lengths and the wrap estimate read), and a record name edit applies
+ * to the Result live (`committedSettingNotePredicate`, the Setting note's: no "waits for Generate").
+ */
+const resultMatchesCards = () => {
+  const shown = state.drawingOf(state.generatedDrawingId.value);
+  return {
+    records: sessionConfig.committedLinearRecordCards(shown)?.length ?? null,
+    recordEditsApply: sessionConfig.committedSettingNotePredicate()('records')
+  };
+};
+
+test('a loaded Linear Result still matches its File card after Save and Load', async () => {
+  await load(structuredClone(LAMBDA));
+  assert.deepEqual(resultMatchesCards(), { records: 1, recordEditsApply: true });
+  const document = await save();
+  assert.deepEqual(linearBindings(document).map(({ fileUid }) => fileUid), ['record-1']);
+  await load(document);
+  assert.deepEqual(resultMatchesCards(), { records: 1, recordEditsApply: true });
+  await load(await save());
+  assert.deepEqual(resultMatchesCards(), { records: 1, recordEditsApply: true });
+});
+
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+/** The Session the CLI writes for `gbdraw linear --gbk <files>` (in a temporary folder, removed after). */
+const cliLinearSession = async (files) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-file-cards-'));
+  try {
+    const output = path.join(directory, 'cli');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', ...files, '-o', output, '-f', 'svg',
+      '--session_output', `${output}.gbdraw`], { cwd: directory, env: { ...process.env, PYTHONPATH: ROOT }, stdio: 'pipe' });
+    return await readFile(`${output}.gbdraw`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+};
+const loadBytes = async (bytes) => {
+  const loaded = await importSession(await sessionLoadEventOfBytes(bytes), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
+};
+const FORCED_LABEL = fileURLToPath(new URL('../fixtures/forced_label_underlay.gb', import.meta.url));
+
+test('a CLI Session loads with its Result matched to its File cards, also after a Web Save and Load', async () => {
+  // One --gbk file: one card. The same file given twice: two cards that read one stored resource, each drawing
+  // its own record of it.
+  for (const [files, cardCount] of [[[FORCED_LABEL], 1], [[FORCED_LABEL, FORCED_LABEL], 2]]) {
+    await loadBytes(await cliLinearSession(files));
+    assert.equal(cards().length, cardCount);
+    assert.deepEqual(resultMatchesCards(), { records: cardCount, recordEditsApply: true }, JSON.stringify(files));
+    await load(await save());
+    assert.equal(cards().length, cardCount);
+    assert.deepEqual(resultMatchesCards(), { records: cardCount, recordEditsApply: true }, JSON.stringify(files));
+  }
+});
+
 test('a Session whose rows name no File card keeps one source per resource', async () => {
   await twoCardsOfEqualBytes();
   const document = await save();
@@ -164,16 +227,23 @@ test('a Session whose rows name no File card keeps one source per resource', asy
   assert.deepEqual(cards(), [['card-a', 'card-a-2', 'card-b']]);
 });
 
-test('a File card name that is no text is dropped from its row', async () => {
+// The values Python's reader accepts and refuses too (tests/test_session_linear_file_cards.py).
+const FILE_UID_VECTORS = JSON.parse(readFileSync(new URL('../fixtures/linear-file-uid-vectors.json', import.meta.url), 'utf8'));
+
+test('a File card name that is no non-empty string is dropped from its row', async () => {
   await twoCardsOfEqualBytes();
   const document = await save();
   const drawing = document.drawings.find(({ mode }) => mode === 'linear');
   const bindings = drawing.webFiles.bindings;
-  for (const fileUid of ['', ' card-a', 7, null]) {
+  for (const { case: label, fileUid } of FILE_UID_VECTORS.refused) {
     bindings.linearSeqs[0].fileUid = fileUid;
     assert.deepEqual(webFileBindingFaults(drawing.webFiles, document.resources, 'linearSeqs'),
-      [{ at: ['linearSeqs', 0, 'fileUid'], field: true }], JSON.stringify(fileUid));
+      [{ at: ['linearSeqs', 0, 'fileUid'], field: true }], label);
   }
-  bindings.linearSeqs[0].fileUid = 'card-a';
-  assert.deepEqual(webFileBindingFaults(drawing.webFiles, document.resources, 'linearSeqs'), []);
+  for (const { case: label, fileUid } of FILE_UID_VECTORS.accepted) {
+    bindings.linearSeqs[0].fileUid = fileUid;
+    assert.deepEqual(webFileBindingFaults(drawing.webFiles, document.resources, 'linearSeqs'), [], label);
+  }
+  delete bindings.linearSeqs[0].fileUid;
+  assert.deepEqual(webFileBindingFaults(drawing.webFiles, document.resources, 'linearSeqs'), [], 'left out');
 });

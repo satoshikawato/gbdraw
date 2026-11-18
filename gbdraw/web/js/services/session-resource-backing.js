@@ -515,9 +515,10 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
   }
   (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence, index) => {
     ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot], ['linearSeqs', index, slot]));
-    // The row's File card (`fileUid`, OV-3703): a non-empty trimmed text, or left out.
+    // The row's File card (`fileUid`, OV-3703): a non-empty string, or left out. Python's reader applies the same
+    // rule (`_validate_web_file_bindings`; tests/fixtures/linear-file-uid-vectors.json).
     const fileUid = object(sequence) && Object.hasOwn(sequence, 'fileUid') ? sequence.fileUid : undefined;
-    if (fileUid !== undefined && (typeof fileUid !== 'string' || !fileUid || fileUid !== fileUid.trim())) {
+    if (fileUid !== undefined && (typeof fileUid !== 'string' || fileUid === '')) {
       faults.push({ at: ['linearSeqs', index, 'fileUid'], field: true });
     }
   });
@@ -897,17 +898,29 @@ export const asLinearFileCardView = (view) => {
 };
 
 /**
- * The source whose bytes `file` stands for: a Session resource view's descriptor, so the views of one resource are
- * one source, or null (the file is its own source) for any other file and for a view of one Linear File card
- * (`asLinearFileCardView`). The one rule of both the refs' `sourceId` (`createInputFileStore`'s `sourceOf`) and the
- * request's resources (`getResourcePayloadIdentity`).
+ * The stored resource whose bytes `file` reads: a clean Session resource view's descriptor, null for any other file.
+ * Every view of one resource reads it, a Linear File card's view too: what the request names the resource by after
+ * Load (`resourceIdOwnedBy`) and what the History estimate counts once (`storedPayloadIdentity`).
+ * @param {unknown} file
+ * @returns {LeafBacking['descriptor'] | null}
+ */
+export const sessionResourceStoredDescriptor = (file) => {
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
+  return !backing || backing.dirty ? null : backing.descriptor;
+};
+
+/**
+ * The source `file` stands for as a File: its stored resource (`sessionResourceStoredDescriptor`), so the views of
+ * one resource are one File, or null (the file is its own source) for any other file and for a view of one Linear
+ * File card (`asLinearFileCardView`), which is a File of its own whatever another card reads. The one rule of both
+ * the refs' `sourceId` (`createInputFileStore`'s `sourceOf`), which the File cards group by, and the request's
+ * resources (`getResourcePayloadIdentity`), which give each File its own resource.
  * @param {unknown} file
  * @returns {object | null}
  */
-export const sessionResourceSourceKey = (file) => {
-  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
-  return !backing || backing.dirty || cardFileViews.has(/** @type {object} */ (file)) ? null : backing.descriptor;
-};
+export const sessionResourceSourceKey = (file) => (
+  cardFileViews.has(/** @type {object} */ (file)) ? null : sessionResourceStoredDescriptor(file)
+);
 
 /**
  * @param {unknown} file

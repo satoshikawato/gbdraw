@@ -1127,10 +1127,11 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         if isinstance(sequence, Mapping):
             for slot in ("gb", "gff", "fasta", "depth", "blast"):
                 value(sequence.get(slot))
-            # The row's Linear File card (OV-3703): a non-empty trimmed text, or left out.
+            # The row's Linear File card (OV-3703): a non-empty string, or left out. The Web reader applies the
+            # same rule (``webFileBindingFaults``; tests/fixtures/linear-file-uid-vectors.json).
             file_uid = sequence.get("fileUid", "-")
-            if not isinstance(file_uid, str) or not file_uid or file_uid != file_uid.strip():
-                raise ValidationError("A Linear row's fileUid must be a non-empty text.", diagnostic=_SESSION_FIELDS_INVALID)
+            if not isinstance(file_uid, str) or file_uid == "":
+                raise ValidationError("A Linear row's fileUid must be a non-empty string.", diagnostic=_SESSION_FIELDS_INVALID)
     for slot in ("linearComparisons", "linearCanonicalComparisons"):
         entries = bindings.get(slot)
         if isinstance(entries, list):
@@ -5987,20 +5988,45 @@ def _project_web_file_binding(
     return leaf
 
 
-def _web_card_binding(
-    sequence: Mapping[str, object],
-    add_file: Callable[[object], object],
-    add_value: Callable[[object], object],
-) -> dict[str, object]:
-    """One Linear card's bindings, the card shape the Web writes (``linearBindings`` in services/session-resources.js).
+class _WebLinearRowFields(TypedDict):
+    uid: str
+    gb: object
+    gff: object
+    fasta: object
+    depth: object
+    losat_gencode: object
+    definition: str
+    record_subtitle: str
+    file_definition: str
+    file_subtitle: str
+    inferred_definition: str
+    region_record_id: str
+    region_start: object
+    region_end: object
+    region_reverse: bool
+    windows: list[dict[str, object]]
+
+
+class WebLinearRowBinding(_WebLinearRowFields, total=False):
+    """One Linear row binding of a Session 51 (``webFiles.bindings.linearSeqs[i]``), as the Web writes it
+    (``WrittenLinearRowBinding`` of ``linearBindings`` in services/session-resources.js): each file slot is a binding
+    or null (``add_file``), ``depth`` one or a list (``add_value``).
 
     ``fileUid`` names the row's File card (OV-3703); a row without one keeps none.
     """
 
-    file_uid = sequence.get("fileUid")
-    return {
+    fileUid: str
+
+
+def _web_card_binding(
+    sequence: Mapping[str, object],
+    add_file: Callable[[object], object],
+    add_value: Callable[[object], object],
+) -> WebLinearRowBinding:
+    """One Linear card's bindings, the card shape the Web writes (``linearBindings`` in services/session-resources.js)."""
+
+    binding: WebLinearRowBinding = {
         "uid": str(sequence.get("uid") or ""),
-        **({"fileUid": file_uid} if isinstance(file_uid, str) and file_uid else {}),
         "gb": add_file(sequence.get("gb")),
         "gff": add_file(sequence.get("gff")),
         "fasta": add_file(sequence.get("fasta")),
@@ -6018,6 +6044,10 @@ def _web_card_binding(
         # The card's window list (several windows, or one across the origin), as the Web writes it.
         "windows": [dict(window) for window in _mapping_list(sequence.get("windows"))],
     }
+    file_uid = sequence.get("fileUid")
+    if isinstance(file_uid, str) and file_uid:
+        binding["fileUid"] = file_uid
+    return binding
 
 
 def _circular_input_bindings(

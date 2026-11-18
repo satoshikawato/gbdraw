@@ -3,13 +3,15 @@
 Save stores equal file bytes once, so two File cards whose files have the same
 bytes would read as one card after Load. The Web writes each row's card; the
 CLI writes one card per ``--gbk`` value; Python keeps the key when it writes a
-Session again, and refuses a ``fileUid`` that is no non-empty text. The Web
+Session again, and refuses a ``fileUid`` that is no non-empty string (the
+values in ``tests/fixtures/linear-file-uid-vectors.json``, which the Web test reads too). The Web
 side is ``tests/web/linear-file-card-identity.test.mjs``.
 """
 
 from __future__ import annotations
 
 import copy
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -51,10 +53,21 @@ def test_a_resave_keeps_the_file_cards_of_a_web_session(tmp_path: Path) -> None:
     assert [row.get("fileUid") for row in _linear_rows(read_session_payload(tmp_path / "fig.gbdraw"))] == written
 
 
-@pytest.mark.parametrize("file_uid", ["", " card", 7, None])
-def test_a_file_card_name_that_is_no_text_is_refused(file_uid: object) -> None:
+# The values the Web reader accepts and refuses too (tests/web/linear-file-card-identity.test.mjs).
+FILE_UID_VECTORS = json.loads((FIXTURES / "linear-file-uid-vectors.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("vector", FILE_UID_VECTORS["refused"], ids=lambda vector: vector["case"])
+def test_a_file_card_name_that_is_no_non_empty_string_is_refused(vector: dict[str, object]) -> None:
     document = copy.deepcopy(read_session_payload(TWO_CARDS))
     validate_session(document)
-    _linear_rows(document)[0]["fileUid"] = file_uid
+    _linear_rows(document)[0]["fileUid"] = vector["fileUid"]
     with pytest.raises(ValidationError, match="fileUid"):
         validate_session(document)
+
+
+@pytest.mark.parametrize("vector", FILE_UID_VECTORS["accepted"], ids=lambda vector: vector["case"])
+def test_a_file_card_name_that_is_a_non_empty_string_is_accepted(vector: dict[str, object]) -> None:
+    document = copy.deepcopy(read_session_payload(TWO_CARDS))
+    _linear_rows(document)[0]["fileUid"] = vector["fileUid"]
+    validate_session(document)

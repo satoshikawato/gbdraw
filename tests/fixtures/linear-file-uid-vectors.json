@@ -1,0 +1,20 @@
+{
+  "description": "The fileUid of a Linear row binding in a Session 51 (webFiles.bindings.linearSeqs[i].fileUid, the row's File card): a non-empty string, kept as written, or left out. Both Session readers apply this one rule: the Web (services/session-resource-backing.js webFileBindingFaults, which drops a refused value with a Load repair row) and Python (gbdraw/session_io.py _validate_web_file_bindings, which refuses the Session). Read by tests/web/linear-file-card-identity.test.mjs and tests/test_session_linear_file_cards.py.",
+  "accepted": [
+    { "case": "a Web card uid", "fileUid": "linear-seq-2fa9296e-adfb-40f9-9d42-09e6444ae7ea" },
+    { "case": "a CLI card uid", "fileUid": "cli-seq-1" },
+    { "case": "a short uid", "fileUid": "a" },
+    { "case": "spaces are kept as written", "fileUid": " card-a " },
+    { "case": "a byte order mark is a character", "fileUid": "﻿a" },
+    { "case": "a control character is a character", "fileUid": "\u001fa" },
+    { "case": "a letter outside ASCII", "fileUid": "é" }
+  ],
+  "refused": [
+    { "case": "an empty string", "fileUid": "" },
+    { "case": "a number", "fileUid": 7 },
+    { "case": "null", "fileUid": null },
+    { "case": "a boolean", "fileUid": true },
+    { "case": "a list", "fileUid": ["a"] },
+    { "case": "an object", "fileUid": { "uid": "a" } }
+  ]
+}
