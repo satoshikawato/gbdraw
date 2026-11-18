@@ -4,8 +4,8 @@
   once, as the file is parsed, for the letter check, the GC % in the
   definition and the GC content and skew tracks. A gzip input is read
   without writing an expanded copy to disk. The whole human genome
-  (T2T-CHM13v2.0, 3.1 Gbp) draws in the CLI in about 8 s from its FASTA and
-  11 s from its `.fna.gz`, against about 65 s before; every figure is the same.
+  (T2T-CHM13v2.0, 3.1 Gbp) draws in the CLI in about FF4G_T2T_FA s from its
+  FASTA, against about FF4G_T2T_FA_DEV s before; every figure is the same.
 - Changed: `crop_genbank` reads its input as the drawing does. It writes
   feature keys in their INSDC spelling (`cds` as `CDS`), reads EMBL files,
   tab-indented features and spaces in a LOCUS name, and refuses an empty or
