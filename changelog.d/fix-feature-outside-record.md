@@ -11,9 +11,15 @@
   in Linear diagrams as the same feature written `join(81..100,1..10)`: in two
   blocks, at the end and at the start of the record. Linear drew it past the
   end of the axis, a reversed record drew only its first block, and a moved
-  display start (`--display_start_coordinate`) stopped the run. On a record
-  that is not circular such a feature does not fit and is left out with the
-  warning. Circular diagrams draw it as before, and color rules and feature
-  selectors still match its location as written.
-- Fixed: A GFF3 record whose `region` line says `Is_circular=true` is now read
-  as circular, as a GenBank record whose LOCUS line says `circular`.
+  display start (`--display_start_coordinate`) stopped the run in both modes.
+  On a record that is not circular such a feature does not fit and is left out
+  with the warning. Circular diagrams draw it in one arc as before, also
+  reversed, and color rules and feature selectors still match its location as
+  written. A feature density track and a `region` crop now count and draw its
+  part from the start of the record, and its protein translation and the Web
+  popup's sequence read all of its bases; they stopped at the record's end.
+- Fixed: A GFF3 record whose landmark (the `region` line covering the whole
+  sequence) says `Is_circular=true` is now read as circular, as a GenBank
+  record whose LOCUS line says `circular`: its GC content and skew windows wrap
+  over the origin in Circular diagrams, and a window across its origin can be
+  drawn.

@@ -1172,21 +1172,55 @@ def test_a_fuzzy_end_past_a_circular_record_draws_as_its_join_in_linear(tmp_path
     assert _path_data(tmp_path / "linear-past.svg") == _path_data(tmp_path / "linear-join.svg")
 
 
-@pytest.mark.parametrize(("location", "blocks"), [("51..150", 1), ("join(81..110,20..30)", 2),
-                                                  ("complement(join(81..110,20..30))", 2)])
-def test_circular_draws_a_part_past_the_end_as_one_arc_as_before(tmp_path: Path, location: str, blocks: int) -> None:
-    """Circular reads a part past the end by its angles, as before this fix: ``51..150`` on 100 bp is one block over
-    the whole circle and the join keeps its two blocks; only Linear draws the join over the origin (review r1
-    MEDIUM-1). The figures equal dev's byte for byte (evidence logs/s20-ov3678-r1fix/)."""
+_REVERSED = (("reverse_complement",), ("1",))
+# Circular figures of features with a part past the record's end, as dev 1daeb52db drew them (one arc each; a
+# reversal keeps the span as written). tests/fixtures/circular_past_end_dev_paths.json holds dev's feature paths,
+# written by the step's make_dev_fixture.py from this table.
+CIRCULAR_PAST_END_CASES: dict[str, tuple[str, tuple[tuple[str, ...], tuple[str, ...]] | None]] = {
+    "past-end": ("51..150", None),
+    "join": ("join(81..110,20..30)", None),
+    "complement-join": ("complement(join(81..110,20..30))", None),
+    "short": ("81..110", None),
+    "past-end-reversed": ("51..150", _REVERSED),
+    "join-reversed": ("join(81..110,20..30)", _REVERSED),
+    "complement-join-reversed": ("complement(join(81..110,20..30))", _REVERSED),
+    "short-reversed": ("81..110", _REVERSED),
+}
+
+
+def _feature_paths(svg: Path) -> list[list[str]]:
+    """The ``id`` and ``d`` of every feature path (ids ``f<hash>``, with ``__part``/``__line`` suffixes), sorted."""
     import re
+    import xml.etree.ElementTree as ET
 
+    pattern = re.compile(r"f[0-9a-f]{6,}(__\w+)?")
+    return sorted(
+        [element.get("id", ""), element.get("d", "")]
+        for element in ET.parse(svg).iter()
+        if element.get("d") is not None and pattern.fullmatch(element.get("id", ""))
+    )
+
+
+@pytest.mark.parametrize("case", sorted(CIRCULAR_PAST_END_CASES))
+def test_circular_draws_a_part_past_the_end_as_dev_did(tmp_path: Path, case: str) -> None:
+    """Circular reads a part past the end by its angles, as dev does, also on a reversed record: ``51..150`` on
+    100 bp stays one block over the whole circle with no seam at the origin, and the joins keep their blocks. Only
+    Linear draws the join over the origin (review r1 MEDIUM-1, r2 HIGH-1). The feature paths equal dev's."""
+    import json
+
+    location, rows = CIRCULAR_PAST_END_CASES[case]
     (tmp_path / "rec.gb").write_text(_genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+    args: tuple[str, ...] = ("--gbk", "rec.gb")
+    if rows:
+        (tmp_path / "records.tsv").write_text(
+            "gbk\t" + "\t".join(rows[0]) + "\nrec.gb\t" + "\t".join(rows[1]) + "\n", encoding="utf-8")
+        args = ("--records_table", "records.tsv")
 
-    run = _gbdraw("circular", "--gbk", "rec.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+    run = _gbdraw("circular", *args, "-o", "out", "-f", "svg", cwd=tmp_path)
 
     assert run.returncode == 0, run.stderr
-    parts = set(re.findall(r'id="(f[0-9a-f]+__part\d+)"', (tmp_path / "out.svg").read_text(encoding="utf-8")))
-    assert len(parts) == (0 if blocks == 1 else blocks), parts
+    expected = json.loads((ROOT / "tests" / "fixtures" / "circular_past_end_dev_paths.json").read_text(encoding="utf-8"))
+    assert _feature_paths(tmp_path / "out.svg") == expected["cases"][case]
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
@@ -1318,3 +1352,148 @@ def test_the_web_feature_listing_leaves_out_what_does_not_fit_as_the_drawing_doe
 
     tags = [tag for feature in payload["features"] for tag in feature.get("qualifiers", {}).get("locus_tag", ())]
     assert tags == ["ok"]
+
+
+def _group_paths(svg: Path, suffix: str) -> list[str]:
+    """The ``d`` of every path inside the groups whose id ends with ``suffix``, in drawing order."""
+    import xml.etree.ElementTree as ET
+
+    return [
+        element.get("d", "")
+        for group in ET.parse(svg).iter()
+        if group.get("id", "").endswith(suffix)
+        for element in group.iter()
+        if element.get("d") is not None
+    ]
+
+
+def test_circular_density_counts_a_part_past_the_end_as_its_join(tmp_path: Path) -> None:
+    """Feature density reads a part past the end of a circular record as the join it is: ``81..110`` covers windows
+    1..10 as ``join(81..100,1..10)`` does (dev clipped it at the end, so those windows counted nothing; r2 MEDIUM-1 a,
+    an intended correction)."""
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        run = _gbdraw("circular", "--gbk", f"{name}.gb", "--feature_density_track", "id=d", "type=CDS",
+                      "metric=coverage", "window=10", "step=5", "-o", name, "-f", "svg", cwd=tmp_path)
+        assert run.returncode == 0, run.stderr
+
+    past = _group_paths(tmp_path / "past.svg", "_density_d")
+    assert past and past == _group_paths(tmp_path / "join.svg", "_density_d")
+
+
+def test_a_circular_crop_keeps_both_blocks_of_a_part_past_the_end(tmp_path: Path) -> None:
+    """A records-table region over the whole record keeps the part from the start too: ``81..110`` draws as
+    ``join(81..100,1..10)`` does, one block from 81 round to 10 (dev drew only 81..100 with a cut end; r2 MEDIUM-1 b,
+    an intended correction)."""
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        (tmp_path / f"{name}.tsv").write_text(f"gbk\tregion\n{name}.gb\t1-100\n", encoding="utf-8")
+        run = _gbdraw("circular", "--records_table", f"{name}.tsv", "-o", name, "-f", "svg", cwd=tmp_path)
+        assert run.returncode == 0, run.stderr
+
+    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "join")]
+    assert paths[0] and paths[0] == paths[1]
+
+
+def _gff3_text(*landmarks: tuple[str, str, int, int, str], cds: tuple[str, int, int] | None = ("rec", 81, 110)) -> str:
+    lines = ["##gff-version 3"]
+    for seqid, feature_type, start, end, attributes in landmarks:
+        lines.append(f"{seqid}\t.\t{feature_type}\t{start}\t{end}\t.\t+\t.\t{attributes}")
+    if cds is not None:
+        lines.append(f"{cds[0]}\t.\tCDS\t{cds[1]}\t{cds[2]}\t.\t+\t0\tID=over;locus_tag=over")
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize(("landmarks", "expected"), [
+    ((("rec", "region", 1, 100, "ID=rec;Is_circular=true"),), "circular"),
+    ((("rec", "chromosome", 1, 100, "ID=rec;Is_circular=TRUE"),), "circular"),
+    ((("rec", "region", 1, 100, "ID=rec;Is_circular=false"),), "unknown"),
+    ((("rec", "region", 1, 100, "ID=rec"),), "unknown"),
+    ((("rec", "gene", 1, 50, "ID=g;Is_circular=true"),), "unknown"),
+    ((("rec", "region", 2, 100, "ID=rec;Is_circular=true"),), "unknown"),
+], ids=["region", "other-type-any-case", "false", "absent", "not-the-landmark", "not-whole"])
+def test_gff3_states_a_circular_sequence_only_on_its_landmark(
+    tmp_path: Path, landmarks: tuple[tuple[str, str, int, int, str], ...], expected: str
+) -> None:
+    """``Is_circular=true`` counts only on the feature that covers the whole sequence (r2 MEDIUM-2)."""
+    from gbdraw.layout.record_transform import detected_topology
+
+    (tmp_path / "rec.gff").write_text(_gff3_text(*landmarks, cds=None), encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    (record,) = parse_gff_fasta(str(tmp_path / "rec.gff"), str(tmp_path / "rec.fa"))
+
+    assert detected_topology(record, "gff_fasta") == expected
+
+
+def test_gff3_reads_each_sequence_by_its_own_landmark(tmp_path: Path) -> None:
+    from gbdraw.layout.record_transform import detected_topology
+
+    (tmp_path / "two.gff").write_text(_gff3_text(
+        ("a", "region", 1, 100, "ID=a;Is_circular=true"), ("b", "region", 1, 100, "ID=b"), cds=None,
+    ), encoding="utf-8")
+    (tmp_path / "two.fa").write_text(">a\n" + "acgtgcatgc" * 10 + "\n>b\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    records = parse_gff_fasta(str(tmp_path / "two.gff"), str(tmp_path / "two.fa"))
+
+    assert [detected_topology(record, "gff_fasta") for record in records] == ["circular", "unknown"]
+
+
+def test_a_set_linear_topology_wins_over_gff3_is_circular(tmp_path: Path) -> None:
+    """``--record_topology linear`` still wins: the past-end CDS of an ``Is_circular=true`` record is left out."""
+    (tmp_path / "rec.gff").write_text(
+        _gff3_text(("rec", "region", 1, 100, "ID=rec;Is_circular=true")), encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    run = _gbdraw("linear", "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "--record_topology", "linear",
+                  "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert any("CDS 81..110 (over)" in line for line in _lines(run) if line.startswith("WARNING"))
+
+
+def test_circular_gc_of_a_gff3_record_stated_circular_wraps_as_genbank_circular(tmp_path: Path) -> None:
+    """GC content and skew windows of a GFF3 record whose landmark says ``Is_circular=true`` wrap over the origin as
+    those of the same sequence in a circular GenBank record (r2 MEDIUM-1 c, an intended correction)."""
+    sequence = ("gggggcccccaaaaattttt" * 3) + ("atatatatgc" * 4)
+    (tmp_path / "rec.gff").write_text(
+        _gff3_text(("rec", "region", 1, 100, "ID=rec;Is_circular=true"), cds=("rec", 10, 30)), encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(f">rec\n{sequence}\n", encoding="utf-8")
+    origin = "".join(
+        f"{start + 1:>9} " + " ".join(sequence[i:i + 10] for i in range(start, min(start + 60, 100), 10)) + "\n"
+        for start in range(0, 100, 60)
+    )
+    (tmp_path / "rec.gb").write_text(
+        "LOCUS       rec                      100 bp    DNA     circular UNK 01-JAN-1980\n"
+        "FEATURES             Location/Qualifiers\n     CDS             10..30\n"
+        f"                     /locus_tag=\"over\"\nORIGIN\n{origin}//\n", encoding="utf-8")
+
+    gff = _gbdraw("circular", "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "-o", "gff", "-f", "svg",
+                  cwd=tmp_path)
+    genbank = _gbdraw("circular", "--gbk", "rec.gb", "-o", "genbank", "-f", "svg", cwd=tmp_path)
+
+    assert gff.returncode == 0, gff.stderr
+    assert genbank.returncode == 0, genbank.stderr
+    for track in ("_gc_content", "_gc_skew"):
+        drawn = _group_paths(tmp_path / "gff.svg", track)
+        assert drawn and drawn == _group_paths(tmp_path / "genbank.svg", track)
+
+
+def test_a_past_end_cds_translates_and_extracts_its_whole_join(tmp_path: Path) -> None:
+    """Protein extraction and the feature popup read a past-end CDS as its join: 30 nt, as ``join(81..100,1..10)``
+    (dev read 20 nt; r2 LOW-1)."""
+    from gbdraw.analysis.protein_colinearity import _translate_cds_feature
+    from gbdraw.web_support.feature_metadata import feature_sequence_payload
+
+    read = []
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        (record,) = read_flat_file_records(str(tmp_path / f"{name}.gb"))
+        (feature,) = [item for item in record.features if item.type == "CDS"]
+        read.append((feature_sequence_payload(feature, record)["nucleotideSequence"],
+                     _translate_cds_feature(record, feature)))
+
+    assert len(read[0][0]) == 30 and read[0] == read[1]

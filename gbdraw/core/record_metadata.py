@@ -557,35 +557,36 @@ def _source_intervals(
 
 
 def location_over_origin(location: Location, length: int) -> Location:
-    """``location`` on one turn of a circular record of ``length`` bases: a part past the origin moves one turn back,
-    and a part across it is split there (``_source_intervals``) into the part up to the end and the part from the
-    start, in biological order, as a GenBank file writes ``join(81..100,1..10)`` for GFF3's ``81..110`` on 100 bp.
-    The cut points at the origin are exact; the part's own ends keep their kind and fuzz. ``location`` itself when no
-    part runs past the end.
+    """``location`` on one turn of a circular record of ``length`` bases: a part past the origin (after the end, or,
+    once reversed, before the start) moves one turn, and a part across it is split there (``_source_intervals``)
+    into the part up to the end and the part from the start, in biological order, as a GenBank file writes
+    ``join(81..100,1..10)`` for GFF3's ``81..110`` on 100 bp (reversed, ``[-10:20]``). The cut points at the origin
+    are exact; the part's own ends keep their kind and fuzz. ``location`` itself when every part lies in the record.
 
-    The one owner of reading a part past a record's end (OV-3724): crops, reversal, feature density and the Linear
-    axis read such a part through it. The feature keeps the location as written, so selectors, hashes and the
-    Circular drawing, which draws a part by its angles, never see this form."""
+    The one owner of reading a part past a record's origin as its join (OV-3724): crops, the Linear axis, display
+    projection, feature density and protein extraction read such a part through it. The feature keeps the location
+    as written, and so does a reversal, so selectors, hashes and the Circular drawing, which draws a part by its
+    angles in one arc, never see this form."""
 
-    if all(int(part.end) <= length for part in location.parts):
+    if all(0 <= int(part.start) and int(part.end) <= length for part in location.parts):
         return location
     parts: list[Location] = []
     for part in location.parts:
         start = int(part.start)
         intervals = _source_intervals(start, int(part.end), 1, 1, length)
+        # A position plus an offset keeps its kind and fuzz (minus gives a plain int).
+        shifted = part if intervals[0][0] == start else part._shift(intervals[0][0] - start)
         if len(intervals) == 1:
-            parts.append(part if intervals[0][0] == start else part._shift(intervals[0][0] - start))
+            parts.append(shifted)
             continue
-        # A position plus an offset keeps its kind (minus gives a plain int).
         pieces = [
-            SimpleLocation(part.start, ExactPosition(length), strand=part.strand),
-            SimpleLocation(ExactPosition(0), part.end + (-length), strand=part.strand),
+            SimpleLocation(shifted.start, ExactPosition(length), strand=part.strand),
+            SimpleLocation(ExactPosition(0), shifted.end + (-length), strand=part.strand),
         ]
         parts.extend(reversed(pieces) if part.strand == -1 else pieces)
     if len(parts) == 1:
         return parts[0]
     return CompoundLocation(parts, operator=getattr(location, "operator", None) or "join")
-
 
 class RecordSourceMetadata(NamedTuple):
     organism: str

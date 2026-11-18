@@ -9,6 +9,7 @@ from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
+    location_over_origin,
     _iter_source_features as _iter_features,
     _read_coord_map as _read_record_coord_map,
     _source_feature_anchor_profile,
@@ -252,7 +253,8 @@ def _source_anchor_profile(feature: Any, *, coord_step: int = 1) -> dict[str, st
 
 def _extract_nucleotide_sequence(feature: Any, record: Any) -> tuple[str, list[str]]:
     try:
-        return str(feature.extract(record.seq)).upper(), []
+        # A part past the origin of a record drawn circular reads as the join it is (OV-3724).
+        return str(location_over_origin(feature.location, len(record.seq)).extract(record.seq)).upper(), []
     except Exception as exc:
         return "", [f"Nucleotide sequence extraction skipped: {exc}"]
 

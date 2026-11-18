@@ -510,11 +510,26 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
 
 
 def _state_gff3_topology(record: SeqRecord) -> None:
-    """Record the topology a GFF3 file states for a sequence: ``Is_circular=true`` on its landmark feature (the
-    ``region`` line) makes it circular, as a GenBank LOCUS line does (``detected_topology`` reads it). GFF3 writes a
-    feature over a circular origin with an end past the sequence's length."""
+    """Record the topology a GFF3 file states for a sequence, as a GenBank LOCUS line does (``detected_topology``
+    reads it). GFF3 states it with ``Is_circular=true`` on the sequence's landmark, the feature that covers the whole
+    sequence (NCBI writes it on the ``region`` line); GFF3 then writes a feature over the origin with an end past
+    the sequence's length. Edges:
 
+    - ``Is_circular=true`` (any case) on a top-level feature from the first base to the last: circular, whatever
+      its type (``region``, ``chromosome``, ``plasmid``).
+    - ``Is_circular`` on a feature that does not cover the whole sequence (a ``gene``): ignored.
+    - ``Is_circular=false``, another value, or no attribute: nothing stated (``unknown``), as before.
+    - Several sequences: each reads its own landmark.
+    - A topology the request sets (``--record_topology``, a records table, the Web record card) still wins
+      (``drawn_circular``).
+
+    Runs after the FASTA merge, so the sequence's length is the FASTA's."""
+
+    length = len(record.seq)
     for feature in record.features:
+        location = feature.location
+        if location is None or int(location.start) != 0 or int(location.end) != length:
+            continue
         values = feature.qualifiers.get("Is_circular") or ()
         if any(str(value).strip().lower() == "true" for value in values):
             record.annotations["topology"] = "circular"
@@ -741,7 +756,6 @@ def parse_gff_fasta(
         for record in gff_records:
             canonicalize_feature_types(record.features)
             _normalize_gff3_multipart_features(record)
-            _state_gff3_topology(record)
         if not gff_records:
             raise ValidationError(f"GFF3 file {gff_file} has no feature lines.", diagnostic=_GFF_WITHOUT_FEATURES)
         catalogs = {
@@ -754,6 +768,7 @@ def parse_gff_fasta(
             source_feature_catalogs.extend(catalogs[id(record)] for record in merged_records)
         for record in merged_records:
             _attach_source_annotations(record, gff_file)
+            _state_gff3_topology(record)
         return merged_records
 
 
