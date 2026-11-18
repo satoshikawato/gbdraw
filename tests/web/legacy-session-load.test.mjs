@@ -251,6 +251,26 @@ with tempfile.TemporaryDirectory() as tmp:
 
 // The reply's repairs are read against the codes Load words
 // (`readSentLoadRepair`); Python's conversion owns their paths.
+// OV-3660: a Session 31-33 stored no file names; Python's move to the current writer names each file once
+// (its CLI file binding's slot, or its resource name without the "<resource ID>-" prefix), and Load shows those
+// names, which the CLI replay reads too (tests/test_input_summary.py).
+for (const [name, cardNames] of [
+  ['lambda_basic_linear.v31-schema1', ['NC_001416.gb']],
+  ['feature-edits-linear-crop-rc.v33', ['record-0.gb', 'record-1.gb']]
+]) {
+  test(`a Session ${name.split('.')[1]} Load names its record files by the names Python's move stores`, async () => {
+    const session = fixture(name);
+    const stored = (await pythonUpgrade(session)).document.webFiles.resourceOriginalNames;
+    assert.equal(session.webFiles?.resourceOriginalNames, undefined);
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    const drawing = state.drawingList().find(({ mode }) => mode === 'linear');
+    const names = drawing.linearSeqs.map((sequence) => state.inputFiles.fileOf(sequence.gb).name);
+    assert.deepEqual(names, cardNames);
+    assert.deepEqual(names.map((shown) => Object.values(stored).includes(shown)), names.map(() => true));
+  });
+}
+
 test('the conversion reply is refused when a repair names a code Load does not word', async () => {
   const { upgradeLegacySession } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
   const reply = (warnings) => async () => ({

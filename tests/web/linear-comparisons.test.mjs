@@ -40,6 +40,8 @@ const {
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan,
+  setComparisonEdgeFile,
+  swapComparisonEdgeFile,
   validateLinearComparisonEdges
 } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-comparisons.js')));
 
@@ -898,3 +900,22 @@ for (const blastpMode of ['orthogroup', 'collinear']) {
     [[0, 1, 0], [0, 2, 1]]
   );
 }
+
+// OV-3592: an edge keeps the name its loaded request stored for its table (each stored form: a name, a table gbdraw
+// made, an older writer's entry) through every rebuild of the plan and into the resolved edge Save writes from, and
+// drops it with the file it was stored for.
+for (const loadedSourceName of [{ sourceName: 'none.tsv' }, { sourceName: null }, {}]) {
+  const plan = normalizeLinearComparisonPlan({
+    mode: 'selected', defaultSource: 'losat',
+    edges: [{ id: 'e1', queryUid: 'a', subjectUid: 'b', included: true, fileActive: true, source: 'upload', file: file('t.tsv'), loadedSourceName }]
+  });
+  assert.deepEqual(plan.edges[0].loadedSourceName, loadedSourceName);
+  assert.deepEqual(normalizeLinearComparisonPlan(plan).edges[0].loadedSourceName, loadedSourceName);
+  assert.deepEqual(resolveLinearComparisonPlan({ plan, sequences }).edges[0].loadedSourceName, loadedSourceName);
+  const replaced = normalizeLinearComparisonPlan(plan).edges[0];
+  setComparisonEdgeFile(replaced, file('other.tsv'));
+  const swapped = normalizeLinearComparisonPlan(plan).edges[0];
+  swapComparisonEdgeFile(swapped, file('other.tsv'));
+  assert.deepEqual([Object.hasOwn(replaced, 'loadedSourceName'), Object.hasOwn(swapped, 'loadedSourceName')], [false, false]);
+}
+assert.equal(Object.hasOwn(createLinearComparisonEdge({ loadedSourceName: { sourceName: 3 } }), 'loadedSourceName'), false);

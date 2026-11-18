@@ -32,6 +32,15 @@ import { edgeRetainsUserData, windowLosatFilenamesOf } from './linear-comparison
  * @property {InputFileRef | null} file
  * @property {string} losatFilename
  * @property {WindowLosatFilenames} [windowLosatFilenames]
+ * @property {LoadedSourceName} [loadedSourceName] The name a loaded request stored for this pair's table, while the
+ *   edge holds the file Load bound for it (OV-3592).
+ */
+/**
+ * What a loaded request stored for the name of a nucleotide comparison's table (`sourceName`): the file the user
+ * chose, `null` for a table gbdraw made, or no field for an older writer's entry (whose name Python reads from
+ * the resource). A Save after Load writes it as stored; it is the comparison's, not its table's: two comparisons of
+ * one table each keep their own. The edge holds it only at runtime: no Session stores it on the plan.
+ * @typedef {{ sourceName?: string | null }} LoadedSourceName
  */
 /**
  * The options of `createLinearComparisonEdge`; every field may be absent or
@@ -47,6 +56,7 @@ import { edgeRetainsUserData, windowLosatFilenamesOf } from './linear-comparison
  * @property {unknown} [file]
  * @property {unknown} [losatFilename]
  * @property {unknown} [windowLosatFilenames]
+ * @property {unknown} [loadedSourceName]
  */
 /**
  * @typedef {object} LinearComparisonPlan
@@ -71,6 +81,7 @@ import { edgeRetainsUserData, windowLosatFilenamesOf } from './linear-comparison
  * @property {string} losatFilename
  * @property {boolean} losatFilenameActive
  * @property {WindowLosatFilenames} [windowLosatFilenames]
+ * @property {LoadedSourceName} [loadedSourceName]
  */
 /**
  * @typedef {object} LinearComparisonIssue
@@ -217,7 +228,8 @@ export const createLinearComparisonEdge = ({
   source = LINEAR_COMPARISON_SOURCES.UPLOAD,
   file = null,
   losatFilename = '',
-  windowLosatFilenames = {}
+  windowLosatFilenames = {},
+  loadedSourceName = undefined
 } = {}) => ({
   id: cleanUid(id) || createComparisonId(),
   queryUid: cleanUid(queryUid),
@@ -229,8 +241,23 @@ export const createLinearComparisonEdge = ({
   // A binding's ref, or the loaded file of a Load candidate (see the typedef).
   file: /** @type {InputFileRef | null} */ (file || null),
   losatFilename: String(losatFilename || ''),
-  ...windowLosatFilenamesField(normalizeWindowLosatFilenames(windowLosatFilenames))
+  ...windowLosatFilenamesField(normalizeWindowLosatFilenames(windowLosatFilenames)),
+  ...loadedSourceNameField(loadedSourceName)
 });
+
+/**
+ * The edge field that holds a loaded request's stored name (`LoadedSourceName`): absent unless `value` is one.
+ * @param {unknown} value
+ * @returns {{ loadedSourceName?: LoadedSourceName }}
+ */
+export const loadedSourceNameField = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const keys = Object.keys(value);
+  if (keys.length === 0) return { loadedSourceName: {} };
+  const { sourceName } = /** @type {{ sourceName?: unknown }} */ (value);
+  return keys.length === 1 && (typeof sourceName === 'string' || sourceName === null)
+    ? { loadedSourceName: { sourceName } } : {};
+};
 
 /**
  * Whether one window-pair name entry holds: a unit edge key and a name, neither blank. The one check of an entry:
@@ -301,6 +328,8 @@ export const withoutWindowLosatFilenames = (plan) => {
 export const setComparisonEdgeFile = (edge, file) => {
   edge.file = file || null;
   edge.fileActive = Boolean(file);
+  // Another file is named by its own name (OV-3592).
+  delete edge.loadedSourceName;
 };
 
 /**
@@ -312,6 +341,21 @@ export const setComparisonEdgeFile = (edge, file) => {
  */
 export const swapComparisonEdgeFile = (edge, file) => {
   edge.file = file;
+  delete edge.loadedSourceName;
+};
+
+/**
+ * Gives an edge back the file it held, with the name its loaded request stored for the file (`LoadedSourceName`,
+ * OV-3592): Load binds a stored table so, and Undo and Redo restore a step's file so. The edge's source, inclusion
+ * and file state stay as they are; no file leaves no name.
+ * @param {LinearComparisonEdge} edge Changed in place.
+ * @param {InputFileRef | null} file The ref of the file.
+ * @param {unknown} loadedSourceName The name the file's row holds (`loadedSourceNameField` reads it).
+ */
+export const restoreComparisonEdgeFile = (edge, file, loadedSourceName) => {
+  edge.file = file || null;
+  delete edge.loadedSourceName;
+  if (edge.file) Object.assign(edge, loadedSourceNameField(loadedSourceName));
 };
 
 /** @param {unknown} value */
@@ -571,7 +615,8 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
   fileActive: edge?.fileActive === true,
   losatFilename: String(edge?.losatFilename || ''),
   losatFilenameActive: edge?.losatFilenameActive === true,
-  ...windowLosatFilenamesField(normalizeWindowLosatFilenames(edge?.windowLosatFilenames))
+  ...windowLosatFilenamesField(normalizeWindowLosatFilenames(edge?.windowLosatFilenames)),
+  ...loadedSourceNameField(edge?.loadedSourceName)
 });
 
 // A selected pair that names an OFF record is left out with its record and

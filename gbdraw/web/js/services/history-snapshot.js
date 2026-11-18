@@ -6,8 +6,10 @@
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
+/** @import { LoadedSourceName } from './linear-comparisons.js' */
 import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
+import { loadedSourceNameField, restoreComparisonEdgeFile } from './linear-comparisons.js';
 import { captureLinearCardOrientation } from './record-display-model.js';
 import { restoreLinearCardOrientation } from './linear-card-windows.js';
 /** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
@@ -197,12 +199,17 @@ const editedIntentPartOf = (path, value) => (
  * @property {InputType} [inputType] The drawing's input type (its inputs slice).
  */
 /**
+ * The file of one comparison-plan edge in an intent or checkpoint, and the name its loaded request stored for it
+ * while the edge holds that file (`LoadedSourceName`, OV-3592).
+ * @typedef {{ id: string, file: BoundFileValue, loadedSourceName?: LoadedSourceName }} ComparisonFileData
+ */
+/**
  * The files of an intent or checkpoint: the drawing's inputs slice capture
  * (`INPUTS_SLICE.capture`), its `files` flattened beside its rows and input
  * type, without the comparisons a Generate wrote (a Linear checkpoint adds
  * them), and the comparison plan's files by edge ID.
  * @typedef {Omit<DrawingInputFiles, 'linearCanonicalComparisons'> & Partial<Pick<DrawingInputFiles, 'linearCanonicalComparisons'>>
- *   & Pick<InputsData, 'linearSeqs' | 'circularSources' | 'inputType'> & { linearComparisons: { id: string, file: BoundFileValue }[] }} FilesData
+ *   & Pick<InputsData, 'linearSeqs' | 'circularSources' | 'inputType'> & { linearComparisons: ComparisonFileData[] }} FilesData
  */
 /**
  * The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and its LOSAT program).
@@ -803,7 +810,9 @@ const filesDataOf = (drawing, generated) => {
     inputType,
     linearSeqs,
     circularSources,
-    linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: refsOf(edge.file) }))
+    linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({
+      id: edge.id, file: refsOf(edge.file), ...loadedSourceNameField(edge.loadedSourceName)
+    }))
   };
 };
 /** @param {DrawingView} drawing */
@@ -834,11 +843,14 @@ const applyFilesData = (drawing, filesData, fileStore) => {
   });
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
-      (filesData.linearComparisons ?? [])
-        .map((comparison) => [comparison.id, fileStore.registerFile(isInputFileRef(comparison.file) ? comparison.file : null)])
+      (filesData.linearComparisons ?? []).map((comparison) => [comparison.id, {
+        file: fileStore.registerFile(isInputFileRef(comparison.file) ? comparison.file : null),
+        loadedSourceName: comparison.loadedSourceName
+      }])
     );
     drawing.linearComparisonPlan.edges.forEach((edge) => {
-      edge.file = comparisonFiles.get(String(edge?.id || '')) || null;
+      const { file = null, loadedSourceName = undefined } = comparisonFiles.get(String(edge?.id || '')) || {};
+      restoreComparisonEdgeFile(edge, file, loadedSourceName);
     });
   }
 };
@@ -1972,7 +1984,10 @@ export const createHistorySnapshotService = ({
             ? drawing.linearComparisonPlan.edges
             : []
           )
-            .map((edge) => /** @type {[string, InputFileRef | null]} */ ([String(edge?.id || ''), edge?.file ?? null]))
+            // The name a loaded request stored for the file goes back with it (OV-3592).
+            .map((edge) => /** @type {[string, { file: InputFileRef | null, loadedSourceName: unknown }]} */ ([
+              String(edge?.id || ''), { file: edge?.file ?? null, loadedSourceName: edge?.loadedSourceName }
+            ]))
             .filter(([edgeId]) => edgeId)
         )
       : null;
@@ -1996,9 +2011,8 @@ export const createHistorySnapshotService = ({
       if (retainedComparisonFiles) {
         (drawing.linearComparisonPlan?.edges || []).forEach((edge) => {
           const edgeId = String(edge?.id || '');
-          if (edgeId && retainedComparisonFiles.has(edgeId)) {
-            edge.file = retainedComparisonFiles.get(edgeId) ?? null;
-          }
+          const retained = edgeId ? retainedComparisonFiles.get(edgeId) : undefined;
+          if (retained) restoreComparisonEdgeFile(edge, retained.file, retained.loadedSourceName);
         });
       }
 

@@ -126,9 +126,11 @@ import {
 import {
   createDefaultLinearComparisonPlan,
   linearComparisonEdgeKey,
+  loadedSourceNameField,
   losatEdgeOfPair,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
+  restoreComparisonEdgeFile,
   resolveLinearComparisonPlan,
   setComparisonEdgeFile,
   windowLosatFilenamesField,
@@ -2809,7 +2811,6 @@ const drawingProjectionInputOf = (view, {
     // derives its draft from the request (D-02); the comparison plan of a
     // Python re-save is stated the same way as the CLI's (OV-296).
     initializeCliInputs: !hasStoredDraft,
-    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
     linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
       ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
       : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -4695,7 +4696,9 @@ export const serializeActiveRenderFiles = async (
       .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'upload' && edge.fileActive && edge.file)
       .map(async (/** @type {LinearComparisonResolvedEdge} */ edge) => ({
       id: String(edge.id || ''),
-      file: await serializeFileValue(store, edge.file)
+      file: await serializeFileValue(store, edge.file),
+      // The name a loaded request stored for the file, which the request writes as stored (OV-3592).
+      ...loadedSourceNameField(edge.loadedSourceName)
     }))
   ) : [];
   const linearCanonicalComparisons = mode === 'linear'
@@ -5395,6 +5398,11 @@ const withStoredComparisonPlan = (config, readFiles) => {
  */
 /** A Circular source card as Load reads it back: each file as stored. @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null }} RestoredCircularSource */
 /**
+ * One comparison-plan edge's row of the files Load binds (`linearComparisons`, unvalidated): the edge's ID, its file,
+ * and the name its request stored for the file (`LoadedSourceName`, read through `loadedSourceNameField`, OV-3592).
+ * @typedef {{ id?: unknown, file?: unknown, loadedSourceName?: unknown }} LoadedComparisonFileRow
+ */
+/**
  * Reads the saved inputs into the Load candidate (`targetState`).
  * `targetDrawing` holds the Linear record layout and comparison plan that the
  * Files reconcile (the candidate's). The Linear record rows the Files hold are
@@ -5520,20 +5528,22 @@ const applyFiles = (filesData, {
         })
       });
     }
-    const comparisonFiles = new Map(
-      /** @type {[string, any][]} */ ((Array.isArray(read.linearComparisons) ? read.linearComparisons : [])
-        .map((comparison) => [
-          String(comparison?.id || ''),
-          deserializeFile(comparison?.file)
-        ]))
-        .filter(([id]) => id)
-    );
+    /** @type {readonly LoadedComparisonFileRow[]} */
+    const comparisonRows = Array.isArray(read.linearComparisons) ? read.linearComparisons : [];
+    const comparisonFiles = new Map(comparisonRows
+      .map((comparison) => /** @type {const} */ ([String(comparison?.id || ''), {
+        // A Load candidate's edge holds its loaded file until `bindLoadedInputs` registers it (`LinearComparisonEdge`).
+        file: /** @type {InputFileRef | null} */ (deserializeFile(comparison?.file)),
+        loadedSourceName: comparison?.loadedSourceName
+      }]))
+      .filter(([id]) => id));
     const planWithFiles = normalizeLinearComparisonPlan(targetDrawing.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
-      const file = comparisonFiles.get(edge.id) || null;
+      const { file = null, loadedSourceName = undefined } = comparisonFiles.get(edge.id) || {};
       // A retained file stays inactive; an edge Load leaves with no file (its
-      // binding dropped) is as the pair card's Remove leaves it (OV-899).
-      if (file) edge.file = file;
+      // binding dropped) is as the pair card's Remove leaves it (OV-899). A
+      // file Load bound from the request keeps the name it stored (OV-3592).
+      if (file) restoreComparisonEdgeFile(edge, file, loadedSourceName);
       else setComparisonEdgeFile(edge, null);
     });
     installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, collapsed));
