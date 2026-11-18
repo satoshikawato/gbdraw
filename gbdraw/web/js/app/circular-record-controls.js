@@ -30,7 +30,7 @@ import { drawingTabLabels } from './input-replacement-ports.js';
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
-/** @import { AskChoice } from './app-messages.js' */
+/** @import { AskChoice, ShowNotice } from './app-messages.js' */
 /** @import { DrawingBarOffer, DrawingBarTab, DrawingInputSite } from './drawing-list.js' */
 /** @import { RevealSetting } from './settings-pane.js' */
 /** @import { CircularRecordLayoutChoice } from '../services/one-circle-layout.js' */
@@ -264,11 +264,11 @@ const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf) => {
 
 /**
  * The question a card's file control asks before a Replace that removes Depth files (OV-2318). Registers nothing.
- * @param {{ state: WebState, askChoice: AskChoice, barTabs: () => Array<DrawingBarTab | DrawingBarOffer> }} ports
+ * @param {{ state: WebState, askChoice: AskChoice, showNotice: ShowNotice, barTabs: () => Array<DrawingBarTab | DrawingBarOffer> }} ports
  *   `barTabs`: the drawing bar's tabs, named as they show.
  * @returns {(sites: readonly DrawingInputSite[], value: ReplacementFile, pickHolds: () => boolean) => Promise<boolean> | null}
  */
-export const createCircularSourceReplacementQuestion = ({ state, askChoice, barTabs }) => {
+export const createCircularSourceReplacementQuestion = ({ state, askChoice, showNotice, barTabs }) => {
   /** @param {ReplacementFile | null} file */
   const fileOf = (file) => /** @type {FileLike | null} */ (isInputFileRef(file) ? state.inputFiles.fileOf(file) : file);
   /**
@@ -277,9 +277,13 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, barT
    * in): when Depth files of some drawing would leave
    * (`circularDepthFilesLeaving`), one dialog names them, with the drawing
    * when the sites are in more than one (Replace file / Cancel). The files are
-   * read first, with no dialog open: a change of the replaced drawings' cards,
-   * or a pick that no longer holds (`pickHolds`: another drawing shown, a
-   * History change), ends the Replace (false); a change of their Depth files reads
+   * read first, with no dialog open: a change of the replaced drawings' cards
+   * (a later pick, the card removed or moved, an Undo or Redo of the card), or
+   * a pick that no longer holds (`pickHolds`: another drawing shown), ends the
+   * Replace (false). A drawing switch does not supersede the pick, so a notice
+   * says the file was not put on the card (D-09); the other changes are the
+   * user's own later acts. A History step of another setting changes nothing
+   * the pick holds. A change of their Depth files reads
    * them again, so the dialog names the files as they are. An answer given
    * after either change does nothing (as `askTrackSourceRemoval`). Null when
    * no Depth file can leave (the control's write runs in its own step); else
@@ -305,6 +309,18 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, barT
     const cardsNow = () => inScope.flatMap(({ drawing }) => replacedCards(drawing));
     const depthNow = () => inScope.flatMap(({ drawing }) => replacementDepthFiles(drawing));
     const picked = cardsNow();
+    const [shown] = sites;
+    const cardNumber = state.drawingOf(shown.drawingId).circularSources.findIndex((card) => card.uid === shown.rowUid) + 1;
+    const stillShown = () => {
+      if (pickHolds()) return true;
+      showNotice({
+        text: () => t('{file} was not put on File {n}: another drawing was shown while it was read. Pick it again.', {
+          file: value.name ?? '', n: cardNumber
+        }),
+        tone: 'warning'
+      });
+      return false;
+    };
     return (async () => {
       /** @type {unknown[]} */
       let asked;
@@ -315,7 +331,7 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, barT
         leaving = await Promise.all(asking().map(async ({ drawingId, drawing, replaced }) => ({
           drawingId, rows: await circularDepthFilesLeaving(drawing, replaced, value, fileOf)
         })));
-        if (!pickHolds() || !sameEntries(picked, cardsNow())) return false;
+        if (!stillShown() || !sameEntries(picked, cardsNow())) return false;
       } while (!sameEntries(asked, depthNow()));
       const named = inScope.length > 1;
       const items = leaving.flatMap(({ drawingId, rows }) => rows.map(({ k, record, files }) => {
@@ -330,7 +346,7 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, barT
         items,
         actions: [{ id: 'replace', label: t('Replace file'), tone: 'danger' }]
       });
-      return answer === 'replace' && pickHolds() && sameEntries(picked, cardsNow()) && sameEntries(asked, depthNow());
+      return answer === 'replace' && stillShown() && sameEntries(picked, cardsNow()) && sameEntries(asked, depthNow());
     })();
   };
   return askCircularSourceReplacement;

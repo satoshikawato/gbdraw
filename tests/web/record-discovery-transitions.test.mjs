@@ -40,6 +40,17 @@ const setCircularGenbank = (file) => {
   else if (file) app.addCircularSourceFiles([file]);
 };
 const recordIds = (drawing) => drawing.circularRecordList.value.map((record) => record.record_id);
+// A pick on a File card's file control, as its uploader makes it (FileUploader `select` in components.js): the
+// upload runs in the uploader's own History step, which ends after one tick, while the Replace may still read its
+// new file; resolves with the upload's own outcome.
+const pickCardFile = (uid, field, file) => {
+  let upload;
+  const step = window.__GBDRAW_HISTORY__.runUndoable('Change uploaded file', async () => {
+    upload = app.uploadCircularSourceFile(uid, field, file);
+    await window.Vue.nextTick();
+  });
+  return step.then(() => upload);
+};
 
 test('a Circular upload discovers that drawing only; a switch writes no record list', async () => {
   app.selectDrawing('linear');
@@ -250,7 +261,7 @@ test('a card Replace that would remove Depth files asks first and names them', a
   const [card] = circular.circularSources.map((source) => source.uid);
   const undoCount = history.getUndoCount();
 
-  const cancelled = app.uploadCircularSourceFile(card, 'gb', genbank('a.gb', ['A1', 40]));
+  const cancelled = pickCardFile(card, 'gb', genbank('a.gb', ['A1', 40]));
   await settle();
   assert.equal(app.choicePrompt.show, true, 'the Replace asks before it removes a Depth file');
   assert.deepEqual(app.choicePrompt.items, ['#2 B1: b.tsv']);
@@ -262,7 +273,7 @@ test('a card Replace that would remove Depth files asks first and names them', a
   assert.deepEqual(rows(), [['a.tsv', null], [null, 'b.tsv']]);
   assert.equal(history.getUndoCount(), undoCount, 'and records no step');
 
-  const replaced = app.uploadCircularSourceFile(card, 'gb', genbank('a.gb', ['A1', 40]));
+  const replaced = pickCardFile(card, 'gb', genbank('a.gb', ['A1', 40]));
   await settle();
   app.resolveChoicePrompt('replace');
   await replaced;
@@ -276,7 +287,7 @@ test('a card Replace that would remove Depth files asks first and names them', a
   assert.deepEqual(rows(), [['a.tsv', null], [null, 'b.tsv']]);
 
   // A new file with a record at every place keeps every row, without a question.
-  await app.uploadCircularSourceFile(card, 'gb', genbank('ab2.gb', ['A1', 40], ['B1', 50]));
+  await pickCardFile(card, 'gb', genbank('ab2.gb', ['A1', 40], ['B1', 50]));
   await settle();
   assert.equal(app.choicePrompt.show, false);
   assert.equal(circular.circularSources[0].gb.name, 'ab2.gb');
@@ -310,7 +321,7 @@ test('after a Load, whose marks have no record count, the Replace still asks bef
   // the same cards keeps them.
   markCircularDepthRows(circular.slices.inputs, settledCircularCardMarks(circular).map((mark) => ({ ...mark, recordCount: null })));
   const [card] = circular.circularSources.map((source) => source.uid);
-  const pending = app.uploadCircularSourceFile(card, 'gb', genbank('a.gb', ['A1', 40]));
+  const pending = pickCardFile(card, 'gb', genbank('a.gb', ['A1', 40]));
   await settle();
   assert.equal(app.choicePrompt.show, true, 'the Replace asks, counting the marks as the read after it does');
   assert.deepEqual(app.choicePrompt.items, ['#2 B1: b.tsv']);
@@ -337,7 +348,7 @@ test('a Replace in every drawing that uses the file names the Depth files each d
   const sourceName = state.drawingTabs.value.find((tab) => tab.id === circular.id).name;
   const undoCount = history.getUndoCount();
   const upload = async (scope, answer) => {
-    const pending = app.uploadCircularSourceFile(card, 'gb', genbank('a.gb', ['A1', 40]));
+    const pending = pickCardFile(card, 'gb', genbank('a.gb', ['A1', 40]));
     await settle();
     assert.equal(app.choicePrompt.title, 'Replace input file?');
     app.resolveChoicePrompt(scope);
@@ -392,7 +403,7 @@ test('a Replace whose Depth files change while it reads names them as they are, 
   const [card] = circular.circularSources.map((source) => source.uid);
   const { file: slow, release } = slowGenbank('a.gb', ['A1']);
   const undoCount = history.getUndoCount();
-  const pending = app.uploadCircularSourceFile(card, 'gb', slow);
+  const pending = pickCardFile(card, 'gb', slow);
   await settle();
   assert.equal(app.choicePrompt.show, false, 'the new file is still read');
   bindRows([['a.tsv', null], [null, 'c.tsv']]);
@@ -409,13 +420,15 @@ test('a Replace whose Depth files change while it reads names them as they are, 
   unbind();
 });
 
-test('a drawing switch while a Replace reads its new file ends the Replace without writing', async () => {
+// A drawing switch does not supersede the pick, so the notice says the file was not put on the card (D-09).
+test('a drawing switch while a Replace reads its new file ends the Replace without writing, and says so', async () => {
   const history = window.__GBDRAW_HISTORY__;
   const { unbind } = await twoRecordsWithDepth(null);
   const [card] = circular.circularSources.map((source) => source.uid);
   const { file: slow, release } = slowGenbank('a.gb', ['A1']);
   const circularUndo = history.getUndoCount();
-  const pending = app.uploadCircularSourceFile(card, 'gb', slow);
+  app.dismissNotice();
+  const pending = pickCardFile(card, 'gb', slow);
   await settle();
   app.selectDrawing('linear');
   await settle();
@@ -427,6 +440,8 @@ test('a drawing switch while a Replace reads its new file ends the Replace witho
   await pending;
   await settle();
   assert.equal(asked, false, 'no question opens over the other drawing');
+  assert.equal(app.notice.text, 'a.gb was not put on File 1: another drawing was shown while it was read. Pick it again.');
+  assert.equal(app.notice.tone, 'warning');
   assert.equal(history.getUndoCount(), linearUndo);
   app.selectDrawing('circular');
   await settle();
@@ -440,9 +455,10 @@ test('a later pick on the same card wins over an earlier pick whose read ends af
   const { unbind } = await twoRecordsWithDepth(null);
   const [card] = circular.circularSources.map((source) => source.uid);
   const { file: slowX, release } = slowGenbank('x-wrong.gb', ['A1', 'B1']);
-  const first = app.uploadCircularSourceFile(card, 'gb', slowX);
+  app.dismissNotice();
+  const first = pickCardFile(card, 'gb', slowX);
   await settle();
-  await app.uploadCircularSourceFile(card, 'gb', genbank('y-right.gb', ['A1', 40], ['B1', 40]));
+  await pickCardFile(card, 'gb', genbank('y-right.gb', ['A1', 40], ['B1', 40]));
   await settle();
   assert.equal(circular.circularSources[0].gb.name, 'y-right.gb');
   release();
@@ -453,6 +469,7 @@ test('a later pick on the same card wins over an earlier pick whose read ends af
   await settle();
   assert.equal(asked, false);
   assert.equal(circular.circularSources[0].gb.name, 'y-right.gb', 'the earlier pick does not overwrite the later one');
+  assert.equal(app.notice.text, '', 'the user\'s own later pick needs no notice');
   unbind();
 });
 
@@ -461,10 +478,11 @@ test('an Undo while a Replace reads its new file ends the Replace without writin
   const { unbind } = await twoRecordsWithDepth(null);
   const [card] = circular.circularSources.map((source) => source.uid);
   // A step to undo that leaves the card as it is: the card's own Replace with a file of the same records.
-  await app.uploadCircularSourceFile(card, 'gb', genbank('ab2.gb', ['A1', 40], ['B1', 50]));
+  await pickCardFile(card, 'gb', genbank('ab2.gb', ['A1', 40], ['B1', 50]));
   await settle();
   const { file: slow, release } = slowGenbank('a.gb', ['A1']);
-  const pending = app.uploadCircularSourceFile(card, 'gb', slow);
+  app.dismissNotice();
+  const pending = pickCardFile(card, 'gb', slow);
   await settle();
   await app.undoHistory();
   await settle();
@@ -480,6 +498,38 @@ test('an Undo while a Replace reads its new file ends the Replace without writin
   assert.equal(circular.circularSources[0].gb.name, 'ab.gb', 'the Undo stands');
   assert.deepEqual(depthNames(circular), [['a.tsv', null], [null, 'b.tsv']]);
   assert.equal(history.getRedoCount(), redoCount, 'and its Redo stays');
+  assert.equal(app.notice.text, '');
+  unbind();
+});
+
+// Only what changes the pick ends it: a History step of another setting while the new file is read (the uploader's
+// own step, a commit on focus-out, a Generate) leaves it, and its question and write follow.
+test('a History step of another setting while a Replace reads its new file leaves the Replace to ask and write', async () => {
+  const history = window.__GBDRAW_HISTORY__;
+  const { unbind } = await twoRecordsWithDepth(null);
+  const [card] = circular.circularSources.map((source) => source.uid);
+  const { file: slow, release } = slowGenbank('a.gb', ['A1']);
+  const undoCount = history.getUndoCount();
+  const pending = pickCardFile(card, 'gb', slow);
+  await settle();
+  await history.runUndoable('Change species', () => { circular.form.species = 'Picked while read'; });
+  await settle();
+  assert.equal(history.getUndoCount(), undoCount + 1);
+  release();
+  await settle();
+  assert.deepEqual(app.choicePrompt.items, ['#2 B1: b.tsv']);
+  app.resolveChoicePrompt('replace');
+  await pending;
+  await settle();
+  assert.equal(circular.circularSources[0].gb.name, 'a.gb');
+  assert.deepEqual(depthNames(circular), [['a.tsv', null]]);
+  assert.equal(history.getUndoCount(), undoCount + 2, 'the Replace is a step of its own after the other one');
+  await app.undoHistory();
+  await settle();
+  assert.equal(circular.circularSources[0].gb.name, 'ab.gb');
+  assert.equal(circular.form.species, 'Picked while read', 'one Undo takes back the Replace only');
+  await app.undoHistory();
+  await settle();
   unbind();
 });
 

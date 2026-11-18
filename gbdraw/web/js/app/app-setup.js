@@ -3370,8 +3370,7 @@ export const createAppSetup = () => {
     askScope,
     // The busy outcome has no control to disable: the notice banner words the
     // drawing list's own busy reason, as the tabs' title does (R15).
-    onBusy: (busy) => showNotice(keptTextWarning(busy.reason)),
-    historyRevision: () => history.revision.value
+    onBusy: (busy) => showNotice(keptTextWarning(busy.reason))
   });
   // The uploaders of the shown drawing's bound input files: each names the
   // file its control binds and its own write; `replaceFromShownDrawing`
@@ -3383,7 +3382,7 @@ export const createAppSetup = () => {
     uploadLinearSourceDepthFile, uploadLinearComparisonCardFile
   } = createInputUploads({
     shownAction, replaceFromShownDrawing, replaceCircularSourceFile,
-    askCircularSourceReplacement: createCircularSourceReplacementQuestion({ state, askChoice, barTabs: drawingBar.tabs }),
+    askCircularSourceReplacement: createCircularSourceReplacementQuestion({ state, askChoice, showNotice, barTabs: drawingBar.tabs }),
     replaceCircularDepthFile, replaceLinearSourceFile, setLinearDepthFiles, setLinearSourceDepthFile,
     linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
