@@ -1,58 +1,71 @@
-// The one owner of the temporary folders that tests make. Each folder is made
-// under os.tmpdir() and removed when the process that made it exits: after the
-// last test, after a failed test or an uncaught error, and when a signal stops
-// the process. `node --test` runs each file in its own process and Playwright
-// runs each worker as one, so no folder outlives its test file or worker
-// (tests/web/temp-dir.test.mjs).
-const { mkdtempSync, rmSync } = require('node:fs');
+// The one owner of the temporary folders that tests make. A process keeps its
+// folders in a folder of its own, <os.tmpdir()>/gbdraw-tests/<host>-<pid>, and
+// removes it (and gbdraw-tests once that is empty) when it exits: after the
+// last test, after a failed test, an uncaught error or process.exit(). A
+// process that a signal or a crash ends cannot remove it, so each process, when
+// it makes its first folder, removes the folders of the processes on this host
+// that have ended. `node --test` runs each file in its own process and
+// Playwright runs each worker as one (tests/web/temp-dir.test.mjs).
+//
+// The helper handles no signal: a signal ends a test process as it did before.
+// Node 26 can abort a `node --test` file that handles one while its run is
+// stopped (OV-3920).
+const { mkdirSync, mkdtempSync, readdirSync, rmSync, rmdirSync } = require('node:fs');
 const { mkdtemp } = require('node:fs/promises');
-const { tmpdir } = require('node:os');
+const { hostname, tmpdir } = require('node:os');
 const { join } = require('node:path');
 
-/** @type {Set<string>} */
-const folders = new Set();
-let watching = false;
+/** @param {string} folder */
+const removeQuietly = (folder) => {
+  try {
+    rmSync(folder, { recursive: true, force: true, maxRetries: 2 });
+  } catch {
+    // A child process may still write into it: the next process removes it.
+  }
+};
 
-// Each folder is removed on its own: a folder that cannot be removed (a child
-// process still writing into it) must not change the exit status, keep the
-// other folders, or skip the other 'exit' listeners.
-const removeTempDirs = () => {
-  for (const folder of folders) {
+/** @param {number} pid */
+const hasEnded = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return /** @type {NodeJS.ErrnoException} */ (error).code === 'ESRCH';
+  }
+};
+
+/** @type {string | null} */
+let processFolder = null;
+
+/** @returns {string} */
+const ownFolder = () => {
+  if (processFolder !== null) return processFolder;
+  const root = join(tmpdir(), 'gbdraw-tests');
+  const host = hostname();
+  const folder = join(root, `${host}-${process.pid}`);
+  mkdirSync(folder, { recursive: true });
+  for (const name of readdirSync(root)) {
+    const owner = /^(.+)-([1-9]\d*)$/.exec(name);
+    if (owner && owner[1] === host && Number(owner[2]) !== process.pid && hasEnded(Number(owner[2]))) {
+      removeQuietly(join(root, name));
+    }
+  }
+  process.once('exit', () => {
+    removeQuietly(folder);
     try {
-      rmSync(folder, { recursive: true, force: true, maxRetries: 2 });
+      rmdirSync(root);
     } catch {
-      // Left for the next cleanup of TMPDIR.
+      // Another process still keeps its folders there.
     }
-  }
-  folders.clear();
-};
-
-// A signal nobody handles ends the process without its 'exit' event, so remove
-// the folders first and then let the signal end the process as before. A
-// Playwright worker handles SIGINT and SIGTERM itself and exits normally.
-/** @param {NodeJS.Signals} signal */
-const removeAndResignal = (signal) => {
-  removeTempDirs();
-  process.kill(process.pid, signal);
-};
-
-/** @param {string} folder @returns {string} */
-const own = (folder) => {
-  if (!watching) {
-    watching = true;
-    process.once('exit', removeTempDirs);
-    for (const signal of /** @type {NodeJS.Signals[]} */ (['SIGINT', 'SIGTERM', 'SIGHUP'])) {
-      if (process.listenerCount(signal) === 0) process.once(signal, removeAndResignal);
-    }
-  }
-  folders.add(folder);
+  });
+  processFolder = folder;
   return folder;
 };
 
 /** @param {string} prefix @returns {string} */
-const makeTempDirSync = (prefix) => own(mkdtempSync(join(tmpdir(), prefix)));
+const makeTempDirSync = (prefix) => mkdtempSync(join(ownFolder(), prefix));
 
 /** @param {string} prefix @returns {Promise<string>} */
-const makeTempDir = async (prefix) => own(await mkdtemp(join(tmpdir(), prefix)));
+const makeTempDir = (prefix) => mkdtemp(join(ownFolder(), prefix));
 
 module.exports = { makeTempDir, makeTempDirSync };
