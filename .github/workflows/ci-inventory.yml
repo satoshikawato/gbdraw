@@ -23,7 +23,7 @@ jobs:
   # only the three files that read GFF3, a few runner-minutes a week.
   gff3-biopython-head:
     name: GFF3 tests on Biopython's development head
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -78,7 +78,7 @@ jobs:
     name: CI inventory
     needs: gff3-biopython-head
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read

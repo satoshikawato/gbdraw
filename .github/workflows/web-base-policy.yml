@@ -18,7 +18,7 @@ jobs:
   trusted-base-policy:
     name: Web base policy (trusted base)
     if: github.event.pull_request.base.ref == 'dev'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       # The checker reads only base, head, and origin/main files, so fetch commits and trees and let Git fetch
@@ -62,7 +62,7 @@ jobs:
   promotion-gate:
     name: Promotion / gate
     if: github.event.pull_request.base.ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout trusted main base
