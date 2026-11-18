@@ -647,7 +647,7 @@ test('Add track names the missing source of the chosen renderer (OV-1254)', () =
   const state = createState();
   const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
   assert.equal(editor.circularTrackAddBlockReason('annotations'), 'Import or add a Region annotation set in Region Annotations first');
-  assert.equal(editor.circularTrackAddBlockReason('depth'), 'Load a Depth TSV first');
+  assert.equal(editor.circularTrackAddBlockReason('depth'), 'Load a numeric series first');
   assert.equal(editor.circularTrackAddBlockReason('spacer'), '');
   assert.equal(editor.circularTrackAddBlockReason('feature_density'), 'The drawing has no feature density track');
   assert.equal(editor.canAddCircularTrackRenderer('annotations'), false);

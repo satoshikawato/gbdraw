@@ -860,12 +860,20 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       optional: Object.freeze(["agg", "baseline", "format", "maxValue", "minValue", "negativeColor", "style", "unit"]),
       open: false,
       defaults: Object.freeze({
+        agg: "mean",
+        baseline: "auto",
         color: null,
+        format: "auto",
         height: null,
         label: null,
         largeTickInterval: null,
+        maxValue: null,
+        minValue: null,
+        negativeColor: null,
         smallTickInterval: null,
-        tickFontSize: null
+        style: "area",
+        tickFontSize: null,
+        unit: "x"
       })
     }),
     CanonicalCircularFeaturePlacement: Object.freeze({
@@ -1229,12 +1237,20 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
       optional: Object.freeze(["agg", "baseline", "format", "maxValue", "minValue", "negativeColor", "style", "unit"]),
       open: false,
       defaults: Object.freeze({
+        agg: "mean",
+        baseline: "auto",
         color: null,
+        format: "auto",
         height: null,
         label: null,
         largeTickInterval: null,
+        maxValue: null,
+        minValue: null,
+        negativeColor: null,
         smallTickInterval: null,
-        tickFontSize: null
+        style: "area",
+        tickFontSize: null,
+        unit: "x"
       })
     }),
     CanonicalLinearFeaturePlacement: Object.freeze({

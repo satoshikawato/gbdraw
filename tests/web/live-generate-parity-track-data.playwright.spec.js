@@ -772,7 +772,7 @@ const RETIRING_CASES = [
     name: 'editing the legend title of a Depth series',
     caption: async (page) => depthCaption(page),
     setup: colorDepthRow(),
-    change: (page) => typeIntoLabel(page, 'Depth TSV tracks', 'Depth legend title', 'Coverage'),
+    change: (page) => typeIntoLabel(page, 'Numeric series tracks', 'Depth legend title', 'Coverage'),
     restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks[0]?.label === 'depth'),
     drawn: ['Coverage']
   },

@@ -1,5 +1,7 @@
 // @ts-check
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
+import { shapeViolations } from '../utils/contract-shape.js';
 import { isUnsetValue, positiveNumberOrNull } from '../utils/field-reading.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 
@@ -10,6 +12,8 @@ import { normalizeOptionalText } from './track-slot-display.js';
  * @typedef {{ readonly name?: string }} DepthSlotFile
  */
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
+/** @import { CanonicalCircularDepthTrack } from '../contracts/request.generated.js' */
+/** @import { ContractShape, JsonValue, ObjectShape } from '../utils/contract-shape.js' */
 
 /**
  * The Depth file slots of one record: one file, or a list indexed by series.
@@ -60,9 +64,74 @@ export const shownAfterSourceChange = ({ wasSourced, isSourced, inShownDrawing, 
  * A Depth series config as a draft or a Session holds it: every field is unvalidated.
  * @typedef {{
  *   label?: unknown, color?: unknown, height?: unknown, large_tick_interval?: unknown,
- *   small_tick_interval?: unknown, tick_font_size?: unknown
+ *   small_tick_interval?: unknown, tick_font_size?: unknown, format?: unknown, agg?: unknown, style?: unknown,
+ *   negative_color?: unknown, baseline?: unknown, min_value?: unknown, max_value?: unknown, unit?: unknown
  * }} RawDepthTrackConfig
  */
+
+/**
+ * How a Depth series is read and drawn (Python's `DepthTrackInput`: its file format, window value, style, colour
+ * below the baseline, baseline, value range and axis unit), under the draft's snake_case names. A setting the series
+ * never set is absent and takes its default (`DEPTH_SERIES_DEFAULTS`).
+ * @typedef {{
+ *   format?: NonNullable<CanonicalCircularDepthTrack['format']>, agg?: NonNullable<CanonicalCircularDepthTrack['agg']>,
+ *   style?: NonNullable<CanonicalCircularDepthTrack['style']>, negative_color?: string | null,
+ *   baseline?: NonNullable<CanonicalCircularDepthTrack['baseline']>, min_value?: number | 'auto' | null,
+ *   max_value?: number | 'auto' | null, unit?: string
+ * }} DepthSeriesSettings
+ */
+/** @typedef {keyof DepthSeriesSettings} DepthSeriesField A series setting's draft name. */
+/**
+ * A series setting's request name (camelCase).
+ * @typedef {'format' | 'agg' | 'style' | 'negativeColor' | 'baseline' | 'minValue' | 'maxValue' | 'unit'} DepthSeriesKey
+ */
+
+// Python owns the series settings: their names, values and defaults are the optional fields of a request's
+// depthTracks[] (DepthTrackInput, `describe_canonical_request`), the same in both modes.
+const SERIES_SHAPE = /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalCircularDepthTrack);
+/**
+ * The series settings, each with its request name: a request writes one only when it differs from its default.
+ * @type {readonly (readonly [DepthSeriesField, DepthSeriesKey])[]}
+ */
+export const SERIES_SETTINGS = Object.freeze(SERIES_SHAPE.optional.map((key) => Object.freeze(/** @type {const} */ ([
+  /** @type {DepthSeriesField} */ (key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)),
+  /** @type {DepthSeriesKey} */ (key)
+]))));
+/** What a series that never set a setting reads, by request name. @type {Readonly<Record<DepthSeriesKey, JsonValue>>} */
+export const DEPTH_SERIES_DEFAULTS = /** @type {Readonly<Record<DepthSeriesKey, JsonValue>>} */ (Object.freeze(
+  Object.fromEntries(SERIES_SETTINGS.map(([, key]) => [key, /** @type {NonNullable<ObjectShape['defaults']>} */ (SERIES_SHAPE.defaults)[key]]))
+));
+/**
+ * The values a series setting holds: its words (a format, an aggregate, a style; the words of a baseline) from the
+ * request's description.
+ * @param {DepthSeriesKey} key
+ * @returns {readonly string[]}
+ */
+export const depthSeriesWords = (key) => {
+  /** @param {ContractShape} shape @returns {string[]} */
+  const words = (shape) => (shape.kind === 'literal' ? shape.values.filter((value) => typeof value === 'string')
+    : shape.kind === 'union' ? shape.options.flatMap(words) : []);
+  return words(SERIES_SHAPE.fields[key]);
+};
+/**
+ * Whether `value` is one a series setting holds (the request's description).
+ * @param {DepthSeriesKey} key
+ * @param {unknown} value
+ */
+export const depthSeriesValueFits = (key, value) => (
+  shapeViolations(value, SERIES_SHAPE.fields[key], CANONICAL_REQUEST_DESCRIPTION.types, key).length === 0
+);
+/**
+ * A series' settings, each it never set as its default: what its controls show and Generate draws.
+ * It asks with `in`, which a reactive view of the draft tracks (`Object.hasOwn` is not tracked, so a
+ * control would not show a setting added after it rendered).
+ * @param {RawDepthTrackConfig | null | undefined} config
+ * @returns {Required<DepthSeriesSettings>}
+ */
+export const depthSeriesSettings = (config) => /** @type {Required<DepthSeriesSettings>} */ (Object.fromEntries(
+  SERIES_SETTINGS.map(([field, key]) => [field, config && field in config && depthSeriesValueFits(key, config[field])
+    ? config[field] : DEPTH_SERIES_DEFAULTS[key]])
+));
 
 /**
  * A Depth series config after `readDepthTrackConfig`. A tick field the
@@ -71,11 +140,12 @@ export const shownAfterSourceChange = ({ wasSourced, isSourced, inShownDrawing, 
  * (gbdraw/configurators/depth.py). `null` is Auto: a cleared field writes it
  * (`v-blank-null`, app/blank-number.js). A Session 50 and earlier wrote `null`
  * for a tick never set and `''` for a cleared one; Load reads such a file's
- * series with `seriesTicksOfOlderWriter` first.
+ * series with `seriesTicksOfOlderWriter` first. A series setting it never set
+ * is absent too (`DepthSeriesSettings`).
  * @typedef {{
  *   label: string, color: string, height: number | null, large_tick_interval?: number | null,
  *   small_tick_interval?: number | null, tick_font_size?: number | null
- * }} DepthTrackConfig
+ * } & DepthSeriesSettings} DepthTrackConfig
  */
 /**
  * The tick fields of a Depth series, each with its camel-case name: the
@@ -512,7 +582,9 @@ export const removeDepthTrackColumnAt = (rows, trackIndex) => {
 // The one reader of a Depth series config: a stored series, a Session's, and
 // the defaults of a series the app adds. A field the series does not hold
 // takes `defaults`; a tick neither names stays absent (it takes the drawing's
-// tick at the next reading that has one). A color name reads as its hex.
+// tick at the next reading that has one). A color name reads as its hex. A
+// series setting it holds stays when it is one of the setting's values; one
+// it does not hold stays absent (its default).
 // `lost`: a stored value it could not use.
 /**
  * @param {unknown} entry
@@ -544,6 +616,14 @@ export const readDepthTrackConfig = (entry, index, defaults = {}) => {
     // A stored null or '' is Auto; an absent tick takes the drawing's, if it has one.
     const stored = Object.hasOwn(source, field) ? source[field] : defaults[defaultKey];
     if (Object.hasOwn(source, field) || !isUnsetValue(stored)) value[field] = positive(field, stored);
+  }
+  for (const [field, key] of SERIES_SETTINGS) {
+    if (!Object.hasOwn(source, field)) continue;
+    if (depthSeriesValueFits(key, source[field])) {
+      Object.assign(value, { [field]: source[field] });
+    } else {
+      leaves.push({ at: `.${field}`, stored: source[field], used: DEPTH_SERIES_DEFAULTS[key] });
+    }
   }
   return { value, lost: lost || leaves.length > 0, ...(leaves.length ? { leaves } : {}) };
 };

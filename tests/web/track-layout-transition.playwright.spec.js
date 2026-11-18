@@ -497,10 +497,10 @@ const removeDepthFile = async (page, mode) => {
     const source = page.locator('[data-linear-source-depth]').first();
     await reveal(source);
     if (!(await source.evaluate((node) => node.open))) await source.locator(':scope > summary').click();
-    return source.getByRole('button', { name: /^Remove Depth TSV/ }).first().click();
+    return source.getByRole('button', { name: /^Remove Numeric series/ }).first().click();
   }
   const section = await openDepthSources(page, mode);
-  return section.getByRole('button', { name: /^Remove Depth TSV/ }).first().click();
+  return section.getByRole('button', { name: /^Remove Numeric series/ }).first().click();
 };
 const expectDepthLeft = (after) => {
   expect(after.rows).toContain('mark:false');
@@ -922,7 +922,7 @@ test('rev 7: Linear Remove from all records of a File and the per-record uploade
       await reveal(perRecord);
       const start = await stackState(page, 'linear');
       await exerciseAsk(page, 'linear', {
-        trigger: () => perRecord.getByRole('button', { name: /^Remove Depth TSV/ }).first().click(),
+        trigger: () => perRecord.getByRole('button', { name: /^Remove Numeric series/ }).first().click(),
         title: `Remove the Depth file and turn off Track row ${rowNumber(start, 'mark')}?`,
         generates: false,
         expectAfter: expectDepthLeft

@@ -606,7 +606,7 @@ export const trackAddBlockReason = (renderer, {
 }) => {
   if (!supported) return t('Choose a track type this diagram can draw');
   if (renderer === 'annotations' && annotationSetCount <= 0) return t('Import or add a Region annotation set in Region Annotations first');
-  if (renderer === 'depth' && depthSeriesCount <= 0) return t('Load a Depth TSV first');
+  if (renderer === 'depth' && depthSeriesCount <= 0) return t('Load a numeric series first');
   if (renderer === 'feature_density' && featureDensityTrackCount <= 0) return t('The drawing has no feature density track');
   if (renderer === 'features' && featuresRowEnabled) return t('The stack already has an enabled Features row; disable or delete it first');
   return '';

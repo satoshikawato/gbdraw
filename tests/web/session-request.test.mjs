@@ -4501,6 +4501,69 @@ assert.deepEqual(
   [[true, false], [false, true]]
 );
 
+// A series' settings (its file format, window value, style, negative color,
+// baseline, value range and unit) reach the request only when they differ
+// from their defaults, as Python's encoder writes them, so a series of
+// defaults keeps the request's bytes. Load reads them back into the draft,
+// leaving one the request does not hold unset, and a stored request without
+// them loads with no repair (PR-3, numeric series).
+{
+  const savedTracks = structuredClone(state.adv.depth_tracks);
+  const draftNames = ['agg', 'baseline', 'format', 'max_value', 'min_value', 'negative_color', 'style', 'unit'];
+  const requestNames = ['agg', 'baseline', 'format', 'maxValue', 'minValue', 'negativeColor', 'style', 'unit'];
+  const pick = (object, names) => Object.fromEntries(names.filter((name) => Object.hasOwn(object, name)).map((name) => [name, object[name]]));
+  const every = {
+    format: 'bedgraph', agg: 'sum', style: 'line', negative_color: '#d62728', baseline: 0.5, min_value: -2,
+    max_value: 'auto', unit: ''
+  };
+  // The second series sets its settings to their defaults, which the request leaves out.
+  state.adv.depth_tracks = [
+    { ...savedTracks[0], ...every },
+    { ...savedTracks[1], format: 'auto', agg: 'mean', style: 'area', negative_color: null, baseline: 'auto', min_value: null, max_value: null, unit: 'x' }
+  ];
+  const withSettings = buildCanonicalRenderRequestRaw({ state, filesData: circularSparseFilesData });
+  const [first, second] = withSettings.renderRequest.diagramOptions.depthTracks;
+  assert.deepEqual(pick(first, requestNames), {
+    format: 'bedgraph', agg: 'sum', style: 'line', negativeColor: '#d62728', baseline: 0.5, minValue: -2,
+    maxValue: 'auto', unit: ''
+  });
+  assert.deepEqual(pick(second, requestNames), {});
+  assert.deepEqual(
+    withSettings.renderRequest.diagramOptions.depthTracks.map(({ source, ...track }) => track).slice(1),
+    circularSparseCanonical.renderRequest.diagramOptions.depthTracks.map(({ source, ...track }) => track).slice(1)
+  );
+  const readOptions = (canonical) => ({
+    featureCatalog: null, legacyOrthogroupState: null, resourceIds: new Set(Object.keys(canonical.resources)), path: 'renderRequest'
+  });
+  assert.deepEqual(readStoredRenderRequest(withSettings.renderRequest, readOptions(withSettings)).repairs, []);
+  assert.deepEqual(readStoredRenderRequest(circularSparseCanonical.renderRequest, readOptions(circularSparseCanonical)).repairs, []);
+  const loaded = projectCanonicalSessionRequest(withSettings);
+  assert.deepEqual(loaded.config.adv.depth_tracks.map((track) => pick(track, draftNames)), [every, {}]);
+  assert.deepEqual(projectCanonicalSessionRequest(circularSparseCanonical).config.adv.depth_tracks.map((track) => pick(track, draftNames)), [{}, {}]);
+  // Save then Load then Generate writes the same series.
+  state.adv.depth_tracks = loaded.config.adv.depth_tracks;
+  assert.deepEqual(
+    buildCanonicalRenderRequestRaw({ state, filesData: loaded.files }).renderRequest.diagramOptions.depthTracks.map(({ source, ...track }) => track),
+    withSettings.renderRequest.diagramOptions.depthTracks.map(({ source, ...track }) => track)
+  );
+  // A draft value that is not one of the setting's is a typed INPUT_INVALID (R7), named by its field and series.
+  state.adv.depth_tracks = [{ ...savedTracks[0] }, { ...savedTracks[1], baseline: '' }];
+  assert.throws(
+    () => buildCanonicalRenderRequestRaw({ state, filesData: circularSparseFilesData }),
+    (error) => error.code === 'INPUT_INVALID' && error.context.field === 'baseline' && error.context.seriesIndex === 1
+      && error.context.reason === 'FINITE'
+  );
+  state.adv.depth_tracks = [{ ...savedTracks[0], style: 'bar' }, { ...savedTracks[1] }];
+  assert.throws(
+    () => buildCanonicalRenderRequestRaw({ state, filesData: circularSparseFilesData }),
+    (error) => error.code === 'INPUT_INVALID' && error.context.field === 'style' && error.context.reason === 'FIELDS'
+  );
+  const badStored = structuredClone(withSettings);
+  badStored.renderRequest.diagramOptions.depthTracks[0].format = 'bigwig';
+  assert.throws(() => projectCanonicalSessionRequest(badStored), /depthTracks\[0\]\.format must be one of the values/);
+  state.adv.depth_tracks = savedTracks;
+}
+
 const circularLegacyFlatCanonical = buildCanonicalRenderRequest({
   state,
   filesData: {

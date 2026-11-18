@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const { join, resolve } = require('node:path');
 const { showDrawing, showPhonePane, newDrawingFromMenu, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
@@ -774,13 +775,13 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await expect(firstSourceSummary).toHaveText('No depth track attached');
   expect(await firstSourceRecords.evaluate((element) => element.open)).toBe(false);
   await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(0);
-  await expect(page.locator('[data-linear-source-records]').nth(1).getByText('Per-record Depth TSV')).toHaveCount(0);
+  await expect(page.locator('[data-linear-source-records]').nth(1).getByText('Per-record numeric series')).toHaveCount(0);
 
   const closedHeight = await firstSource.evaluate((element) => element.getBoundingClientRect().height);
   await firstSourceSummary.press('Enter');
   await expect(firstSource).toHaveAttribute('open', '');
   expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(closedHeight);
-  await expect(page.getByRole('button', { name: /Add Depth TSV series to all files/ })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Add numeric series to all files/ })).toHaveCount(1);
 
   await page.getByTestId('linear-source-depth-1-1').setInputFiles({
     name: 'common.tsv',
@@ -797,7 +798,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
 
   await page.getByRole('button', {
-    name: 'Add Depth TSV series to all files (file 1)', exact: true
+    name: 'Add numeric series to all files (file 1)', exact: true
   }).click();
   await expect(firstSourceSummary).toHaveText('1 depth track attached');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
@@ -3506,6 +3507,125 @@ test('a bedGraph and a two-column Depth file draw as the per-base file of the sa
   expect(depthGroups.perBase.group).toContain('<path');
   expect(depthGroups.bedGraph.group).toBe(depthGroups.perBase.group);
   expect(depthGroups.twoColumns.group).toBe(depthGroups.perBase.group);
+});
+
+// Numeric series settings: a series' Format, Style, Negative color, Baseline and
+// Unit, set in its controls, reach Python in the request (a staged file has no
+// name to tell its format by). The Source recipe of that Generate gives them as
+// CLI flags and the CLI draws the Result; the CLI's own flags write the same
+// request fields. Save then Load keeps every setting and draws the same series.
+test('a signed bedGraph set as a line with a negative color, a baseline and no unit draws as the CLI draws it', async ({ page }, testInfo) => {
+  test.setTimeout(600000);
+  const genbank = readFileSync(sparseGenbankAPath, 'utf8');
+  const rows = ['track type=bedGraph'];
+  for (let start = 0, index = 0; start < 40579; index += 1) {
+    const end = Math.min(40579, start + 1 + ((index * 37) % 400));
+    rows.push(`BGC0000708\t${start}\t${end}\t${(((index * 13) % 90) - 45) / 10}`);
+    start = end;
+  }
+  const bedGraph = `${rows.join('\n')}\n`;
+  const directory = testInfo.outputPath('numeric-series');
+  mkdirSync(directory, { recursive: true });
+  const inputs = [join(directory, 'BGC0000708.gbk'), join(directory, 'signal.bedgraph')];
+  writeFileSync(inputs[0], genbank);
+  writeFileSync(inputs[1], bedGraph);
+  const replayEnv = { ...process.env };
+  delete replayEnv.PYTHONPATH;
+  delete replayEnv.PYTHONHOME;
+  const settingsOf = (track) => Object.fromEntries(['format', 'agg', 'style', 'negativeColor', 'baseline', 'minValue', 'maxValue', 'unit']
+    .filter((key) => Object.hasOwn(track, key)).map((key) => [key, track[key]]));
+  const expectedSettings = { format: 'bedgraph', style: 'line', negativeColor: '#d62728', baseline: 0.5, unit: '' };
+  const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+    '-m', 'gbdraw.cli', 'circular', '--gbk', 'BGC0000708.gbk', '--depth_track', 'signal.bedgraph',
+    '--depth_track_format', 'bedgraph', '--depth_track_style', 'line', '--depth_track_negative_color', '#d62728',
+    '--depth_track_baseline', '0.5', '--depth_track_unit', '', '-f', 'svg', '-o', 'cli', '--save_session'
+  ], { cwd: directory, encoding: 'utf8', env: { ...process.env, PYTHONPATH: repoRoot } });
+  expect(cli.status, cli.stderr).toBe(0);
+  const cliRequest = (await readSessionFile(join(directory, 'cli.gbdraw'))).drawings[0].renderRequest;
+  expect(settingsOf(cliRequest.diagramOptions.depthTracks[0])).toEqual(expectedSettings);
+
+  await openApp(page, { waitForPalette: false });
+  await evaluateWithRetainedPromise(page, async ({ genbankText, signalText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.selectDrawing('circular');
+    app.setCircularInputType('gb');
+    await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
+    app.setCircularDepthFile(0, new File([signalText], 'signal.bedgraph', { type: 'text/plain', lastModified: 2 }));
+    await window.Vue.nextTick();
+  }, { genbankText: genbank, signalText: bedGraph });
+  const generated = async (name) => {
+    await generateAndWaitForResult(page);
+    const result = await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const source = app.lastRunInfo?.sourceRecipe || {};
+      const svg = app.currentResults()[0].content;
+      return {
+        svg,
+        groups: [...new DOMParser().parseFromString(svg, 'image/svg+xml').querySelectorAll('g[data-gbdraw-slot-renderer="depth"]')].map((group) => group.outerHTML),
+        recipe: { available: source.available, command: source.command || '', reason: source.unavailableReason || '' },
+        draft: { ...app.adv.depth_tracks[0] }
+      };
+    });
+    const file = join(directory, `${name}.gui.svg`);
+    writeFileSync(file, result.svg);
+    return { ...result, file };
+  };
+  const before = await generated('defaults');
+
+  // The series' own controls, as a user sets them.
+  const control = async (name) => reveal(page.getByLabel(name, { exact: true }));
+  await (await control('Depth format')).selectOption('bedgraph');
+  await (await control('Depth style')).selectOption('line');
+  await (await control('Depth baseline')).selectOption('value');
+  const baselineValue = await control('Depth baseline value');
+  await expect(baselineValue).toHaveValue('0');
+  await baselineValue.fill('0.5');
+  await baselineValue.press('Enter');
+  await (await control('Depth negative color')).fill('#d62728');
+  const unit = await control('Depth unit');
+  await expect(unit).toHaveValue('x');
+  await unit.fill('');
+  await unit.press('Enter');
+  await expect(page.getByRole('button', { name: 'Use the series color below the Depth baseline', exact: true })).toBeEnabled();
+
+  const web = await generated('settings');
+  expect(web.draft).toMatchObject({ format: 'bedgraph', style: 'line', negative_color: '#d62728', baseline: 0.5, unit: '' });
+  expect(web.groups).toHaveLength(1);
+  expect(web.groups[0]).toContain('#d62728');
+  expect(web.recipe.available, web.recipe.reason).toBe(true);
+  for (const flag of ['--depth_track_format bedgraph', '--depth_track_style line', "--depth_track_negative_color '#d62728'",
+    '--depth_track_baseline 0.5', "--depth_track_unit ''"]) expect(web.recipe.command).toContain(flag);
+  const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+    join(repoRoot, 'tests/web/helpers/source-recipe-replay.py'), join(directory, 'replay'), web.recipe.command,
+    web.file, before.file, '-', ...inputs
+  ], { encoding: 'utf8', env: replayEnv });
+  expect(replay.status, `${web.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
+
+  // Save, then Load in a fresh page: the request, the draft and the controls keep every setting, and Generate draws the same series.
+  const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    app.sessionTitle = 'numeric-series';
+    await app.saveSessionWithTitle();
+  });
+  const savedSessionPath = await (await downloadPromise).path();
+  const saved = await readSessionFile(savedSessionPath);
+  expect(settingsOf(saved.drawings.find((drawing) => drawing.mode === 'circular').renderRequest.diagramOptions.depthTracks[0]))
+    .toEqual(settingsOf(cliRequest.diagramOptions.depthTracks[0]));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page, { waitForPalette: false });
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
+  await expectSessionLoadedWithoutWarnings(page);
+  await showDrawing(page, { kind: 'circular' });
+  await expect(await control('Depth format')).toHaveValue('bedgraph');
+  await expect(await control('Depth style')).toHaveValue('line');
+  await expect(await control('Depth baseline')).toHaveValue('value');
+  await expect(await control('Depth baseline value')).toHaveValue('0.5');
+  await expect(await control('Depth negative color')).toHaveValue('#d62728');
+  await expect(await control('Depth unit')).toHaveValue('');
+  const reloaded = await generated('reloaded');
+  expect(reloaded.draft).toMatchObject({ format: 'bedgraph', style: 'line', negative_color: '#d62728', baseline: 0.5, unit: '' });
+  expect(reloaded.groups).toEqual(web.groups);
 });
 
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {

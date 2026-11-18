@@ -307,9 +307,9 @@ def capture_gui_quantitative_map(
         page.get_by_label("Output Prefix", exact=True).fill(OUTPUT_PREFIX)
         page.get_by_label("Separate Strands", exact=True).check()
 
-        depth_section = page.get_by_label("Depth TSV tracks", exact=True)
+        depth_section = page.get_by_label("Numeric series tracks", exact=True)
         toggle_disclosure(depth_section)
-        page.get_by_label("Depth TSV", exact=True).set_input_files(
+        page.get_by_label("Numeric series", exact=True).set_input_files(
             GUI_QUANTITATIVE_DEPTH_PATH
         )
         page.get_by_label("Depth Window", exact=True).fill("1")

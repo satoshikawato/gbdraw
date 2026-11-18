@@ -1642,7 +1642,7 @@ export const createAppSetup = () => {
     hasCircularDepthFiles, canShowDepthTrack, circularDepthTrackRows, linearDepthTrackRows, linearSourceDepthRows,
     linearSourceDepthSummary, depthTrackRows, linearDepthTrackCoverageLabel, linearDepthTrackIndexOptions,
     getDepthTrackLabel, depthSeriesDefaultName, depthSeriesName, getDepthTrackColor, getDepthTrackLegendLabelForSlot,
-    getCircularDepthFile
+    getCircularDepthFile, depthSeriesChoices
   } = createDepthTrackPanels({ state, shownDrawingOfMode });
   const enabledOptionClass = 'text-slate-700 cursor-pointer';
   const disabledOptionClass = 'text-slate-400 cursor-not-allowed opacity-60';
@@ -1702,7 +1702,7 @@ export const createAppSetup = () => {
     none: t('None')
   })[String(position || '').trim().toLowerCase()] || t('None');
   const {
-    setDepthTrackColor, setDepthTrackLabel, setDepthTrackLegendLabelForSlot, syncDepthTrackSlotLabel
+    setDepthTrackColor, setDepthTrackLabel, setDepthSeriesSetting, setDepthTrackLegendLabelForSlot, syncDepthTrackSlotLabel
   } = createDepthSeriesEdits({
     state, mode, sessionOperationAvailability, retireLegendStylesOfUnnamedCaptions
   });
@@ -3755,6 +3755,8 @@ export const createAppSetup = () => {
     setDepthTrackLabel,
     getDepthTrackColor,
     setDepthTrackColor,
+    depthSeriesChoices,
+    setDepthSeriesSetting,
     getDepthTrackLegendLabelForSlot,
     setDepthTrackLegendLabelForSlot,
     syncDepthTrackSlotLabel,

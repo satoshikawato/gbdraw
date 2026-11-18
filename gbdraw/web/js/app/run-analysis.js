@@ -2652,8 +2652,8 @@ export const createRunAnalysis = ({
     }
     if (!rows.some((row) => row.some(Boolean))) {
       return linear
-        ? 'Please upload at least one Depth TSV file or disable Show depth track.'
-        : 'Please upload a Depth TSV file or disable Show depth track.';
+        ? 'Please upload at least one numeric series file or disable Show depth track.'
+        : 'Please upload a numeric series file or disable Show depth track.';
     }
     const logicalWidth = depthTrackMatrixWidth(rows);
     for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
@@ -3479,7 +3479,7 @@ export const createRunAnalysis = ({
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         if (draftDrawsDepth('circular', drawing)) {
-          if (!hasCircularDepthFile) throw new Error('Please upload a Depth TSV file or disable Show depth track.');
+          if (!hasCircularDepthFile) throw new Error('Please upload a numeric series file or disable Show depth track.');
           for (let depthIndex = 0; depthIndex < circularDepthEntries.length; depthIndex += 1) {
             const entry = circularDepthEntries[depthIndex];
             if (!entry.file) {
@@ -5107,7 +5107,7 @@ export const createRunAnalysis = ({
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
           const totalDepthFiles = depthRows.reduce((sum, row) => sum + row.filter(Boolean).length, 0);
           if (totalDepthFiles === 0) {
-            throw new Error('Please upload at least one Depth TSV file or disable the depth track.');
+            throw new Error('Please upload at least one numeric series file or disable the depth track.');
           }
           const maxDepthTracks = depthTrackMatrixWidth(depthRows);
           for (let depthTrackIndex = 0; depthTrackIndex < maxDepthTracks; depthTrackIndex += 1) {

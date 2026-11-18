@@ -120,8 +120,8 @@ def test_track_flows_use_visible_accessible_controls_without_state_injection() -
         'show_drawing(page, "circular")',
         'get_by_role("radio", name="GenBank", exact=True)',
         'circular_file_input(page).set_input_files(',
-        'get_by_label("Depth TSV tracks", exact=True)',
-        'get_by_label("Depth TSV", exact=True).set_input_files',
+        'get_by_label("Numeric series tracks", exact=True)',
+        'get_by_label("Numeric series", exact=True).set_input_files',
         'get_by_label("Depth Window", exact=True)',
         'get_by_label("Depth Step", exact=True)',
         'get_by_label("Depth Min", exact=True)',
@@ -177,7 +177,7 @@ def test_region_flows_edit_the_rows_use_custom_stack_gives_each_set(flow_path: P
 def test_track_capture_accessibility_labels_are_part_of_the_public_ui() -> None:
     source = read_english_index(INDEX_PATH)
     for label in (
-        'aria-label="Depth TSV tracks"',
+        'aria-label="Numeric series tracks"',
         'aria-label="Depth Window"',
         'aria-label="Depth Step"',
         'aria-label="Depth Min"',

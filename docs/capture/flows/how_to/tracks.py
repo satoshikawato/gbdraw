@@ -651,13 +651,13 @@ def capture_gui_quantitative_tracks(
         prefix.fill("quantitative_tracks")
         expect(prefix).to_have_value("quantitative_tracks")
 
-        depth_section = page.get_by_label("Depth TSV tracks", exact=True)
+        depth_section = page.get_by_label("Numeric series tracks", exact=True)
         toggle_disclosure(depth_section)
-        page.get_by_label("Depth TSV", exact=True).set_input_files(
+        page.get_by_label("Numeric series", exact=True).set_input_files(
             GUI_QUANTITATIVE_DEPTH_PATH
         )
         expect(
-            page.get_by_role("group", name="Depth TSV selection", exact=True)
+            page.get_by_role("group", name="Numeric series selection", exact=True)
         ).to_contain_text("AP027133.DRR394922.depth-1kb.tsv")
 
         depth_window = page.get_by_label("Depth Window", exact=True)

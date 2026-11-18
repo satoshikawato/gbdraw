@@ -15,6 +15,7 @@ import {
   syncLinearSlotsFromAxisIndex
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
+import { DEPTH_SERIES_DEFAULTS, SERIES_SETTINGS } from '../services/depth-track-state.js';
 import { identityScalePathForMode } from '../mode-profiles.js';
 import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -43,6 +44,7 @@ import { unitRecordsOf } from '../services/linear-units.js';
 import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureDensityTrack, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalComparison, CanonicalGeneratedProteinComparison, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
+/** @import { DepthSeriesKey } from '../services/depth-track-state.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/losat-cache.js' */
@@ -958,7 +960,7 @@ const validateCurrentSemanticCoverage = (request) => {
     const path = `diagramOptions.depthTracks[${index}]`;
     coverObject(coverage, track, path, [
       'source', 'label', 'color', 'height', 'largeTickInterval', 'smallTickInterval',
-      'tickFontSize'
+      'tickFontSize', ...SERIES_SETTINGS.map(([, key]) => key)
     ]);
     const refs = Array.isArray(track.source) ? track.source : [track.source];
     refs.forEach((ref, refIndex) => coverResourceRef(
@@ -1743,7 +1745,25 @@ const appendDepthOptions = (args, options, files) => {
   appendTrackValues('--depth_track_large_tick_interval', 'largeTickInterval');
   appendTrackValues('--depth_track_small_tick_interval', 'smallTickInterval');
   appendTrackValues('--depth_track_tick_font_size', 'tickFontSize');
+  // A series setting has its flag only when a series of the request sets it; each series then gives its value, and
+  // a series without one the token the CLI reads as the default (`depth_track_inputs_from_cli`).
+  SERIES_SETTINGS.forEach(([, key]) => {
+    if (!tracks.some((track) => Object.hasOwn(track, key))) return;
+    args.push(DEPTH_SERIES_FLAGS[key], ...tracks.map((track) => depthSeriesToken(
+      Object.hasOwn(track, key) ? track[key] : DEPTH_SERIES_DEFAULTS[key]
+    )));
+  });
 };
+/** The CLI flag of each series setting (gbdraw/cli_utils/common.py `_add_depth_track_series_args`). @type {Readonly<Record<DepthSeriesKey, string>>} */
+const DEPTH_SERIES_FLAGS = Object.freeze({
+  format: '--depth_track_format', agg: '--depth_track_agg', style: '--depth_track_style',
+  negativeColor: '--depth_track_negative_color', baseline: '--depth_track_baseline', minValue: '--depth_track_min',
+  maxValue: '--depth_track_max', unit: '--depth_track_unit'
+});
+// A series setting as its CLI token: a word, a number or a text as it is; unset (null) as '', which the CLI reads as
+// unset (a range bound then takes --depth_min/--depth_max, a negative color the series color).
+/** @param {unknown} value */
+const depthSeriesToken = (value) => (value === null ? '' : String(value));
 
 /**
  * @param {unknown} value

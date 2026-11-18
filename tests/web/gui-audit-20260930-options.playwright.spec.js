@@ -141,7 +141,7 @@ test('removing the Depth file with the uploader Remove leaves a Generate-ready s
   await (await openCustomStackPanel(page)).check();
   await settle(page);
   expect(await depthRows(page)).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
-  const summary = page.locator('summary[aria-label="Depth TSV tracks"]');
+  const summary = page.locator('summary[aria-label="Numeric series tracks"]');
   await reveal(summary);
   await summary.evaluate((element) => { element.parentElement.open = true; });
   await uploaderRemove(summary.locator('xpath=..')).click();
@@ -267,7 +267,7 @@ test('Add Depth TSV series keeps a disabled Linear Depth row disabled', async ({
     slot.params = { ...slot.params, legend_label: 'Coverage A' };
   });
   const before = await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)));
-  await page.getByRole('button', { name: 'Add Depth TSV series to all files (file 1)', exact: true }).click();
+  await page.getByRole('button', { name: 'Add numeric series to all files (file 1)', exact: true }).click();
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].depth.length)).toBe(2);
   expect(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.adv.linear_track_slots)))).toEqual(before);

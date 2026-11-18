@@ -636,7 +636,7 @@ const autoTextByKey = (state, drawing, key, context = null) => {
   switch (key) {
     case 'depthWindow': return depthWindowText(state, drawing, 'window');
     case 'depthStep': return depthWindowText(state, drawing, 'step');
-    case 'depthMin': return t('0 (auto)');
+    case 'depthMin': return t('0 or the data minimum (auto)');
     case 'depthMax': return t('from depth data (auto)');
     case 'circularDepthWidth': return circularWidthText(state, drawing, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));

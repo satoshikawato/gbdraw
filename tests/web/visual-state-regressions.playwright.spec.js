@@ -32,7 +32,7 @@ for (const mode of ['circular', 'linear']) {
     try {
       const length = mode === 'circular' ? 16569 : 48502;
       const depth = Buffer.from(Array.from({ length: Math.ceil(length / 100) }, (_, i) => `${mode === 'circular' ? 'NC_012920.1' : 'NC_001416.1'}\t${i * 100 + 1}\t${20 + i % 10}\n`).join(''));
-      await (await reveal(page.getByLabel('Depth TSV', { exact: true }))).setInputFiles({ name: 'depth.tsv', mimeType: 'text/plain', buffer: depth });
+      await (await reveal(page.getByLabel('Numeric series', { exact: true }))).setInputFiles({ name: 'depth.tsv', mimeType: 'text/plain', buffer: depth });
       await check(page, 'Show Depth', true); await generate(page);
       for (const enabled of [false, true]) {
         await check(page, 'Show Depth', enabled);

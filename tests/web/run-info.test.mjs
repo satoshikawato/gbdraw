@@ -1523,6 +1523,50 @@ test('ring colors and the ring color scheme read back from the Source recipe', a
   }
 });
 
+// A depth series setting has its CLI flag only when a series of the request sets it; each series then gives its
+// value, a series without one the token the CLI reads as the default, and the CLI reads every series back as the
+// request holds it (PR-3, numeric series).
+test('the depth series settings have their CLI flags in the Source recipe and read back as the request holds them', async () => {
+  const withTracks = (tracks) => {
+    const session = structuredClone(circularCanonical);
+    session.renderRequest.diagramOptions.configOverrides['canvas.show_depth'] = true;
+    session.renderRequest.diagramOptions.depthTracks = tracks.map((settings, index) => ({
+      source: { resourceId: `depth-${index}`, representation: 'file' }, label: `S${index + 1}`, color: '#112233',
+      height: null, largeTickInterval: null, smallTickInterval: null, tickFontSize: null, ...settings
+    }));
+    tracks.forEach((_, index) => { session.resources[`depth-${index}`] = resource('depth-track-file', `s${index}.bedgraph`, 'input\t0\t10\t-1.5\n'); });
+    return session;
+  };
+  const flags = ['--depth_track_format', '--depth_track_agg', '--depth_track_style', '--depth_track_negative_color',
+    '--depth_track_baseline', '--depth_track_min', '--depth_track_max', '--depth_track_unit'];
+  const plain = await buildSourceRecipe(withTracks([{}, {}]));
+  assert.equal(plain.available, true, plain.unavailableReason);
+  assert.deepEqual(flags.filter((flag) => plain.args.includes(flag)), [], JSON.stringify(plain.args));
+
+  const settings = [
+    { format: 'bedgraph', agg: 'max', style: 'line', negativeColor: '#d62728', baseline: 0.5, minValue: -2, maxValue: 'auto', unit: '' },
+    { baseline: 'mean', maxValue: 3 }
+  ];
+  const recipe = await buildSourceRecipe(withTracks(settings));
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const after = (flag) => recipe.args.slice(recipe.args.indexOf(flag) + 1, recipe.args.indexOf(flag) + 3);
+  assert.deepEqual(flags.map(after), [
+    ['bedgraph', 'auto'], ['max', 'mean'], ['line', 'area'], ['#d62728', ''], ['0.5', 'mean'], ['-2', ''], ['auto', '3'], ['', 'x']
+  ], JSON.stringify(recipe.args));
+  await assertCliParserAccepts(recipe);
+  const visibleArgs = recipe.args.map((token) => recipe.fileMetadata.get(token)?.name || token);
+  const readBack = await evaluatePython([
+    'from gbdraw.circular import _get_args',
+    'from gbdraw.cli_utils.common import depth_track_inputs_from_args',
+    'tracks = depth_track_inputs_from_args(_get_args(payload["args"]))',
+    'result = [{name: getattr(track, name) for name in ("format", "agg", "style", "negative_color", "baseline", "min_value", "max_value", "unit")} for track in tracks]'
+  ].join('\n'), { args: visibleArgs });
+  assert.deepEqual(readBack, [
+    { format: 'bedgraph', agg: 'max', style: 'line', negative_color: '#d62728', baseline: 0.5, min_value: -2, max_value: 'auto', unit: '' },
+    { format: 'auto', agg: 'mean', style: 'area', negative_color: null, baseline: 'mean', min_value: null, max_value: 3, unit: 'x' }
+  ]);
+});
+
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {

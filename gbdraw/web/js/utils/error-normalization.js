@@ -163,8 +163,8 @@ const REASONS = Object.freeze({
   // A drawing's name (app/drawing-list.js; Python's _identity_problem).
   BLANK_NAME: 'Enter a name for the drawing.',
   REPEATED_NAME: 'Another drawing has this name. Names that differ only in letter case are the same name.',
-  DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
-  DEPTH_SERIES_SOURCE: 'Attach a Depth TSV to this series, or remove the series.',
+  DEPTH_SERIES: 'Select an existing numeric series or remove the slot.',
+  DEPTH_SERIES_SOURCE: 'Attach a file to this numeric series, or remove the series.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits. Feature type rows of a Default colors table and configuration colors other than conservation also accept transparent, rgb(), and hsl(); comparison gradient colors take #RGB or #RRGGBB.',
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
@@ -181,7 +181,7 @@ const REASONS = Object.freeze({
   // A Linear card window with Across the origin ticked (PD-OI-124, services/session-request.js linearWindowsPayload).
   ORIGIN_ORDER: 'Across the origin is ticked: give a Start greater than the End, or clear the box.',
   DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
-  REFERENCE_REQUIRED: 'Fill in the reference name on every row of the Depth TSV.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
+  REFERENCE_REQUIRED: 'Fill in the reference name on every row of the numeric series file.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
   WORKSPACE: 'Retry the operation.', OUT_OF_RANGE: 'Choose a record within the loaded range.',
   NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #<number> to distinguish records with the same ID.',
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
@@ -195,8 +195,8 @@ const REASONS = Object.freeze({
   ANNOTATION_LANE_CONFLICT: 'Two region annotations overlap in the same lane of the annotation table, counting their labels and padding. Give one of them another lane in Region Annotations, or set the Annotations row\'s Overflow behavior to Compress or Clip in Custom Track Slots (Use custom stack).',
   THREE_COLUMNS: 'Supply at least three tab-separated columns.',
   // A depth file's form comes from its column count (gbdraw/analysis/depth.py).
-  DEPTH_COLUMNS: 'Supply two tab-separated columns (position, value), three (reference, position, value, as samtools depth writes), or four (reference, start, end, value, as bedGraph).',
-  INTERVAL: 'A file of four or more columns is read as bedGraph: reference, 0-based start, end and value, each end greater than its start, and the rows of a reference in increasing order without overlaps. For samtools depth of several samples, keep the reference, position and one sample\'s column, or write the file with samtools depth -H.',
+  DEPTH_COLUMNS: 'Supply two tab-separated columns (position, value), three (reference, position, value, as samtools depth writes), or four (reference, start, end, value, as bedGraph). For a BED file, set the series Format to BED.',
+  INTERVAL: 'A file of four or more columns is read as bedGraph: reference, 0-based start, end and value, each end greater than its start, and the rows of a reference in increasing order without overlaps. For samtools depth of several samples, set the series Format to samtools depth (its first sample is drawn), or write the file with samtools depth -H.',
   POSITIVE_INTEGER_OR_AUTO: 'Use Auto or an integer greater than zero.',
   DINUCLEOTIDE: 'Use two letters from A, C, G, T, and U, for example GC.',
   DEPTH_VALUES: 'Use integer positions and numeric depth values.',
@@ -737,8 +737,8 @@ for (const [message, field, reason] of [
   ['GC content tick font size must be greater than 0.', 'tick_font_size', 'POSITIVE']
 ]) NATIVE_VALIDATIONS.set(message, { code: 'INPUT_INVALID', stage: 'request-validation', context: { field, reason } });
 for (const [message, code] of [
-  ['Please upload a Depth TSV file or disable Show depth track.', 'DEPTH_INVALID'],
-  ['Please upload at least one Depth TSV file or disable the depth track.', 'DEPTH_INVALID'],
+  ['Please upload a numeric series file or disable Show depth track.', 'DEPTH_INVALID'],
+  ['Please upload at least one numeric series file or disable the depth track.', 'DEPTH_INVALID'],
   ['Please upload at least one BLAST outfmt 6/7 file for Pairwise Comparisons.', 'COMPARISON_INPUT'],
   ['Please upload at least one comparison sequence file for Pairwise Comparisons.', 'COMPARISON_INPUT'],
   ['No records found', 'NO_RECORDS'], ['No records found for circular conservation reference.', 'NO_RECORDS'],

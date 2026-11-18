@@ -26,19 +26,24 @@ import {
   padDepthFileSlots,
   representativeDepthFiles,
   defaultDepthSeriesLabel,
+  DEPTH_SERIES_DEFAULTS,
+  depthSeriesSettings,
+  depthSeriesValueFits,
+  depthSeriesWords,
   getDepthTrackFileBaseName,
+  SERIES_SETTINGS,
   isDepthSeriesAutoLabel,
   syncDepthSlotLabels,
   uploadedDepthFileCount
 } from '../services/depth-track-state.js';
-import { msg, t, tn } from '../utils/i18n.js';
+import { msg, t, tm, tn } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy, WebState } from '../state.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
-/** @import { DepthFileSlots, DepthSourceChange, DepthSourceLoss, RawDepthTrackConfig, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
+/** @import { DepthFileSlots, DepthSeriesField, DepthSeriesKey, DepthSourceChange, DepthSourceLoss, RawDepthTrackConfig, SyncDepthSlotLabelsOptions } from '../services/depth-track-state.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 
@@ -68,7 +73,7 @@ const depthFileCount = (value) => (
 /** @param {DepthFileSlots | DepthFileSlots[]} value */
 export const depthTrackCountLabel = (value) => {
   const count = depthFileCount(value);
-  return tn(count, '{count} TSV', '{count} TSVs');
+  return tn(count, '{count} file', '{count} files');
 };
 /** @param {DrawingState} drawing */
 const circularDrawingHasDepthFiles = (drawing) => depthFileCount(drawing.files.c_depth) > 0;
@@ -105,15 +110,52 @@ const sourceDepthTrackCount = (slots, uiCount = 1) => Math.max(
 const circularDepthTrackCount = (drawing) => sourceDepthTrackCount(drawing.files.c_depth, drawing.adv.depth_tracks.length);
 // The Depth panels read the drawing's series and never write them (OV-109):
 // the Depth transitions and the Session reconcile grow, trim and label the
-// list, and a series it does not hold yet shows its defaults.
+// list, and a series it does not hold yet shows its defaults. `series`: the
+// series settings its controls show, each it never set as its default.
 /** @param {DrawingState} drawing @param {number} count */
 const rowsForDepthTrackCount = (drawing, count) => {
   const normalizedCount = Math.max(1, Number(count) || 1);
-  return Array.from({ length: normalizedCount }, (_, index) => ({
-    index,
-    key: `depth-track-${index}`,
-    config: drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index)
-  }));
+  return Array.from({ length: normalizedCount }, (_, index) => {
+    const config = drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index);
+    return { index, key: `depth-track-${index}`, config, series: depthSeriesSettings(config) };
+  });
+};
+/**
+ * The words of the series settings a menu offers, as the menu names them (Python owns the words: `depthSeriesWords`).
+ * A baseline's menu adds Value, a number of the series' own.
+ * @type {Readonly<Record<'format' | 'agg' | 'style' | 'baseline', Readonly<Record<string, string>>>>}
+ */
+const DEPTH_SERIES_WORD_NAMES = Object.freeze({
+  format: { auto: msg('Auto'), samtools: msg('samtools depth'), bedgraph: msg('bedGraph'), bed: msg('BED'), position_value: msg('Position and value') },
+  agg: { mean: msg('Mean'), max: msg('Max'), sum: msg('Sum') },
+  style: { area: msg('Area'), line: msg('Line') },
+  baseline: { auto: msg('Auto'), mean: msg('Mean'), value: msg('Value') }
+});
+/** The baseline menu's choice of a number of the series' own. */
+export const DEPTH_BASELINE_VALUE = 'value';
+/**
+ * The choices of a series setting's menu, in Python's order of its words.
+ * @param {'format' | 'agg' | 'style' | 'baseline'} key
+ * @returns {{ value: string, label: string }[]}
+ */
+export const depthSeriesChoices = (key) => [...depthSeriesWords(key), ...(key === 'baseline' ? [DEPTH_BASELINE_VALUE] : [])]
+  .map((value) => ({ value, label: tm(DEPTH_SERIES_WORD_NAMES[key][value] ?? value) }));
+/**
+ * What a series setting's control gives as the value it stores: a number field's text as its number (blank: unset,
+ * or for a baseline, nothing to store yet); the baseline menu's Value as 0 when the series has no number yet; any
+ * other value as it is.
+ * @param {DepthSeriesKey} key
+ * @param {unknown} value
+ * @param {unknown} current The value the series holds.
+ * @returns {{ value: unknown } | null} null: nothing to store.
+ */
+const depthSeriesInputValue = (key, value, current) => {
+  if (key === 'baseline' && value === DEPTH_BASELINE_VALUE) return { value: typeof current === 'number' ? current : 0 };
+  const word = typeof value === 'string' && depthSeriesValueFits(key, value);
+  if (typeof value !== 'string' || word || !depthSeriesValueFits(key, 0)) return { value };
+  if (value.trim() === '') return key === 'baseline' ? null : { value: null };
+  const numeric = Number(value);
+  return { value: Number.isFinite(numeric) ? numeric : value };
 };
 // A Linear drawing's Depth files, row by row (each record row holds its own).
 /** @param {DrawingState} drawing */
@@ -338,7 +380,7 @@ export const createDepthTrackPanels = ({ state, shownDrawingOfMode }) => {
     hasCircularDepthFiles, canShowDepthTrack, circularDepthTrackRows, linearDepthTrackRows, linearSourceDepthRows,
     linearSourceDepthSummary, depthTrackRows, linearDepthTrackCoverageLabel, linearDepthTrackIndexOptions,
     getDepthTrackLabel, depthSeriesDefaultName, depthSeriesName, getDepthTrackColor, getDepthTrackLegendLabelForSlot,
-    getCircularDepthFile
+    getCircularDepthFile, depthSeriesChoices
   };
 };
 
@@ -382,6 +424,22 @@ export const createDepthSeriesEdits = ({
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
     });
   };
+  /**
+   * A series setting of the shown drawing's series `index`, from its control (`depthSeriesInputValue`). A setting
+   * set to its default is unset again, so the request leaves it out.
+   * @param {number} index @param {DepthSeriesField} field @param {unknown} value
+   */
+  const setDepthSeriesSetting = (index, field, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const config = depthTrackConfigForIndex(state.activeDrawing(), Math.max(0, Number(index) || 0));
+    const key = SERIES_SETTINGS.find(([name]) => name === field)?.[1];
+    if (!config || !key) return;
+    const input = depthSeriesInputValue(key, value, config[field]);
+    if (!input) return;
+    if (input.value === DEPTH_SERIES_DEFAULTS[key]) delete config[field];
+    else config[field] = input.value;
+  };
   /** @param {CircularTrackSlot | LinearTrackSlot | null | undefined} slot @param {unknown} value */
   const setDepthTrackLegendLabelForSlot = (slot, value) => {
     const sessionBusy = sessionOperationAvailability();
@@ -413,7 +471,7 @@ export const createDepthSeriesEdits = ({
     if (hasSource) delete slot.depth_binding_error;
     syncDepthTrackSlotLabelsForTrack(drawing, trackIndex);
   };
-  return { setDepthTrackColor, setDepthTrackLabel, setDepthTrackLegendLabelForSlot, syncDepthTrackSlotLabel };
+  return { setDepthTrackColor, setDepthTrackLabel, setDepthSeriesSetting, setDepthTrackLegendLabelForSlot, syncDepthTrackSlotLabel };
 };
 
 /**
@@ -547,8 +605,8 @@ export const createDepthFiles = ({
     source,
     index,
     null,
-    msg('Clear File Depth TSV'),
-    (apply) => runUndoable(msg('Clear File Depth TSV'), apply)
+    msg('Clear File numeric series'),
+    (apply) => runUndoable(msg('Clear File numeric series'), apply)
   );
   const addCircularDepthTrack = () => shownAction('circular', (drawing) => {
     ensureDepthTrackConfigCount(drawing, circularDepthTrackCount(drawing) + 1);

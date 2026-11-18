@@ -509,7 +509,7 @@ PROGRESSIVE_TUTORIALS = {
         # The depth file stays through Reset with Show Depth off; the depth step chooses
         # it again, as the reader does, and turns Show Depth on.
         "required_selectors": {
-            "role=button[name='Choose Depth TSV'] >> visible=true",
+            "role=button[name='Choose Numeric series'] >> visible=true",
             "role=checkbox[name='Show Depth'] >> visible=true",
             "input[aria-label='Depth Window'] >> visible=true",
             "input[aria-label='Depth large tick']",

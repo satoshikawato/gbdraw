@@ -194,7 +194,7 @@
   },
   {
    "title": "Add the read-depth table",
-   "body": "Open Depth TSV tracks, click Choose Depth TSV, and choose AP027133.DRR394922.depth-1kb.tsv. Show Depth in Layout turns on with the file. Click Generate Diagram. A depth ring appears inside the features, but it looks like a sparse comb: the default Depth Window averages the depth over 100-bp windows, and most of them hold no row of this 1-kbp table.",
+   "body": "Open Numeric series tracks, click Choose Numeric series, and choose AP027133.DRR394922.depth-1kb.tsv. Show Depth in Layout turns on with the file. Click Generate Diagram. A depth ring appears inside the features, but it looks like a sparse comb: the default Depth Window averages the depth over 100-bp windows, and most of them hold no row of this 1-kbp table.",
    "table": {
     "columns": [
      "Setting",
@@ -202,7 +202,7 @@
     ],
     "rows": [
      [
-      "Depth TSV",
+      "Numeric series",
       "AP027133.DRR394922.depth-1kb.tsv"
      ],
      [
@@ -214,11 +214,11 @@
    "replay": [
     {
      "type": "evaluate",
-     "script": "const labels = [\"Layout\", \"Depth TSV tracks\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
+     "script": "const labels = [\"Layout\", \"Numeric series tracks\"]; labels.forEach((label) => { const nodes = [...document.querySelectorAll('summary')].filter((s) => s.getAttribute('aria-label') === label); if (!nodes.length) throw new Error(`Summary ${label} not found.`); nodes.forEach((s) => { if (s.parentElement) s.parentElement.open = true; }); });"
     },
     {
      "type": "upload",
-     "selector": "role=button[name='Choose Depth TSV'] >> visible=true",
+     "selector": "role=button[name='Choose Numeric series'] >> visible=true",
      "path": "gallery/files/AP027133.DRR394922.depth-1kb.tsv"
     },
     {
@@ -234,7 +234,7 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-04-01-depth-file.webp",
-      "alt": "Depth TSV tracks card with AP027133.DRR394922.depth-1kb.tsv chosen; Depth Window and Depth Step show their automatic values.",
+      "alt": "Numeric series tracks card with AP027133.DRR394922.depth-1kb.tsv chosen; Depth Window and Depth Step show their automatic values.",
       "caption": "Choose the depth table."
      },
      "capture": {
@@ -248,7 +248,7 @@
       "actions": [
        {
         "type": "evaluate",
-        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Depth TSV tracks'); const card = summary?.parentElement; if (!card) throw new Error('Depth TSV tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Numeric series tracks'); const card = summary?.parentElement; if (!card) throw new Error('Numeric series tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
        },
        {
         "type": "wait",
@@ -262,7 +262,7 @@
        "form.show_depth": true
       },
       "visibleText": [
-       "Depth TSV tracks",
+       "Numeric series tracks",
        "AP027133.DRR394922"
       ]
      }
@@ -310,7 +310,7 @@
   },
   {
    "title": "Keep the 1-kbp means as they are",
-   "body": "The table already holds one mean per kilobase. In Depth TSV tracks, set Depth Window to 1 and Depth Step to 1000 so that each row is drawn as it is, then click Generate Diagram. The ring becomes a continuous coverage profile.",
+   "body": "The table already holds one mean per kilobase. In Numeric series tracks, set Depth Window to 1 and Depth Step to 1000 so that each row is drawn as it is, then click Generate Diagram. The ring becomes a continuous coverage profile.",
    "table": {
     "columns": [
      "Setting",
@@ -389,7 +389,7 @@
   },
   {
    "title": "Give the depth ring a readable scale",
-   "body": "The ring is thin, and its scale label, [0–74.5x], is too small to read. The scale ends at the highest mean in the table and marks nothing between its two ends. In Depth TSV tracks, set Depth Max to 80 for a round upper end and Depth Width to 60 for a wider ring. Under the series, set Large Tick to 20 and Small Tick to 10 to mark the scale every 10x, and Tick Font Size to 14 to enlarge the label. Click Generate Diagram. The label reads [0–80x], and the marks show that coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
+   "body": "The ring is thin, and its scale label, [0–74.5x], is too small to read. The scale ends at the highest mean in the table and marks nothing between its two ends. In Numeric series tracks, set Depth Max to 80 for a round upper end and Depth Width to 60 for a wider ring. Under the series, set Large Tick to 20 and Small Tick to 10 to mark the scale every 10x, and Tick Font Size to 14 to enlarge the label. Click Generate Diagram. The label reads [0–80x], and the marks show that coverage stays near 20x around the genome, with one sharp peak to about 75x near 246 kbp.",
    "table": {
     "columns": [
      "Setting",
@@ -453,7 +453,7 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-06-01-depth-scale.webp",
-      "alt": "Depth TSV tracks card with Depth Window 1, Depth Step 1000, Depth Max 80, Depth Width 60, and the series' Large Tick 20, Small Tick 10, and Tick Font Size 14.",
+      "alt": "Numeric series tracks card with Depth Window 1, Depth Step 1000, Depth Max 80, Depth Width 60, and the series' Large Tick 20, Small Tick 10, and Tick Font Size 14.",
       "caption": "Depth Max, Depth Width, and the series' tick settings."
      },
      "capture": {
@@ -467,7 +467,7 @@
       "actions": [
        {
         "type": "evaluate",
-        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Depth TSV tracks'); const card = summary?.parentElement; if (!card) throw new Error('Depth TSV tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Numeric series tracks'); const card = summary?.parentElement; if (!card) throw new Error('Numeric series tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
        },
        {
         "type": "wait",
@@ -482,7 +482,7 @@
        "adv.depth_width_circular": 60
       },
       "visibleText": [
-       "Depth TSV tracks",
+       "Numeric series tracks",
        "Large Tick",
        "Small Tick"
       ],
@@ -548,7 +548,7 @@
   },
   {
    "title": "Name the depth series in the legend",
-   "body": "The legend names the depth series after the file, AP027133.DRR394922.depth-1kb. In Depth TSV tracks, enter DRR394922 mean depth as the Legend title, then click Generate Diagram. The legend now names the series by its sequencing run.",
+   "body": "The legend names the depth series after the file, AP027133.DRR394922.depth-1kb. In Numeric series tracks, enter DRR394922 mean depth as the Legend title, then click Generate Diagram. The legend now names the series by its sequencing run.",
    "table": {
     "columns": [
      "Setting",
@@ -576,7 +576,7 @@
      "dataDependent": true,
      "media": {
       "src": "./media/hepatoplasma_scabrum_depth/manual-07-01-legend-title.webp",
-      "alt": "Depth TSV tracks card with DRR394922 mean depth as the Legend title of the depth series.",
+      "alt": "Numeric series tracks card with DRR394922 mean depth as the Legend title of the depth series.",
       "caption": "Enter the Legend title."
      },
      "capture": {
@@ -590,7 +590,7 @@
       "actions": [
        {
         "type": "evaluate",
-        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Depth TSV tracks'); const card = summary?.parentElement; if (!card) throw new Error('Depth TSV tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
+        "script": "const app = window.__GBDRAW_APP__; if (app) app.sidebarWidth = 420; const summary = [...document.querySelectorAll('summary')].find((s) => s.getAttribute('aria-label') === 'Numeric series tracks'); const card = summary?.parentElement; if (!card) throw new Error('Numeric series tracks card not found.'); card.open = true; card.dataset.capture = 'depth-card'; card.scrollIntoView({ block: 'start' }); document.activeElement?.blur();"
        },
        {
         "type": "wait",
@@ -604,7 +604,7 @@
        "form.show_depth": true
       },
       "visibleText": [
-       "Depth TSV tracks",
+       "Numeric series tracks",
        "Legend title"
       ],
       "visibleControls": [
@@ -729,7 +729,7 @@
  "troubleshooting": [
   {
    "title": "No depth ring is drawn",
-   "body": "Check that a file is chosen under Depth TSV tracks and that Show Depth in Layout is on. The first column of the table must be AP027133.1, the record ID in the GenBank file."
+   "body": "Check that a file is chosen under Numeric series tracks and that Show Depth in Layout is on. The first column of the table must be AP027133.1, the record ID in the GenBank file."
   },
   {
    "title": "The depth ring looks like a comb of thin spikes",

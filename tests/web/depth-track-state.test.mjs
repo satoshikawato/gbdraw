@@ -16,14 +16,22 @@ await writeFile(join(tempDir, 'services', 'track-slot-display.js'), await readFi
 await cp(new URL('../../gbdraw/web/js/utils', import.meta.url), join(tempDir, 'utils'), { recursive: true });
 // color-utils.js reads the generated palette name aliases.
 await cp(new URL('../../gbdraw/web/js/contracts/schema.generated.js', import.meta.url), join(tempDir, 'contracts', 'schema.generated.js'));
+// The series settings' names, values and defaults are the request description's.
+await cp(new URL('../../gbdraw/web/js/contracts/request-shape.generated.js', import.meta.url), join(tempDir, 'contracts', 'request-shape.generated.js'));
 // track-slot-display.js reads the generated size-class boundaries.
 await writeFile(
   join(tempDir, 'mode-profiles.generated.js'),
   await readFile(new URL('../../gbdraw/web/js/mode-profiles.generated.js', import.meta.url), 'utf8')
 );
 
+const { CANONICAL_REQUEST_DESCRIPTION } = await import(pathToFileURL(join(tempDir, 'contracts', 'request-shape.generated.js')));
 const {
   activeDepthTrackIndices,
+  DEPTH_SERIES_DEFAULTS,
+  depthSeriesSettings,
+  depthSeriesValueFits,
+  depthSeriesWords,
+  SERIES_SETTINGS,
   clearDepthTrackSourceAt,
   depthSeriesLegendCaptions,
   depthTrackConfigForEdit,
@@ -213,6 +221,54 @@ const depthIndexes = (slots) => slots
     targetCount: 2
   });
   assert.deepEqual([labels(swapped.tracks), swapped.sources], [['b', 'a'], [1, 0]]);
+}
+
+{
+  // A series' settings are the optional fields of a request's depthTracks[] in either mode, under their draft
+  // (snake_case) names, with Python's defaults (DepthTrackInput) and words.
+  const types = CANONICAL_REQUEST_DESCRIPTION.types;
+  assert.deepEqual(types.CanonicalLinearDepthTrack.optional, types.CanonicalCircularDepthTrack.optional);
+  assert.deepEqual(SERIES_SETTINGS, [
+    ['agg', 'agg'], ['baseline', 'baseline'], ['format', 'format'], ['max_value', 'maxValue'], ['min_value', 'minValue'],
+    ['negative_color', 'negativeColor'], ['style', 'style'], ['unit', 'unit']
+  ]);
+  assert.deepEqual(DEPTH_SERIES_DEFAULTS, {
+    agg: 'mean', baseline: 'auto', format: 'auto', maxValue: null, minValue: null, negativeColor: null, style: 'area', unit: 'x'
+  });
+  assert.deepEqual(depthSeriesWords('format'), ['auto', 'samtools', 'bedgraph', 'bed', 'position_value']);
+  assert.deepEqual(depthSeriesWords('agg'), ['mean', 'max', 'sum']);
+  assert.deepEqual(depthSeriesWords('style'), ['area', 'line']);
+  assert.deepEqual(depthSeriesWords('baseline'), ['auto', 'mean']);
+  assert.equal(depthSeriesValueFits('baseline', -0.5), true);
+  assert.equal(depthSeriesValueFits('baseline', ''), false);
+  assert.equal(depthSeriesValueFits('minValue', 'auto'), true);
+  assert.equal(depthSeriesValueFits('format', 'bigwig'), false);
+  assert.equal(depthSeriesValueFits('unit', ''), true);
+
+  // The reader keeps each setting a series holds when it is one of the setting's values and leaves one it never
+  // set absent, so a series of defaults keeps the draft's bytes; a value it cannot use is a loss named by its place
+  // and reads as the default.
+  const every = {
+    format: 'bedgraph', agg: 'max', style: 'line', negative_color: '#D62728', baseline: 0.5, min_value: -2,
+    max_value: 'auto', unit: ''
+  };
+  assert.deepEqual(readDepthTrackConfig({ label: 'A', color: '#111111', ...every }, 0).value,
+    { label: 'A', color: '#111111', height: null, ...every });
+  const plain = readDepthTrackConfig({ label: 'A', color: '#111111' }, 0).value;
+  assert.deepEqual(Object.keys(plain), ['label', 'color', 'height']);
+  assert.deepEqual(depthSeriesSettings(plain), {
+    agg: 'mean', baseline: 'auto', format: 'auto', max_value: null, min_value: null, negative_color: null, style: 'area', unit: 'x'
+  });
+  assert.deepEqual(depthSeriesSettings({ ...every, style: 'bar' }), { ...every, style: 'area' });
+  const lost = readDepthTrackConfig({ label: 'A', color: '#111111', format: 'bigwig', baseline: '', unit: 3 }, 0);
+  assert.equal(lost.lost, true);
+  assert.deepEqual(lost.leaves, [
+    { at: '.baseline', stored: '', used: 'auto' }, { at: '.format', stored: 'bigwig', used: 'auto' }, { at: '.unit', stored: 3, used: 'x' }
+  ]);
+  assert.equal(['format', 'baseline', 'unit'].some((field) => Object.hasOwn(lost.value, field)), false);
+  // A series list keeps the settings of each series through a reading.
+  assert.deepEqual(readDepthTracks([{ style: 'line' }, { unit: 'kb' }]).value.map((series) => [series.style, series.unit]),
+    [['line', undefined], [undefined, 'kb']]);
 }
 
 console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);

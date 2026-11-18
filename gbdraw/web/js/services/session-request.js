@@ -95,8 +95,12 @@ import {
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity,
+  DEPTH_SERIES_DEFAULTS,
+  depthSeriesValueFits,
+  SERIES_SETTINGS,
   SERIES_TICKS
 } from './depth-track-state.js';
+/** @import { DepthSeriesKey, RawDepthTrackConfig } from './depth-track-state.js' */
 import {
   circularDrawingRecordSet,
   circularFormCrop,
@@ -3775,6 +3779,25 @@ const logicalDepthTrackCountForRequest = ({ mode, filesData, recordCount }) => {
 };
 
 /**
+ * A Depth series' settings for the request: each one the draft series holds
+ * that is not its default, as Python's encoder writes them, so a series with
+ * the defaults keeps the request's bytes. A value that is not one of the
+ * setting's is a typed INPUT_INVALID (R7).
+ * @param {RawDepthTrackConfig} track
+ * @param {number} seriesIndex
+ * @returns {Partial<Record<DepthSeriesKey, unknown>>}
+ */
+const depthSeriesRequestSettings = (track, seriesIndex) => Object.fromEntries(SERIES_SETTINGS.flatMap(([field, key]) => {
+  if (!Object.hasOwn(track, field)) return [];
+  const value = track[field];
+  if (!depthSeriesValueFits(key, value)) {
+    // A setting that takes a number (a baseline, a range bound) names the finite-number rule.
+    throw diagnosticError('INPUT_INVALID', { field, seriesIndex, reason: depthSeriesValueFits(key, 0) ? 'FINITE' : 'FIELDS' });
+  }
+  return value === DEPTH_SERIES_DEFAULTS[key] ? [] : [[key, value]];
+}));
+
+/**
  * @param {{ drawing: RequestDrawing, filesData: RequestFilesData,
  *   resources: ResourceBuilder, diagramOptions: Record<string, any>, recordCount: number }} input
  */
@@ -3827,7 +3850,8 @@ const buildDepthResources = ({ drawing, filesData, resources, diagramOptions, re
         : null,
       largeTickInterval: projectOptionalNumber(track.large_tick_interval, { field: 'large_tick_interval', seriesIndex: trackIndex }),
       smallTickInterval: projectOptionalNumber(track.small_tick_interval, { field: 'small_tick_interval', seriesIndex: trackIndex }),
-      tickFontSize: projectOptionalNumber(track.tick_font_size, { field: 'tick_font_size', seriesIndex: trackIndex })
+      tickFontSize: projectOptionalNumber(track.tick_font_size, { field: 'tick_font_size', seriesIndex: trackIndex }),
+      ...depthSeriesRequestSettings(track, trackIndex)
     };
   });
 };
@@ -6167,6 +6191,14 @@ const projectCanonicalDepthTracks = ({
       ...Object.fromEntries(SERIES_TICKS.flatMap(([field, requestField]) => {
         const tick = canonicalDepthNumber(track[requestField], `${fieldName}.${requestField}`);
         return tick === null ? [] : [[field, tick]];
+      })),
+      // A series setting the request leaves out, or gives its default, stays unset in the draft (its default).
+      ...Object.fromEntries(SERIES_SETTINGS.flatMap(([field, key]) => {
+        if (!Object.hasOwn(track, key)) return [];
+        if (!depthSeriesValueFits(key, track[key])) {
+          throw new Error(`${fieldName}.${key} must be one of the values of a Depth series ${key}.`);
+        }
+        return track[key] === DEPTH_SERIES_DEFAULTS[key] ? [] : [[field, track[key]]];
       }))
     };
   });

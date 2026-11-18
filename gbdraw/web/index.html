@@ -2895,19 +2895,19 @@
                             </div>
                         </details>
                         <details data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
-                            <summary :aria-label="t('Depth TSV tracks')">
+                            <summary :aria-label="t('Numeric series tracks')">
                                 <i class="ph ph-chart-bar" aria-hidden="true"></i>
-                                {{ t('Depth TSV tracks') }}
+                                {{ t('Numeric series tracks') }}
                                 <setting-note setting="depth-sources"></setting-note>
-                                <help-tip :text="t('A tab-separated read-depth table drawn as a track. With several records, one file is used for the same series of every record; a loaded Session keeps each record\'s Depth TSV as saved, empty ones included.')"></help-tip>
+                                <help-tip :text="t('A table of values along the record drawn as a track: samtools depth output, a bedGraph, a BED file, or positions and values. With several records, one file is used for the same series of every record; a loaded Session keeps each record\'s file as saved, empty ones included.')"></help-tip>
                                 <span v-if="hasCircularDepthFiles" class="ms-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
                             <p v-if="circularRecordDiscoveryState.records.length > 1" class="ui-hint pt-1">{{ t('Each file is used for every record.') }}</p>
                             <div v-if="!hasCircularDepthFiles" class="pt-1">
                                 <file-uploader
-                                    :label="t('Depth TSV')"
+                                    :label="t('Numeric series')"
                                     small
-                                    accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
+                                    accept=".tsv,.tab,.txt,.bedgraph,.bdg,.bg,.bed,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                     :model-value="getCircularDepthFile(0)"
                                     @update:model-value="uploadCircularDepthFile(0, $event)" file-kind="depth"
                                 ></file-uploader>
@@ -2969,13 +2969,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Min') }} <help-tip id="help-circular-depth-min" :text="t('Minimum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" v-blank-null :aria-label="t('Depth Min')" aria-describedby="help-circular-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="any" v-model.number="adv.depth_min" v-blank-null :aria-label="t('Depth Min')" aria-describedby="help-circular-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Max') }} <help-tip id="help-circular-depth-max" :text="t('Maximum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" v-blank-null :aria-label="t('Depth Max')" aria-describedby="help-circular-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="any" v-model.number="adv.depth_max" v-blank-null :aria-label="t('Depth Max')" aria-describedby="help-circular-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -3039,17 +3039,70 @@
                                                 </auto-value-field>
                                             </div>
                                         </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Format') }} <help-tip :id="`help-circular-depth-format-${track.index}`" :text="t('How this series\' file is read. Auto tells samtools depth, bedGraph, and position and value files apart by their columns. Choose BED for a BED file, and samtools depth for a samtools depth file of several samples (its first sample is drawn).')"></help-tip></span>
+                                                <select :value="track.series.format" @change="setDepthSeriesSetting(track.index, 'format', $event.target.value)" :aria-label="track.index === 0 ? t('Depth format') : t('Depth {n} format', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-format-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('format')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Style') }} <help-tip :id="`help-circular-depth-style-${track.index}`" :text="t('Area fills the series between its baseline and its values; Line draws its values as a line.')"></help-tip></span>
+                                                <select :value="track.series.style" @change="setDepthSeriesSetting(track.index, 'style', $event.target.value)" :aria-label="track.index === 0 ? t('Depth style') : t('Depth {n} style', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-style-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('style')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Window value') }} <help-tip :id="`help-circular-depth-agg-${track.index}`" :text="t('The value drawn for each window: the mean of its bases, the largest base value, or the sum of its values.')"></help-tip></span>
+                                                <select :value="track.series.agg" @change="setDepthSeriesSetting(track.index, 'agg', $event.target.value)" :aria-label="track.index === 0 ? t('Depth window value') : t('Depth {n} window value', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-agg-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('agg')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Baseline') }} <help-tip :id="`help-circular-depth-baseline-${track.index}`" :text="t('The value the series is drawn from. Auto: 0, or the bottom of a range above 0. Mean: the series mean. Value: the number you enter.')"></help-tip></span>
+                                                <select :value="typeof track.series.baseline === 'number' ? 'value' : track.series.baseline" @change="setDepthSeriesSetting(track.index, 'baseline', $event.target.value)" :aria-label="track.index === 0 ? t('Depth baseline') : t('Depth {n} baseline', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-baseline-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('baseline')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                                <input v-if="typeof track.series.baseline === 'number'" type="number" step="any" v-committed-value="track.series.baseline" @change="setDepthSeriesSetting(track.index, 'baseline', $event.target.value)" :aria-label="track.index === 0 ? t('Depth baseline value') : t('Depth {n} baseline value', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-baseline-${track.index}`" class="form-input form-input-compact mt-1" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Min') }} <help-tip :id="`help-circular-depth-min-${track.index}`" :text="t('Bottom of this series\' value range. Shared (blank): Depth Min, which every series without its own takes.')"></help-tip></span>
+                                                <input type="number" step="any" v-committed-value="track.series.min_value ?? ''" @change="setDepthSeriesSetting(track.index, 'min_value', $event.target.value)" :aria-label="track.index === 0 ? t('Depth series min') : t('Depth {n} series min', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-min-${track.index}`" :placeholder="t('Shared')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Max') }} <help-tip :id="`help-circular-depth-max-${track.index}`" :text="t('Top of this series\' value range. Shared (blank): Depth Max, which every series without its own takes.')"></help-tip></span>
+                                                <input type="number" step="any" v-committed-value="track.series.max_value ?? ''" @change="setDepthSeriesSetting(track.index, 'max_value', $event.target.value)" :aria-label="track.index === 0 ? t('Depth series max') : t('Depth {n} series max', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-max-${track.index}`" :placeholder="t('Shared')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Negative color') }} <help-tip :id="`help-circular-depth-negative-color-${track.index}`" :text="t('Color of the series below its baseline. Clear it to use the series color.')"></help-tip></span>
+                                                <div class="flex items-center gap-1">
+                                                    <input type="color" v-committed-value="track.series.negative_color || getDepthTrackColor(track.index)" @input="setDepthSeriesSetting(track.index, 'negative_color', $event.target.value)" :aria-label="track.index === 0 ? t('Depth negative color') : t('Depth {n} negative color', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-negative-color-${track.index}`" class="h-6 w-8 shrink-0 p-0 border rounded" :disabled="!semanticMutationAvailable">
+                                                    <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ track.series.negative_color ? t('Custom') : t('Series color') }}</span>
+                                                    <button type="button" @click="setDepthSeriesSetting(track.index, 'negative_color', null)" :aria-label="track.index === 0 ? t('Use the series color below the Depth baseline') : t('Use the series color below the Depth {n} baseline', { n: track.index + 1 })" :title="t('Use the series color')" class="btn btn-secondary h-6 w-6 shrink-0 p-0 text-[10px]" :disabled="!semanticMutationAvailable || !track.series.negative_color"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                                </div>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Unit') }} <help-tip :id="`help-circular-depth-unit-${track.index}`" :text="t('Text after each axis number, such as x for coverage. Leave blank for none.')"></help-tip></span>
+                                                <input type="text" v-committed-value="track.series.unit" @change="setDepthSeriesSetting(track.index, 'unit', $event.target.value)" :aria-label="track.index === 0 ? t('Depth unit') : t('Depth {n} unit', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-unit-${track.index}`" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                        </div>
                                     </div>
                                     <file-uploader
-                                        :label="t('Depth TSV')"
+                                        :label="t('Numeric series')"
                                         small
-                                        accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
+                                        accept=".tsv,.tab,.txt,.bedgraph,.bdg,.bg,.bed,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                         :model-value="getCircularDepthFile(track.index)"
                                         @update:model-value="uploadCircularDepthFile(track.index, $event)" file-kind="depth"
                                     ></file-uploader>
                                 </div>
                                 <button type="button" @click="addCircularDepthTrack" class="btn btn-secondary text-xs w-full" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add TSV') }}
+                                    <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add numeric series') }}
                                 </button>
                             </div>
                         </details>
@@ -3199,14 +3252,14 @@
                                             {{ t('Some records use different files or have no depth track. Choosing a file applies it to every record in this File.') }}
                                         </p>
                                         <file-uploader
-                                            :label="t('Depth TSV')"
+                                            :label="t('Numeric series')"
                                             small
-                                            accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
+                                            accept=".tsv,.tab,.txt,.bedgraph,.bdg,.bg,.bed,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                             :model-value="track.status.file"
                                             @update:model-value="uploadLinearSourceDepthFile(source, track.index, $event)" file-kind="depth"
                                             :data-input-aria-label="sourceIndex === 0 && track.index === 0
-                                                ? t('Depth TSV')
-                                                : t('Depth TSV for file {file}, series {series}', { file: sourceIndex + 1, series: track.index + 1 })"
+                                                ? t('Numeric series')
+                                                : t('Numeric series {series} for file {file}', { file: sourceIndex + 1, series: track.index + 1 })"
                                             :test-id="`linear-source-depth-${sourceIndex + 1}-${track.index + 1}`"
                                         ></file-uploader>
                                         <button
@@ -3222,10 +3275,10 @@
                                     <button
                                         type="button"
                                         @click="addLinearDepthTrack()"
-                                        :aria-label="t('Add Depth TSV series to all files (file {n})', { n: sourceIndex + 1 })"
+                                        :aria-label="t('Add numeric series to all files (file {n})', { n: sourceIndex + 1 })"
                                         class="btn btn-secondary min-w-0 w-full text-xs"
                                      :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add Depth TSV series') }}
+                                        <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add numeric series') }}
                                     </button>
                                 </div>
                             </details>
@@ -3301,9 +3354,9 @@
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
-                                <summary :aria-label="t('Per-record Depth TSV')">
+                                <summary :aria-label="t('Per-record numeric series')">
                                     <i class="ph ph-chart-bar" aria-hidden="true"></i>
-                                    {{ t('Per-record Depth TSV') }}
+                                    {{ t('Per-record numeric series') }}
                                     <setting-note setting="depth-sources"></setting-note>
                                     <span v-if="hasLinearDepthFiles(seq)" class="ms-auto text-[10px] font-semibold text-slate-500">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
@@ -3311,12 +3364,12 @@
                                     <div class="space-y-1.5">
                                         <div v-for="track in linearDepthTrackRows()" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
                                             <file-uploader
-                                                :label="t('Depth TSV · series {n}', { n: track.index + 1 })"
+                                                :label="t('Numeric series {n}', { n: track.index + 1 })"
                                                 small
-                                                accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
+                                                accept=".tsv,.tab,.txt,.bedgraph,.bdg,.bg,.bed,text/tab-separated-values,text/plain,text/*,.gz,application/gzip"
                                                 :model-value="getLinearDepthFile(seq, track.index)"
                                                 @update:model-value="uploadLinearDepthFile(seq, track.index, $event)" file-kind="depth"
-                                                :data-input-aria-label="t('Depth TSV · series {series} for sequence {sequence}', { sequence: idx + 1, series: track.index + 1 })"
+                                                :data-input-aria-label="t('Numeric series {series} for sequence {sequence}', { sequence: idx + 1, series: track.index + 1 })"
                                             ></file-uploader>
                                         </div>
                                     </div>
@@ -3498,13 +3551,13 @@
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Min') }} <help-tip id="help-linear-depth-min" :text="t('Minimum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_min, 'depthMin')" :text="autoValueText('depthMin')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_min" v-blank-null :aria-label="t('Depth Min')" aria-describedby="help-linear-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="any" v-model.number="adv.depth_min" v-blank-null :aria-label="t('Depth Min')" aria-describedby="help-linear-depth-min" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                         <div>
                                             <span class="input-label text-[10px]">{{ t('Depth Max') }} <help-tip id="help-linear-depth-max" :text="t('Maximum depth for clipping and normalization. Leave blank for auto.')"></help-tip></span>
                                             <auto-value-field :visible="autoValueVisible(adv.depth_max, 'depthMax')" :text="autoValueText('depthMax')">
-                                                <input type="number" min="0" step="1" v-model.number="adv.depth_max" v-blank-null :aria-label="t('Depth Max')" aria-describedby="help-linear-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
+                                                <input type="number" step="any" v-model.number="adv.depth_max" v-blank-null :aria-label="t('Depth Max')" aria-describedby="help-linear-depth-max" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                             </auto-value-field>
                                         </div>
                                     </div>
@@ -3584,6 +3637,59 @@
                                                 <auto-value-field :visible="autoValueVisible(track.config.tick_font_size, 'depthTickFont', track)" :text="autoValueText('depthTickFont', track)">
                                                     <input type="number" min="0.01" step="0.5" v-model.number="track.config.tick_font_size" v-blank-null :aria-label="track.index === 0 ? t('Depth tick font size') : t('Depth {n} tick font size', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-tick-font-${track.index}`" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Format') }} <help-tip :id="`help-linear-depth-format-${track.index}`" :text="t('How this series\' file is read. Auto tells samtools depth, bedGraph, and position and value files apart by their columns. Choose BED for a BED file, and samtools depth for a samtools depth file of several samples (its first sample is drawn).')"></help-tip></span>
+                                                <select :value="track.series.format" @change="setDepthSeriesSetting(track.index, 'format', $event.target.value)" :aria-label="track.index === 0 ? t('Depth format') : t('Depth {n} format', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-format-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('format')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Style') }} <help-tip :id="`help-linear-depth-style-${track.index}`" :text="t('Area fills the series between its baseline and its values; Line draws its values as a line.')"></help-tip></span>
+                                                <select :value="track.series.style" @change="setDepthSeriesSetting(track.index, 'style', $event.target.value)" :aria-label="track.index === 0 ? t('Depth style') : t('Depth {n} style', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-style-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('style')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Window value') }} <help-tip :id="`help-linear-depth-agg-${track.index}`" :text="t('The value drawn for each window: the mean of its bases, the largest base value, or the sum of its values.')"></help-tip></span>
+                                                <select :value="track.series.agg" @change="setDepthSeriesSetting(track.index, 'agg', $event.target.value)" :aria-label="track.index === 0 ? t('Depth window value') : t('Depth {n} window value', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-agg-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('agg')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Baseline') }} <help-tip :id="`help-linear-depth-baseline-${track.index}`" :text="t('The value the series is drawn from. Auto: 0, or the bottom of a range above 0. Mean: the series mean. Value: the number you enter.')"></help-tip></span>
+                                                <select :value="typeof track.series.baseline === 'number' ? 'value' : track.series.baseline" @change="setDepthSeriesSetting(track.index, 'baseline', $event.target.value)" :aria-label="track.index === 0 ? t('Depth baseline') : t('Depth {n} baseline', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-baseline-${track.index}`" class="form-input form-input-compact min-w-0" :disabled="!semanticMutationAvailable">
+                                                    <option v-for="choice in depthSeriesChoices('baseline')" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                                                </select>
+                                                <input v-if="typeof track.series.baseline === 'number'" type="number" step="any" v-committed-value="track.series.baseline" @change="setDepthSeriesSetting(track.index, 'baseline', $event.target.value)" :aria-label="track.index === 0 ? t('Depth baseline value') : t('Depth {n} baseline value', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-baseline-${track.index}`" class="form-input form-input-compact mt-1" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Min') }} <help-tip :id="`help-linear-depth-min-${track.index}`" :text="t('Bottom of this series\' value range. Shared (blank): Depth Min, which every series without its own takes.')"></help-tip></span>
+                                                <input type="number" step="any" v-committed-value="track.series.min_value ?? ''" @change="setDepthSeriesSetting(track.index, 'min_value', $event.target.value)" :aria-label="track.index === 0 ? t('Depth series min') : t('Depth {n} series min', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-min-${track.index}`" :placeholder="t('Shared')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Max') }} <help-tip :id="`help-linear-depth-max-${track.index}`" :text="t('Top of this series\' value range. Shared (blank): Depth Max, which every series without its own takes.')"></help-tip></span>
+                                                <input type="number" step="any" v-committed-value="track.series.max_value ?? ''" @change="setDepthSeriesSetting(track.index, 'max_value', $event.target.value)" :aria-label="track.index === 0 ? t('Depth series max') : t('Depth {n} series max', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-max-${track.index}`" :placeholder="t('Shared')" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-1.5 items-start">
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Negative color') }} <help-tip :id="`help-linear-depth-negative-color-${track.index}`" :text="t('Color of the series below its baseline. Clear it to use the series color.')"></help-tip></span>
+                                                <div class="flex items-center gap-1">
+                                                    <input type="color" v-committed-value="track.series.negative_color || getDepthTrackColor(track.index)" @input="setDepthSeriesSetting(track.index, 'negative_color', $event.target.value)" :aria-label="track.index === 0 ? t('Depth negative color') : t('Depth {n} negative color', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-negative-color-${track.index}`" class="h-6 w-8 shrink-0 p-0 border rounded" :disabled="!semanticMutationAvailable">
+                                                    <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ track.series.negative_color ? t('Custom') : t('Series color') }}</span>
+                                                    <button type="button" @click="setDepthSeriesSetting(track.index, 'negative_color', null)" :aria-label="track.index === 0 ? t('Use the series color below the Depth baseline') : t('Use the series color below the Depth {n} baseline', { n: track.index + 1 })" :title="t('Use the series color')" class="btn btn-secondary h-6 w-6 shrink-0 p-0 text-[10px]" :disabled="!semanticMutationAvailable || !track.series.negative_color"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                                </div>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <span class="input-label text-[10px]">{{ t('Unit') }} <help-tip :id="`help-linear-depth-unit-${track.index}`" :text="t('Text after each axis number, such as x for coverage. Leave blank for none.')"></help-tip></span>
+                                                <input type="text" v-committed-value="track.series.unit" @change="setDepthSeriesSetting(track.index, 'unit', $event.target.value)" :aria-label="track.index === 0 ? t('Depth unit') : t('Depth {n} unit', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-unit-${track.index}`" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                             </div>
                                         </div>
                                     </div>
@@ -4793,7 +4899,7 @@
                                             <label
                                                 class="option-label flex items-center gap-2 text-xs select-none"
                                                 :class="depthToggleOptionClass"
-                                                :title="adv.linear_track_slots_enabled ? t('Simple mode only. Use Reset to rebuild the custom stack from this setting.') : (canShowDepthTrack ? '' : t('Upload a Depth TSV file to enable Show Depth.'))"
+                                                :title="adv.linear_track_slots_enabled ? t('Simple mode only. Use Reset to rebuild the custom stack from this setting.') : (canShowDepthTrack ? '' : t('Upload a numeric series file to enable Show Depth.'))"
                                             >
                                                 <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled || !canShowDepthTrack)" aria-describedby="help-linear-show-depth" class="form-checkbox">
                                                 <span>{{ t('Show Depth') }}</span>
@@ -4849,7 +4955,7 @@
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
                                                     <i class="ph ph-stack" aria-hidden="true"></i>
                                                     <span class="truncate">{{ t('Linear track stack') }}</span>
-                                                    <help-tip :text="t('Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. A record without a Depth TSV for that series does not draw it, but its space in the stack stays reserved.')"></help-tip>
+                                                    <help-tip :text="t('Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. A record without a file for that series does not draw it, but its space in the stack stays reserved.')"></help-tip>
                                                 </div>
                                                 <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ linearTrackSlots().length }}</span>
                                             </div>
@@ -5164,7 +5270,7 @@
                                         <label
                                             class="option-label flex items-center gap-2 text-xs select-none"
                                             :class="depthToggleOptionClass"
-                                            :title="adv.circular_track_slots_enabled ? t('Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.') : (canShowDepthTrack ? '' : t('Upload a Depth TSV file to enable Show Depth.'))"
+                                            :title="adv.circular_track_slots_enabled ? t('Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.') : (canShowDepthTrack ? '' : t('Upload a numeric series file to enable Show Depth.'))"
                                         >
                                             <input type="checkbox" :checked="form.show_depth" @change="setTrackShown('show_depth', $event.target.checked)" :disabled="!semanticMutationAvailable || (adv.circular_track_slots_enabled || !canShowDepthTrack)" class="form-checkbox">
                                             <span>{{ t('Show Depth') }}</span>

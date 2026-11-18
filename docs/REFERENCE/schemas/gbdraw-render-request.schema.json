@@ -1740,20 +1740,23 @@
             "bedgraph",
             "bed",
             "position_value"
-          ]
+          ],
+          "default": "auto"
         },
         "agg": {
           "enum": [
             "mean",
             "max",
             "sum"
-          ]
+          ],
+          "default": "mean"
         },
         "style": {
           "enum": [
             "area",
             "line"
-          ]
+          ],
+          "default": "area"
         },
         "negativeColor": {
           "anyOf": [
@@ -1763,7 +1766,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "baseline": {
           "anyOf": [
@@ -1776,7 +1780,8 @@
             {
               "type": "number"
             }
-          ]
+          ],
+          "default": "auto"
         },
         "minValue": {
           "anyOf": [
@@ -1789,7 +1794,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "maxValue": {
           "anyOf": [
@@ -1802,10 +1808,12 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "unit": {
-          "type": "string"
+          "type": "string",
+          "default": "x"
         }
       },
       "required": [
@@ -2406,20 +2414,23 @@
             "bedgraph",
             "bed",
             "position_value"
-          ]
+          ],
+          "default": "auto"
         },
         "agg": {
           "enum": [
             "mean",
             "max",
             "sum"
-          ]
+          ],
+          "default": "mean"
         },
         "style": {
           "enum": [
             "area",
             "line"
-          ]
+          ],
+          "default": "area"
         },
         "negativeColor": {
           "anyOf": [
@@ -2429,7 +2440,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "baseline": {
           "anyOf": [
@@ -2442,7 +2454,8 @@
             {
               "type": "number"
             }
-          ]
+          ],
+          "default": "auto"
         },
         "minValue": {
           "anyOf": [
@@ -2455,7 +2468,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "maxValue": {
           "anyOf": [
@@ -2468,10 +2482,12 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "default": null
         },
         "unit": {
-          "type": "string"
+          "type": "string",
+          "default": "x"
         }
       },
       "required": [

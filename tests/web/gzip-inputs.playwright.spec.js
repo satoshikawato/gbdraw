@@ -89,7 +89,7 @@ test('a gzip Depth TSV and BLAST TSV past the expanded cap are refused right aft
     window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxExpandedInputBytes };
   }, cap);
   await openFresh(page);
-  await (await reveal(page.getByLabel('Depth TSV', { exact: true }))).setInputFiles(overCap('big depth.tsv.gz'));
+  await (await reveal(page.getByLabel('Numeric series', { exact: true }))).setInputFiles(overCap('big depth.tsv.gz'));
   await expect(refusal('big depth.tsv.gz')).toBeVisible({ timeout: 60_000 });
 
   await showDrawing(page, { kind: 'linear' });
@@ -336,14 +336,14 @@ test('a Depth TSV gzip past the expanded cap is refused once right after the dra
     window.__GBDRAW_TEST_HOOKS__ = { ...(window.__GBDRAW_TEST_HOOKS__ || {}), maxExpandedInputBytes };
   }, cap);
   await openFresh(page);
-  const depth = await reveal(page.getByLabel('Depth TSV', { exact: true }));
+  const depth = await reveal(page.getByLabel('Numeric series', { exact: true }));
   await depth.setInputFiles({ name: 'first depth.tsv', mimeType: 'text/plain', buffer: Buffer.from('chr\t1\t5\n') });
   await expect(page.getByText('first depth.tsv', { exact: true }).first()).toBeVisible();
   const menu = page.locator('.drawing-bar-menu');
   await menu.locator('summary').click();
   await menu.getByRole('button', { name: 'Duplicate drawing', exact: true }).click();
   await watchErrors(page);
-  await (await reveal(page.getByLabel('Depth TSV', { exact: true }))).setInputFiles(overCapFile(info, 'big depth.tsv.gz', cap));
+  await (await reveal(page.getByLabel('Numeric series', { exact: true }))).setInputFiles(overCapFile(info, 'big depth.tsv.gz', cap));
   const dialog = page.getByRole('dialog', { name: 'Replace input file?' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'This drawing only', exact: true }).click();

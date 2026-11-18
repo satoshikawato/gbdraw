@@ -6664,8 +6664,11 @@ def describe_canonical_request() -> dict[str, Any]:
         # (CircularDiagramOptions.__post_init__).
         # DepthTrackInput.__post_init__: at least one source, and positive numbers.
         depth_hints = _class_type_hints(DepthTrackInput)
-        # _encode_depth_tracks writes a series setting only when it differs from its default.
-        data(DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}), optional=frozenset(DEPTH_TRACK_SERIES_FIELDS), replace={
+        # _encode_depth_tracks writes a series setting only when it differs from its default, which a reader takes
+        # for one the request leaves out (the Web's series controls show it).
+        data(DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}), optional=frozenset(DEPTH_TRACK_SERIES_FIELDS), defaults={
+            _camel(name): default for name, default in _DEPTH_TRACK_SERIES_DEFAULTS.items()
+        }, replace={
             "source": bounded(resource(depth_hints["source"]), minItems=1),
             **{name: bounded(of(depth_hints[name]), exclusiveMinimum=0) for name in DEPTH_TRACK_POSITIVE_FIELDS},
             **({"height": NULL} if mode == "circular" else {}),

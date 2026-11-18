@@ -1005,7 +1005,7 @@ test('a FASTA-only refusal names the record and the letter Python found (PD-OI-0
 // TK-06: a Depth series with no file in any record names the series and offers
 // both recoveries, whether the request builder or the Generate check finds it.
 test('a Depth series without a file says to attach a TSV or remove the series (TK-06)', () => {
-  const expected = 'The depth input or settings are invalid. Depth series 2. Attach a Depth TSV to this series, or remove the series.';
+  const expected = 'The depth input or settings are invalid. Depth series 2. Attach a file to this numeric series, or remove the series.';
   assert.equal(producerSummary('DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }), expected);
   for (const message of [
     'Depth series #2 (logical track index 1) has no TSV source in any record.',
