@@ -1,4 +1,6 @@
-import { compileLosatWasm, concatUint8Arrays, isLosatTrapFailure, raisedLosatFailure } from '../services/losat-runtime.js';
+import {
+  compileLosatWasm, concatUint8Arrays, isLosatBuildChangedFailure, isLosatTrapFailure, raisedLosatFailure, requireLosatBuild
+} from '../services/losat-runtime.js';
 
 const markWorkerStart = (control, state) => {
   const view = new Int32Array(control);
@@ -67,7 +69,7 @@ const instantiateThreadContext = async ({
   const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
   const preopen = new PreopenDirectory('.', new Map());
   const wasi = new WASI(args || [], env || [], [stdin, stdout, stderr, preopen]);
-  const compiledModule = module || await compileLosatWasm(wasmUrl, 'threaded LOSAT wasm');
+  const compiledModule = module || await compileLosatWasm(wasmUrl, 'losat-threaded.wasm');
   const instance = await WebAssembly.instantiate(compiledModule, {
     env: { memory },
     wasi: { 'thread-spawn': () => -1 },
@@ -121,6 +123,7 @@ const startPreparedThread = ({ id, tid, startArg, control }) => {
 
 const runThreadFromCold = async (data) => {
   const {
+    losatBuild,
     module,
     wasmUrl,
     memory,
@@ -135,6 +138,8 @@ const runThreadFromCold = async (data) => {
   faultChannelName = String(faultChannel || '');
 
   try {
+    // A job worker of another LOSAT build than this worker's (OV-2440).
+    requireLosatBuild(losatBuild);
     const context = await instantiateThreadContext({ module, wasmUrl, memory, args, env, wasiShimUrl });
     markWorkerStart(control, 1);
     runThreadStart(context, tid, startArg);
@@ -145,7 +150,8 @@ const runThreadFromCold = async (data) => {
     self.postMessage({
       type: 'error',
       tid,
-      error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread failed')
+      error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread failed'),
+      buildChanged: isLosatBuildChangedFailure(error)
     });
     self.close();
   }
@@ -168,6 +174,8 @@ self.onmessage = async (event) => {
     };
     markSlotState(0);
     try {
+      // A job worker of another LOSAT build than this worker's (OV-2440).
+      requireLosatBuild(data.losatBuild);
       preparedContext = await instantiateThreadContext(preparedPayload);
       markSlotState(1);
       self.postMessage({ id, type: 'prepare', ok: true });
@@ -179,7 +187,8 @@ self.onmessage = async (event) => {
         id,
         type: 'prepare',
         ok: false,
-        error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread prepare failed')
+        error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread prepare failed'),
+        buildChanged: isLosatBuildChangedFailure(error)
       });
     }
     return;

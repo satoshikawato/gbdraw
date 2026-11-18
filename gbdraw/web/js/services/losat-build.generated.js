@@ -4,15 +4,25 @@
 
 /**
  * The LOSAT build of the shipped Wasm files: the commit, the version the Web records with each
- * search (the Cargo version and the commit), and the page limits of the memory the threaded file
- * imports.
- * @type {Readonly<{ commit: string, version: string, threadedMemoryPages: { initial: number, maximum: number } }>}
+ * search (the Cargo version and the commit), each file's sha256, which the app checks before it
+ * compiles the file, and the page limits of the memory the threaded file imports.
+ * @type {Readonly<{ commit: string, version: string, files: Readonly<Record<LosatWasmFile, { sha256: string }>>, threadedMemoryPages: { initial: number, maximum: number } }>}
  */
 export const LOSAT_WASM_BUILD = Object.freeze({
   "commit": "5234c754f31adb6c18ba41d09c3baacc97404bcf",
   "version": "0.2.0+5234c754f31a",
+  "files": {
+    "losat-threaded.wasm": {
+      "sha256": "3036f42075e3f8652757a15d894ff05b1dc34764a1b81e94ac88fb9cb3e34cd1"
+    },
+    "losat.wasm": {
+      "sha256": "dfd3558b41176c8b2860f6997ba24cbd24afcf4eff2fa59daf84bed5bc0a5619"
+    }
+  },
   "threadedMemoryPages": {
     "initial": 45,
     "maximum": 65535
   }
 });
+
+/** @typedef {'losat-threaded.wasm' | 'losat.wasm'} LosatWasmFile A shipped LOSAT Wasm file. */

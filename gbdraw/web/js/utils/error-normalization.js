@@ -317,6 +317,9 @@ const DEFINITIONS = Object.freeze({
   COMPARISON_INPUT: ['The comparison input is invalid.', ['edit-comparison', 'retry'], 'Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.'],
   LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
+  // A LOSAT file or worker of another LOSAT build than the page's: the server was updated while the page was open
+  // (services/losat-runtime.js `losatBuildChangedFailure`, OV-2440).
+  LOSAT_BUILD_CHANGED: ['gbdraw was updated while this page was open, so the comparison search did not run. Save a Session, reload the page, then run the search again.', ['save-session', 'reload']],
   COMPARISON_IDENTITY: ['The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   // A read-only saved comparison fails the same way until Inherit, Replace, or Clear is chosen.
   COMPARISON_CHOICE_REQUIRED: ['Choose how to handle the saved comparison in the Comparison panel, then Generate again.', ['edit-comparison']],

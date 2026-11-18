@@ -1,6 +1,7 @@
 import {
-  compileLosatWasm, concatUint8Arrays, isLosatOwnFailure, isLosatThreadsFailure, isLosatTrapFailure, losatCommandArgs,
-  losatRunFailure, losatThreadsFailure, raisedLosatFailure, reportedLosatFailure
+  compileLosatWasm, concatUint8Arrays, isLosatBuildChangedFailure, isLosatOwnFailure, isLosatThreadsFailure,
+  isLosatTrapFailure, losatBuildChangedFailure, losatCommandArgs, losatRunFailure, losatThreadsFailure, raisedLosatFailure,
+  reportedLosatFailure, requireLosatBuild
 } from '../services/losat-runtime.js';
 import { LOSAT_WASM_BUILD } from '../services/losat-build.generated.js';
 
@@ -17,7 +18,7 @@ const childWorkerUrl = new URL('./losat-wasi-thread-worker.js', import.meta.url)
 
 const compileLosatModule = async (module, wasmUrl) => {
   if (module instanceof WebAssembly.Module) return module;
-  return compileLosatWasm(wasmUrl, 'threaded LOSAT wasm');
+  return compileLosatWasm(wasmUrl, 'losat-threaded.wasm');
 };
 
 const getChildWorkerCount = (threadsPerJob) =>
@@ -103,7 +104,8 @@ const prepareThreadWorker = ({
       settle(() => {
         worker.terminate();
         workers.delete(worker);
-        reject(new Error(data.error || 'LOSAT WASI thread worker preparation failed'));
+        const detail = data.error || 'LOSAT WASI thread worker preparation failed';
+        reject(data.buildChanged === true ? losatBuildChangedFailure(detail) : new Error(detail));
       });
     };
     const handleError = (event) => {
@@ -144,6 +146,7 @@ const prepareThreadWorker = ({
       worker.postMessage({
         type: 'prepare',
         id,
+        losatBuild: LOSAT_WASM_BUILD.version,
         readyControl,
         module: compiledModule,
         wasmUrl,
@@ -175,6 +178,8 @@ const prepareThreadWorker = ({
  */
 const jobFailure = (error, hostFailures) => {
   const raised = raisedLosatFailure(error);
+  // A thread worker of another LOSAT build refused the job (OV-2440).
+  if (isLosatBuildChangedFailure(raised)) return raised;
   if (hostFailures.length === 0 && isLosatOwnFailure(raised)) return raised;
   const detail = reportedLosatFailure(raised) ?? String(/** @type {Error} */ (raised)?.message || raised);
   return losatThreadsFailure([...hostFailures, detail].filter(Boolean).join('\n'));
@@ -300,6 +305,7 @@ const runThreadedLosat = async ({
     attachThreadWorkerOutput({ worker, encoder, stdoutChunks, stderrChunks, hostFailures });
     worker.postMessage({
       type: 'run',
+      losatBuild: LOSAT_WASM_BUILD.version,
       module: compiledModule,
       wasmUrl,
       memory: mainMemory,
@@ -390,6 +396,8 @@ self.onmessage = async (event) => {
   }
 
   try {
+    // A page of another LOSAT build than this worker's (OV-2440).
+    requireLosatBuild(event.data?.losatBuild);
     const result = await runThreadedJob(event.data || {});
     self.postMessage({
       id,
@@ -407,7 +415,8 @@ self.onmessage = async (event) => {
       error: error?.message ? String(error.message) : String(error || 'Threaded LOSAT worker failed'),
       losatReported: reportedLosatFailure(error),
       hostFailure: isLosatThreadsFailure(error),
-      trap: isLosatTrapFailure(error)
+      trap: isLosatTrapFailure(error),
+      buildChanged: isLosatBuildChangedFailure(error)
     });
   }
 };

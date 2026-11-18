@@ -1,7 +1,10 @@
 // @ts-check
 import { LOSAT_SEARCH_FLAGS } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { sha256Hex } from './byte-utils.js';
+import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 /** @import { DiagnosticError } from '../utils/error-normalization.js' */
+/** @import { LosatWasmFile } from './losat-build.generated.js' */
 
 /**
  * The exports of the direct LOSAT wasm API (`hasDirectLosatApi` checks for it).
@@ -116,6 +119,39 @@ const namedLosatFailure = (code, reason, detail) => Object.assign(
 );
 
 /**
+ * The failure of a LOSAT file or message of another LOSAT build than the one this code records (`LOSAT_WASM_BUILD`):
+ * gbdraw was updated while the page was open, and the page's code and the files or workers it loads now differ
+ * (OV-2440). Nothing ran; reloading the page loads one build. `LOSAT_BUILD_CHANGED`.
+ * @param {string} detail what differs, for the console
+ * @returns {DiagnosticError}
+ */
+export const losatBuildChangedFailure = (detail) => Object.assign(
+  diagnosticError('LOSAT_BUILD_CHANGED', {}, { stage: 'losat' }), { message: detail }
+);
+
+/**
+ * Whether a failure is the changed build (`losatBuildChangedFailure`). It ends the run on every engine: no other
+ * engine of this page runs the server's build.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export const isLosatBuildChangedFailure = (error) => error instanceof Error
+  && /** @type {Partial<DiagnosticError>} */ (error).code === 'LOSAT_BUILD_CHANGED';
+
+/**
+ * Refuses a message to a LOSAT worker from code of another LOSAT build: each `init`, `run` and `prepare` message
+ * carries its sender's `LOSAT_WASM_BUILD.version` as `losatBuild`.
+ * @param {unknown} losatBuild
+ */
+export const requireLosatBuild = (losatBuild) => {
+  if (losatBuild !== LOSAT_WASM_BUILD.version) {
+    throw losatBuildChangedFailure(
+      `this LOSAT worker runs LOSAT ${LOSAT_WASM_BUILD.version}; its message came from LOSAT ${String(losatBuild ?? '(none)')}`
+    );
+  }
+};
+
+/**
  * Whether `error` is the named LOSAT failure of `code` and `reason` (`namedLosatFailure`).
  * @param {unknown} error
  * @param {string} code
@@ -219,17 +255,28 @@ export const losatCommandArgs = ({ program, outfmt = '6', extraArgs, threads }) 
 /**
  * Fetch and compile a packaged LOSAT wasm. Its URL carries no version, so the
  * request always revalidates (`no-cache`): an unchanged file costs a 304, and a
- * file replaced at the same URL is never served from a stale cache.
+ * file replaced at the same URL is never served from a stale cache. The bytes are
+ * compiled only when their sha256 is the one `LOSAT_WASM_BUILD` records for
+ * `file`: a file of another build (the server was updated after this page loaded)
+ * would run under this page's record of the build (OV-2440).
  * @param {string} wasmUrl
- * @param {string} label the asset named when it is missing
+ * @param {LosatWasmFile} file the shipped file the URL serves
  * @returns {Promise<WebAssembly.Module>}
  */
-export const compileLosatWasm = async (wasmUrl, label) => {
+export const compileLosatWasm = async (wasmUrl, file) => {
   const response = await fetch(wasmUrl, { cache: 'no-cache' });
   if (!response.ok) {
-    throw new Error(`Missing packaged asset: ${label} not found at ${wasmUrl}`);
+    throw new Error(`Missing packaged asset: ${file} not found at ${wasmUrl}`);
   }
-  return WebAssembly.compile(await response.arrayBuffer());
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const digest = await sha256Hex(bytes);
+  const recorded = LOSAT_WASM_BUILD.files[file].sha256;
+  if (digest !== recorded) {
+    throw losatBuildChangedFailure(
+      `${wasmUrl} has sha256 ${digest}; this page runs LOSAT ${LOSAT_WASM_BUILD.version}, whose ${file} has sha256 ${recorded}`
+    );
+  }
+  return WebAssembly.compile(bytes);
 };
 
 /** @param {Uint8Array[]} chunks */
