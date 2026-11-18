@@ -2,14 +2,15 @@
 // (OV-3858: tests that removed their own folders, or did not, left 124 GiB in
 // one machine's TMPDIR). This file checks that the helper removes them on every
 // way a test process ends: at its exit, or, when a signal or a crash ends it,
-// in the next process that makes a folder.
+// in the next process that makes a folder. It also checks that no other test
+// file makes one.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { makeTempDirSync } from './helpers/temp-dir.cjs';
+import { makeTempDirSync, removeTempDir } from './helpers/temp-dir.cjs';
 
 const OWNER = 'tests/web/helpers/temp-dir.cjs';
 const HELPER_URL = pathToFileURL(join(process.cwd(), OWNER)).href;
@@ -215,4 +216,31 @@ test('the next test process removes the folders of ended processes on its host a
   const next = await startFixture(root, 'pass', { runner: false });
   await next.ended();
   assert.deepEqual({ sameScope: existsSync(sameScope), otherScope: existsSync(otherScope) }, { sameScope: false, otherScope: true });
+});
+
+test('a folder removed before its process ends is gone, and only the helper\'s folders can be removed', () => {
+  const folder = makeTempDirSync('gbdraw-temp-dir-early-');
+  removeTempDir(folder);
+  assert.equal(existsSync(folder), false);
+  assert.throws(() => removeTempDir(folder), /is not a temporary folder of this process/);
+  const other = join(makeRoot(), 'not-made-by-the-helper');
+  mkdirSync(other);
+  assert.throws(() => removeTempDir(other), /is not a temporary folder of this process/);
+  assert.equal(existsSync(other), true);
+});
+
+// Node's folder makers in every form (the promise and sync ones, the
+// disposable ones of Node 24, imported or as a member) and a path built on the
+// system temporary directory itself. This file is scanned too. Python's
+// tempfile.mkdtemp in a snippet runs under the evaluator's TMPDIR, a folder
+// the helper made (tests/web/helpers/python-evaluator.mjs).
+const OUTSIDE_THE_HELPER = /(?<!tempfile\.)\bmkdtemp\w*|\btmpdir\(/;
+
+test('only the helper makes temporary folders for tests', () => {
+  const files = execFileSync('git', ['ls-files', '-z', '--', 'tests'], { encoding: 'utf8' })
+    .split('\0')
+    .filter((path) => /\.(?:c|m)?js$/.test(path) && path !== OWNER);
+  const offenders = files.filter((path) => OUTSIDE_THE_HELPER.test(readFileSync(path, 'utf8')));
+  assert.deepEqual(offenders, [],
+    `Make a test's temporary folder with makeTempDir or makeTempDirSync from ${OWNER}:\n${offenders.join('\n')}`);
 });

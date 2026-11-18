@@ -6,7 +6,8 @@
 // that a signal or a crash ends cannot remove it, so each process, when it
 // makes its first folder, removes the folders of the processes in its scope
 // that have ended. `node --test` runs each file in its own process and
-// Playwright runs each worker as one (tests/web/temp-dir.test.mjs).
+// Playwright runs each worker as one. tests/web/temp-dir.test.mjs checks this
+// and refuses mkdtemp and tmpdir() anywhere else under tests/.
 //
 // - The root belongs to one user, so a folder another user left never blocks
 //   this user's tests.
@@ -18,10 +19,10 @@
 // The helper handles no signal: a signal ends a test process as it did before.
 // Node 26 can abort a `node --test` file that handles one while its run is
 // stopped (OV-3920).
-const { mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, rmdirSync } = require('node:fs');
+const { existsSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, rmdirSync } = require('node:fs');
 const { mkdtemp } = require('node:fs/promises');
 const { hostname, tmpdir } = require('node:os');
-const { join } = require('node:path');
+const { dirname, join } = require('node:path');
 
 /** @param {string} folder */
 const removeQuietly = (folder) => {
@@ -84,4 +85,14 @@ const makeTempDirSync = (prefix) => mkdtempSync(join(ownFolder(), prefix));
 /** @param {string} prefix @returns {Promise<string>} */
 const makeTempDir = (prefix) => mkdtemp(join(ownFolder(), prefix));
 
-module.exports = { makeTempDir, makeTempDirSync };
+// For a test that makes many large folders: removes one before its process
+// ends. A folder that fails to be removed goes with the process's folder.
+/** @param {string} folder */
+const removeTempDir = (folder) => {
+  if (dirname(folder) !== processFolder || !existsSync(folder)) {
+    throw new Error(`${folder} is not a temporary folder of this process`);
+  }
+  rmSync(folder, { recursive: true, force: true, maxRetries: 2 });
+};
+
+module.exports = { makeTempDir, makeTempDirSync, removeTempDir };
