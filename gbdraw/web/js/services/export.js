@@ -8,6 +8,7 @@ import {
   stripTransientPreviewState
 } from './svg-serialization.js';
 import { stripResultBaseAttributes } from './result-paint-bases.js';
+import { stripLabelSourceRecords } from './preview-affordances.js';
 import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -241,6 +242,7 @@ const getCurrentSvgClone = (snapshot) => {
   stripTransientPreviewState(clone);
   stripPreviewFeatureSearchClasses(clone);
   stripResultBaseAttributes(clone);
+  stripLabelSourceRecords(clone);
   return clone;
 };
 

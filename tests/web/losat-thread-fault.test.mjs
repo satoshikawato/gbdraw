@@ -9,6 +9,10 @@ const webRoot = new URL('../../gbdraw/web/', import.meta.url);
 const threadWorkerUrl = new URL('js/workers/losat-wasi-thread-worker.js', webRoot);
 const losatUrl = new URL('js/services/losat.js', webRoot);
 const wasiShimUrl = new URL('vendor/browser_wasi_shim/dist/index.js', webRoot).href;
+// Each message to a LOSAT worker names the page's LOSAT build (OV-2440).
+const { LOSAT_WASM_BUILD } = await import(new URL('js/services/losat-build.generated.js', webRoot).href);
+const losatBuild = LOSAT_WASM_BUILD.version;
+const { fetchShippedLosatWasm } = await import('./helpers/shipped-losat-wasm.mjs');
 
 const leb = (value) => {
   const bytes = [];
@@ -38,23 +42,6 @@ const threadTrapModule = moduleBytes(
   section(3, [[0]]),
   section(7, [[...name('wasi_thread_start'), 0x00, 0]]),
   section(10, [trappingThreadStart])
-);
-
-// Threaded-LOSAT shape: _start spawns one thread, then waits on a futex that
-// only that thread could notify; the thread traps.
-const threadedJobModule = moduleBytes(
-  section(1, [[0x60, 1, I32, 1, I32], [0x60, 0, 0], [0x60, 2, I32, I32, 0]]),
-  section(2, [
-    [...name('wasi'), ...name('thread-spawn'), 0x00, 0],
-    [...name('env'), ...name('memory'), ...sharedMemory(1, 16384)]
-  ]),
-  section(3, [[1], [2]]),
-  section(7, [[...name('_start'), 0x00, 1], [...name('wasi_thread_start'), 0x00, 2]]),
-  section(10, [
-    [...leb(18), 0x00, 0x41, 0x00, 0x10, 0x00, 0x1a,
-      0x41, 0x00, 0x41, 0x00, 0x42, 0x7f, 0xfe, 0x01, 0x02, 0x00, 0x1a, 0x0b],
-    trappingThreadStart
-  ])
 );
 
 const settleWithin = (promise, ms, label) => Promise.race([
@@ -87,7 +74,7 @@ test('a WASI thread that traps reports the trap on its job fault channel', async
 
   await onmessage({
     data: {
-      type: 'prepare', id: 'prepare-1', readyControl: new SharedArrayBuffer(4),
+      type: 'prepare', id: 'prepare-1', losatBuild, readyControl: new SharedArrayBuffer(4),
       module: await WebAssembly.compile(threadTrapModule),
       memory: new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }),
       args: [], env: [], wasiShimUrl, faultChannel
@@ -141,7 +128,7 @@ test('a WASI thread refreshes its view of the shared memory right before wasi_th
   // The standby path: the instance exists before the thread is asked to start.
   const standby = memoryWithGrowLog();
   await onmessage({
-    data: { type: 'prepare', id: 'prepare-1', readyControl: new SharedArrayBuffer(4), module, memory: standby.memory, args: [], env: [], wasiShimUrl }
+    data: { type: 'prepare', id: 'prepare-1', losatBuild, readyControl: new SharedArrayBuffer(4), module, memory: standby.memory, args: [], env: [], wasiShimUrl }
   });
   const done = new Promise((resolve) => { threadDone = resolve; });
   await onmessage({ data: { type: 'start', id: 'start-1', tid: 1, startArg: 0, control: new SharedArrayBuffer(4) } });
@@ -152,7 +139,7 @@ test('a WASI thread refreshes its view of the shared memory right before wasi_th
   // The cold path: the worker instantiates when it is asked to run.
   const cold = memoryWithGrowLog();
   await onmessage({
-    data: { type: 'run', module, memory: cold.memory, startArg: 0, tid: 2, control: new SharedArrayBuffer(4), args: [], env: [], wasiShimUrl }
+    data: { type: 'run', losatBuild, module, memory: cold.memory, startArg: 0, tid: 2, control: new SharedArrayBuffer(4), args: [], env: [], wasiShimUrl }
   });
   assert.deepEqual(cold.grows, [{ delta: 0, started: 0 }]);
   assert.equal(new Int32Array(cold.memory.buffer)[0], 1);
@@ -227,7 +214,7 @@ for (const [label, module, posted, setup = {}] of [
     await import(`${new URL('js/workers/losat-threaded-worker.js', webRoot).href}?instance=${label.length}-${Date.now()}`);
     await globalThis.self.onmessage({
       data: {
-        type: 'run', id: 'job-1', module: await WebAssembly.compile(module), wasiShimUrl: setup.wasiShimUrl ?? wasiShimUrl,
+        type: 'run', id: 'job-1', losatBuild, module: await WebAssembly.compile(module), wasiShimUrl: setup.wasiShimUrl ?? wasiShimUrl,
         threadsPerJob: setup.threadsPerJob ?? 1, faultChannel: '',
         job: { program: 'blastn', extraArgs: [] }, queryFasta: '>q\nACGT\n', subjectFasta: '>s\nACGT\n'
       }
@@ -239,11 +226,40 @@ for (const [label, module, posted, setup = {}] of [
   });
 }
 
+// OV-2440: a thread started cold (no prepared thread worker) by a job worker of another LOSAT build refuses to start
+// (control -2, `losat-wasi-thread-worker.js`); the job then fails with the build change, not as a threaded host
+// failure, so the page asks for a reload instead of falling back to the serial engine.
+test('the threaded job worker: a cold thread of another LOSAT build ends the job with the build change', async (t) => {
+  restoreGlobalsAfter(t, ['self', 'Worker']);
+  const sent = [];
+  let terminated = 0;
+  globalThis.self = { postMessage: (message) => sent.push(message) };
+  globalThis.Worker = class {
+    addEventListener() {}
+    postMessage({ control }) {
+      const view = new Int32Array(control);
+      Atomics.store(view, 0, -2);
+      Atomics.notify(view, 0, 1);
+    }
+    terminate() { terminated += 1; }
+  };
+  await import(`${new URL('js/workers/losat-threaded-worker.js', webRoot).href}?instance=cold-build-${Date.now()}`);
+  await globalThis.self.onmessage({
+    data: {
+      type: 'run', id: 'job-1', losatBuild, module: await WebAssembly.compile(exitingJobModule(true)), wasiShimUrl,
+      threadsPerJob: 1, faultChannel: '', job: { program: 'blastn', extraArgs: [] }, queryFasta: '>q\nACGT\n', subjectFasta: '>s\nACGT\n'
+    }
+  });
+  assert.deepEqual(sent.map(({ ok, buildChanged, hostFailure, trap }) => ({ ok, buildChanged, hostFailure, trap })),
+    [{ ok: false, buildChanged: true, hostFailure: false, trap: false }]);
+  assert.match(sent[0].error, /LOSAT WASI thread 1 runs another LOSAT build/);
+  assert.ok(terminated >= 1);
+});
+
 const setupPage = async (t, {
   trappedAttempts = Infinity, trap = true, losatReported, threadedHostFailure = false, threadedWorkerThrows = false,
-  trapReply = false, threadedWorkerEvent = ''
+  trapReply = false, threadedWorkerEvent = '', buildChangedReply = false
 } = {}) => {
-  assert.ok(WebAssembly.validate(threadedJobModule));
   restoreGlobalsAfter(t, ['window', 'crossOriginIsolated', 'fetch', 'Worker']);
   for (const level of ['info', 'warn']) {
     const previous = console[level];
@@ -253,7 +269,8 @@ const setupPage = async (t, {
   const workers = [];
   globalThis.window = { location: { href: 'https://example.test/gbdraw/web/' } };
   globalThis.crossOriginIsolated = true;
-  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => threadedJobModule.slice().buffer });
+  // The page compiles the shipped files; the Worker transport below imitates what they do.
+  globalThis.fetch = fetchShippedLosatWasm;
   // Real orchestration; the Worker transport imitates threaded jobs. The first
   // trappedAttempts jobs have a thread that trapped: the job worker never
   // answers, and the thread reports on the fault channel named in the run
@@ -285,6 +302,13 @@ const setupPage = async (t, {
         // `threadedWorkerEvent`: the threaded job worker fails as a worker (its script, its message), not in a reply.
         if (threadedWorkerEvent && this.threaded && message.type === 'run') {
           for (const listener of this.listeners.get(threadedWorkerEvent) || []) listener({ message: 'simulated' });
+          return;
+        }
+        // `buildChangedReply`: every worker is of another LOSAT build than the page and refuses its first message
+        // (OV-2440).
+        if (buildChangedReply) {
+          const data = { id: message.id, type: message.type, ok: false, error: 'other build', losatReported: null, trap: false, buildChanged: true };
+          for (const listener of this.listeners.get('message') || []) listener({ data });
           return;
         }
         // `trapReply`: every run's LOSAT traps, on either engine (OV-3327).
@@ -366,7 +390,25 @@ test('automatic threaded LOSAT falls back to serial execution after its trap ret
   assert.deepEqual(statuses.map((status) => status.state), ['running', 'fallback']);
   assert.deepEqual(workers.map((worker) => worker.threaded), [true, true, true, false]);
   assert.ok(workers.every((worker) => worker.terminated));
+  // Each message to a LOSAT worker names the page's LOSAT build, which the worker requires (OV-2440).
+  const sent = workers.flatMap((worker) => worker.messages);
+  assert.deepEqual([...new Set(sent.map((message) => message.type))], ['run', 'init']);
+  assert.ok(sent.every((message) => message.losatBuild === losatBuild));
 });
+
+// OV-2440: a worker of another LOSAT build ends the run with the reload message on every engine, without the serial
+// fallback of Auto or the page's own sequential run.
+for (const executionMode of ['auto', 'threaded', 'serial']) {
+  test(`${executionMode} LOSAT stops on a worker of another LOSAT build`, async (t) => {
+    const { owner, workers } = await setupPage(t, { buildChangedReply: true, trappedAttempts: 0 });
+    await assert.rejects(
+      settleWithin(owner.runLosatPairsParallel([job], { ...options, executionMode }), 5000, 'LOSAT run'),
+      (error) => error.code === 'LOSAT_BUILD_CHANGED' && error.stage === 'losat'
+    );
+    assert.equal(workers.length, 1);
+    assert.equal(workers[0].threaded, executionMode !== 'serial');
+  });
+}
 
 // OV-3304: a LOSAT run that exits with an error reaches the page as the LOSAT failure with what LOSAT reported, from
 // either pool, once: the serial pool does not run the jobs again in the page, and the threaded pool retries only traps.

@@ -277,7 +277,8 @@ import {
   webFileBindingsWithoutDepth
 } from './session-resource-backing.js';
 import {
-  LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, normalizeLinearComparisonPlan
+  LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, linearComparisonEdgeKey, loadedSourceNameField,
+  normalizeLinearComparisonPlan
 } from './linear-comparisons.js';
 import { createDefaultAdv, createDefaultForm, createDefaultLosatExecution } from './session-active-config-contract.js';
 import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
@@ -300,13 +301,13 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { ContractShape } from '../utils/contract-shape.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { OrderedConservationSource, RingSlot } from './conservation-series.js' */
-/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
+/** @import { LinearComparisonResolution, LinearComparisonResolvedEdge, LoadedSourceName } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
 /** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
 /**
- * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
- *   WebFileBindings } from './session-resource-backing.js'
+ * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata,
+ *   SessionResourceTable, WebFileBindingRow, WebFileBindings } from './session-resource-backing.js'
  */
 /** @import { CircularRecordDrawing, CircularRecordRange, CircularRegionForm } from './record-options.js' */
 /** @import { RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow } from './record-display-model.js' */
@@ -406,7 +407,7 @@ const requestDrawingMode = (drawing) => {
  * @property {string | null} [c_conservation_blasts_source]
  * @property {FileLike[][]} [c_conservation_fastas] Each LOSAT ring's comparison genome files.
  * @property {ResourceEntry[][]} [c_conservation_sequence_sources] Each table's comparison sequence files.
- * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
+ * @property {{ id?: unknown, file?: ResourceEntry | null, loadedSourceName?: LoadedSourceName }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
  * @property {HiddenDepthFiles} [hiddenDepth] The Depth slot values a draft that draws no Depth holds: a Generate
  *   that keeps the track parts reads them (F1); the request never does.
@@ -1241,6 +1242,23 @@ const normalizeOriginalResourceName = (name) => {
     .trim();
   if (!basename || basename === '.' || basename === '..') return '';
   return basename.slice(0, 1024);
+};
+
+/**
+ * `name` without each leading "<resource ID>-" while a name remains: the Web writer names a resource "<ID>-<file>"
+ * (`normalizeResourceName`), so Load shows a resource that stores no name of its own by what follows. Python's
+ * `_without_resource_id_prefix` (gbdraw/session_migration.py) does the same for the CLI and for the Sessions it moves
+ * to the current writer; the vector of tools/twins.json row `vector:tests/fixtures/resource-id-prefix-vectors.json`
+ * pins both.
+ * @param {string} resourceId
+ * @param {string} name
+ * @returns {string}
+ */
+export const withoutResourceIdPrefix = (resourceId, name) => {
+  const prefix = `${resourceId}-`;
+  let shown = name;
+  while (shown.startsWith(prefix) && shown.length > prefix.length) shown = shown.slice(prefix.length);
+  return shown;
 };
 
 /**
@@ -3567,6 +3585,7 @@ export const requestLegendEditLeaves = (state, drawing) => {
   return legendEditConfigLeaves({
     legendEntries: drawing.legendEntries.value,
     deletedLegendEntries: drawing.deletedLegendEntries.value,
+    dormantLegendEntries: drawing.dormantLegendEntries.value,
     originalLegendOrder: inventory,
     pythonRowKeys: pythonLegendRowKeys(inventory, state.results ? state.results.value : []),
     rules: drawing.manualSpecificRules,
@@ -4321,10 +4340,10 @@ const buildComparisons = ({
   const comparisons = [];
   /** @type {RequestComparisonRef[]} */
   const metadataComparisons = [];
-  const uploadFilesByEdgeId = new Map(
+  const uploadsByEdgeId = new Map(
     (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
       .filter((binding) => binding?.file)
-      .map((binding) => [String(binding.id || ''), binding.file])
+      .map((binding) => [String(binding.id || ''), binding])
   );
   const resolvedByEdgeKey = new Map();
   (Array.isArray(resolvedComparisons) ? resolvedComparisons : []).forEach((comparison) => {
@@ -4483,8 +4502,8 @@ const buildComparisons = ({
       throw new Error('The resolved Linear comparison plan contains an invalid edge.');
     }
     if (edge.source === 'upload') {
-      const file = uploadFilesByEdgeId.get(String(edge.id || ''));
-      if (!file) {
+      const upload = uploadsByEdgeId.get(String(edge.id || ''));
+      if (!upload?.file) {
         throw diagnosticError('COMPARISON_INPUT', {
           reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: edge.queryIndex, subjectRecordIndex: edge.subjectIndex
         });
@@ -4492,11 +4511,10 @@ const buildComparisons = ({
       const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
       comparisons.push({
         kind: 'nucleotideBlast',
-        resourceId: resources.addFile(resourceId, 'nucleotide-blast', file),
+        resourceId: resources.addFile(resourceId, 'nucleotide-blast', upload.file),
         queryRecordIndex: edge.queryIndex,
         subjectRecordIndex: edge.subjectIndex,
-        // The name of the file the user chose, which the CLI replay and the Web show (OV-3557).
-        ...uploadedComparisonSourceName(file)
+        ...uploadedComparisonSourceName(upload.file, upload.loadedSourceName)
       });
       continue;
     }
@@ -5534,118 +5552,6 @@ export const projectCompositionRecordIdentity = (canonical, keys, reference = nu
 export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
 /**
- * @param {{ source?: { kind?: unknown, resourceId?: unknown, gffResourceId?: unknown, fastaResourceId?: unknown } | null } | null | undefined} record
- * @param {string} field
- */
-const recordSourceResourceId = (record, field) => {
-  /** @type {Readonly<Record<string, string>>} */
-  const ids = recordSourceSlotIds(record?.source);
-  return Object.hasOwn(ids, field) ? ids[field] : '';
-};
-
-/** @param {{ resourceId?: unknown } | null | undefined} ref */
-const referencedResourceId = (ref) => String(ref?.resourceId || '').trim();
-
-/**
- * @param {Record<string, string>} target
- * @param {unknown} resourceId
- * @param {unknown} name
- */
-const addResourceOriginalNameHint = (target, resourceId, name) => {
-  const id = String(resourceId || '').trim();
-  const originalName = normalizeOriginalResourceName(name);
-  if (!id || !originalName || Object.prototype.hasOwnProperty.call(target, id)) return;
-  target[id] = originalName;
-};
-
-/**
- * The projection's unvalidated Session parts, read through views.
- * @param {{
- *   renderRequest: UnvalidatedFields<'records' | 'mode'>,
- *   legacyFiles: unknown,
- *   fileBindings: unknown
- * }} input
- */
-const legacyResourceOriginalNames = ({ renderRequest, legacyFiles, fileBindings }) => {
-  /** @type {Record<string, string>} */
-  const hints = {};
-  /** @type {readonly UnvalidatedFields<'source', UnvalidatedFields<'kind' | 'resourceId' | 'gffResourceId' | 'fastaResourceId'>>[]} */
-  const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
-  // The cast: an object other than an array, read through views of its properties.
-  const files = legacyFiles && typeof legacyFiles === 'object' && !Array.isArray(legacyFiles)
-    ? /** @type {Readonly<Record<string, UnvalidatedFields<'name'>>>} */ (legacyFiles)
-    : {};
-  const tableRefs = editorTableTextRefs(renderRequest);
-  const namedOptionResources = {
-    d_color: referencedResourceId(tableRefs.defaultColors),
-    t_color: referencedResourceId(tableRefs.colorTable),
-    whitelist: referencedResourceId(tableRefs.whitelist),
-    qualifier_priority: referencedResourceId(tableRefs.priority)
-  };
-  Object.entries(namedOptionResources).forEach(([slot, resourceId]) => {
-    addResourceOriginalNameHint(hints, resourceId, files?.[slot]?.name);
-  });
-
-  if (renderRequest?.mode === 'linear') {
-    /** @type {readonly UnvalidatedFields<'gb' | 'gff' | 'fasta', UnvalidatedFields<'name'>>[]} */
-    const sequences = Array.isArray(files.linearSeqs) ? files.linearSeqs : [];
-    records.forEach((record, index) => {
-      const sequence = sequences[index] || {};
-      /** @type {const} */ (['gb', 'gff', 'fasta']).forEach((field) => {
-        addResourceOriginalNameHint(
-          hints,
-          recordSourceResourceId(record, field),
-          sequence?.[field]?.name
-        );
-      });
-    });
-  } else {
-    const record = records[0];
-    ['gb', 'gff', 'fasta'].forEach((field) => {
-      addResourceOriginalNameHint(
-        hints,
-        recordSourceResourceId(record, field),
-        files?.[`c_${field}`]?.name
-      );
-    });
-  }
-
-  (Array.isArray(fileBindings) ? fileBindings : []).forEach((/** @type {UnvalidatedFields<'slot' | 'name'>} */ binding) => {
-    const slot = String(binding?.slot || '');
-    const normalizedSlot = slot.replace(/^files\./, '');
-    if (Object.prototype.hasOwnProperty.call(namedOptionResources, normalizedSlot)) {
-      addResourceOriginalNameHint(
-        hints,
-        // An own key of the table, checked above.
-        namedOptionResources[/** @type {keyof typeof namedOptionResources} */ (normalizedSlot)],
-        binding?.name
-      );
-      return;
-    }
-    const linearMatch = slot.match(/^(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)$/);
-    if (linearMatch) {
-      const record = records[Number(linearMatch[1])];
-      addResourceOriginalNameHint(
-        hints,
-        recordSourceResourceId(record, linearMatch[2]),
-        binding?.name
-      );
-      return;
-    }
-    const circularMatch = slot.match(/^(?:files\.)?c_(gb|gff|fasta)$/);
-    if (circularMatch) {
-      addResourceOriginalNameHint(
-        hints,
-        recordSourceResourceId(records[0], circularMatch[1]),
-        binding?.name
-      );
-    }
-  });
-
-  return hints;
-};
-
-/**
  * @param {StoredResources} resources
  * @param {Readonly<Record<string, unknown>>} originalNameHints
  */
@@ -5655,13 +5561,8 @@ const resourcesWithOriginalNames = (resources, originalNameHints) => {
     : {};
   return Object.fromEntries(Object.entries(resources || {}).map(([resourceId, entry]) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [resourceId, entry];
-    const storedName = normalizeOriginalResourceName(entry.name);
-    const prefix = `${resourceId}-`;
-    let inferredName = storedName;
-    while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
-      inferredName = inferredName.slice(prefix.length);
-    }
-    const originalName = normalizeOriginalResourceName(hints[resourceId]) || inferredName;
+    const originalName = normalizeOriginalResourceName(hints[resourceId])
+      || withoutResourceIdPrefix(resourceId, normalizeOriginalResourceName(entry.name));
     return [resourceId, originalName && originalName !== entry.name ? { ...entry, name: originalName } : entry];
   }));
 };
@@ -5706,40 +5607,50 @@ const storedComparisonFileName = (comparison) => (
 );
 
 /**
- * The loaded tables a stored request names no file for, by their payload (`getResourcePayloadIdentity`, the Session
- * resource every view of it stands for): `null` for a table gbdraw made (a LOSAT result, OV-3557), `undefined` for
- * an entry an older writer stored without `sourceName`, whose name Python reads from the resource. Load makes every
- * stored nucleotide table a file of the draft; the writer stores such a file as the request stored it, so a Generate
- * or Save after Load names it as the CLI replay does. A file the user chooses later is another payload.
- * @type {WeakMap<object, null | undefined>}
- */
-const unnamedComparisonTables = new WeakMap();
-
-/**
- * Load: remember a loaded table the stored request names no file for (`unnamedComparisonTables`).
- * @template T
- * @param {T} file The file Load bound for the comparison.
+ * What a stored nucleotide comparison holds for its table's name (`LoadedSourceName`), which Load gives the
+ * comparison's draft row (OV-3592): a present field that is no name is `null`, as the reader reads it.
  * @param {{ sourceName?: unknown }} comparison The stored comparison (unvalidated).
- * @returns {T} `file`.
+ * @returns {LoadedSourceName}
  */
-const rememberUnnamedComparisonTable = (file, comparison) => {
-  if (typeof comparison.sourceName !== 'string' && file && typeof file === 'object') {
-    unnamedComparisonTables.set(getResourcePayloadIdentity(file), Object.hasOwn(comparison, 'sourceName') ? null : undefined);
-  }
-  return file;
+const loadedComparisonSourceName = (comparison) => {
+  if (typeof comparison.sourceName === 'string') return { sourceName: comparison.sourceName };
+  return Object.hasOwn(comparison, 'sourceName') ? { sourceName: null } : {};
 };
 
 /**
- * The `sourceName` a nucleotide comparison of an uploaded file stores: the name of the file the user chose, or what
- * the loaded request stored for a table it named no file for; none (the field left out) for an older writer's entry.
- * @param {{ name?: unknown }} file
- * @returns {{ sourceName?: string | null }}
+ * The `sourceName` a nucleotide comparison of an uploaded table stores: what the loaded request stored for the
+ * comparison while its draft row keeps that table (`LoadedSourceName`, OV-3592), else the name of the file the user
+ * chose, which the CLI replay and the Web show (OV-3557).
+ * @param {{ name?: unknown }} file The table the comparison's draft row holds.
+ * @param {LoadedSourceName | undefined} loadedSourceName What the row holds from a loaded request.
+ * @returns {LoadedSourceName}
  */
-const uploadedComparisonSourceName = (file) => {
-  const identity = getResourcePayloadIdentity(file);
-  if (!unnamedComparisonTables.has(identity)) return { sourceName: normalizeOriginalResourceName(file.name) || null };
-  const stored = unnamedComparisonTables.get(identity);
-  return stored === undefined ? {} : { sourceName: stored };
+const uploadedComparisonSourceName = (file, loadedSourceName) => (
+  loadedSourceName ?? { sourceName: normalizeOriginalResourceName(file.name) || null }
+);
+
+/**
+ * The name a stored request holds for the table a Web file binding binds to a comparison-plan edge (`LoadedSourceName`),
+ * by the edge's ID and the resource the binding names; none when the request stores no comparison of that pair and
+ * table (the binding then holds a file the user chose after the request was written).
+ * @typedef {(edgeId: string, resourceId: string) => LoadedSourceName | undefined} LoadedSourceNameOf
+ */
+/**
+ * `LoadedSourceNameOf` for a Session: a Web Save binds a pair's table by the plan edge (`webFiles.bindings`), the
+ * request names it by the pair's records (`loadedComparisonSourceName`), and the stored plan gives each edge its pair.
+ * @param {readonly { queryUid: string, subjectUid: string, resourceId: string, loadedSourceName: LoadedSourceName }[]} stored
+ *   The request's nucleotide comparisons, by the uids of their records.
+ * @param {unknown} plan The stored draft's comparison plan (unvalidated).
+ * @returns {LoadedSourceNameOf}
+ */
+const storedComparisonSourceNames = (stored, plan) => {
+  const byTable = new Map(stored.map((comparison) => [
+    `${linearComparisonEdgeKey(comparison.queryUid, comparison.subjectUid)}\u0000${comparison.resourceId}`,
+    comparison.loadedSourceName
+  ]));
+  const pairs = new Map(normalizeLinearComparisonPlan(plan).edges
+    .map((edge) => [edge.id, linearComparisonEdgeKey(edge.queryUid, edge.subjectUid)]));
+  return (edgeId, resourceId) => (pairs.has(edgeId) ? byTable.get(`${pairs.get(edgeId)}\u0000${resourceId}`) : undefined);
 };
 
 /**
@@ -5795,20 +5706,28 @@ const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = nul
 );
 
 /**
+ * `Array.isArray` alone narrows the readonly list to `any[]`; this keeps its element type.
+ * @param {WebFileBindings['linearCanonicalComparisons']} value
+ * @returns {value is NonNullable<WebFileBindings['linearCanonicalComparisons']>}
+ */
+const isAdoptedComparisonList = (value) => Array.isArray(value);
+
+/**
  * @param {Record<string, any>} files
  * @param {{ readonly bindings?: WebFileBindings } | null | undefined} webMetadata `webFiles`, its bindings checked
  * @param {Record<string, any> | null | undefined} resources
  * @param {{
  *   resolveResourceFile?: ResourceFileResolver | null,
  *   sessionResourceTable?: SessionResourceTable | null,
- *   adoptCanonicalPayloads?: boolean
+ *   adoptCanonicalPayloads?: boolean,
+ *   loadedSourceNameOf?: LoadedSourceNameOf
  * }} [options]
  */
 const applyWebFileBindings = (
   files,
   webMetadata,
   resources,
-  { resolveResourceFile = null, sessionResourceTable = null, adoptCanonicalPayloads = false } = {}
+  { resolveResourceFile = null, sessionResourceTable = null, adoptCanonicalPayloads = false, loadedSourceNameOf = () => undefined } = {}
 ) => {
   const bindings = webMetadata?.bindings;
   if (bindings === undefined) return files;
@@ -5869,13 +5788,21 @@ const applyWebFileBindings = (
       queryUid: String(comparison?.queryUid || ''),
       subjectUid: String(comparison?.subjectUid || ''),
       source: String(comparison?.source || 'upload'),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
+      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema),
+      // The name the request stored for the table this edge binds (OV-3592).
+      ...loadedSourceNameField(loadedSourceNameOf(
+        String(comparison?.id || ''), String(/** @type {UnvalidatedFields<'resourceId'>} */ (comparison?.file)?.resourceId || '')
+      ))
     }));
   }
-  if (Array.isArray(bindings.linearCanonicalComparisons)) {
-    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((/** @type {WebFileBindingRow} */ comparison) => ({
+  // A Session 51 Linear drawing's adopted comparisons (OV-3826): the draft's, in place of the request's projection.
+  // A generated pipeline has no file.
+  const adopted = bindings.linearCanonicalComparisons;
+  if (isAdoptedComparisonList(adopted)) {
+    restored.linearCanonicalComparisons = adopted.map((comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
+      ...(Object.hasOwn(comparison, 'file')
+        ? { file: webBindingValueAsLegacyFile(resources, comparison.file, resolveBinding, bindings.schema) } : {})
     }));
   }
   return restored;
@@ -7052,7 +6979,6 @@ export const projectCanonicalSessionRequest = ({
   legacyFiles = null,
   storedConfig = null,
   initializeCliInputs = false,
-  fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairLegacyTableRows = false,
   sessionResourceTable = null,
@@ -7136,7 +7062,7 @@ export const projectCanonicalSessionRequest = ({
   // A Load passes the input slot of the Session it reads (`c_gb` for a Session 41-48); a committed request
   // projected again (label reflow, orientation, alignment) holds its own mode's input slot (OV-1814).
   let explicitBindings = validateWebFileBindings(
-    webMetadata, canonicalResources, bindingInputSlot ?? webBindingInputSlot(true, renderRequest.mode)
+    webMetadata, canonicalResources, bindingInputSlot ?? webBindingInputSlot(true, renderRequest.mode), renderRequest
   );
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in
@@ -7199,11 +7125,13 @@ export const projectCanonicalSessionRequest = ({
     webMetadata = { ...webMetadata, bindings: explicitBindings };
   }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
-  const originalNameHints = {
-    ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
-    ...(storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
-      !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {})
-  };
+  /** @type {Parameters<typeof storedComparisonSourceNames>[0][number][]} The request's nucleotide comparisons (Linear). */
+  const storedComparisons = [];
+  // The names a Session stored: a Web Save's, or those Python's move of a Session 31-45 to the current writer
+  // stores (`loaded_resource_display_names`, OV-3660).
+  /** @type {Readonly<Record<string, unknown>>} */
+  const originalNameHints = storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
+    !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {};
   const resources = sessionResourceTable
     ? canonicalResources
     : resourcesWithOriginalNames(canonicalResources, originalNameHints);
@@ -7214,16 +7142,10 @@ export const projectCanonicalSessionRequest = ({
           sessionResourceTable,
           resourceId
         );
-        const storedName = normalizeOriginalResourceName(descriptor.name);
-        const prefix = `${resourceId}-`;
-        let inferredName = storedName;
-        while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
-          inferredName = inferredName.slice(prefix.length);
-        }
+        // `String` is the property key the read used before: an id is text or a JSON value.
         const displayName = normalizeOriginalResourceName(metadata.name)
-          // `String` is the property key the read used before: an id is text or a JSON value.
           || normalizeOriginalResourceName(originalNameHints[String(resourceId)])
-          || inferredName;
+          || withoutResourceIdPrefix(String(resourceId), normalizeOriginalResourceName(descriptor.name));
         return createSessionResourceFileView(
           sessionResourceTable,
           resourceId,
@@ -7362,22 +7284,27 @@ export const projectCanonicalSessionRequest = ({
           .get(Number(comparison.queryRecordIndex));
         const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
           .get(Number(comparison.subjectRecordIndex));
-        const file = rememberUnnamedComparisonTable(resolveResourceFile
+        const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId, storedComparisonFileName(comparison))
-          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) },
-        comparison);
+          : { ...resourceAsLegacyFile(resources, comparison.resourceId), ...storedComparisonFileName(comparison) };
         // An unmapped source index is undefined; it never named a sequence here.
         if (queryIndex === undefined || subjectIndex === undefined) return;
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
           files.linearSeqs[queryIndex].blast = file;
         }
         if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
+        const loadedSourceName = loadedComparisonSourceName(comparison);
         files.linearComparisons.push({
           id: `linear-comparison-canonical-${index + 1}`,
           queryUid: files.linearSeqs[queryIndex].uid,
           subjectUid: files.linearSeqs[subjectIndex].uid,
           source: 'upload',
-          file
+          file,
+          loadedSourceName
+        });
+        storedComparisons.push({
+          queryUid: files.linearSeqs[queryIndex].uid, subjectUid: files.linearSeqs[subjectIndex].uid,
+          resourceId: String(comparison.resourceId || ''), loadedSourceName
         });
       });
     (renderRequest.comparisons || []).forEach((/** @type {CanonicalComparison} */ comparison) => {
@@ -7663,7 +7590,10 @@ export const projectCanonicalSessionRequest = ({
     files,
     webMetadata,
     resources,
-    { resolveResourceFile, sessionResourceTable, adoptCanonicalPayloads }
+    {
+      resolveResourceFile, sessionResourceTable, adoptCanonicalPayloads,
+      loadedSourceNameOf: storedComparisonSourceNames(storedComparisons, storedConfig?.linearComparisonPlan)
+    }
   ));
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
@@ -8133,7 +8063,8 @@ const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite'
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
 // A request key outside this table reads no default: a JSON value is never an inherited member.
 /** @type {Readonly<Record<string, JsonValue>>} */
-const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true, 'objects.definition.circular.show': true };
+// A diagram option at its default is read from the request contract (`publicationOptionDefault`), not from this table.
+const PUBLICATION_OPTION_DEFAULTS = { 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true, 'objects.definition.circular.show': true };
 /**
  * A resource of a request under comparison: the descriptor a Session stores or
  * the writer built (no reader has checked it), or a backing that reads its bytes.
@@ -8146,6 +8077,7 @@ const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWith
  * @property {{ path: string, kind: string, decodedPayloadSha256: string }[]} bindings
  * @property {Map<unknown, Promise<string>>} resourceIdentities Digests by a resource's base64 text.
  * @property {boolean} ignoreComparisonFilters
+ * @property {StoredRequestPlaces | null} places The places of the request's mode, or null for an unknown mode.
  */
 /**
  * @param {PublicationResource | undefined} resource
@@ -8211,6 +8143,19 @@ const publicationResourceIdentity = async (resources, id, path, cache) => {
   return { kind, decodedPayloadSha256: await digest };
 };
 /**
+ * A diagram option a request states at its type's default, or at the one value
+ * the other diagram type's option allows: the CLI encoder omits it, a Web
+ * request states it, and both draw the same (generated request contract).
+ * @param {StoredRequestPlaces | null} places
+ * @param {string} key
+ * @param {JsonValue} value
+ */
+const publicationOptionDefault = (places, key, value) => {
+  const place = `diagramOptions.${key}`;
+  return !!places && [places.defaulted, places.otherType].some((table) =>
+    table.has(place) && JSON.stringify(table.get(place)) === JSON.stringify(value));
+};
+/**
  * @param {JsonValue} value
  * @param {PublicationResources} resources
  * @param {PublicationContext} context
@@ -8237,6 +8182,7 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
       || (path === '$.diagramOptions' && key === 'featureShapes' && value[key] && typeof value[key] === 'object'
         && Object.entries(value[key]).every(([type, rendering]) => rendering === defaultFeatureRendering(type)))
       || (path === '$.diagramOptions.config.canvas' && key === 'feature_overlap_tolerance_bp' && value[key] === 0)
+      || (path === '$.diagramOptions' && publicationOptionDefault(context.places, key, value[key]))
       || (context.ignoreComparisonFilters && path === '$.diagramOptions' && PUBLICATION_COMPARISON_FILTER_FIELDS.has(key))
       || (/^\$\.output(?:\[\d+\])?$/.test(path) && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;
     if (resourceReference && ['encoding', 'representation'].includes(key)) continue;
@@ -8636,8 +8582,9 @@ const STORED_REQUEST_ROOTS = /** @type {const} */ ({ circular: 'CanonicalCircula
  * Per mode, from the description: the places a value of the other diagram
  * type is read as this one's (a placeholder that holds only null or no item,
  * and an option of the other type that this one holds at its default), the
- * unions picked by their `kind`, and the places that have a default (a repair
- * puts it there in place of a value it cannot read, so each is a part).
+ * unions picked by their `kind`, and the places that have a default, with it (a
+ * repair puts it there in place of a value it cannot read, so each is a part;
+ * Gallery publication reads a stated default as an omitted one).
  * @param {string} rootType
  * @param {string} otherOptionsType
  */
@@ -8647,8 +8594,8 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
   const otherType = new Map();
   /** @type {Set<string>} */
   const tagged = new Set();
-  /** @type {Set<string>} */
-  const defaulted = new Set();
+  /** @type {Map<string, unknown>} */
+  const defaulted = new Map();
   const otherOptions = /** @type {import('../utils/contract-shape.js').ObjectShape} */ (types[otherOptionsType]);
   /** @param {ContractShape} shape @returns {ContractShape} */
   const resolve = (shape) => (shape.kind === 'ref' ? resolve(types[shape.name]) : shape);
@@ -8676,7 +8623,7 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
     else if (resolved.kind === 'object') {
       Object.entries(resolved.fields).forEach(([key, field]) => {
         const place = pattern ? `${pattern}.${key}` : key;
-        if (resolved.defaults && Object.hasOwn(resolved.defaults, key)) defaulted.add(place);
+        if (resolved.defaults && Object.hasOwn(resolved.defaults, key)) defaulted.set(place, resolved.defaults[key]);
         walk(field, place, depth + 1);
       });
     }
@@ -8684,6 +8631,7 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
   walk(types[rootType], '', 0);
   return { otherType, tagged, defaulted, otherOptionKeys: new Set(Object.keys(otherOptions.fields)) };
 };
+/** @typedef {ReturnType<typeof storedRequestPlaces>} StoredRequestPlaces */
 const STORED_REQUEST_PLACES = {
   circular: storedRequestPlaces(STORED_REQUEST_ROOTS.circular, 'CanonicalLinearDiagramOptions'),
   linear: storedRequestPlaces(STORED_REQUEST_ROOTS.linear, 'CanonicalCircularDiagramOptions')
@@ -9508,8 +9456,11 @@ const publicationRequestIdentity = async (request, resources, resourceIdentities
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
   const normalizedRequest = normalizePublicationRequestAliases(request, resources);
   const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
+  /** @type {unknown} */
+  const mode = normalizedRequest.mode;
   /** @type {PublicationContext} */
   const context = { bindings: [], resourceIdentities,
+    places: mode === 'circular' || mode === 'linear' ? STORED_REQUEST_PLACES[mode] : null,
     ignoreComparisonFilters: !(normalizedRequest.comparisons?.length || (Array.isArray(conservation) ? conservation.length : conservation)) };
   const canonical = await canonicalizePublicationValue(normalizedRequest, resources, context);
   return { canonical, digest: await sha256Hex(textToBytes(JSON.stringify(canonical))),

@@ -49,6 +49,7 @@ from gbdraw.comparisons.losat_runtime import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.linear_comparison import LinearComparison
 
 logger = logging.getLogger(__name__)
@@ -57,17 +58,6 @@ def _plan_error(message: str) -> ValidationError:
     return ValidationError(
         message, diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"}
     )
-
-
-def _adjacent_row_pairs(rows_by_record: Sequence[int]) -> list[tuple[int, int]]:
-    """Every record of a row against every record of the next row (Web adjacent)."""
-
-    rows = sorted(set(rows_by_record))
-    by_row = {row: [i for i, value in enumerate(rows_by_record) if value == row] for row in rows}
-    pairs: list[tuple[int, int]] = []
-    for upper, lower in zip(rows, rows[1:]):
-        pairs.extend((query, subject) for query in by_row[upper] for subject in by_row[lower])
-    return pairs
 
 
 def _validated_pairs(
@@ -255,7 +245,8 @@ def resolve_linear_nucleotide_losat(
     if len(records) < 2:
         raise _plan_error(f"{search.program.upper()} needs at least two records.")
     pairs = _validated_pairs(
-        search.pairs if search.pairs is not None else _adjacent_row_pairs(rows_by_record),
+        search.pairs if search.pairs is not None
+        else record_pairs_between_adjacent_rows(rows_by_record, order="rows"),
         rows_by_record,
     )
     if not pairs:

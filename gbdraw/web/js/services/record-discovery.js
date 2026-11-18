@@ -1271,48 +1271,77 @@ export const settledCircularCardMarks = (drawing) => {
 };
 
 /**
- * OV-2868: what a settled read of a drawing's cards makes of its record-major
- * Depth matrix. The rows stand for the records of `marks` (`c_depth_rows`, in
- * row order); after a card edit they follow their records to the cards read
- * now (`resliceCardRows`), and the cards read now become the marks. A mark's
- * record count unknown (a Load) is the count read now while its card holds the
- * same files, else the count of its own files, read again. Null: the matrix
- * and its marks stay (no matrix, no marks, or the cards did not change); rows
- * null: the rows cannot be placed (a file no longer readable, or a matrix
- * whose rows are not those of its marks), and Generate reports the matrix.
- * @param {{ matrix: DrawingInputFiles['c_depth'], marks: readonly CircularCardMark[] | null,
- *   inputs: readonly import('./input-types.js').CircularSourceInput<InputFileRef>[], counts: readonly number[],
- *   fileOf: (file: InputFileRef | null) => FileLike | null | undefined }} read
- *   `counts`: the records read now of each card of `inputs`.
- * @returns {Promise<{ rows: (InputFileRef | null)[][] | null, marks: CircularCardMark[] } | null>}
+ * A Circular File card at one moment, with the record count of its files when it is known (`CircularCardMark`).
+ * @template F
+ * @typedef {{ uid: string, primaryFile: F | null, pairedFile: F | null, recordCount: number | null }} CardRecordCount
  */
-export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, counts, fileOf }) => {
-  if (!marks || !isRecordMajorDepthFileMatrix(matrix)) return null;
-  const now = inputs.map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: counts[index] }));
-  /** @param {CircularCardMark} mark */
-  const heldCount = (mark) => now.find((card) => card.uid === mark.uid && card.primaryFile === mark.primaryFile
-    && card.pairedFile === mark.pairedFile)?.recordCount ?? null;
-  const unchanged = marks.length === now.length && marks.every((mark, index) => mark.uid === now[index].uid
-    && heldCount(mark) !== null && (mark.recordCount === null || mark.recordCount === now[index].recordCount));
-  if (unchanged) return null;
+/**
+ * The record count a card read now gives a mark: that card's, while it holds
+ * the mark's files; else null.
+ * @template F
+ * @param {readonly CardRecordCount<F>[]} now @param {CardRecordCount<F>} mark
+ */
+const heldRecordCount = (now, mark) => now.find((card) => card.uid === mark.uid && card.primaryFile === mark.primaryFile
+  && card.pairedFile === mark.pairedFile)?.recordCount ?? null;
+
+/**
+ * The record count of each of `marks`, in their order: the mark's own, else
+ * (a Load) the count read now of the card that holds the same files (`now`),
+ * else the count of its own files, read again. Null when a mark's files
+ * cannot be read. The one count of the records a record-major Depth matrix's
+ * rows stand for: the read after a card edit (`circularDepthRowsAfterRead`)
+ * and the question before a Replace read it here.
+ * @template F
+ * @param {{ marks: readonly CardRecordCount<F>[], now: readonly CardRecordCount<F>[],
+ *   inputs: readonly import('./input-types.js').CircularSourceInput<F>[],
+ *   fileOf: (file: F | null) => FileLike | null | undefined }} read
+ *   `inputs`: the drawing's cards, whose input type reads a mark's files.
+ * @returns {Promise<{ uid: string, recordCount: number }[] | null>}
+ */
+export const circularMarkRecordCounts = async ({ marks, now, inputs, fileOf }) => {
   /** @type {{ uid: string, recordCount: number }[]} */
   const marked = [];
   for (const mark of marks) {
-    let recordCount = mark.recordCount ?? heldCount(mark);
+    let recordCount = mark.recordCount ?? heldRecordCount(now, mark);
     if (recordCount === null && inputs.length > 0) {
       // The same input type reads the files a card held then.
       const [own] = await readCircularSourceRecords([{ ...inputs[0], uid: mark.uid, primaryFile: mark.primaryFile, pairedFile: mark.pairedFile }], fileOf);
       recordCount = own.error === null ? own.records.length : null;
     }
-    if (recordCount === null) return { rows: null, marks: now };
+    if (recordCount === null) return null;
     marked.push({ uid: mark.uid, recordCount });
   }
+  return marked;
+};
+
+/**
+ * OV-2868: what a settled read of a drawing's cards makes of its record-major
+ * Depth matrix. The rows stand for the records of `marks` (`c_depth_rows`, in
+ * row order); after a card edit they follow their records to the cards read
+ * now (`resliceCardRows`). A mark's record count is `circularMarkRecordCounts`'s.
+ * A settled read ends the marks: its caller clears them whenever this gives a
+ * result, since marks null read as the cards as last read, the one form of
+ * "the rows stand for the cards read" (OV-3706). Marks stay only while a read
+ * is pending. Rows null: the rows stay as they are, because the cards did not
+ * change or the rows cannot be placed (a file no longer readable, or a matrix
+ * whose rows are not those of its marks), and then Generate reports the
+ * matrix. Null: nothing changes (no matrix, or no marks).
+ * @param {{ matrix: DrawingInputFiles['c_depth'], marks: readonly CircularCardMark[] | null,
+ *   inputs: readonly import('./input-types.js').CircularSourceInput<InputFileRef>[], counts: readonly number[],
+ *   fileOf: (file: InputFileRef | null) => FileLike | null | undefined }} read
+ *   `counts`: the records read now of each card of `inputs`.
+ * @returns {Promise<{ rows: (InputFileRef | null)[][] | null } | null>}
+ */
+export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, counts, fileOf }) => {
+  if (!marks || !isRecordMajorDepthFileMatrix(matrix)) return null;
+  const now = inputs.map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: counts[index] }));
+  const unchanged = marks.length === now.length && marks.every((mark, index) => mark.uid === now[index].uid
+    && heldRecordCount(now, mark) !== null && (mark.recordCount === null || mark.recordCount === now[index].recordCount));
+  if (unchanged) return { rows: null };
+  const marked = await circularMarkRecordCounts({ marks, now, inputs, fileOf });
   const rows = /** @type {(InputFileRef | null)[][]} */ (matrix);
-  return {
-    rows: marked.reduce((sum, card) => sum + card.recordCount, 0) === rows.length
-      ? resliceCardRows(rows, marked, now, () => /** @type {(InputFileRef | null)[]} */ ([])) : null,
-    marks: now
-  };
+  if (marked === null || marked.reduce((sum, card) => sum + card.recordCount, 0) !== rows.length) return { rows: null };
+  return { rows: resliceCardRows(rows, marked, now, () => /** @type {(InputFileRef | null)[]} */ ([])) };
 };
 
 /**

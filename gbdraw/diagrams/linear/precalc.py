@@ -25,6 +25,7 @@ from ...configurators import FeatureDrawingConfigurator
 from ...auto_sizes import linear_label_font_size, linear_label_size_lengths
 from ...features.factory import (
     FeatureBuildResult,
+    FeatureLayerMode,
     create_feature_layers,
 )
 from ...features.objects import FeatureObject
@@ -152,6 +153,7 @@ def _precalculate_feature_layers(
             placement_slot=placement_slot,
             feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
             record_transform=(record_transforms[i] if record_transforms is not None else None),
+            layer_mode=FeatureLayerMode(past_end_as_join=True),
         )
         feature_layers.append(result)
     return feature_layers
@@ -222,6 +224,7 @@ def _precalculate_label_dimensions(
                 feature_shapes=feature_config.feature_shapes,
                 feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
                 feature_visibility_rules=feature_config.feature_visibility_rules,
+                layer_mode=FeatureLayerMode(past_end_as_join=True),
             )
             feature_dict = feature_result.foreground_features
 

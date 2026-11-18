@@ -52,9 +52,11 @@ from gbdraw.session_io import (  # noqa: E402
     written_file_metadata,
 )
 from gbdraw.session_container import is_session_container, read_session_container, write_session_container  # noqa: E402
-from gbdraw.session import _keep_resources  # noqa: E402
+from gbdraw.session import _keep_resources, _resource_original_names  # noqa: E402
 from gbdraw.session_drawings import (  # noqa: E402
     _drawing_view,
+    active_session_drawing,
+    read_session_drawings,
     replace_session_drawings,
     write_session_drawings,
 )
@@ -1239,24 +1241,86 @@ def _write_staged_session(session_path: Path, payload: Mapping[str, Any]) -> Non
     write_session_container(document, sources, session_path)
 
 
-def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    """The one-drawing view a refresh reads and edits, and the ID of its drawing.
+def _shown_drawing(document: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The drawing a Gallery Session shows; ``None`` for a Session 46-50, which is its own view.
 
-    A Gallery Session shows one drawing: a Session 51's only drawing with a
-    committed render (``GALLERY_SESSION_DRAWN_DRAWINGS`` in
-    gbdraw/session_contract.py, which ``galleryPublicationView`` reads
-    generated). A Session 46-50 is its own view (ID ``None``).
+    The one rule for it: the Gallery shows the drawing the Web app opens
+    (``active_session_drawing``), and that drawing has a render. A tutorial
+    that creates the shown drawing from another, as **Find in other files**
+    does, adds it after the drawing it starts in, so a drawn drawing after the
+    shown one cannot be an input of it. A Session where the rule has no single
+    answer is refused: the opened drawing has no render, or a drawing after it
+    is drawn too.
     """
 
     drawings = document.get("drawings")
     if not isinstance(drawings, list):
+        return None
+    opened = active_session_drawing(document, read_session_drawings(document))
+    drawn = [str(drawing["id"]) for drawing in drawings if drawing.get("renderRequest") is not None]
+    if opened is None or opened.id not in drawn:
+        raise ValueError(
+            f"A Gallery Session shows the drawing the Web app opens, {opened.id if opened else 'none'}, "
+            f"but it has no render (drawn: {', '.join(drawn) or 'none'}). Open the drawing the Gallery "
+            "should show, Generate it, and save the Session with that drawing open."
+        )
+    later = drawn[drawn.index(opened.id) + 1 :]
+    if later:
+        raise ValueError(
+            f"A Gallery Session shows the drawing the Web app opens, {opened.id}, but {', '.join(later)} "
+            f"after it is drawn too, and the refresh would undraw it. Save the Session with the drawing the "
+            "Gallery should show open; a drawing created from another comes after it."
+        )
+    return next(drawing for drawing in drawings if drawing["id"] == opened.id)
+
+
+def _keep_render_of_shown_drawing(document: dict[str, Any]) -> int:
+    """A Gallery Session keeps a render only for its shown drawing (:func:`_shown_drawing`).
+
+    A tutorial that creates that drawing from another, as **Find in other
+    files** does, keeps the other one as its input but undrawn, as the Web
+    leaves a drawing without a Result set (``withStoredResultSet`` in
+    gbdraw/web/js/services/session-authority.js): no request, Results, run
+    record, command, or feature catalog. Returns the number of drawings undrawn;
+    a Session whose other drawings have no render is left as it is.
+    """
+
+    shown = _shown_drawing(document)
+    if shown is None:
+        return 0
+    undrawn = 0
+    for drawing in document["drawings"]:
+        if drawing is shown or drawing.get("renderRequest") is None:
+            continue
+        drawing.pop("runMetadata", None)
+        drawing.pop("cliInvocation", None)
+        drawing["renderRequest"] = None
+        drawing["results"] = []
+        if isinstance(drawing.get("editorState"), dict):
+            drawing["editorState"]["featureCatalog"] = None
+        undrawn += 1
+    return undrawn
+
+
+def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """The one-drawing view a refresh reads and edits, and the ID of its drawing.
+
+    A Gallery Session shows one drawing (:func:`_shown_drawing`), and it is
+    the Session 51's only drawing with a committed render
+    (``GALLERY_SESSION_DRAWN_DRAWINGS`` in gbdraw/session_contract.py, which
+    ``galleryPublicationView`` reads generated). A Session 46-50 is its own
+    view (ID ``None``).
+    """
+
+    shown = _shown_drawing(document)
+    if shown is None:
         return document, None
-    drawn = [drawing for drawing in drawings if drawing.get("renderRequest") is not None]
+    drawn = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
     if len(drawn) != GALLERY_SESSION_DRAWN_DRAWINGS:
         raise ValueError(
             f"A Gallery Session shows {GALLERY_SESSION_DRAWN_DRAWINGS} drawn drawing; this one has {len(drawn)}."
         )
-    return _drawing_view(document, drawn[0]), str(drawn[0]["id"])
+    return _drawing_view(document, shown), str(shown["id"])
 
 
 def _gallery_document(
@@ -1264,15 +1328,55 @@ def _gallery_document(
 ) -> dict[str, Any]:
     """``document`` with the drawing of :func:`_gallery_view` replaced by ``view``.
 
-    A resource that no drawing names any more (a stored comparison an edit
-    replaced) is left out, as Session 51 requires.
+    The written Session holds every resource its drawings name, by resource
+    ID: those of ``view``, and those only ``document``'s other drawings name,
+    with their original names. A resource that no drawing names any more (a
+    stored comparison an edit replaced) is left out, as Session 51 requires.
     """
 
     if drawing_id is None:
         return view
     others = [_drawing_view(document, drawing) for drawing in document["drawings"] if drawing["id"] != drawing_id]
-    _keep_resources(view, set().union(*(drawing_resource_ids(fields) for fields in (view, *others))))
+    named_by_others = set().union(*(drawing_resource_ids(fields) for fields in others))
+    view = {**view, "resources": dict(view["resources"])}
+    view_names = dict(_resource_original_names(view))
+    document_names = _resource_original_names(document)
+    for resource_id in sorted(named_by_others):
+        descriptor = document["resources"].get(resource_id)
+        if descriptor is None:
+            continue
+        held = view["resources"].setdefault(resource_id, descriptor)
+        if held.get("data") != descriptor.get("data"):
+            raise ValueError(
+                f"Resource {resource_id} holds other bytes in the drawing the Gallery shows than in the "
+                f"drawings it keeps; save the Session again from the Web app so one ID names one file."
+            )
+        if resource_id in document_names:
+            view_names.setdefault(resource_id, document_names[resource_id])
+    if view_names:
+        view["webFiles"] = {**view.get("webFiles", {}), "resourceOriginalNames": view_names}
+    _keep_resources(view, drawing_resource_ids(view) | named_by_others)
     return replace_session_drawings(document, {drawing_id: view})
+
+
+def _with_source_drawings(finalized: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+    """The finalized Session with the source's other drawings back in place, undrawn.
+
+    The publication writes the drawing it shows alone (``galleryPublicationDocument``).
+    A tutorial that creates that drawing from another, as **Find in other
+    files** does, replays its steps in the other one, so the refreshed Session
+    keeps it as :func:`_keep_render_of_shown_drawing` leaves it, its files with
+    the metadata gbdraw's writer stores (:func:`_store_written_file_metadata`),
+    as the shown drawing's. A Session of one drawing is ``finalized`` as it is.
+    """
+
+    if len(source.get("drawings") or ()) < 2:
+        return finalized
+    _keep_render_of_shown_drawing(source)
+    _store_written_file_metadata(source)
+    view, drawing_id = _gallery_view(finalized)
+    assert drawing_id is not None
+    return _gallery_document(source, view, drawing_id)
 
 
 def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -1766,6 +1870,7 @@ def _refresh_one_session(
     gallery_id = _gallery_id(session_path)
     load_session(session_path)
     document = _read_session_file(session_path)
+    _keep_render_of_shown_drawing(document)
     session, drawing_id = _gallery_view(document)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
@@ -1838,7 +1943,10 @@ def _refresh_one_session(
             finalized_staged_path,
             env=env,
         )
-        _write_session_file(finalized_path, _read_session_file(finalized_staged_path))
+        _write_session_file(
+            finalized_path,
+            _with_source_drawings(_read_session_file(finalized_staged_path), _read_session_file(session_path)),
+        )
         load_session(finalized_path)
         gc.collect()
         shutil.move(str(finalized_path), destination_path or session_path)

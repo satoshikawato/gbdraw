@@ -27,7 +27,7 @@ jobs:
   gallery-publication-browser:
     name: Gallery publication browser (exact main SHA)
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.site_sha == '')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
       - name: Checkout exact main SHA
@@ -73,7 +73,7 @@ jobs:
   hosted-site:
     name: Hosted site serves this main commit
     if: github.event_name == 'push' || github.event_name == 'schedule' || inputs.site_sha != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read

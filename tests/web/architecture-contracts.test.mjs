@@ -2172,6 +2172,10 @@ const WEB_OWNER_GRAPH_DETECTOR_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-owner-graph-detectors.mjs'
 );
+const WEB_TWIN_DETECTOR_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-twin-detectors.mjs'
+);
 const PRODUCT_IMPACT_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-product-impact-evaluation.mjs'
@@ -2332,6 +2336,10 @@ const BUDGET_FIXTURE = Object.freeze({
   ),
   'tools/web-owner-graph-detectors.mjs': readFileSync(
     WEB_OWNER_GRAPH_DETECTOR_MODULE,
+    'utf8'
+  ),
+  'tools/web-twin-detectors.mjs': readFileSync(
+    WEB_TWIN_DETECTOR_MODULE,
     'utf8'
   ),
   'tools/web-product-impact-evaluation.mjs': readFileSync(
@@ -2671,6 +2679,10 @@ const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
   ),
   'tools/web-owner-graph-detectors.mjs': readFileSync(
     WEB_OWNER_GRAPH_DETECTOR_MODULE,
+    'utf8'
+  ),
+  'tools/web-twin-detectors.mjs': readFileSync(
+    WEB_TWIN_DETECTOR_MODULE,
     'utf8'
   ),
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
@@ -7983,6 +7995,97 @@ test('a json-ids allowlist compares the entry ids and the length of each row lis
   const ownerRemoved = run([rowA({ pythonOwner: ['gbdraw/a.py:f'] }), base[1]]);
   assert.equal(ownerRemoved.status, 0, ownerRemoved.output);
   assert.match(ownerRemoved.output, new RegExp(`- contraction: ${subject}\\n`));
+});
+
+// A row added to the twin registry needs its admission fields, and retired
+// rows or a waiver pay for it (WEB_CHANGE_POLICY.md "Design-rule co-change").
+// The fixture history adds the base rows without a waiver, so its balance is
+// below zero.
+test('the Gate admits an added twin row only with its fields and with retired rows or a waiver', () => {
+  const TWINS_PATH = 'tools/twins.json';
+  const row = (id, extra = {}) => ({ id, concern: 'c', pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f'], vector: null, reason: 'r', retireWhen: 'w', source: 's', ...extra });
+  const twins = (rows) => `${JSON.stringify({ schemaVersion: 1, twins: rows }, null, 2)}\n`;
+  const admitted = { whyNotAskPython: 'p', whyNotGenerate: 'g', retireBy: '2999-12-31' };
+  const base = [row('function:a')];
+  const run = (rows, environment = {}) => withDesignRuleGuardRepository(({ execute, write }) => {
+    write(TWINS_PATH, twins(rows));
+    return execute({ environment });
+  }, { sources: { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [TWINS_PATH]: twins(base) } });
+  const bare = run([...base, row('function:b')]);
+  assert.equal(bare.status, 1, bare.output);
+  assert.match(bare.output, /twin\.admission: tools\/twins\.json: function:b: an added row needs whyNotAskPython, whyNotGenerate, retireBy/);
+  const unpaid = run([...base, row('function:b', admitted)]);
+  assert.equal(unpaid.status, 1, unpaid.output);
+  assert.match(unpaid.output, /twin\.admission: tools\/twins\.json: 1 added row\(s\) without a waiver/);
+  assert.doesNotMatch(unpaid.output, /function:b: an added row needs/);
+  const waived = run([...base, row('function:b', { ...admitted, waiver: 'w' })]);
+  assert.equal(waived.status, 0, waived.output);
+  assert.doesNotMatch(waived.output, /twin\.admission/);
+  const edited = run([row('function:a', { reason: 'moved' })]);
+  assert.equal(edited.status, 0, edited.output);
+  assert.doesNotMatch(edited.output, /twin\.admission/);
+  // A merged change (a push to dev) was checked as a pull request and is not charged again.
+  const merged = run([...base, row('function:b')], { GITHUB_EVENT_NAME: 'push' });
+  assert.doesNotMatch(merged.output, /twin\.admission/);
+});
+
+// Only rows that a change to production code (Web runtime or the Python package) retired pay for an
+// added row, and the Gate runs the check for pull requests. Added rows are those that neither the
+// merge base nor the trusted base has; the balance is read at the trusted base.
+const twinRow = (id, extra = {}) => ({ id, concern: 'c', pythonOwner: ['gbdraw/a.py:f'], jsOwner: ['gbdraw/web/js/services/a.js:f'], vector: null, reason: 'r', retireWhen: 'w', source: 's', ...extra });
+const twinRegistrySource = (rows) => `${JSON.stringify({ schemaVersion: 1, twins: rows }, null, 2)}\n`;
+const ADMITTED_TWIN = Object.freeze({ whyNotAskPython: 'p', whyNotGenerate: 'g', retireBy: '2999-12-31' });
+const waivedTwinRow = (id) => twinRow(id, { ...ADMITTED_TWIN, waiver: 'w' });
+const executeDevPullRequest = (repository, base, head) => executePromotion({
+  ...repository, base, head, event: { baseRef: 'dev', headRef: 'topic' }
+});
+
+test('the Gate pays for an added twin row only with rows that production changes retired', () => {
+  const TWINS_PATH = 'tools/twins.json';
+  // The base rows carry waivers, so the fixture history starts with a balance of zero.
+  const sources = { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [TWINS_PATH]: twinRegistrySource([waivedTwinRow('function:a'), waivedTwinRow('function:x')]) };
+  const retireThenAdd = (path) => withDesignRuleGuardRepository(({ commit, execute, root, write }) => {
+    write(TWINS_PATH, twinRegistrySource([waivedTwinRow('function:a')]));
+    write(path, 'export const a = 1;\n');
+    const base = commit(`retire function:x with ${path}`);
+    write(TWINS_PATH, twinRegistrySource([waivedTwinRow('function:a'), twinRow('function:b', ADMITTED_TWIN)]));
+    return executeDevPullRequest({ execute, root }, base, commit('add function:b'));
+  }, { sources });
+  for (const path of ['gbdraw/web/js/services/retired.js', 'gbdraw/retired.py']) {
+    const result = retireThenAdd(path);
+    assert.equal(result.status, 0, `${path}\n${result.output}`);
+    assert.doesNotMatch(result.output, /twin\.admission/, path);
+  }
+  for (const path of ['gbdraw/web/gallery/retired.js', 'tests/test_retired.py']) {
+    const result = retireThenAdd(path);
+    assert.equal(result.status, 1, `${path}\n${result.output}`);
+    assert.match(result.output, /twin\.admission: tools\/twins\.json: 1 added row\(s\) without a waiver, .* leave 0 to pay/, path);
+  }
+});
+
+test('the Gate reads added twin rows against both bases and the balance at the trusted base', () => {
+  const TWINS_PATH = 'tools/twins.json';
+  // function:x and function:y have no admission fields, so either would fail the check if read as added.
+  const rowX = twinRow('function:x', { waiver: 'w' });
+  const rowY = twinRow('function:y', { waiver: 'w' });
+  const sources = { [DESIGN_RULE_GUARD_TEST_PATH]: designRuleGuardTestSource(), [TWINS_PATH]: twinRegistrySource([waivedTwinRow('function:a'), rowX]) };
+  withDesignRuleGuardRepository(({ base: fork, commit, execute, git, root, write }) => {
+    // After the fork, the base branch retires function:x with a production change and adds function:y.
+    write(TWINS_PATH, twinRegistrySource([waivedTwinRow('function:a')]));
+    write('gbdraw/web/js/services/retired.js', 'export const a = 1;\n');
+    commit('retire function:x');
+    write(TWINS_PATH, twinRegistrySource([waivedTwinRow('function:a'), rowY]));
+    const trusted = commit('add function:y');
+    // The branch still has function:x, has function:y as well, and adds function:b without a waiver.
+    assert.equal(git(['checkout', '--quiet', fork]).status, 0);
+    write(TWINS_PATH, twinRegistrySource([
+      waivedTwinRow('function:a'), rowX, rowY, twinRow('function:b', ADMITTED_TWIN)
+    ]));
+    const head = commit('add function:b');
+    const result = executeDevPullRequest({ execute, root }, trusted, head);
+    assert.equal(result.status, 0, result.output);
+    assert.doesNotMatch(result.output, /twin\.admission/);
+  }, { sources });
 });
 
 test('a candidate guard registry names only authority paths as rule files', () => {

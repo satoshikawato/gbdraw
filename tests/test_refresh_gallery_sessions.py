@@ -82,8 +82,8 @@ BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 13
-    assert len(_public_gallery_session_files()) == 12
+    assert len(paths) == 15
+    assert len(_public_gallery_session_files()) == 14
     assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
 
@@ -474,21 +474,23 @@ _GALLERY_ROOT = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery"
 _GALLERY_ENTRIES = json.loads(
     (_GALLERY_ROOT / "examples.json").read_text(encoding="utf-8")
 )
-_SEQUENCE_INPUT_SUFFIXES = frozenset(
-    {".gb", ".gbk", ".gbff", ".gff", ".gff3", ".fa", ".fas", ".fasta", ".fna"}
-)
+# The flags whose values are record input files.
+_RECORD_INPUT_FLAGS = frozenset({"--gbk", "--gff", "--fasta"})
 
 
-def _declared_input_names(entry: dict[str, object]) -> set[str]:
-    """The input files a Gallery entry declares: Files plus command inputs."""
+def _command_input_names(entry: dict[str, object]) -> set[str]:
+    """The record input files a Gallery card's command reads: the values of
+    its record input flags and the files of its records table. A command that
+    replays a Session reads none of them."""
 
-    declared = {str(name) for name in entry["featureSources"]}
+    declared: set[str] = set()
     args = shlex.split(str(entry["command"]))
-    declared.update(
-        Path(arg).name
-        for arg in args
-        if Path(arg).suffix.lower() in _SEQUENCE_INPUT_SUFFIXES
-    )
+    flag = None
+    for arg in args:
+        if arg.startswith("-"):
+            flag = arg
+        elif flag in _RECORD_INPUT_FLAGS:
+            declared.add(Path(arg).name)
     for flag, value in zip(args, args[1:]):
         if flag != "--records_table":
             continue
@@ -529,10 +531,11 @@ def test_gallery_session_record_sources_are_the_declared_input_files(
     entry: dict[str, object],
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
-    """One declared input file is one Session resource with its own name.
+    """One input file is one Session resource with its own name.
 
     A Session that stores each record of a multi-record file as its own
-    resource names resources that no declared input has, or repeats one.
+    resource names resources that no input file has, or repeats one. The
+    card lists these files, and a command that reads input files reads them.
     """
 
     session = session_view(load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"])))
@@ -540,7 +543,10 @@ def test_gallery_session_record_sources_are_the_declared_input_files(
 
     assert names
     assert len(names) == len(set(names)), names
-    assert set(names) <= _declared_input_names(entry), names
+    assert sorted(entry["featureSources"]) == sorted(names), names
+    command_inputs = _command_input_names(entry)
+    if "--session" not in shlex.split(str(entry["command"])):
+        assert set(names) <= command_inputs, names
 
 
 def test_gallery_session_inventory_matches_files_and_examples() -> None:
@@ -556,7 +562,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
     )
     paths.extend(sorted((repo_root / "tests" / "test_inputs").glob("*.gbdraw")))
 
-    assert len(paths) == 13
+    assert len(paths) == 15
     for path in paths:
         session = session_view(load_cached_gallery_session(path))
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
@@ -995,7 +1001,7 @@ def test_refresh_records_resolved_track_geometry(
     [
         pytest.param(example, id=example.id)
         for example in gallery_assets_module.EXAMPLES
-        if "Multi-record" in example.tags
+        if "Multi-record" in example.tags and example.session_from_command
     ],
 )
 def test_multi_record_gallery_sessions_are_built_from_their_declared_commands(
@@ -2390,28 +2396,43 @@ def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -
     ]
 
 
-def test_feature_sources_of_a_web_saved_session_come_from_its_record_resources() -> None:
-    # A Web-saved Session has no cliInvocation; its input names live in
-    # webFiles.resourceOriginalNames, keyed by each record's source resource.
+def test_feature_sources_of_a_session_come_from_its_record_resources() -> None:
+    # A card lists the files its records read, found by each record's source
+    # resource IDs and named as the user chose them
+    # (webFiles.resourceOriginalNames), whatever their suffix: a gzip-compressed
+    # GenBank file, a .genbank file, and a GFF3 file with its FASTA. A file two
+    # records read is listed once; a table no record reads is not listed.
     session = {
         "renderRequest": {
             "records": [
                 {"recordKey": "record-1", "source": {"kind": "genbank", "resourceId": "record-1-genbank"}},
                 {"recordKey": "record-2", "source": {"kind": "genbank", "resourceId": "record-2-genbank"}},
+                {"recordKey": "record-3", "source": {"kind": "genbank", "resourceId": "record-3-genbank"}},
+                {"recordKey": "record-4", "source": {"kind": "genbank", "resourceId": "record-3-genbank"}},
+                {
+                    "recordKey": "record-5",
+                    "source": {"kind": "gff_fasta", "gffResourceId": "record-5-gff", "fastaResourceId": "record-5-fasta"},
+                },
             ]
         },
         "webFiles": {
             "resourceOriginalNames": {
                 "colors-default-colors-file": "colors-default-colors.tsv",
-                "record-2-genbank": "second.gbk",
+                "record-2-genbank": "second.genbank",
                 "record-1-genbank": "first.gbk",
+                "record-3-genbank": "draft_genomic.gbff.gz",
+                "record-5-gff": "annotation.gff3",
+                "record-5-fasta": "genome.fna",
             }
         },
     }
 
     assert gallery_assets_module._session_feature_sources(session) == [
         "first.gbk",
-        "second.gbk",
+        "second.genbank",
+        "draft_genomic.gbff.gz",
+        "genome.fna",
+        "annotation.gff3",
     ]
 
 
@@ -2460,12 +2481,168 @@ def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> 
     from gbdraw.session_drawings import _drawings_document
 
     view = {"createdAt": "2026-01-02T00:00:00Z", **_staged_geometry_session(mode="linear", records=None)}
+    # The last drawing is open, so the shown drawing has one answer and the count rule speaks.
     two_drawn = _drawings_document(
-        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=0, project_views=[view, view]
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=1, project_views=[view, view]
     )
 
     with pytest.raises(ValueError, match="shows 1 drawn drawing; this one has 2"):
         _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw", two_drawn)
+
+
+def test_gallery_session_keeps_a_render_only_for_its_shown_drawing() -> None:
+    """A tutorial that creates its shown drawing from another keeps that one undrawn.
+
+    The refresh leaves every drawing but the one the Web app opens without a
+    render, as the Web leaves a drawing without a Result set, so the Session
+    meets the one-drawn-drawing rule; a Session that meets it is left as it is.
+    """
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = {
+        "createdAt": "2026-01-02T00:00:00Z",
+        **_staged_geometry_session(mode="linear", records=None),
+        "runMetadata": {"tool": "gbdraw"},
+        "cliInvocation": {"argv": ["gbdraw", "linear"]},
+    }
+    document = _drawings_document(
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=1, project_views=[view, view]
+    )
+    shown_before = copy.deepcopy(document["drawings"][1])
+
+    assert refresh_gallery_sessions_module._keep_render_of_shown_drawing(document) == 1
+
+    reference, shown = document["drawings"]
+    assert reference["renderRequest"] is None
+    assert reference["results"] == []
+    assert reference["editorState"]["featureCatalog"] is None
+    assert "runMetadata" not in reference and "cliInvocation" not in reference
+    assert shown == shown_before
+    assert refresh_gallery_sessions_module._gallery_view(document)[1] == "linear-2"
+    assert refresh_gallery_sessions_module._keep_render_of_shown_drawing(document) == 0
+
+
+def test_refreshed_gallery_session_keeps_the_drawing_its_tutorial_starts_in() -> None:
+    """The publication writes the shown drawing alone; the refresh puts the others back, undrawn.
+
+    A Find in other files tutorial starts in a reference drawing and creates
+    the shown one from it; its capture replays the steps in the reference
+    drawing, so the refreshed Session keeps it, without a render, in its place.
+    A Session of one drawing is the finalized Session as it is.
+    """
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = {
+        "createdAt": "2026-01-02T00:00:00Z",
+        **_staged_geometry_session(mode="linear", records=None),
+        "runMetadata": {"tool": "gbdraw"},
+    }
+    source = _drawings_document(
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=1, project_views=[view, view]
+    )
+    finalized_view = {**view, "runMetadata": {"tool": "gbdraw", "refreshed": True}}
+    finalized = _drawings_document(
+        [finalized_view], ids=["linear-2"], names=["Linear 2"], active=0, project_views=[finalized_view]
+    )
+
+    refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
+
+    assert [drawing["id"] for drawing in refreshed["drawings"]] == ["linear", "linear-2"]
+    assert refreshed["ui"]["activeDrawingId"] == "linear-2"
+    reference, shown = refreshed["drawings"]
+    assert reference["renderRequest"] is None and reference["results"] == []
+    assert shown["runMetadata"] == {"tool": "gbdraw", "refreshed": True}
+    one = _drawings_document([view], ids=["linear"], names=["Linear"], active=0, project_views=[view])
+    assert refresh_gallery_sessions_module._with_source_drawings(finalized, one) is finalized
+
+
+def test_refreshed_gallery_session_keeps_the_resources_only_a_kept_drawing_names(tmp_path: Path) -> None:
+    """The publication writes the shown drawing's resources alone; the refresh
+    brings back, by resource ID, those only the kept reference drawing names,
+    and keeps no resource that no drawing names."""
+
+    from gbdraw.session_drawings import _drawing_view, write_session_drawings
+    from gbdraw.session_resources import drawing_resource_ids
+
+    read = refresh_gallery_sessions_module._read_session_file
+    source = read(_session_path("vibrio_parahaemolyticus_pva1"))
+    reference, shown = source["drawings"]
+    # The reference drawing's File 1 reads a file the created drawing does not use.
+    source["resources"]["record-9-genbank"] = copy.deepcopy(source["resources"]["record-1-genbank"])
+    source["webFiles"]["resourceOriginalNames"]["record-9-genbank"] = "reference-only.gbk"
+    reference["webFiles"]["bindings"]["linearSeqs"][0]["gb"]["resourceId"] = "record-9-genbank"
+    finalized_view = _drawing_view(source, shown)
+    refresh_gallery_sessions_module._keep_resources(finalized_view, drawing_resource_ids(finalized_view))
+    finalized = write_session_drawings([finalized_view], ids=[shown["id"]], names=[shown["name"]])
+    assert "record-9-genbank" not in finalized["resources"]
+    # A resource no drawing names, with its original name, in both documents.
+    for document in (source, finalized):
+        document["resources"]["unnamed-table"] = copy.deepcopy(source["resources"]["colors-color-table-file"])
+        document["webFiles"]["resourceOriginalNames"]["unnamed-table"] = "unnamed.tsv"
+
+    refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
+
+    assert refreshed["webFiles"]["resourceOriginalNames"]["record-9-genbank"] == "reference-only.gbk"
+    assert "unnamed-table" not in refreshed["resources"]
+    assert "unnamed-table" not in refreshed["webFiles"]["resourceOriginalNames"]
+    named = set().union(*(drawing_resource_ids(_drawing_view(refreshed, drawing)) for drawing in refreshed["drawings"]))
+    assert set(refreshed["resources"]) == named
+    assert set(refreshed["webFiles"]["resourceOriginalNames"]) <= named
+    refresh_gallery_sessions_module._write_session_file(tmp_path / "refreshed.gbdraw", refreshed)
+
+
+def test_refreshed_gallery_session_stores_written_file_metadata_in_a_kept_drawing() -> None:
+    """The refresh gives a kept drawing's files the metadata gbdraw's writer
+    stores, as it does the shown drawing's: the Web saved the reference
+    drawing with each upload's media type guess and modification time."""
+
+    from gbdraw.session_drawings import _drawing_view, write_session_drawings
+    from tests.test_gallery_session_file_metadata import machine_file_metadata
+
+    source = refresh_gallery_sessions_module._read_session_file(_session_path("vibrio_parahaemolyticus_pva1"))
+    reference, shown = source["drawings"]
+    reference["webFiles"]["bindings"]["linearSeqs"][0]["gb"].update(type="", lastModified=1794337444533)
+    finalized = write_session_drawings([_drawing_view(source, shown)], ids=[shown["id"]], names=[shown["name"]])
+    assert machine_file_metadata(source)
+
+    refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
+
+    assert machine_file_metadata(refreshed) == []
+
+
+@pytest.mark.parametrize(
+    ("active", "drawn", "message"),
+    [
+        # Both drawn and the reference open: the Gallery would show the whole reference.
+        (0, ("linear", "linear-2"), "linear-2 after it is drawn too"),
+        # The opened drawing has no render; another one has.
+        (1, ("linear",), "but it has no render"),
+    ],
+    ids=["reference-open-both-drawn", "opened-drawing-undrawn"],
+)
+def test_gallery_refresh_refuses_a_session_without_one_shown_drawing(
+    active: int, drawn: tuple[str, ...], message: str
+) -> None:
+    """One rule names the drawing a refresh shows and keeps drawn: the drawing
+    the Web app opens, with a render and no drawn drawing after it."""
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = _staged_geometry_session(mode="linear", records=None)
+    undrawn = {**view, "renderRequest": None, "results": [], "ui": {**view.get("ui", {}), "mode": "linear"}}
+    views = [view if drawing_id in drawn else undrawn for drawing_id in ("linear", "linear-2")]
+    document = _drawings_document(
+        views, ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=active, project_views=views
+    )
+
+    for reader in (
+        refresh_gallery_sessions_module._keep_render_of_shown_drawing,
+        refresh_gallery_sessions_module._gallery_view,
+    ):
+        with pytest.raises(ValueError, match=message):
+            reader(copy.deepcopy(document))
 
 
 def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(

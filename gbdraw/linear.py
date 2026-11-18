@@ -193,15 +193,6 @@ LOSATP_RAW_OUTPUT_NAME = "losatp.raw.tsv"
 # ``--losat_output_dir`` manifest of LOSATN / TLOSATX edges; it is a valid
 # ``--comparisons_table`` (design 3.7).
 LOSAT_COMPARISONS_OUTPUT_NAME = "comparisons.tsv"
-# CLI spelling of the typed LOSAT fields named in option/program diagnostics.
-_CLI_LOSAT_FIELD_FLAGS = {
-    "losatp_mode": "--losatp_mode",
-    "losatn_task": "--losatn_task",
-    "record_gencodes": "--losat_gencode (or the records table losat_gencode column)",
-    "losatp_max_hits": "--losatp_max_hits",
-    "losatp_max_target_seqs": "--losatp_max_target_seqs",
-    "losatp_member_max_hits": "--losatp_member_max_hits",
-}
 # The ``gbdraw linear`` option of each ``generatedProteinComparison`` setting (``protein_setting_defaults``), by the
 # destination the parser gives it; None: the command has no option for it (OV-3590).
 _PROTEIN_SETTING_DESTS: dict[tuple[str, str | None], str | None] = {
@@ -1232,11 +1223,27 @@ def _validate_collinear_args(parser: argparse.ArgumentParser, args: argparse.Nam
         parser.error("--collinear_max_paralog_links_per_orthogroup must be > 0")
 
 
+def _linear_options() -> dict[str, str]:
+    """Each option of this command by the destination the parser gives it, as the parser spells it."""
+
+    return {action.dest: action.option_strings[0] for action in _linear_parser()._actions if action.option_strings}
+
+
+def _cli_losat_flag(field: str) -> str | None:
+    """The option a diagnostic of the typed LOSAT field ``field`` names: the option whose destination is the field,
+    or for ``record_gencodes`` ``--losat_gencode`` and its records-table column; None when no option sets it."""
+
+    options = _linear_options()
+    if field == "record_gencodes":
+        return f"{options['losat_gencode']} (or the records table losat_gencode column)"
+    return options.get(field)
+
+
 def describe_protein_comparison_flags() -> ProteinComparisonFlags:
     """The command line of a ``generatedProteinComparison``, which the Web's Source recipe writes: each setting's
     option as this command's parser spells it, and its ``cliDefault`` (``protein_setting_defaults``)."""
 
-    options = {action.dest: action.option_strings[0] for action in _linear_parser()._actions if action.option_strings}
+    options = _linear_options()
     defaults = protein_setting_defaults()
     if [(row["setting"], row["parameter"]) for row in defaults] != list(_PROTEIN_SETTING_DESTS):
         raise RuntimeError("_PROTEIN_SETTING_DESTS must name each protein comparison setting once, in wire order")
@@ -1541,7 +1548,7 @@ def _cli_losat_search(
     except ValidationError as exc:
         diagnostic = exc.diagnostic or {}
         field = str(diagnostic.get("field"))
-        flag = _CLI_LOSAT_FIELD_FLAGS.get(field)
+        flag = _cli_losat_flag(field)
         if flag is None or diagnostic.get("reason") not in {"LOSAT_OPTION_PROGRAM", "GENETIC_CODE"}:
             raise
         message = (

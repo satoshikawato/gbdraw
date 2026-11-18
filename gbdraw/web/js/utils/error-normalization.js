@@ -269,6 +269,10 @@ export const RULE_INPUT_CHANGE_WORDS = msg("colors, color rules, the Legend, or 
 // The code of an engine that ran out of memory (its DEFINITIONS entry below): the service that owns the Worker
 // replaces that engine when a reply carries it.
 export const OUT_OF_MEMORY_CODE = 'OUT_OF_MEMORY';
+// A Review alignment whose Result is no longer the shown one (a Generate, an Undo or a Load committed another): its
+// Apply is disabled with this sentence, and an Apply that still reaches the check fails with ALIGNMENT_STALE, whose
+// message it is (OV-2447).
+export const ALIGNMENT_STALE_TEXT = msg('The diagram changed after this review opened. Start alignment again.');
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
@@ -317,6 +321,9 @@ const DEFINITIONS = Object.freeze({
   COMPARISON_INPUT: ['The comparison input is invalid.', ['edit-comparison', 'retry'], 'Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.'],
   LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
+  // A LOSAT file or worker of another LOSAT build than the page's: the server was updated while the page was open
+  // (services/losat-runtime.js `losatBuildChangedFailure`, OV-2440).
+  LOSAT_BUILD_CHANGED: ['gbdraw was updated while this page was open, so the comparison search did not run. Save a Session, reload the page, then run the search again.', ['save-session', 'reload']],
   COMPARISON_IDENTITY: ['The features at the ends of comparison links do not match the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   // A read-only saved comparison fails the same way until Inherit, Replace, or Clear is chosen.
   COMPARISON_CHOICE_REQUIRED: ['Choose how to handle the saved comparison in the Comparison panel, then Generate again.', ['edit-comparison']],
@@ -332,6 +339,13 @@ const DEFINITIONS = Object.freeze({
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
+  ALIGNMENT_STALE: [ALIGNMENT_STALE_TEXT, ['edit-input']],
+  // An Align or Review from a feature popup whose feature is no single member of the group, or of a group the shown
+  // diagram no longer has, and an Align whose final geometry the check did not confirm (OV-3849). The same click fails
+  // the same way, so each names what to do instead of Retry.
+  ALIGNMENT_REFERENCE: ['The clicked feature is not exactly one member of this Similarity Group; choose the exact reference record and feature in the Similarity groups tab, then Align.', ['edit-input']],
+  ALIGNMENT_GROUP_MISSING: ['This Similarity Group is not in the shown diagram; choose a group in the Similarity groups tab, then Align.', ['edit-input']],
+  ALIGNMENT_NOT_VALIDATED: ['The alignment could not be checked against the drawn records, so nothing was changed; select Align… again.', ['edit-input']],
   // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
   ALIGNMENT_RESET_EVIDENCE: ['What Reset alignment would restore no longer matches the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
   REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
@@ -445,7 +459,7 @@ const KEPT_INSIDE_AMONG = Object.freeze({
 const PHRASES = Object.freeze({
   diagramLinear: 'Diagram: Linear.', diagramCircular: 'Diagram: Circular.', sessionTable: 'Session table: {table}.',
   sequence: 'Sequence {n}.', pair: 'Pair: #{query} to #{subject}.', featureCaption: 'Feature: {caption}.',
-  line: 'Line {row}.', column: 'Column {column}.', trackRow: 'Track row {row}.', depthSeries: 'Depth series {series}.',
+  line: 'Line {row}.', column: 'Column {column}.', trackRow: 'Track row {row}.', trackWidth: 'Track width: {px} px.', depthSeries: 'Depth series {series}.',
   setting: 'Setting: {path}.', feature: 'Feature: {feature}.', featuresAffected: 'Features affected: {count}.',
   field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
   sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
@@ -625,6 +639,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [recordIndex]
  * @property {number} [seriesIndex]
  * @property {number} [slotIndex]
+ * @property {number} [slotWidthPx] The failed row's own width, when that width alone is wider than the band (OV-2314).
  * @property {number} [recordCount]
  * @property {number} [columnCount]
  * @property {number} [codepoint]
@@ -971,8 +986,8 @@ const contextFor = (value) => {
     }
     if (value.legendRemedy === true) context.legendRemedy = true;
   }
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi' | 'recordPosition'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'slotWidthPx' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi' | 'recordPosition'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'slotWidthPx', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
     'limit', 'width', 'height', 'rowLength', 'dpi', 'recordPosition'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
@@ -1193,7 +1208,7 @@ export const normalizeUserFacingError = (value, {
   }
   const [, actions] = definitionOf(result);
   const lead = leadSentence(result);
-  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
+  const { inputOrdinal, row, column, slotIndex, slotWidthPx, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const { recordName, recordPosition, codepoint } = result.context;
   // A letter Python names by its code point: itself when printable, else its U+ form.
@@ -1232,6 +1247,7 @@ export const normalizeUserFacingError = (value, {
     row !== undefined && { text: PHRASES.line, params: { row } },
     column !== undefined && { text: PHRASES.column, params: { column } },
     slotIndex !== undefined && { text: PHRASES.trackRow, params: { row: slotIndex + 1 } },
+    slotWidthPx !== undefined && { text: PHRASES.trackWidth, params: { px: slotWidthPx } },
     seriesIndex !== undefined && { text: PHRASES.depthSeries, params: { series: seriesIndex + 1 } },
     configPath !== undefined && !figureSize && { text: PHRASES.setting, params: { path: configPath } },
     featureName && { text: PHRASES.feature, params: { feature: featureName } },

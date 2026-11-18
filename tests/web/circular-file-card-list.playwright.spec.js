@@ -166,3 +166,46 @@ test('a CLI Session of several --gbk files loads as one File card per file', asy
     'web_batch_two_records.gb', 'cli-web-mito.gb', 'feature_location_search.gb'
   ]);
 });
+
+// OV-2318: a Replace on the card's file control (its own History step, which ends while the new file is read) asks
+// before the Depth files of the records past the new file's last one leave, naming them: Cancel keeps the file,
+// Replace file is one Undo step. A file with the same records replaces at once and keeps every Depth file.
+test('the card\'s file control asks before a Replace removes Depth files, and replaces a file of the same records at once', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openApp(page, { waitForPalette: false });
+  const both = await readFile(twoRecords, 'utf8');
+  const onlyA = `${both.slice(0, both.indexOf('//\n') + 3)}`;
+  const gb = (name, text) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
+  await circularFileInput(page).setInputFiles(gb('ab.gb', both));
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().circularRecordList.value
+    .map((record) => record.record_id)), { timeout: 60_000 }).toEqual(['TESTA', 'TESTB']);
+  const depthRows = () => page.evaluate(async () => ((await import('./js/state.js')).state.activeDrawing().files.c_depth ?? [])
+    .map((row) => row.map((ref) => (ref ? ref.name : null))));
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const { bindDrawingInputFileTree } = await import('./js/services/drawing/inputs.js');
+    const depth = (name) => state.inputFiles.registerFile(new File(['reference_name\tposition\tdepth\n'], name));
+    bindDrawingInputFileTree(state.inputFiles, state.activeDrawing().slices.inputs, 'c_depth', [[depth('a.tsv'), null], [null, depth('b.tsv')]]);
+  });
+  const dialog = page.locator('[data-choice-prompt]');
+  await circularFileInput(page).setInputFiles(gb('a.gb', onlyA));
+  await expect(dialog).toContainText('Replace the file and remove Depth files?');
+  await expect(dialog.locator('li')).toHaveText(['#2 TESTB: b.tsv']);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => cardNames(page)).toEqual(['File 1: ab.gb']);
+  expect(await depthRows()).toEqual([['a.tsv', null], [null, 'b.tsv']]);
+
+  await circularFileInput(page).setInputFiles(gb('a.gb', onlyA));
+  await dialog.getByRole('button', { name: 'Replace file' }).click();
+  await expect.poll(() => cardNames(page)).toEqual(['File 1: a.gb']);
+  await expect.poll(depthRows).toEqual([['a.tsv', null]]);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => cardNames(page)).toEqual(['File 1: ab.gb']);
+  await expect.poll(depthRows).toEqual([['a.tsv', null], [null, 'b.tsv']]);
+
+  await circularFileInput(page).setInputFiles(gb('ab2.gb', both));
+  await expect.poll(() => cardNames(page)).toEqual(['File 1: ab2.gb']);
+  await expect(dialog).toHaveCount(0);
+  expect(await depthRows()).toEqual([['a.tsv', null], [null, 'b.tsv']]);
+});

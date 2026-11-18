@@ -1,8 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { writeFileSync } = require('node:fs');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { readSessionFile } = require('./helpers/session-file.cjs');
 
@@ -192,6 +192,79 @@ test('Swapping Linear rows reconverts LOSATP Similarity groups and draws the fre
   expect(swapped.cache).toEqual({ cacheHits: 4, cacheMisses: 0, derivedHits: 0, derivedMisses: 1 });
   expect(swapped.links).toEqual(fresh.links);
   expect(swapped.paths).toEqual(fresh.paths);
+});
+
+// PD-OI-022 Revision #2101 (OV-3785): Clear in one drawing leaves the searches another drawing names, and the cleared
+// drawing's next Generate reuses them. Similarity groups search both directions of the pair and each record against
+// itself; the drawing lists one row, the displayed direction. A Duplicate's Result uses all four searches, so the
+// cleared drawing reuses all of them, the three without a row included, and runs no LOSAT search. Its Generate changes
+// nothing: Clear also took the stored results the drawing's draft held, so it looks the searches up (OV-3826) instead
+// of redrawing them with no search and no listed result.
+test('Clear in a drawing reuses the LOSATP searches a Duplicate uses without a row for them', async ({ page }) => {
+  test.setTimeout(420000);
+  await openSimilarityGroups(page, [1, 2]);
+  const first = await generate(page);
+  expect(first.cache).toEqual({ cacheHits: 0, cacheMisses: 4, derivedHits: 0, derivedMisses: 1 });
+  const rows = () => page.evaluate(() => window.__GBDRAW_APP__.losatResultRows.length);
+  expect(await rows()).toBe(1);
+  const { id: source } = await shownDrawing(page);
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'Duplicate drawing', exact: true }).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).not.toBe(source);
+  await showDrawing(page, { id: source });
+  await page.getByRole('button', { name: 'Clear 1 LOSAT result', exact: true }).click();
+  await expect.poll(rows).toBe(0);
+  const again = await generate(page);
+  expect(again.cache).toEqual({ cacheHits: 4, cacheMisses: 0, derivedHits: 1, derivedMisses: 0 });
+  expect(again.executorCalls).toBe(first.executorCalls);
+  expect(await rows()).toBe(1);
+});
+
+// OV-3826: a Linear LOSATP drawing on uploaded files keeps the stored results its Generate gave its draft through Save
+// and Load. Save finds each of them by the bytes of the file Generate read, so Load gives them back, and the next
+// Generate, in a browser with no LOSAT cache, draws them with no LOSAT run. Clear then takes them, and Generate searches.
+test('Save and Load keep the stored LOSATP results of a drawing on uploaded files, so Generate runs no search', async ({ page, browser }, testInfo) => {
+  test.setTimeout(420000);
+  await openSimilarityGroups(page, [1, 2]);
+  const first = await generate(page);
+  expect(first.cache).toEqual({ cacheHits: 0, cacheMisses: 4, derivedHits: 0, derivedMisses: 1 });
+  const saved = testInfo.outputPath('uploaded-losatp.gbdraw');
+  const download = page.waitForEvent('download', { timeout: 120000 });
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'uploaded-losatp';
+    return (await window.__GBDRAW_APP__.saveSessionWithTitle())?.status;
+  });
+  expect(outcome).toBe('saved');
+  await (await download).saveAs(saved);
+
+  const context = await browser.newContext();
+  try {
+    const loaded = await context.newPage();
+    await installProteinExecutor(loaded);
+    await openApp(loaded);
+    await loaded.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved);
+    await expectSessionLoadedWithoutWarnings(loaded);
+    const rows = () => loaded.evaluate(() => window.__GBDRAW_APP__.losatResultRows.length);
+    await expect.poll(rows, { timeout: 60000 }).toBe(1);
+    const stored = await generate(loaded);
+    expect(stored.executorCalls).toBe(0);
+    expect(stored.cache).toEqual({
+      cacheHits: undefined, cacheMisses: undefined, derivedHits: undefined, derivedMisses: undefined
+    });
+    expect(stored.links).toEqual(first.links);
+    expect(stored.paths).toEqual(first.paths);
+
+    await openLayoutControls(loaded);
+    await loaded.getByRole('button', { name: 'Clear 1 LOSAT result', exact: true }).click();
+    await expect.poll(rows).toBe(0);
+    const searched = await generate(loaded);
+    expect(searched.executorCalls).toBe(1);
+    expect(searched.cache).toEqual({ cacheHits: 0, cacheMisses: 4, derivedHits: 0, derivedMisses: 1 });
+    expect(searched.links).toEqual(first.links);
+  } finally {
+    await context.close();
+  }
 });
 
 // A CLI records table with row and column places GridA and GridB, the two

@@ -74,34 +74,35 @@ const isFeatureFillTarget = (element) => (
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);
 
-// The element among these that shows the block stroke Python drew on the
-// first of them that is a feature block, found by part (not a connector line
-// or an outline) and not an automatic underlay: that block's outline when it
-// has one (a partial feature's block has no stroke; its outline, open at the
-// partial end, carries it, OV-3725), else the block. Connector lines come
-// before their blocks in document order, so no reader takes the first
-// element. Null without a block.
+// The elements of one feature that show its block stroke as Python draws it:
+// each element except a connector line (it keeps the line stroke, a separate
+// control; Owner 2026-11-18) and except a block Python drew under an outline
+// (the outline's id is the block's plus the outline suffix, found by id). That
+// block (a partial feature's fill path) has no stroke; its outline, open at
+// the partial end, carries the block stroke (OV-3725), so a stroke edit that
+// reaches the fill path would close the open end (OV-3726). The stroke readers
+// and both stroke writers (a feature's and a Legend row's) take the elements
+// from here.
 /** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
-export const drawnBlockStrokeElement = (elements) => {
+export const featureStrokeElements = (elements) => {
   const all = Array.from(elements || []);
-  const block = filterFeatureFillTargets(all).find((element) => !isAutoFeatureUnderlay(element));
-  if (!block) return null;
-  return blockOutlineOf(block, all) || block;
+  const outlined = new Set(all.map(elementDomId).filter((id) => id.endsWith(OUTLINE_ID_SUFFIX)));
+  return all.filter((element) => {
+    if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return false;
+    const id = elementDomId(element);
+    return !id || !outlined.has(`${id}${OUTLINE_ID_SUFFIX}`);
+  });
 };
 
-// The outline Python drew over this block (its id plus the outline suffix)
-// among these elements, found by id; null when the block has none.
-/**
- * @param {Element | null | undefined} block
- * @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements
- * @returns {Element | null}
- */
-export const blockOutlineOf = (block, elements) => {
-  const id = elementDomId(block);
-  if (!id) return null;
-  const outlineId = `${id}${OUTLINE_ID_SUFFIX}`;
-  return Array.from(elements || []).find((element) => elementDomId(element) === outlineId) || null;
-};
+// The element among these that shows the block stroke Python drew: the first
+// that carries the feature's stroke (`featureStrokeElements`) and is a block,
+// by part (not a connector line), and not an automatic underlay. Connector
+// lines come before their blocks in document order, so no reader takes the
+// first element. Null without a block.
+/** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
+export const drawnBlockStrokeElement = (elements) => featureStrokeElements(elements).find((element) => (
+  getFeaturePart(element) === FEATURE_PART_BLOCK && !isAutoFeatureUnderlay(element)
+)) || null;
 
 /**
  * @param {FeatureSvgRoot | null | undefined} svg

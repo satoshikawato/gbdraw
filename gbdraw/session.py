@@ -1022,21 +1022,30 @@ def _with_stored_file_names(
     drawing: SessionDrawingParts,
     resource_paths: Mapping[str, Path],
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """``result`` with its input summary naming each file by the name a Web Save stored for it (OV-3591).
+    """``result`` with its input summary naming each file by the name Web Load shows for it (OV-3591, OV-3660).
 
     A Web Save names a resource "<resource ID>-<file>" and stores the file the
     user chose in ``webFiles.resourceOriginalNames``; a Load shows that name,
     and the Web's input summary names the file by it. The replay reads the copy
-    named by the resource, so it names the file by the same stored value.
+    named by the resource, so it names the file by the same name
+    (:func:`gbdraw.session_migration.loaded_resource_display_names`).
     """
 
     from gbdraw.api.input_summary import source_names_by_file, with_source_names
     from gbdraw.api.request_render import CircularBatchRenderResult
 
+    from gbdraw.session_migration import loaded_resource_display_names
+
+    fields = drawing.artifacts.fields
+    version = fields.get("version")
+    # A Session 31-45 is read as Web Load reads Python's move of it to the current writer (OV-3660).
+    shown = loaded_resource_display_names(
+        fields, cli_file_bindings=isinstance(version, int) and version < MODE_SCOPED_SESSION_MIN_VERSION,
+    )
     names = source_names_by_file(
         {
             resource_id: name
-            for resource_id, name in _resource_original_names(drawing.artifacts.fields).items()
+            for resource_id, name in shown.items()
             if resource_id in resource_paths and isinstance(name, str) and name
         },
         resource_paths,
@@ -2330,6 +2339,21 @@ def mode_scoped_saved_protein_results(
     )
 
 
+def _with_loaded_resource_names(document: SessionDocument) -> SessionDocument:
+    """``document`` (a Session 31-45 moved to the current writer) storing the name each of its files is shown by
+    (:func:`gbdraw.session_migration.loaded_resource_display_names`): the CLI replay and Web Load read it."""
+
+    from gbdraw.session_migration import loaded_resource_display_names
+
+    data = document.to_dict()
+    names = loaded_resource_display_names(data, cli_file_bindings=True)
+    if names == dict(_resource_original_names(data)):
+        return document
+    web_files = data.get("webFiles")
+    data["webFiles"] = {**(web_files if isinstance(web_files, Mapping) else {}), "resourceOriginalNames": names}
+    return SessionDocument._built(data, document._resource_sources, document.source_path)
+
+
 def _upgrade_to_current(
     loaded: SessionDocument,
     temporary_directory: str | Path | None,
@@ -2463,6 +2487,7 @@ def _upgrade_to_current(
             web_file_inventory=web_file_inventory,
             resources=resources,
         )
+        upgraded = _with_loaded_resource_names(upgraded)
         _hold_temporary_sources(upgraded, materialized.temp_directory)
     for warning in warnings:
         logger.warning("%s", warning)

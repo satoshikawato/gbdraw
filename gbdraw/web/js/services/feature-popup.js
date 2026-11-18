@@ -72,6 +72,8 @@ export const unreadFeatureSequence = () => ({ status: 'idle', warnings: [], nucl
  * @property {FeaturePopupDetailRow[]} detailRows
  * @property {string} legendName The Legend name the popup's field holds.
  * @property {string} appliedLegendName The Legend name the drawing applies.
+ * @property {boolean} legendNameEdited Whether the user edited the Legend name field since it last showed the row (its
+ *   input handler sets it, a commit reads and clears it): an untouched field commits nothing.
  * @property {string} strokeColor
  * @property {number | ''} strokeWidth '' after a stroke reset when neither the Legend row nor the drawn feature has a width.
  * @property {string | null} strokeWidthDraft The stroke width typed or stepped into the popup's field and not committed yet; null: none, the field shows `strokeWidth`.
@@ -172,6 +174,7 @@ export const buildFeaturePopup = (feat, view) => {
     detailRows: buildDetailRows(feat),
     legendName: view.legendName,
     appliedLegendName: view.legendName,
+    legendNameEdited: false,
     strokeColor: view.strokeColor,
     strokeWidth: view.strokeWidth,
     strokeWidthDraft: null,

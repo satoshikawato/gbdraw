@@ -218,6 +218,33 @@ def test_losat_output_dir_names_each_window_pair(tmp_path: Path) -> None:
     assert sorted(path.name for path in raw.iterdir()) == sorted([*names, "comparisons.tsv"])
 
 
+@pytest.mark.linear
+@pytest.mark.parametrize("program", ["losatn", "tlosatx"])
+def test_unlisted_pairs_search_each_upper_row_record_against_the_row_below(tmp_path: Path, program: str) -> None:
+    # Records #1 and #2 stand in the lower row, record #3 above them: the upper record is the query of both
+    # searches, as the Web's adjacent edges read, whatever the record order.
+    losat, log = _fake_losat(tmp_path)
+    inputs = REPO_ROOT / "tests" / "test_inputs"
+    table = _write(
+        tmp_path, "records.tsv",
+        "gbk\trow\n"
+        f"{inputs / 'SARS-CoV-1.gbk'}\t2\n"
+        f"{inputs / 'MERS-CoV.gbk'}\t2\n"
+        f"{inputs / 'SARS-CoV-2.gbk'}\t1\n",
+    )
+    raw = tmp_path / "raw"
+    linear_main([
+        "--records_table", str(table), "--losat", program, "--losat_bin", losat,
+        "--losat_output_dir", str(raw), "-o", str(tmp_path / "fig"), "-f", "svg",
+    ])
+    assert len(_searches(log)) == 2
+    assert (raw / "comparisons.tsv").read_text(encoding="utf-8").splitlines() == [
+        "blast\tquery\tsubject",
+        f"NC_045512.2.NC_004718.3.{program}.tsv\t#3\t#1",
+        f"NC_045512.2.NC_019843.3.{program}.tsv\t#3\t#2",
+    ]
+
+
 # TLOSATX translation tables.
 
 
@@ -333,6 +360,10 @@ def test_options_of_another_program_are_rejected(kwargs: dict, field: str) -> No
         (["--losat", "tlosatx", "--losatn_task", "blastn"], "--losatn_task", "losatn_task"),
         (["--losat", "losatn", "--losatp_mode", "pairwise"], "--losatp_mode", "losatp_mode"),
         (["--losat", "tlosatx", "--collinear_min_anchors", "2"], "--collinear_min_anchors", "collinear_min_anchors"),
+        # Each option is named as the parser spells it, which the diagnostic reads by the field's name.
+        (["--losat", "losatn", "--losatp_max_hits", "3"], "--losatp_max_hits", "losatp_max_hits"),
+        (["--losat", "tlosatx", "--losatp_max_target_seqs", "3"], "--losatp_max_target_seqs", "losatp_max_target_seqs"),
+        (["--losat", "losatn", "--losatp_member_max_hits", "3"], "--losatp_member_max_hits", "losatp_member_max_hits"),
     ],
 )
 def test_cli_option_program_diagnostics(tmp_path: Path, argv: list[str], message: str, field: str) -> None:

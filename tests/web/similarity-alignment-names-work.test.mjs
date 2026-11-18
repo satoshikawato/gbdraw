@@ -80,7 +80,8 @@ const fixture = (catalog) => {
     mode: ref('linear'), featureCatalog: ref(catalog), selectedOrthogroupId: ref('og-1'),
     similarityAlignmentPlan: ref(null), similarityAlignmentResetReceipt: ref(null), errorLog: ref(null),
     linearRecordTranslations: ref([]),
-    results: ref(results)
+    results: ref(results),
+    sessionOperationAvailability: () => null
   };
   const actions = createSimilarityAlignmentActions({
     state,

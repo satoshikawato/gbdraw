@@ -403,7 +403,8 @@ test('a replaced Linear File and another Circular input draw every record', asyn
 
 // Review F4: a Legend rename of a row only an OFF record draws survives a
 // Generate that replaced another File (the request carries the rename, so the
-// row returns renamed when its record is ON again).
+// row returns renamed when its record is ON again). OV-3832: so does its color;
+// Python reports the row of the OFF record as one the draft did not draw.
 test('a Legend rename waits while its record is OFF, also across a source replacement', async ({ page }) => {
   test.setTimeout(300_000);
   await openLinear(page);
@@ -416,6 +417,7 @@ test('a Legend rename waits while its record is OFF, also across a source replac
     const index = app.legendEntries.findIndex((entry) => entry.caption === 'tRNA');
     if (index < 0) throw new Error(`no tRNA row: ${app.legendEntries.map((entry) => entry.caption).join(', ')}`);
     await app.renameLegendEntry(index, 'transfer RNA');
+    await app.updateLegendEntryColor(index, '#2a9d8f');
   });
   await openRecords(page);
   await (await drawCheckbox(page, 'T2')).uncheck();
@@ -424,9 +426,12 @@ test('a Legend rename waits while its record is OFF, also across a source replac
   await generateAndWaitForResult(page);
   await (await drawCheckbox(page, 'T2')).check();
   await generateAndWaitForResult(page);
-  const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
-  expect(captions).toContain('transfer RNA');
-  expect(captions).not.toContain('tRNA');
+  const rows = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.legendEntries.map((entry) => ({ caption: entry.caption, color: String(app.legendEntryColor(entry)).toLowerCase() }));
+  });
+  expect(rows).toContainEqual({ caption: 'transfer RNA', color: '#2a9d8f' });
+  expect(rows.map(({ caption }) => caption)).not.toContain('tRNA');
 });
 
 // The Auto note of Label Font Size in the sidebar, and the label font sizes

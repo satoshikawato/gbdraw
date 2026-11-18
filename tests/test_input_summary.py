@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import base64
 import gzip
+import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -31,6 +33,9 @@ from gbdraw.linear_comparison import ComparisonTableTally
 from gbdraw.io.genome import parse_gff_fasta, read_flat_file_records
 from gbdraw.session import SessionDocument, build_session_document
 from tests.utils.session_files import embedded_session, load_session_mapping
+from tests.test_web_helper_prepared_lookup import (  # noqa: F401 - the Worker's Python helpers fixture
+    helpers,
+)
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs,
     render_embedded_canonical_web_request,
@@ -529,6 +534,94 @@ def test_a_web_saved_record_is_named_by_its_file_by_the_cli_replay_and_the_web(t
     assert (cli, _record_names(summary["lines"])) == (fresh, fresh)
 
 
+_SESSIONS = ROOT / "tests" / "fixtures" / "sessions"
+# OV-3660: each fixture and the names Web Load gives its record files (logs of origin/dev 3377d9a7e, through
+# config.js importSession and Python's upgrade). The rule that names each: a binding name (Session 41), a CLI file
+# binding's slot (Sessions 31-33, CLI 42, and a Circular composite's components of CLI 44), the "<resource ID>-"
+# prefix (Session 33), and a stored name (Session 50).
+_LOADED_RECORD_NAMES = {
+    "single.v41-bindings1.json": ["original.gb"],
+    "lambda_basic_linear.v31-schema1.gbdraw-session.json.gz": ["NC_001416.gb"],
+    "se08-main-linear-cli.v42.gbdraw-session.json.gz": ["record.gb"],
+    "feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz": ["record-0.gb", "record-1.gb"],
+    "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz": [
+        "BGC0000708.gbk", "BGC0000709.gbk", "BGC0000711.gbk", "BGC0000712.gbk", "BGC0000713.gbk",
+    ],
+    "HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz": ["HmmtDNA.gbk"],
+    "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz": [
+        "SARS-CoV-1.gbk", "SARS-CoV-2.gbk", "MERS-CoV.gbk",
+    ],
+}
+
+
+@pytest.mark.parametrize("fixture", list(_LOADED_RECORD_NAMES))
+def test_the_cli_replay_names_an_older_sessions_records_as_web_load_does(tmp_path: Path, fixture: str) -> None:
+    """OV-3660: `gbdraw render --session` names each record by the file Web Load shows for it, for a Session that
+    stores no name: Python's Session migration names the files once, for both."""
+
+    completed = _gbdraw("render", "--session", str(_SESSIONS / fixture), "-o", "out", "-f", "svg", cwd=tmp_path)
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    lines = [line.removeprefix("INFO: ") for line in completed.stderr.splitlines() if line.startswith("INFO: Record ")]
+    assert _record_names(lines) == _LOADED_RECORD_NAMES[fixture]
+
+
+_RESOURCE_ID_PREFIX_VECTORS = json.loads(
+    (ROOT / "tests" / "fixtures" / "resource-id-prefix-vectors.json").read_text(encoding="utf-8")
+)["cases"]
+
+
+@pytest.mark.parametrize("case", _RESOURCE_ID_PREFIX_VECTORS, ids=lambda case: case["case"])
+def test_python_names_a_resource_that_stores_no_name_as_the_shared_vector_says(case: dict[str, str]) -> None:
+    """OV-3660: Python's prefix strip gives each case the name the Web's ``withoutResourceIdPrefix`` gives it
+    (tests/web/resource-id-prefix.test.mjs reads the same vector; tools/twins.json registers the twin)."""
+
+    from gbdraw.session_migration import _without_resource_id_prefix
+
+    assert _without_resource_id_prefix(case["resourceId"], case["name"]) == case["shown"]
+
+
+@pytest.mark.parametrize(
+    ("binding_name", "stored", "shown"),
+    [
+        # A binding's name comes first, as in Web Load (``resolveResourceFile``), then the stored name.
+        ("a.gb", {"resource-0001": "b.gb"}, "a.gb"),
+        (None, {"resource-0001": "b.gb"}, "b.gb"),
+        # A schema 1 binding without a name: the file is named as a resource that stores none.
+        ("", {}, "x.gb"),
+        (None, {}, "x.gb"),
+    ],
+)
+def test_loaded_names_follow_web_loads_order(binding_name: str | None, stored: dict[str, str], shown: str) -> None:
+    """OV-3660, review r1 LOW 2: Python names a loaded file in the order Web Load does."""
+
+    from gbdraw.session_migration import loaded_resource_display_names
+
+    binding = {"resourceId": "resource-0001", **({} if binding_name is None else {"name": binding_name})}
+    session = {
+        "resources": {"resource-0001": {"kind": "web-file", "name": "resource-0001-x.gb"}},
+        "webFiles": {"bindings": {"c_gb": binding}, "resourceOriginalNames": stored},
+    }
+    assert loaded_resource_display_names(session, cli_file_bindings=False) == {"resource-0001": shown}
+
+
+def test_the_cli_replay_names_two_files_of_one_name_as_its_fresh_render(tmp_path: Path) -> None:
+    """OV-3686: a CLI Save renames the second of two files named alike ("record.2.gb") and binds it by the name
+    given, which Web Load shows; the replay names it so too, as the render that saved it did."""
+
+    for folder, source in (("a", QUERY), ("b", SUBJECT)):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "record.gb").write_bytes(source.read_bytes())
+    saved = _gbdraw("linear", "--gbk", "a/record.gb", "b/record.gb", "-o", "dup", "-f", "svg", "--save_session",
+                    cwd=tmp_path)
+    replayed = _gbdraw("render", "--session", "dup.gbdraw", "-o", "replay", "-f", "svg", cwd=tmp_path)
+    assert (saved.returncode, replayed.returncode) == (0, 0), saved.stderr[-2000:] + replayed.stderr[-2000:]
+    names = [
+        _record_names([line.removeprefix("INFO: ") for line in run.stderr.splitlines() if line.startswith("INFO: Record ")])
+        for run in (saved, replayed)
+    ]
+    assert names == [["record.gb", "record.gb"]] * 2
+
+
 @pytest.mark.parametrize("name", ["hits.tsv", "my hits.tsv"])
 def test_a_session_stores_the_name_its_fresh_render_shows(tmp_path: Path, name: str) -> None:
     """The fresh render names a comparison file by its name as given, unsanitized, and the Session stores that name
@@ -844,3 +937,679 @@ def test_a_window_across_the_origin_names_its_span_and_its_export_check_reads_it
         {"format": "png", "width": 1000.0, "height": 500.0, "dpi": 96, "linearWrap": {"requested": 500, "records": records}}
     )))
     assert reply["ok"] is True
+
+
+def _genbank_text(name: str, topology: str, locations: Sequence[tuple[str, str]]) -> str:
+    """A 100 bp GenBank record whose CDS features have ``locations``, each with a ``locus_tag`` or a ``product``."""
+
+    features = "".join(
+        f"     CDS             {location}\n                     /{qualifier}\n" for location, qualifier in locations
+    )
+    sequence = "acgtgcatgc" * 10
+    origin = "".join(
+        f"{start + 1:>9} " + " ".join(sequence[at:at + 10] for at in range(start, min(start + 60, 100), 10)) + "\n"
+        for start in range(0, 100, 60)
+    )
+    return (
+        f"LOCUS       {name:<16}         100 bp    DNA     {topology} UNK 01-JAN-1980\n"
+        f"DEFINITION  .\nACCESSION   {name}\nVERSION     {name}\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n"
+        f"            .\nFEATURES             Location/Qualifiers\n     source          1..100\n{features}"
+        f"ORIGIN\n{origin}//\n"
+    )
+
+
+# OV-3678: a 100 bp circular record with a CDS that fits and one that starts after the record's end.
+OUTSIDE_RECORD = (("21..90", 'product="p"'), ("121..240", 'product="q"'))
+OUTSIDE_RECORD_WARNING = (
+    "WARNING: Record tiny (tiny.gb): left out 1 feature that does not fit in the record's 100 bp: CDS 121..240 (q)."
+)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_leaves_out_a_feature_outside_its_record_and_names_it(tmp_path: Path, mode: str) -> None:
+    """A feature that does not fit in its record is left out with a warning that names it (OV-3678): Circular
+    stopped with "A circle arc spans at most 360 degrees", Linear drew it past the end of the record."""
+    (tmp_path / "tiny.gb").write_text(_genbank_text("tiny", "circular", OUTSIDE_RECORD), encoding="utf-8")
+
+    run = _gbdraw(mode, "--gbk", "tiny.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert OUTSIDE_RECORD_WARNING in lines
+    assert "INFO: Record tiny (tiny.gb), record 1 of 1, 100 bp: drew 1 feature (1 CDS); left out 1 source (type not drawn)." in lines
+
+
+def test_web_reply_names_a_feature_outside_its_record(tmp_path: Path) -> None:
+    from gbdraw.api import CircularDiagramRequest
+
+    path = tmp_path / "tiny.gb"
+    path.write_text(_genbank_text("tiny", "circular", OUTSIDE_RECORD), encoding="utf-8")
+    document = _embedded(build_session_document(CircularDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(path)),),
+        output=RenderOutputRequest(output_prefix="tiny", formats=("svg",)),
+    )))
+    reply = render_embedded_canonical_web_request(
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+    )
+
+    assert reply["metadata"]["inputSummaries"][0]["warnings"] == [
+        {"code": "feature_outside_record", "message": OUTSIDE_RECORD_WARNING.removeprefix("WARNING: ")}
+    ]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_python_api_names_a_feature_outside_its_record(
+    tmp_path: Path, mode: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    from gbdraw import read_genbank
+
+    path = tmp_path / "tiny.gb"
+    path.write_text(_genbank_text("tiny", "circular", OUTSIDE_RECORD), encoding="utf-8")
+    records = read_genbank(str(path))
+    with caplog.at_level("WARNING", logger="gbdraw.api.input_summary"):
+        diagram = (gbdraw.draw_circular if mode == "circular" else gbdraw.draw_linear)(records)
+
+    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [
+        OUTSIDE_RECORD_WARNING.removeprefix("WARNING: ").replace("(tiny.gb)", "(in-memory record)")
+    ]
+    assert diagram is not None
+
+
+def test_the_warning_names_each_feature_by_its_type_name_and_location(tmp_path: Path) -> None:
+    """Up to three features are named, by locus_tag (else gene, label, product), the rest counted."""
+    path = tmp_path / "many.gb"
+    path.write_text(_genbank_text("many", "linear", (
+        ("1..10", 'locus_tag="in1"'),
+        ("complement(101..110)", 'locus_tag="out1"'),
+        ("join(1..10,150..160)", 'gene="out2"'),
+        ("1..150", 'label="out3"'),
+        ("200..210", 'note="no name"'),
+    )), encoding="utf-8")
+
+    run = _gbdraw("linear", "--gbk", "many.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert (
+        "WARNING: Record many (many.gb): left out 4 features that do not fit in the record's 100 bp: "
+        "CDS complement(101..110) (out1), CDS join(1..10,150..160) (out2), CDS 1..150 (out3), and 1 more."
+    ) in _lines(run)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_features_that_fit_their_record_are_drawn_and_none_warns(tmp_path: Path, mode: str) -> None:
+    """Joins over the origin, partial ends, and a span over a circular record's origin written past its end (the
+    GFF3 way) all fit: each is drawn and nothing warns."""
+    path = tmp_path / "fit.gb"
+    path.write_text(_genbank_text("fit", "circular", (
+        ("join(91..100,1..10)", 'locus_tag="join"'),
+        ("<1..30", 'locus_tag="partial5"'),
+        ("70..>100", 'locus_tag="partial3"'),
+        ("81..110", 'locus_tag="past_end"'),
+        ("1..100", 'locus_tag="whole"'),
+    )), encoding="utf-8")
+
+    run = _gbdraw(mode, "--gbk", "fit.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert not [line for line in lines if line.startswith("WARNING")]
+    assert "INFO: Record fit (fit.gb), record 1 of 1, 100 bp: drew 5 features (5 CDS); left out 1 source (type not drawn)." in lines
+
+
+def test_features_after_one_left_out_keep_their_source_identity(tmp_path: Path) -> None:
+    """Leaving out a feature that does not fit moves no other feature's source index or hash: edits and colors that
+    name a later feature still find it."""
+    from gbdraw.api.request_render import resolve_request_records
+    from gbdraw.core.record_metadata import _feature_source_index_map
+    from gbdraw.features.ids import compute_source_feature_hash
+
+    path = tmp_path / "tiny.gb"
+    path.write_text(_genbank_text("tiny", "circular", (("121..240", 'locus_tag="out"'), ("21..90", 'locus_tag="in"'))),
+                    encoding="utf-8")
+    (source,) = read_flat_file_records(str(path))
+    resolved = resolve_request_records(LinearDiagramRequest(records=(RecordInput(GenBankInputSource(path)),)))
+
+    (record,) = resolved.records
+    indexes = _feature_source_index_map(record.features)
+    assert [(feature.qualifiers.get("locus_tag"), indexes[id(feature)]) for feature in record.features] == [
+        (None, 0), (["in"], 2),
+    ]
+    assert compute_source_feature_hash(record.features[1], record) == compute_source_feature_hash(
+        source.features[2], source
+    )
+    assert [item.location for item in resolved.provenance[0].features_outside_record] == ["121..240"]
+
+
+def _path_data(svg: Path) -> list[str]:
+    """Every path's ``d`` attribute in drawing order (not the IDs, which carry a feature's hash)."""
+    import re
+
+    return re.findall(r' d="([^"]*)"', svg.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("strand", ["", "complement"])
+def test_a_part_past_the_end_of_a_circular_record_draws_as_the_join_over_its_origin(
+    tmp_path: Path, mode: str, strand: str
+) -> None:
+    """``81..110`` on a 100 bp circular record is the GFF3 way to write ``join(81..100,1..10)``: both modes draw it
+    with exactly the join's paths, and nothing warns (OV-3724: Linear drew it past the axis end)."""
+    def location(text: str) -> str:
+        return f"complement({text})" if strand else text
+
+    (tmp_path / "past.gb").write_text(
+        _genbank_text("rec", "circular", (("21..40", 'locus_tag="in"'), (location("81..110"), 'locus_tag="x"'))),
+        encoding="utf-8")
+    (tmp_path / "join.gb").write_text(
+        _genbank_text("rec", "circular", (("21..40", 'locus_tag="in"'), (location("join(81..100,1..10)"), 'locus_tag="x"'))),
+        encoding="utf-8")
+
+    runs = [_gbdraw(mode, "--gbk", f"{name}.gb", "-o", name, "-f", "svg", cwd=tmp_path) for name in ("past", "join")]
+
+    for run in runs:
+        assert run.returncode == 0, run.stderr
+        assert not [line for line in _lines(run) if line.startswith("WARNING")]
+    assert _path_data(tmp_path / "past.svg") == _path_data(tmp_path / "join.svg")
+
+
+@pytest.mark.parametrize("source", ["genbank", "gff3"])
+def test_a_part_past_the_end_of_a_record_not_drawn_circular_is_left_out_in_linear(tmp_path: Path, source: str) -> None:
+    """A linear record, or a GFF3 record whose landmark does not say ``Is_circular=true`` (so it is not drawn
+    circular), has no origin to cross: Linear leaves the feature out with the warning (OV-3724). Circular draws every
+    record as a circle and keeps it over the origin, as before."""
+    if source == "genbank":
+        (tmp_path / "rec.gb").write_text(
+            _genbank_text("rec", "linear", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+            encoding="utf-8")
+        inputs, name = ("--gbk", "rec.gb"), "rec.gb"
+    else:
+        (tmp_path / "rec.gff").write_text(
+            "##gff-version 3\nrec\t.\tCDS\t21\t40\t.\t+\t0\tID=in;locus_tag=in\n"
+            "rec\t.\tCDS\t81\t110\t.\t+\t0\tID=past;locus_tag=past\n", encoding="utf-8")
+        (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+        inputs, name = ("--gff", "rec.gff", "--fasta", "rec.fa"), "rec.gff"
+
+    linear = _gbdraw("linear", *inputs, "-o", "linear", "-f", "svg", cwd=tmp_path)
+    circular = _gbdraw("circular", *inputs, "-o", "circular", "-f", "svg", cwd=tmp_path)
+
+    assert linear.returncode == 0, linear.stderr
+    assert (
+        f"WARNING: Record rec ({name}): left out 1 feature that does not fit in the record's 100 bp: CDS 81..110 (past)."
+    ) in _lines(linear)
+    assert circular.returncode == 0, circular.stderr
+    assert not [line for line in _lines(circular) if line.startswith("WARNING: Record rec")]
+    assert any("drew 2 features (2 CDS)" in line for line in _lines(circular))
+
+
+def test_setting_a_gff3_record_circular_draws_a_part_past_its_end_over_the_origin(tmp_path: Path) -> None:
+    (tmp_path / "rec.gff").write_text(
+        "##gff-version 3\nrec\t.\tCDS\t81\t110\t.\t+\t0\tID=past;locus_tag=past\n", encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    run = _gbdraw("linear", "--gff", "rec.gff", "--fasta", "rec.fa", "--record_topology", "circular",
+                  "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert not [line for line in _lines(run) if line.startswith("WARNING: Record rec")]
+    assert any("drew 1 feature (1 CDS)" in line for line in _lines(run))
+
+
+@pytest.mark.parametrize(("past", "join"), [
+    ("81..(105.110)", "join(81..100,1..(5.10))"),
+    ("81..one-of(105,110)", "join(81..100,1..one-of(5,10))"),
+    ("81..>110", "join(81..100,1..>10)"),
+    ("<81..110", "join(<81..100,1..10)"),
+    ("81..<110", "join(81..100,1..<10)"),
+])
+def test_a_fuzzy_end_past_a_circular_record_draws_as_its_join_in_linear(tmp_path: Path, past: str, join: str) -> None:
+    """Writing the part over the origin keeps each end's kind and fuzz: Linear draws the join's paths, and neither mode
+    stops on the position (a WithinPosition or OneOfPosition end raised TypeError, review r1 HIGH-1)."""
+    for name, location in (("past", past), ("join", join)):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+    for mode in ("linear", "circular"):
+        runs = [_gbdraw(mode, "--gbk", f"{name}.gb", "-o", f"{mode}-{name}", "-f", "svg", cwd=tmp_path)
+                for name in ("past", "join")]
+        for run in runs:
+            assert run.returncode == 0, run.stderr
+    assert _path_data(tmp_path / "linear-past.svg") == _path_data(tmp_path / "linear-join.svg")
+
+
+_REVERSED = (("reverse_complement",), ("1",))
+# Circular figures of features with a part past the record's end, as dev 1daeb52db drew them (one arc each; a
+# reversal keeps the span as written). tests/fixtures/circular_past_end_dev_paths.json holds dev's feature paths,
+# written by the step's make_dev_fixture.py from this table.
+CIRCULAR_PAST_END_CASES: dict[str, tuple[str, tuple[tuple[str, ...], tuple[str, ...]] | None]] = {
+    "past-end": ("51..150", None),
+    "join": ("join(81..110,20..30)", None),
+    "complement-join": ("complement(join(81..110,20..30))", None),
+    "short": ("81..110", None),
+    "past-end-reversed": ("51..150", _REVERSED),
+    "join-reversed": ("join(81..110,20..30)", _REVERSED),
+    "complement-join-reversed": ("complement(join(81..110,20..30))", _REVERSED),
+    "short-reversed": ("81..110", _REVERSED),
+}
+
+
+def _feature_paths(svg: Path) -> list[list[str]]:
+    """The ``id`` and ``d`` of every feature path (ids ``f<hash>``, with ``__part``/``__line`` suffixes), sorted."""
+    import re
+    import xml.etree.ElementTree as ET
+
+    pattern = re.compile(r"f[0-9a-f]{6,}(__\w+)?")
+    return sorted(
+        [element.get("id", ""), element.get("d", "")]
+        for element in ET.parse(svg).iter()
+        if element.get("d") is not None and pattern.fullmatch(element.get("id", ""))
+    )
+
+
+@pytest.mark.parametrize("case", sorted(CIRCULAR_PAST_END_CASES))
+def test_circular_draws_a_part_past_the_end_as_dev_did(tmp_path: Path, case: str) -> None:
+    """Circular reads a part past the end by its angles, as dev does, also on a reversed record: ``51..150`` on
+    100 bp stays one block over the whole circle with no seam at the origin, and the joins keep their blocks. Only
+    Linear draws the join over the origin (review r1 MEDIUM-1, r2 HIGH-1). The feature paths equal dev's."""
+    import json
+
+    location, rows = CIRCULAR_PAST_END_CASES[case]
+    (tmp_path / "rec.gb").write_text(_genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+    args: tuple[str, ...] = ("--gbk", "rec.gb")
+    if rows:
+        (tmp_path / "records.tsv").write_text(
+            "gbk\t" + "\t".join(rows[0]) + "\nrec.gb\t" + "\t".join(rows[1]) + "\n", encoding="utf-8")
+        args = ("--records_table", "records.tsv")
+
+    run = _gbdraw("circular", *args, "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    expected = json.loads((ROOT / "tests" / "fixtures" / "circular_past_end_dev_paths.json").read_text(encoding="utf-8"))
+    assert _feature_paths(tmp_path / "out.svg") == expected["cases"][case]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_location_color_rule_matches_a_part_past_the_end_as_written(tmp_path: Path, mode: str) -> None:
+    """Selectors read the location as written (``80..110``), in both modes: drawing the part over the origin changes
+    no rule match (review r1 MEDIUM-2)."""
+    (tmp_path / "rec.gb").write_text(_genbank_text("rec", "circular", (("81..110", 'locus_tag="x"'),)), encoding="utf-8")
+    (tmp_path / "colors.tsv").write_text("CDS\tlocation\t80..110\t#ff0000\tmine\n", encoding="utf-8")
+
+    run = _gbdraw(mode, "--gbk", "rec.gb", "-t", "colors.tsv", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    svg = (tmp_path / "out.svg").read_text(encoding="utf-8")
+    assert "#ff0000" in svg and ">mine<" in svg
+
+
+def test_web_selector_values_keep_a_part_past_the_end_as_written(tmp_path: Path) -> None:
+    from gbdraw.api import CircularDiagramRequest
+
+    path = tmp_path / "rec.gb"
+    path.write_text(_genbank_text("rec", "circular", (("81..110", 'locus_tag="x"'),)), encoding="utf-8")
+    for request_type in (CircularDiagramRequest, LinearDiagramRequest):
+        document = _embedded(build_session_document(request_type(
+            records=(RecordInput(source=GenBankInputSource(path)),),
+            output=RenderOutputRequest(output_prefix="rec", formats=("svg",)),
+        )))
+        reply = render_embedded_canonical_web_request(
+            document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+        )
+        (item,) = reply["featureCatalog"]["items"]
+        (feature,) = item["features"]
+        assert feature["drawnSelector"]["location"] == "80..110"
+        assert feature["drawnSelector"]["recordLocation"] == "rec:80..110:+"
+        (biological,) = item["biologicalFeatures"]
+        assert (biological["start"], biological["end"]) == (80, 110)
+
+
+GFF3_CIRCULAR = (
+    "##gff-version 3\n##sequence-region rec 1 100\nrec\t.\tregion\t1\t100\t.\t+\t.\tID=rec;Is_circular=true\n"
+    "rec\t.\tCDS\t81\t110\t.\t+\t0\tID=over;locus_tag=over\n"
+)
+
+
+def test_a_gff3_record_stated_circular_draws_a_gene_over_its_origin_in_linear(tmp_path: Path) -> None:
+    """``Is_circular=true`` on a GFF3 landmark states a circular record, as a GenBank LOCUS line does, so Linear draws
+    its gene written past the end as the join over the origin (review r1 MEDIUM-3)."""
+    from gbdraw.io.genome import parse_gff_fasta
+    from gbdraw.layout.record_transform import detected_topology
+
+    (tmp_path / "rec.gff").write_text(GFF3_CIRCULAR, encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+    (tmp_path / "join.gb").write_text(
+        _genbank_text("rec", "circular", (("join(81..100,1..10)", 'locus_tag="over"'),)), encoding="utf-8")
+    (record,) = parse_gff_fasta(str(tmp_path / "rec.gff"), str(tmp_path / "rec.fa"))
+    assert detected_topology(record, "gff_fasta") == "circular"
+
+    gff = _gbdraw("linear", "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "-o", "gff", "-f", "svg", cwd=tmp_path)
+    genbank = _gbdraw("linear", "--gbk", "join.gb", "-k", "CDS", "-o", "genbank", "-f", "svg", cwd=tmp_path)
+
+    assert gff.returncode == 0, gff.stderr
+    assert genbank.returncode == 0, genbank.stderr
+    assert not [line for line in _lines(gff) if line.startswith("WARNING")]
+    assert _path_data(tmp_path / "gff.svg") == _path_data(tmp_path / "genbank.svg")
+
+
+def test_a_record_whose_features_all_do_not_fit_says_so(tmp_path: Path) -> None:
+    """The no-feature reason names the features that did not fit, not a feature type to add (review r1 LOW-1)."""
+    (tmp_path / "rec.gb").write_text(_genbank_text("rec", "linear", (("121..240", 'locus_tag="out"'),)), encoding="utf-8")
+
+    run = _gbdraw("linear", "--gbk", "rec.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert "WARNING: Record rec (rec.gb) has no feature to draw: its 1 feature does not fit in the record." in _lines(run)
+
+
+def test_the_warning_writes_each_location_as_the_file_does(tmp_path: Path) -> None:
+    """Strands of each part, partial ends and fuzzy positions as a GenBank file writes them (review r1 LOW-2)."""
+    (tmp_path / "rec.gb").write_text(_genbank_text("rec", "linear", (
+        ("complement(join(20..30,150..160))", 'locus_tag="a"'),
+        ("join(20..30,complement(150..160))", 'locus_tag="b"'),
+        ("<95..>120", 'locus_tag="c"'),
+    )), encoding="utf-8")
+
+    run = _gbdraw("linear", "--gbk", "rec.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert (
+        "WARNING: Record rec (rec.gb): left out 3 features that do not fit in the record's 100 bp: "
+        "CDS complement(join(20..30,150..160)) (a), CDS join(20..30,complement(150..160)) (b), CDS <95..>120 (c)."
+    ) in _lines(run)
+
+
+@pytest.mark.parametrize(("mode", "options"), [
+    ("linear", ("--region", "1-100:rc")),
+    ("linear", ("--display_start_coordinate", "50")),
+    ("circular", ("--display_start_coordinate", "50")),
+])
+def test_a_part_past_the_end_reads_as_its_join_in_a_crop_a_reversal_and_a_new_start(
+    tmp_path: Path, mode: str, options: tuple[str, ...]
+) -> None:
+    """A crop, a reversal and a moved display start read a part past the end of a circular record through the same
+    owner as the Linear axis (``location_over_origin``): the figure equals the join's. Before, a reversal drew only the
+    part up to the end and a moved start stopped the run."""
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+    runs = [_gbdraw(mode, "--gbk", f"{name}.gb", *options, "-o", name, "-f", "svg", cwd=tmp_path)
+            for name in ("past", "join")]
+
+    for run in runs:
+        assert run.returncode == 0, run.stderr
+    assert _path_data(tmp_path / "past.svg") == _path_data(tmp_path / "join.svg")
+
+
+@pytest.mark.parametrize(("region", "reverse"), [(None, None), ("rec:1-50", None), (None, "1"), ("rec:1-50", "1")])
+def test_the_web_feature_listing_leaves_out_what_does_not_fit_as_the_drawing_does(
+    tmp_path: Path, region: str | None, reverse: str | None
+) -> None:
+    """The Worker's feature listing (feature table, Session recovery) reads records through the same fit owner as the
+    planner: a feature outside its record is not listed, and a crop or a reversal no longer stops on it."""
+    from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+
+    path = tmp_path / "rec.gb"
+    path.write_text(_genbank_text("rec", "linear", (
+        ("121..240", 'locus_tag="out"'), ("1..250", 'locus_tag="long"'), ("10..20", 'locus_tag="ok"'),
+    )), encoding="utf-8")
+
+    payload = extract_features_from_genbank_payload(path, region, None, reverse, include_biological_features=True)
+
+    tags = [tag for feature in payload["features"] for tag in feature.get("qualifiers", {}).get("locus_tag", ())]
+    assert tags == ["ok"]
+
+
+def _group_paths(svg: Path, suffix: str) -> list[str]:
+    """The ``d`` of every path inside the groups whose id ends with ``suffix``, in drawing order."""
+    import xml.etree.ElementTree as ET
+
+    return [
+        element.get("d", "")
+        for group in ET.parse(svg).iter()
+        if group.get("id", "").endswith(suffix)
+        for element in group.iter()
+        if element.get("d") is not None
+    ]
+
+
+def test_circular_density_counts_a_part_past_the_end_as_its_join(tmp_path: Path) -> None:
+    """Feature density reads a part past the end of a circular record as the join it is: ``81..110`` covers windows
+    1..10 as ``join(81..100,1..10)`` does (dev clipped it at the end, so those windows counted nothing; r2 MEDIUM-1 a,
+    an intended correction)."""
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        run = _gbdraw("circular", "--gbk", f"{name}.gb", "--feature_density_track", "id=d", "type=CDS",
+                      "metric=coverage", "window=10", "step=5", "-o", name, "-f", "svg", cwd=tmp_path)
+        assert run.returncode == 0, run.stderr
+
+    past = _group_paths(tmp_path / "past.svg", "_density_d")
+    assert past and past == _group_paths(tmp_path / "join.svg", "_density_d")
+
+
+def test_a_circular_crop_keeps_both_blocks_of_a_part_past_the_end(tmp_path: Path) -> None:
+    """A records-table region over the whole record keeps the part from the start too: ``81..110`` draws as
+    ``join(81..100,1..10)`` does, one block from 81 round to 10 (dev drew only 81..100 with a cut end; r2 MEDIUM-1 b,
+    an intended correction)."""
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        (tmp_path / f"{name}.tsv").write_text(f"gbk\tregion\n{name}.gb\t1-100\n", encoding="utf-8")
+        run = _gbdraw("circular", "--records_table", f"{name}.tsv", "-o", name, "-f", "svg", cwd=tmp_path)
+        assert run.returncode == 0, run.stderr
+
+    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "join")]
+    assert paths[0] and paths[0] == paths[1]
+
+
+@pytest.mark.parametrize("region", ["1-100", "1-30"])
+def test_a_circular_crop_of_a_linear_record_cuts_a_part_past_the_end_at_the_end(tmp_path: Path, region: str) -> None:
+    """A linear record has no origin to cross, also in a Circular diagram: a records-table crop of ``81..110`` cuts it at
+    the end as dev did, so it draws as ``81..>100`` does, the cut end a fuzzy one (r4 LOW-1: only a record drawn
+    circular reads the part over the origin in a crop)."""
+    for name, location in (("past", "81..110"), ("cut", "81..>100")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "linear", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        (tmp_path / f"{name}.tsv").write_text(f"gbk\tregion\n{name}.gb\t{region}\n", encoding="utf-8")
+        run = _gbdraw("circular", "--records_table", f"{name}.tsv", "-o", name, "-f", "svg", cwd=tmp_path)
+        assert run.returncode == 0, run.stderr
+
+    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "cut")]
+    assert paths[0] == paths[1]
+    assert bool(paths[0]) == (region == "1-100")
+
+
+def _gff3_text(*landmarks: tuple[str, str, int, int, str], cds: tuple[str, int, int] | None = ("rec", 81, 110)) -> str:
+    lines = ["##gff-version 3"]
+    for seqid, feature_type, start, end, attributes in landmarks:
+        lines.append(f"{seqid}\t.\t{feature_type}\t{start}\t{end}\t.\t+\t.\t{attributes}")
+    if cds is not None:
+        lines.append(f"{cds[0]}\t.\tCDS\t{cds[1]}\t{cds[2]}\t.\t+\t0\tID=over;locus_tag=over")
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize(("landmarks", "expected"), [
+    ((("rec", "region", 1, 100, "ID=rec;Is_circular=true"),), "circular"),
+    ((("rec", "chromosome", 1, 100, "ID=rec;Is_circular=TRUE"),), "circular"),
+    ((("rec", "region", 1, 100, "ID=rec;Is_circular=false"),), "unknown"),
+    ((("rec", "region", 1, 100, "ID=rec"),), "unknown"),
+    ((("rec", "gene", 1, 50, "ID=g;Is_circular=true"),), "unknown"),
+    ((("rec", "region", 2, 100, "ID=rec;Is_circular=true"),), "unknown"),
+], ids=["region", "other-type-any-case", "false", "absent", "not-the-landmark", "not-whole"])
+def test_gff3_states_a_circular_sequence_only_on_its_landmark(
+    tmp_path: Path, landmarks: tuple[tuple[str, str, int, int, str], ...], expected: str
+) -> None:
+    """``Is_circular=true`` counts only on the feature that covers the whole sequence (r2 MEDIUM-2)."""
+    from gbdraw.layout.record_transform import detected_topology
+
+    (tmp_path / "rec.gff").write_text(_gff3_text(*landmarks, cds=None), encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    (record,) = parse_gff_fasta(str(tmp_path / "rec.gff"), str(tmp_path / "rec.fa"))
+
+    assert detected_topology(record, "gff_fasta") == expected
+
+
+def test_gff3_reads_each_sequence_by_its_own_landmark(tmp_path: Path) -> None:
+    from gbdraw.layout.record_transform import detected_topology
+
+    (tmp_path / "two.gff").write_text(_gff3_text(
+        ("a", "region", 1, 100, "ID=a;Is_circular=true"), ("b", "region", 1, 100, "ID=b"), cds=None,
+    ), encoding="utf-8")
+    (tmp_path / "two.fa").write_text(">a\n" + "acgtgcatgc" * 10 + "\n>b\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    records = parse_gff_fasta(str(tmp_path / "two.gff"), str(tmp_path / "two.fa"))
+
+    assert [detected_topology(record, "gff_fasta") for record in records] == ["circular", "unknown"]
+
+
+def test_a_set_linear_topology_wins_over_gff3_is_circular(tmp_path: Path) -> None:
+    """``--record_topology linear`` still wins: the past-end CDS of an ``Is_circular=true`` record is left out."""
+    (tmp_path / "rec.gff").write_text(
+        _gff3_text(("rec", "region", 1, 100, "ID=rec;Is_circular=true")), encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    run = _gbdraw("linear", "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "--record_topology", "linear",
+                  "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert any("CDS 81..110 (over)" in line for line in _lines(run) if line.startswith("WARNING"))
+
+
+@pytest.mark.parametrize(("mode", "tracks"), [("circular", ()), ("linear", ("--gc", "--skew"))])
+def test_gc_of_a_gff3_record_stated_circular_wraps_as_genbank_circular(
+    tmp_path: Path, mode: str, tracks: tuple[str, ...]
+) -> None:
+    """GC content and skew windows of a GFF3 record whose landmark says ``Is_circular=true`` wrap over the origin as
+    those of the same sequence in a circular GenBank record, in both modes (r2 MEDIUM-1 c and r3 MEDIUM-2, an
+    intended correction: dev read the record as not circular)."""
+    sequence = ("gggggcccccaaaaattttt" * 3) + ("atatatatgc" * 4)
+    (tmp_path / "rec.gff").write_text(
+        _gff3_text(("rec", "region", 1, 100, "ID=rec;Is_circular=true"), cds=("rec", 10, 30)), encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(f">rec\n{sequence}\n", encoding="utf-8")
+    origin = "".join(
+        f"{start + 1:>9} " + " ".join(sequence[i:i + 10] for i in range(start, min(start + 60, 100), 10)) + "\n"
+        for start in range(0, 100, 60)
+    )
+    (tmp_path / "rec.gb").write_text(
+        "LOCUS       rec                      100 bp    DNA     circular UNK 01-JAN-1980\n"
+        "FEATURES             Location/Qualifiers\n     CDS             10..30\n"
+        f"                     /locus_tag=\"over\"\nORIGIN\n{origin}//\n", encoding="utf-8")
+
+    gff = _gbdraw(mode, "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "-o", "gff", "-f", "svg", *tracks,
+                  cwd=tmp_path)
+    genbank = _gbdraw(mode, "--gbk", "rec.gb", "-o", "genbank", "-f", "svg", *tracks, cwd=tmp_path)
+
+    assert gff.returncode == 0, gff.stderr
+    assert genbank.returncode == 0, genbank.stderr
+    for track in ("_gc_content", "_gc_skew"):
+        drawn = _group_paths(tmp_path / "gff.svg", track)
+        assert drawn and drawn == _group_paths(tmp_path / "genbank.svg", track)
+
+
+def test_a_past_end_cds_translates_and_extracts_its_whole_join(tmp_path: Path) -> None:
+    """Protein extraction and the feature popup read a past-end CDS as its join: 30 nt, as ``join(81..100,1..10)``
+    (dev read 20 nt; r2 LOW-1)."""
+    from gbdraw.analysis.protein_colinearity import _translate_cds_feature
+    from gbdraw.web_support.feature_metadata import feature_sequence_payload
+
+    read = []
+    for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        (record,) = read_flat_file_records(str(tmp_path / f"{name}.gb"))
+        (feature,) = [item for item in record.features if item.type == "CDS"]
+        read.append((feature_sequence_payload(feature, record)["nucleotideSequence"],
+                     _translate_cds_feature(record, feature)))
+
+    assert len(read[0][0]) == 30 and read[0] == read[1]
+
+
+@pytest.mark.parametrize(("location", "expected"), [
+    (("81..110", 1), "join{[80:100](+), [0:10](+)}"),
+    (("81..110", -1), "join{[0:10](-), [80:100](-)}"),
+    # A past-end part once reversed (``reverse_records`` flips the location as written).
+    (("-9..20", 1), "join{[90:100](+), [0:20](+)}"),
+    (("121..240", 1), "[120:240](+)"),
+    (("101..110", 1), "[100:110](+)"),
+    (("51..200", 1), "[50:200](+)"),
+    (("21..90", 1), "[20:90](+)"),
+], ids=["past-plus", "past-minus", "reversed", "outside", "after-end", "longer", "inside"])
+def test_only_a_location_that_fits_over_the_origin_reads_as_its_join(location: tuple[str, int], expected: str) -> None:
+    """``location_over_origin`` splits a part at the origin only when it fits the record over its origin, as written
+    or reversed; a location outside the record or longer than it stays as it is, so no reader takes a feature that
+    does not fit at a place modulo the record's length (r3 MEDIUM-1 a, D-199's rejected option C)."""
+    from Bio.SeqFeature import SimpleLocation
+
+    from gbdraw.core.record_metadata import location_over_origin
+
+    text, strand = location
+    start, end = (int(value) for value in text.split(".."))
+    assert str(location_over_origin(SimpleLocation(start - 1, end, strand), 100)) == expected
+
+
+# r3 MEDIUM-1: linear records with a CDS that fits and one that does not (wholly outside; past the end), and a
+# circular record whose past-end CDS reads over its origin.
+_PROTEIN_RECORDS = {
+    "tiny3": ("linear", (("1..30", 'locus_tag="in"'), ("121..240", 'locus_tag="out"'))),
+    "wrapl": ("linear", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+    "overc": ("circular", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+}
+# The letters of each protein the drawing takes: 1..30, 21..40, and the 30 bases of the join over the origin.
+_DRAWN_PROTEINS = {"tiny3": [10], "wrapl": [6], "overc": [6, 10]}
+
+
+def _proteins(records: Sequence[object]) -> list[tuple[int, int, str]]:
+    from gbdraw.analysis.protein_colinearity import extract_cds_proteins
+
+    extraction = extract_cds_proteins(list(records), prefer_source_ids=False)  # type: ignore[arg-type]
+    return [(p.start, p.end, p.sequence) for proteins in extraction.proteins_by_record for p in proteins]
+
+
+@pytest.mark.parametrize("region", [None, "rec:1-100"], ids=["whole", "crop"])
+@pytest.mark.parametrize("name", sorted(_PROTEIN_RECORDS))
+def test_the_web_losatp_proteins_are_those_of_the_drawn_features(
+    tmp_path: Path, helpers: dict[str, object], name: str, region: str | None,  # noqa: F811 - the fixture
+) -> None:
+    """The Web LOSATP protein reader takes the features the Linear drawing takes: none for a CDS outside its linear
+    record or past its end, with or without a crop, and the CLI plan extracts the same proteins (r3 MEDIUM-1 b, c).
+    Before, the Web searched a protein of ``121..240`` read at 21..140 and the join of a linear record's ``81..110``."""
+    from gbdraw.api import plan_linear_request
+    from gbdraw.io.regions import RecordWindow
+
+    topology, locations = _PROTEIN_RECORDS[name]
+    path = tmp_path / f"{name}.gb"
+    path.write_text(_genbank_text("rec", topology, locations), encoding="utf-8")
+    load = helpers["_load_single_linear_record_for_proteins"]
+    web = _proteins([load(str(path), "genbank", region_spec=region)])  # type: ignore[operator]
+    plan = plan_linear_request(LinearDiagramRequest(
+        records=(RecordInput(GenBankInputSource(path), windows=(RecordWindow(1, 100),) if region else ()),),
+        options=LinearDiagramOptions(),
+    ))
+
+    assert [len(sequence) for *_span, sequence in web] == _DRAWN_PROTEINS[name]
+    assert web == _proteins(plan.records)
+
+
+def test_the_losatp_database_counts_only_the_proteins_of_the_drawn_features(tmp_path: Path) -> None:
+    """A LOSATP search's database size counts the proteins of the features the drawing takes, so a CDS outside its
+    record adds no letters and the e-values stay those of the drawn proteins (r3 MEDIUM-1 b). Before, ``121..240``
+    added 40 letters and a linear record's ``81..110`` 4 more."""
+    from gbdraw.api import LinearMultiRecordOptions, RecordPresentation, plan_linear_request
+    from gbdraw.api.options import LosatSearchOptions
+
+    records = []
+    for row, name in enumerate(("tiny3", "wrapl", "overc"), start=1):
+        topology, locations = _PROTEIN_RECORDS[name]
+        path = tmp_path / f"{name}.gb"
+        path.write_text(_genbank_text(name, topology, locations), encoding="utf-8")
+        records.append(RecordInput(GenBankInputSource(path), record_key=name, presentation=RecordPresentation(grid_row=row)))
+    plan = plan_linear_request(LinearDiagramRequest(
+        records=tuple(records),
+        layout=LinearMultiRecordOptions(),
+        options=LinearDiagramOptions(losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise")),
+    ))
+    sizes = plan.losatp_database_sizes
+    assert sizes is not None
+    letters = [sum(len(sequence) for *_span, sequence in _proteins([record])) for record in plan.records]
+
+    # Each record is its own genome; ``proteins`` is what a search of a cropped or windowed genome passes LOSAT.
+    assert list(sizes.proteins) == letters == [10, 6, 16]

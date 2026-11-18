@@ -34,6 +34,7 @@ from gbdraw.features.selector_values import get_feature_type
 from gbdraw.features.visibility import should_render_feature
 from gbdraw.io.comparison_sequences import RepeatedRecordIds
 from gbdraw.io.comparisons import ComparisonThresholdName, ComparisonThresholdTally
+from gbdraw.io.genome import FeatureOutsideRecord
 from gbdraw.layout.linear_wrap import LinearWrapSummary
 from gbdraw.linear_comparison import ComparisonTableTally
 
@@ -47,12 +48,16 @@ InputWarningCode = Literal[
     "comparison_table_empty",
     "annotation_set_not_drawn",
     "comparison_record_id_repeated",
+    "feature_outside_record",
 ]
 NO_DRAWABLE_FEATURES: InputWarningCode = "no_drawable_features"
 COMPARISON_ROWS_FILTERED_OUT: InputWarningCode = "comparison_rows_filtered_out"
 COMPARISON_TABLE_EMPTY: InputWarningCode = "comparison_table_empty"
 ANNOTATION_SET_NOT_DRAWN: InputWarningCode = "annotation_set_not_drawn"
 COMPARISON_RECORD_ID_REPEATED: InputWarningCode = "comparison_record_id_repeated"
+FEATURE_OUTSIDE_RECORD: InputWarningCode = "feature_outside_record"
+# How many features left out of a record its warning names; it counts the rest.
+_FEATURES_OUTSIDE_RECORD_NAMED = 3
 # Warnings of inputs drawn in full: the Web does not head them "Part of the input was not drawn".
 INPUT_WARNINGS_OF_DRAWN_INPUT: frozenset[InputWarningCode] = frozenset({COMPARISON_RECORD_ID_REPEATED})
 
@@ -107,6 +112,8 @@ class RecordInputSummary:
     # The shortest record one circle draws, when this record is shorter and so not drawn
     # (``gbdraw.layout.record_units.left_off_circle``); ``features`` is then empty.
     left_off_circle_under_bp: int | None = None
+    # The features left out because they do not fit in the source record (``fit_features_to_record``).
+    features_outside_record: tuple[FeatureOutsideRecord, ...] = ()
 
     @property
     def drawn_features(self) -> int:
@@ -285,6 +292,7 @@ def summarize_inputs(
             ) if draws_features and under_bp is None else (),
             features_track=draws_features,
             left_off_circle_under_bp=under_bp,
+            features_outside_record=item.features_outside_record,
         ))
     return InputSummary(
         records=tuple(summaries),
@@ -405,6 +413,12 @@ def input_summary_lines(summary: InputSummary) -> tuple[str, ...]:
 def _no_feature_reason(record: RecordInputSummary) -> str:
     hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
     not_drawn = _types_not_drawn(record)
+    if outside := len(record.features_outside_record):
+        # The features that did not fit are the reason; adding a type would draw none of them.
+        reasons = [f"its {_count(outside, 'feature')} {'does' if outside == 1 else 'do'} not fit in the record"]
+        if hidden:
+            reasons.append(f"its {_type_counts(hidden)} features are hidden by a visibility rule or a feature edit")
+        return "; ".join(reasons)
     if record.region is not None and not hidden and not not_drawn:
         return f"its region {_region_text(record.region)} holds no feature of a type drawn"
     if not record.features:
@@ -418,6 +432,27 @@ def _no_feature_reason(record: RecordInputSummary) -> str:
     if hidden:
         reasons.append(f"its {_type_counts(hidden)} features are hidden by a visibility rule or a feature edit")
     return "; ".join(reasons)
+
+
+def _feature_outside_record_text(feature: FeatureOutsideRecord) -> str:
+    return f"{feature.feature_type} {feature.location}" + (f" ({feature.name})" if feature.name else "")
+
+
+def _features_outside_record_warning(record: RecordInputSummary) -> InputWarning:
+    """One warning per source record that names the features left out of it, the first few by name."""
+
+    features = record.features_outside_record
+    named = [_feature_outside_record_text(feature) for feature in features[:_FEATURES_OUTSIDE_RECORD_NAMED]]
+    if len(features) > len(named):
+        named.append(f"and {len(features) - len(named):,} more")
+    verb = "does" if len(features) == 1 else "do"
+    subject = _record_subject(replace(record, region=None))
+    return InputWarning(
+        FEATURE_OUTSIDE_RECORD,
+        f"{_record_label(record)}: left out {_count(len(features), 'feature')} that {verb} not fit in the record's "
+        f"{record.source_length:,} bp: {', '.join(named)}.",
+        subject,
+    )
 
 
 def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
@@ -436,6 +471,12 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         # line says so); the inputs are not the reason.
         if record.features_track and record.left_off_circle_under_bp is None and record.drawn_features == 0
     ]
+    warnings.extend(
+        _features_outside_record_warning(record)
+        for record in summary.records
+        # A record one circle leaves out draws nothing; its line says so.
+        if record.features_outside_record and record.left_off_circle_under_bp is None
+    )
     for position, table in enumerate(summary.comparisons):
         tally = table.tally
         label = _comparison_label(table, summary.records)

@@ -1465,8 +1465,8 @@
           "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09"
         ],
         "tool": "LOSAT browser WASM",
-        "toolVersion": "0.1.0",
-        "toolSha256": "1c597c9e366785051af698cb69f315bec10ac6c55e7a3b9c2e9325dbbd46f312",
+        "toolVersion": "0.2.0+5234c754f31a",
+        "toolSha256": "dfd3558b41176c8b2860f6997ba24cbd24afcf4eff2fa59daf84bed5bc0a5619",
         "arguments": {
           "program": "blastn",
           "task": "megablast",
@@ -1490,7 +1490,7 @@
       "mediaType": "text/tab-separated-values",
       "inputType": "blast-outfmt6",
       "sizeBytes": 28303,
-      "sha256": "483e98f8b3dce172523cf00c82eb9d47e4faee13e4781b06f3d58ea4fb63532d",
+      "sha256": "cc293d0b9a2dfc691c53ae507edba7e50b4c26429653561987506bf55269241d",
       "packageTier": "core",
       "records": [],
       "expectedSemantics": {
@@ -1525,8 +1525,8 @@
           "288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09"
         ],
         "tool": "LOSAT browser WASM",
-        "toolVersion": "0.1.0",
-        "toolSha256": "1c597c9e366785051af698cb69f315bec10ac6c55e7a3b9c2e9325dbbd46f312",
+        "toolVersion": "0.2.0+5234c754f31a",
+        "toolSha256": "dfd3558b41176c8b2860f6997ba24cbd24afcf4eff2fa59daf84bed5bc0a5619",
         "arguments": {
           "program": "tblastx",
           "queryGeneticCode": 1,

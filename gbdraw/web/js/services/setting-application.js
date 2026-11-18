@@ -47,7 +47,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * deleted rows (the paint slice), the color rules, whose captions name the
  * rows Python draws from them (a Legend rename of a feature type row can write
  * them; the color rules slice), and the Canvas padding (the canvas slice).
- * @typedef {'legendEntries' | 'deletedLegendEntries' | 'rules' | 'canvasPadding'} RefitField
+ * @typedef {'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'rules' | 'canvasPadding'} RefitField
  */
 /**
  * How a `<setting-note>` shows its note (PD-OI-037 rev 3): `clock`, a clock
@@ -200,7 +200,8 @@ export const SETTING_APPLICATION = Object.freeze([
   /** @type {SettingApplicationRow} */ ({ id: 'legend-editor', application: 'live',
     help: msg('Live edit: legend text, order, stroke, and removal update the current Result.'),
     refitPaths: Object.freeze({
-      'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries', 'config.rules': 'rules'
+      'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries',
+      'editorState.legend.dormantEntries': 'dormantLegendEntries', 'config.rules': 'rules'
     }),
     refitHelp: msg('With a Figure size set, a rename, removal, or reorder then redraws the figure to fit it.') }),
   /** @type {SettingApplicationRow} */ ({ id: 'canvas-padding', application: 'live',

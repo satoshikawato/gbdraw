@@ -16,7 +16,8 @@ const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, sameStepStart, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
-  SINGLE_FIXTURE, open, generate, history, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
+  SINGLE_FIXTURE, open, generate, history, DEPTH_TSV, colorLegendRow, openCanvas, renameRow,
+  holdNextRerender, insideHeldRerender, releaseRerender
 } = require('./helpers/live-generate-parity-steps.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
 
@@ -1674,30 +1675,6 @@ const generateWithTrackWidth = async (page) => {
   await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.gc_content_width_circular = 40; });
   await generate(page);
-};
-// The warm restore releases a hold a case left (`installPageProbe`).
-const holdNextRerender = (page) => installPageProbe(page, () => {
-  const hold = { entered: false };
-  const released = new Promise((resolve) => { hold.release = resolve; });
-  window.__UNDO_HOLD__ = hold;
-  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
-    if (hold.entered) return;
-    hold.entered = true;
-    await released;
-  };
-  return () => {
-    hold.release();
-    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
-    delete window.__UNDO_HOLD__;
-  };
-});
-const insideHeldRerender = (page) => expect.poll(() => page.evaluate(() => window.__UNDO_HOLD__.entered), { timeout: 120_000 }).toBe(true);
-const releaseRerender = async (page) => {
-  await page.evaluate(() => {
-    window.__UNDO_HOLD__.release();
-    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
-  });
-  await settleLive(page);
 };
 const step = (page, name) => page.evaluate((each) => window.__GBDRAW_HISTORY__[each](), name);
 const undoWithHeldRerender = async (page) => {

@@ -45,7 +45,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
-/** @import { LosatCacheInfoEntry } from '../services/config.js' */
+/** @import { LosatCacheInfoEntry } from '../services/losat-cache.js' */
 /** @import { ErrorTextPart } from '../utils/error-normalization.js' */
 /** @import { RecordPlace, RecordPlaceInput } from '../contracts/card-windows.generated.js' */
 
@@ -2178,14 +2178,14 @@ const appendComparisonOptions = (args, request, files, units) => {
   const records = recordPairs(drawable);
   const losatRows = recordPairs(searched);
   if (search !== null) {
-    // `-b` takes no LOSAT search, and Linear assembly takes no comparison table row beside the pairs a search lists
-    // (`_linear_comparison_modes`, OV-3688).
-    if (comparisons.length > 0) {
-      throw recipeUnavailable(msg('the command line takes no BLAST table beside a protein search.'));
-    }
-    // Only a Pairwise search lists its pairs, as `source=losat` rows of a comparisons table.
-    if (search.mode !== 'pairwise' && losatRows.length > 0) {
+    // Only a Pairwise search lists its pairs, as `source=losat` rows of a comparisons table beside its BLAST table
+    // rows (`source=table`); `-b` takes no LOSAT search (OV-3688).
+    if (search.mode !== 'pairwise' && (losatRows.length > 0 || comparisons.length > 0)) {
       throw recipeUnavailable(msg('the command line lists no comparison table rows for this protein search mode.'));
+    }
+    // A search of every adjacent pair lists no pairs, and a comparisons table with BLAST rows needs them listed.
+    if (losatRows.length === 0 && comparisons.length > 0) {
+      throw recipeUnavailable(msg('the command line lists no pairs of a protein search of every adjacent pair beside a BLAST table.'));
     }
     args.push(...proteinSearchArgs(search));
     if (losatRows.length === 0) return;
@@ -2211,7 +2211,7 @@ const appendComparisonOptions = (args, request, files, units) => {
     });
     return { blastPath: path, query: `#${records[index].query + 1}`, subject: `#${records[index].subject + 1}` };
   });
-  // The pairs the search compares are `source=losat` rows, without a file; a search comes with no BLAST table row.
+  // The pairs the search compares are `source=losat` rows, without a file, after the BLAST tables' `source=table` rows.
   const searchRows = losatRows.map(({ query, subject }) => ({ query: `#${query + 1}`, subject: `#${subject + 1}`, source: 'losat' }));
   appendOption(
     args,
@@ -2220,9 +2220,12 @@ const appendComparisonOptions = (args, request, files, units) => {
       'comparisons.tsv',
       (finalNameForPath) => tsv(
         searchRows.length > 0 ? ['blast', 'query', 'subject', 'source'] : ['blast', 'query', 'subject'],
-        searchRows.length > 0
-          ? searchRows.map((row) => ({ ...row, blast: '' }))
-          : rows.map(({ blastPath, ...row }) => ({ ...row, blast: finalNameForPath(blastPath) }))
+        [
+          ...rows.map(({ blastPath, ...row }) => ({
+            ...row, blast: finalNameForPath(blastPath), ...(searchRows.length > 0 ? { source: 'table' } : {})
+          })),
+          ...searchRows.map((row) => ({ ...row, blast: '' }))
+        ]
       ),
       'generatedFiles.source_recipe.comparisons_table'
     )

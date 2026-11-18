@@ -417,6 +417,33 @@ test('a legacy configuration Load keeps the zoom of the figure already shown', a
   expect(await appZoom(page)).toBe(zoomed);
 });
 
+// OV-3697: the Fit reads the layout, not the pan and zoom it starts from. Pressing it again keeps the view to
+// the last bit, and a Session saved with the fitted view loads (with its Fit) to that same view.
+const lambdaSession = join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw');
+test('Fit keeps its view to the last bit, and a Load gives back a saved fitted view exactly', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  const view = (shown) => shown.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan, zoom: window.__GBDRAW_APP__.zoom }));
+  const load = async (shown, file) => {
+    await shown.setViewportSize({ width: 1280, height: 800 });
+    await openApp(shown);
+    shown.on('dialog', (dialog) => dialog.dismiss());
+    await shown.locator('input[type=file][accept*=".gbdraw"]').setInputFiles(file);
+    await waitForSessionLoadAtRest(shown, { timeout: 60_000 });
+    await settle(shown);
+    return view(shown);
+  };
+  const loaded = await load(page, lambdaSession);
+  for (let press = 0; press < 3; press += 1) {
+    await fitButton(page).click();
+    expect(await view(page), `Fit ${press + 1}`).toEqual(loaded);
+  }
+  const saved = testInfo.outputPath('fitted.gbdraw');
+  const download = page.waitForEvent('download');
+  await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
+  await (await download).saveAs(saved);
+  expect(await load(await page.context().newPage(), saved)).toEqual(loaded);
+});
+
 // GX-02: the buttons keep the wheel's range and 0.1 steps.
 test('Zoom in stops at 500% and Zoom out at 10%, on exact 0.1 steps', async ({ page }) => {
   test.setTimeout(180000);

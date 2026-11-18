@@ -9,6 +9,7 @@ from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
+    location_over_origin,
     _iter_source_features as _iter_features,
     _read_coord_map as _read_record_coord_map,
     _source_feature_anchor_profile,
@@ -252,7 +253,8 @@ def _source_anchor_profile(feature: Any, *, coord_step: int = 1) -> dict[str, st
 
 def _extract_nucleotide_sequence(feature: Any, record: Any) -> tuple[str, list[str]]:
     try:
-        return str(feature.extract(record.seq)).upper(), []
+        # A part past the origin of a record drawn circular reads as the join it is (OV-3724).
+        return str(location_over_origin(feature.location, len(record.seq)).extract(record.seq)).upper(), []
     except Exception as exc:
         return "", [f"Nucleotide sequence extraction skipped: {exc}"]
 
@@ -499,6 +501,15 @@ def extract_features_from_records_payload(
     return payload
 
 
+def _features_that_fit(records: list[SeqRecord]) -> list[SeqRecord]:
+    """``records`` without the features that do not fit in them, by the planner's owner (``fit_features_to_record``),
+    so a crop or a reversal reads no feature outside its record. A part past a record's end is kept as Circular draws
+    every record (the listing does not know the mode): the listing holds every feature a drawing may draw."""
+    from gbdraw.io.genome import fit_features_to_record
+
+    return [fit_features_to_record(record, over_origin=True).record for record in records]
+
+
 def _crop_then_reverse(
     records: list[SeqRecord], region_spec: object | None, reverse_flag: object | None, *, source_kind: str
 ) -> list[SeqRecord]:
@@ -532,7 +543,9 @@ def extract_features_from_genbank_payload(
 
     records = read_flat_file_records(str(gb_path))
     selector = parse_record_selector(_normalize_record_selector(record_selector))
-    records = _crop_then_reverse(select_record(records, selector), region_spec, reverse_flag, source_kind="genbank")
+    records = _crop_then_reverse(
+        _features_that_fit(select_record(records, selector)), region_spec, reverse_flag, source_kind="genbank"
+    )
     return extract_features_from_records_payload(
         records,
         selected_features=selected_features,
@@ -565,7 +578,7 @@ def extract_features_from_gff_fasta_payload(
         keep_all_features=True,
         record_selectors=[selector] if selector else None,
     )
-    records = _crop_then_reverse(records, region_spec, reverse_flag, source_kind="gff_fasta")
+    records = _crop_then_reverse(_features_that_fit(records), region_spec, reverse_flag, source_kind="gff_fasta")
     return extract_features_from_records_payload(
         records,
         selected_features=selected_features,

@@ -326,6 +326,54 @@ test('a LOSATP Pairwise Linear Result has a Source recipe that the CLI replays t
   expect.soft(replay.status, `${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
 });
 
+// OV-3688: three Linear records, an uploaded BLAST table for #1-#2 and LOSATP Pairwise for #2-#3, have a Source recipe
+// (one comparisons table with a `source=table` row and a `source=losat` row), and the CLI's run of it draws the Web Result.
+test('a BLAST table beside a LOSATP Pairwise pair has a Source recipe that the CLI replays to it', async ({ page }, testInfo) => {
+  test.setTimeout(900_000);
+  const inputs = ['BGC0000708', 'BGC0000709', 'BGC0000711'].map((name) => path.resolve('tests', 'test_inputs', `${name}.gbk`));
+  const table = testInfo.outputPath('pair.tsv');
+  writeFileSync(table, 'BGC0000708\tBGC0000709\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n');
+  await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  for (const [index, input] of inputs.entries()) {
+    if (index > 0) await page.evaluate(() => window.__GBDRAW_APP__.addLinearSeq());
+    await page.getByTestId(`linear-genbank-${index + 1}`).setInputFiles(input);
+  }
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.gb?.name)))
+    .toEqual(['BGC0000708.gbk', 'BGC0000709.gbk', 'BGC0000711.gbk']);
+  const previous = await generated(page, testInfo, 'three records without comparison');
+  await setApp(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('pairwise');
+    // Chromium here has no SharedArrayBuffer for threaded LOSAT.
+    app.losatExecution.executionMode = 'serial';
+  });
+  const tableText = readFileSync(table, 'utf8');
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonCardFile(app.linearComparisonResolution.edges[0].edgeKey,
+      new File([text], 'pair.tsv', { type: 'text/tab-separated-values' }));
+  }, tableText);
+  const current = await generated(page, testInfo, 'blast table beside losatp pairwise');
+  // The table's ribbon for #1-#2 and the search's protein matches for #2-#3.
+  const groups = [...readFileSync(current.file, 'utf8').matchAll(/<g [^>]*id="comparison\d+"[^>]*>/g)]
+    .map(([tag]) => tag.match(/data-query-record-index="(\d)"[^>]*data-subject-record-index="(\d)"/).slice(1).join('-'));
+  expect(groups).toEqual(['0-1', '1-2']);
+  expect(readFileSync(current.file, 'utf8')).toContain('data-query-protein-id');
+  expect(current.recipe.available, current.recipe.reason).toBe(true);
+  expect(current.recipe.command).toContain('--losat losatp --losatp_mode pairwise');
+  expect(current.recipe.command).toContain('--comparisons_table');
+  const archive = await bundle(page, testInfo, 'blast table beside losatp pairwise');
+  const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+    path.resolve('tests/web/helpers/source-recipe-replay.py'), testInfo.outputPath('table-beside-losatp-replay'),
+    current.recipe.command, current.file, previous.file, archive, ...inputs, table
+  ], { encoding: 'utf8', env: replayEnv });
+  expect.soft(replay.status, `${current.recipe.command}\n${replay.stdout}${replay.stderr}`).toBe(0);
+});
+
 // OV-3590: a CLI Session of two Linear records and a -b table, loaded and Generated, has a Source recipe; its run draws
 // the Web Result and the CLI's own SVG.
 test('a Linear CLI -b Session draws the CLI SVG on Generate and its Source recipe replays to it', async ({ page }, testInfo) => {

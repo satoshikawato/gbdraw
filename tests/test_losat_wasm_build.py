@@ -64,6 +64,67 @@ def test_the_threaded_memory_limits_are_the_ones_the_file_imports() -> None:
     assert f'"initial": {pages["initial"]},' in module and f'"maximum": {pages["maximum"]}' in module
 
 
+def test_the_generated_module_records_each_shipped_file_digest() -> None:
+    # The Web app compiles a fetched Wasm file only when its sha256 is the one recorded here (OV-2440).
+    manifest = json.loads(build_tool.MANIFEST_PATH.read_text(encoding="utf-8"))
+    module = build_tool.MODULE_PATH.read_text(encoding="utf-8")
+    for name, record in manifest["files"].items():
+        assert record["sha256"] == hashlib.sha256((build_tool.WASM_DIR / name).read_bytes()).hexdigest()
+        assert f'"{name}": {{\n      "sha256": "{record["sha256"]}"\n    }}' in module
+
+
+def test_the_copied_guard_is_the_one_the_manifest_records(tmp_path: Path) -> None:
+    # check() proves the threaded file by running this copy of LOSAT's guard (its `verify` command, OV-2441).
+    tool = json.loads(build_tool.MANIFEST_PATH.read_text(encoding="utf-8"))["files"]["losat-threaded.wasm"]["guardTool"]
+    assert tool == {"path": build_tool.GUARD_TOOL, "sha256": hashlib.sha256(build_tool.GUARD_TOOL_COPY.read_bytes()).hexdigest()}
+    changed = tmp_path / "wasi_shared_memory.js"
+    changed.write_bytes(build_tool.GUARD_TOOL_COPY.read_bytes() + b"\n")
+    assert build_tool.check(guard_copy=changed) == [f"{changed.name} is not the guard the manifest records (sha256 {tool['sha256']})"]
+
+
+def test_the_check_refuses_a_threaded_file_without_a_recorded_guard(tmp_path: Path) -> None:
+    wasm_dir = tmp_path / "losat"
+    shutil.copytree(build_tool.WASM_DIR, wasm_dir)
+    manifest = json.loads((wasm_dir / "losat-build.json").read_text(encoding="utf-8"))
+    del manifest["files"]["losat-threaded.wasm"]["guardTool"]
+    (wasm_dir / "losat-build.json").write_text(json.dumps(manifest), encoding="utf-8")
+    assert build_tool.check(wasm_dir) == ["the manifest records no guard of losat-threaded.wasm"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="LOSAT's guard runs on Node.js")
+def test_recording_guards_the_threaded_file_with_the_copied_guard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # record() writes cargo's threaded output through LOSAT's guard, keeps the record the guard prints and the copy
+    # of the guard that ran. The guard returns a module it already guarded as it is, so the shipped file stands in
+    # for cargo's output here.
+    crate = tmp_path / "LOSAT"
+    (crate / "tests").mkdir(parents=True)
+    shutil.copyfile(build_tool.GUARD_TOOL_COPY, crate / build_tool.GUARD_TOOL)
+    copy = tmp_path / "copy" / "wasi_shared_memory.js"
+    monkeypatch.setattr(build_tool, "GUARD_TOOL_COPY", copy)
+    destination = tmp_path / "losat-threaded.wasm"
+    shipped = build_tool.WASM_DIR / "losat-threaded.wasm"
+    guard, tool = build_tool.guard_threaded_file(crate, shipped, destination)
+    recorded = json.loads(build_tool.MANIFEST_PATH.read_text(encoding="utf-8"))["files"]["losat-threaded.wasm"]
+    assert (guard, tool) == (recorded["sharedMemoryGuard"], recorded["guardTool"])
+    assert destination.read_bytes() == shipped.read_bytes()
+    assert copy.read_bytes() == build_tool.GUARD_TOOL_COPY.read_bytes()
+
+
+def _forged_threaded_file() -> bytes:
+    """The shipped threaded file's header, memory import and guard record, without its code: a file whose guard
+    record claims the shipped counts although nothing in it is guarded."""
+
+    shipped = (build_tool.WASM_DIR / "losat-threaded.wasm").read_bytes()
+    kept = []
+    for section_id, body, end in build_tool._sections(shipped):
+        length, cursor = build_tool._leb128(shipped, body)
+        named = section_id == 0 and shipped[cursor : cursor + length] == b"losat.shared_memory_guard"
+        if section_id == 2 or named:
+            kept.append(bytes([section_id]) + _leb(end - body) + shipped[body:end])
+    assert len(kept) == 2
+    return shipped[:8] + b"".join(kept)
+
+
 def _leb(value: int) -> bytes:
     out = bytearray()
     while True:
@@ -74,83 +135,16 @@ def _leb(value: int) -> bytes:
             return bytes(out)
 
 
-def _custom_section(name: str, payload: bytes) -> bytes:
-    body = _leb(len(name)) + name.encode() + payload
-    return b"\0" + _leb(len(body)) + body
-
-
-_GUARD = {"version": 3, "fill": 1, "copy": 2, "grow": 4, "atomic": 3, "atomic_helpers": 1}
-_HEADER = b"\0asm\x01\0\0\0"
-
-
-def _guarded(record: object = _GUARD) -> bytes:
-    return _HEADER + _custom_section("losat.shared_memory_guard", json.dumps(record).encode())
-
-
-def test_the_guard_record_is_the_one_losat_wrote() -> None:
-    assert build_tool.shared_memory_guard(_guarded()) == _GUARD
-    assert build_tool.shared_memory_guard(_HEADER) is None
-    assert build_tool.shared_memory_guard(_HEADER + _custom_section("name", b"x")) is None
-    assert build_tool.shared_memory_guard(_HEADER + _custom_section("losat.shared_memory_guard", b"{")) is None
-
-
-@pytest.mark.parametrize(
-    ("wasm", "expected"),
-    [
-        (_guarded(), None),
-        (_HEADER, "has no shared-memory guard record"),
-        (_guarded({**_GUARD, "version": 2}), "guard version 2 is older than 3"),
-        (_guarded({"version": 2, "fill": 1, "copy": 2, "atomic": 3, "atomic_helpers": 1}), "has no shared-memory guard record"),
-        (_guarded({**_GUARD, "fill": 0, "copy": 0, "grow": 0, "atomic": 0}), "guard record guards nothing"),
-        (_guarded({**_GUARD, "fill": 0, "copy": 0, "atomic": 0}), None),
-    ],
-)
-def test_a_threaded_file_needs_a_current_guard(wasm: bytes, expected: str | None) -> None:
-    problem = build_tool.guard_problem(wasm)
-    assert problem == expected
-
-
-def test_the_check_refuses_an_unguarded_threaded_file(tmp_path: Path) -> None:
+def test_the_check_refuses_a_threaded_file_whose_guard_record_is_not_its_code(tmp_path: Path) -> None:
+    # OV-2441: the record alone (a custom section) passed the check; LOSAT's verifier walks the code and refuses it.
     wasm_dir = tmp_path / "losat"
-    wasm_dir.mkdir()
-    threaded = _HEADER
-    (wasm_dir / "losat.wasm").write_bytes(_HEADER)
-    (wasm_dir / "losat-threaded.wasm").write_bytes(threaded)
-    record = {"sha256": hashlib.sha256(_HEADER).hexdigest(), "size": len(_HEADER)}
-    manifest = {
-        "commit": "a" * 40,
-        "cargoVersion": "0.2.0",
-        "version": build_tool.build_version("0.2.0", "a" * 40),
-        "files": {"losat.wasm": record, "losat-threaded.wasm": {**record, "memory": None}},
-    }
-    (wasm_dir / "losat-build.json").write_text(json.dumps(manifest), encoding="utf-8")
-    module = tmp_path / "module.js"
-    module.write_text(build_tool.render_module(manifest), encoding="utf-8")
-    assert build_tool.check(wasm_dir, module) == ["losat-threaded.wasm has no shared-memory guard record"]
-
-
-def test_the_check_compares_the_guard_record_with_the_manifest(tmp_path: Path) -> None:
-    wasm_dir = tmp_path / "losat"
-    wasm_dir.mkdir()
-    threaded = _guarded()
-    (wasm_dir / "losat.wasm").write_bytes(_HEADER)
-    (wasm_dir / "losat-threaded.wasm").write_bytes(threaded)
-    manifest = {
-        "commit": "a" * 40,
-        "cargoVersion": "0.2.0",
-        "version": build_tool.build_version("0.2.0", "a" * 40),
-        "files": {
-            "losat.wasm": {"sha256": hashlib.sha256(_HEADER).hexdigest(), "size": len(_HEADER)},
-            "losat-threaded.wasm": {
-                "sha256": hashlib.sha256(threaded).hexdigest(),
-                "size": len(threaded),
-                "memory": None,
-                "sharedMemoryGuard": {**_GUARD, "copy": 99},
-            },
-        },
-    }
+    shutil.copytree(build_tool.WASM_DIR, wasm_dir)
+    forged = _forged_threaded_file()
+    (wasm_dir / "losat-threaded.wasm").write_bytes(forged)
+    manifest = json.loads((wasm_dir / "losat-build.json").read_text(encoding="utf-8"))
+    manifest["files"]["losat-threaded.wasm"].update(sha256=hashlib.sha256(forged).hexdigest(), size=len(forged))
     (wasm_dir / "losat-build.json").write_text(json.dumps(manifest), encoding="utf-8")
     module = tmp_path / "module.js"
     module.write_text(build_tool.render_module(manifest), encoding="utf-8")
     problems = build_tool.check(wasm_dir, module)
-    assert len(problems) == 1 and problems[0].startswith("losat-threaded.wasm carries guard record")
+    assert len(problems) == 1 and problems[0].startswith("LOSAT's guard refuses losat-threaded.wasm:"), problems

@@ -132,7 +132,7 @@ from gbdraw.io.comparison_sequences import (
     read_comparison_sequence_file,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_resource
-from gbdraw.io.genome import load_fasta, parse_gff_fasta, source_genome_length
+from gbdraw.io.genome import fit_features_to_record, load_fasta, parse_gff_fasta, source_genome_length
 from gbdraw.io.record_select import select_record_units
 from gbdraw.labels.filtering import (
     read_filter_list_file,
@@ -140,9 +140,10 @@ from gbdraw.labels.filtering import (
     read_qualifier_priority_file,
 )
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
+from gbdraw.legend.row_facts import LeftOutRecord, cover_records_left_out
 from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import detected_topology
+from gbdraw.layout.record_transform import detected_topology, reads_over_origin
 from gbdraw.layout.record_units import left_off_circle, record_units
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
@@ -532,6 +533,8 @@ class PreparedDiagramInputs:
     feature_bindings: Mapping[tuple[str, str], IdentityBindings] | None = None
     # Source parses shared by the loads of one ``_load_request_records`` call.
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] | None = field(default=None, repr=False, compare=False)
+    # The records of the request's files that its record selection does not draw (``_with_records_left_out``).
+    records_left_out: tuple[LeftOutRecord, ...] = field(default=(), repr=False, compare=False)
 
 
 def _is_current_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
@@ -1474,6 +1477,42 @@ def _load_request_records(
     )))
 
 
+def _with_records_left_out(
+    request: DiagramRequest,
+    collection: ResolvedRecordCollection,
+    inputs: PreparedDiagramInputs,
+    parsed_sources: Mapping[tuple[object, ...], ParsedRecordInputs],
+) -> PreparedDiagramInputs:
+    """``inputs`` with the records of the request's files that its record selection does not draw.
+
+    The Web sends a drawing's files with the records it draws; the records it draws OFF are the rest of
+    those files (a file keeps one record ON). The Legend row facts name their rows as rows the draft did
+    not draw (``LegendRowFacts``). The record load parsed each file already: ``parsed_sources`` holds the
+    parse, or the prepared cache does when the load reused a resolved collection. A record in memory is
+    drawn. Only references are kept: a GFF3 record is flattened to the request's types when the facts are
+    read (``producible_drawing_rows``), so a render that does not read them pays nothing. Each record left
+    out is keyed by its parse and place, so the facts' render stage keeps it.
+    """
+
+    drawn: dict[tuple[object, ...], tuple[RecordInputSource, set[int]]] = {}
+    for item in collection.provenance:
+        source = request.records[item.input_index].source
+        if not isinstance(source, InMemoryRecordSource):
+            drawn.setdefault(_source_key(source), (source, set()))[1].add(item.source_record_index)
+    gff_types = _gff_feature_types(inputs.gff_candidate_features, inputs.gff_keep_all_features)
+    left_out: list[LeftOutRecord] = []
+    for key, (source, indexes) in drawn.items():
+        gff3 = isinstance(source, GffFastaInputSource)
+        spec = _prepared_source_cache_spec(source)
+        for index, record in enumerate((parsed_sources.get(key) or load_render_source_records(source)).records):
+            if index in indexes:
+                continue
+            if spec is not None:
+                register_prepared_value_identity(record, (RECORD_IDENTITY_TAG, "left-out", spec[0], index))
+            left_out.append(LeftOutRecord(record, gff3, gff_types if gff3 else None))
+    return replace(inputs, records_left_out=tuple(left_out))
+
+
 def _render_source_loaders() -> tuple[GenBankLoader, GffFastaLoader, FastaLoader]:
     """The loaders a request render reads its record sources with (read when called).
 
@@ -1509,8 +1548,10 @@ def _normalize_request_records(
             gff_loader=gff_loader,
             fasta_loader=fasta_loader,
             parsed_sources=inputs.parsed_sources,
+            circle_diagram=circle_diagram,
         )
 
+    circle_diagram = not isinstance(request, LinearDiagramRequest)
     if not prepared_input_cache_active():
         return resolve()
     source_specs = tuple(
@@ -1546,12 +1587,23 @@ def _normalize_request_records(
     gff_type_key = None if gff_types is None else tuple(sorted(gff_types))
     input_keys = tuple(_record_input_preparation_key(item) for item in request.records)
     collection_key = _record_collection_preparation_key(request.record_options)
+    # Whether each record reads a feature part past its end over its origin decides whether that part fits, by the
+    # rule record planning fits by (``reads_over_origin``); a record read alike in both modes keeps its hit across a
+    # mode switch.
+    circle_key = tuple(
+        tuple(
+            reads_over_origin(circle_diagram, item.display.is_circular, record, _source_details(item.source)[0])
+            for record in load_render_source_records(item.source).records
+        )
+        for item in request.records
+    )
     key = (
         "resolved-records-v1",
         tuple(source_key for source_key, _identities in typed_source_specs),
         input_keys,
         collection_key,
         gff_type_key,
+        circle_key,
     )
     collection = get_or_build_resolved_records(key, resource_identities, resolve)
     # Per-record identity (design 2.1, M1): the elements of the key above that
@@ -1573,6 +1625,8 @@ def _normalize_request_records(
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
                 # Each window of a record is its own drawn record (D-01).
                 *(() if provenance.window is None else (provenance.window.index,)),
+                # The features fitting the record left out, which the circle key decides.
+                *(() if not provenance.features_outside_record else (provenance.features_outside_record,)),
             )
             if default_collection
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)
@@ -2043,6 +2097,7 @@ def plan_circular_request(
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+        inputs = _with_records_left_out(unresolved_request, collection, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
@@ -2107,6 +2162,7 @@ def plan_circular_batch_request(
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+        inputs = _with_records_left_out(unresolved_request, collection, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
@@ -2286,6 +2342,7 @@ def _load_linear_request(request: LinearDiagramRequest) -> _LoadedLinearRequest:
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+        inputs = _with_records_left_out(unresolved_request, collection, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         projected_request = _with_window_layout(replace(
             unresolved_request,
@@ -2460,7 +2517,8 @@ def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
     file's; an in-memory crop, the record it was cut from, as its genome length does), with the proteins LOSATP's
     extraction takes under the drawing's visibility rules and the request's feature edits of each drawn record,
     bound to the uncropped record, so an edit outside a crop or window counts too (an undrawn record has none):
-    ``source_protein_letters``, read once per source.
+    ``source_protein_letters``, read once per source. Each record counts the features the drawing takes
+    (``fit_features_to_record``, by the rule record planning fits by), so a feature outside its record adds none.
     """
 
     collection, inputs = loaded.collection, loaded.inputs
@@ -2487,8 +2545,15 @@ def _losatp_database_sizes(loaded: _LoadedLinearRequest) -> GenomeDatabaseSizes:
         for other in provenance:
             if source_of(other) == key:
                 drawn.setdefault(other.source_record_index, other)
+        source_kind = _source_details(source)[0]
+        fitted = [
+            fit_features_to_record(record, over_origin=reads_over_origin(
+                False, drawn[index].display.is_circular if index in drawn else None, record, source_kind,
+            )).record
+            for index, record in enumerate(source_records)
+        ]
         letters[key] = source_protein_letters(
-            source_records,
+            fitted,
             feature_visibility_rules=inputs.features.feature_visibility_rules,
             feature_overrides=_source_record_edits(edits, source_records, drawn),
         )
@@ -3424,8 +3489,9 @@ def _build_request_plan_diagram(
                     mode="circular",
                     request=item_plan.request,
                     records=item_plan.records,
-                    drawing=item_plan.build(
-                        label_fit_warn_search_seconds=label_fit_warn_search_seconds
+                    drawing=cover_records_left_out(
+                        item_plan.build(label_fit_warn_search_seconds=label_fit_warn_search_seconds),
+                        item_plan.inputs.records_left_out if item_plan.inputs is not None else (),
                     ),
                     inputs=item_plan.inputs,
                     transforms=item_plan.transforms,
@@ -3514,6 +3580,7 @@ def _build_request_plan_diagram(
                 and linear_artifacts.extraction.identity_manifest is not None
                 else current_artifacts.protein_identity_manifest
             )
+    cover_records_left_out(drawing, plan.inputs.records_left_out if plan.inputs is not None else ())
     return PreparedDiagramRequest(
         mode=plan.mode,
         transforms=plan.transforms,

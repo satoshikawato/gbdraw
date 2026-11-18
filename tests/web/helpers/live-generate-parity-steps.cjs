@@ -4,7 +4,7 @@
 // siblings). The comparison itself is tests/web/helpers/live-generate-parity.cjs.
 const { expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, installPageProbe } = require('./app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./audit-browser.cjs');
 const { settleLive } = require('./live-generate-parity.cjs');
 const { loadEditorLegendRows } = require('./mode-transition.cjs');
@@ -109,6 +109,8 @@ const popupEdit = async (page, match, edit = {}) => {
     await app.openFeatureEditorFromList(app.filteredFeatures.find(matches), null);
     await window.Vue.nextTick();
     if (!app.clickedFeature) throw new Error(`no popup for ${JSON.stringify(target)}`);
+    // A name typed in the Legend name field and not committed: the color edit below names its rule with it.
+    if (change.typedLegendName !== undefined) app.clickedFeature.legendName = change.typedLegendName;
     if (change.fill) {
       await app.updateClickedFeatureColor(change.fill);
       if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');
@@ -275,6 +277,33 @@ const renameLegendRow = async (page, caption, name) => {
 const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetSettings(); })
   .then(() => settleLive(page));
 
+// The reply of the next automatic rerender (or Generate) is held until
+// `releaseRerender`, so the steps between land while it is owed. The warm
+// restore releases a hold a case left (`installPageProbe`).
+const holdNextRerender = (page) => installPageProbe(page, () => {
+  const hold = { entered: false };
+  const released = new Promise((resolve) => { hold.release = resolve; });
+  window.__RERENDER_HOLD__ = hold;
+  window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
+    if (hold.entered) return;
+    hold.entered = true;
+    await released;
+  };
+  return () => {
+    hold.release();
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    delete window.__RERENDER_HOLD__;
+  };
+});
+const insideHeldRerender = (page) => expect.poll(() => page.evaluate(() => window.__RERENDER_HOLD__.entered), { timeout: 120_000 }).toBe(true);
+const releaseRerender = async (page) => {
+  await page.evaluate(() => {
+    window.__RERENDER_HOLD__.release();
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+  });
+  await settleLive(page);
+};
+
 // A Save started while a batch Result is displayed, declining that display.
 // The Save is held (its own `beforeExport`) until the Result it raced is mounted.
 const displayWhileSaveHeld = async (page, resultIndex) => {
@@ -355,6 +384,9 @@ module.exports = {
   renameLegendRow,
   resetSettings,
   displayWhileSaveHeld,
+  holdNextRerender,
+  insideHeldRerender,
+  releaseRerender,
   saveWhileDisplaying,
   loadFeatureEdits
 };

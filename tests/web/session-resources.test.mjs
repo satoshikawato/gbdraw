@@ -265,7 +265,8 @@ assert.equal(bindings.linearSeqs[0].file_subtitle, 'Default subtitle');
 assert.equal(bindings.linearSeqs[0].inferred_definition, '<i>Escherichia coli</i> K-12');
 assert.equal(bindings.linearComparisons[0].id, 'comparison-uid-1');
 assert.deepEqual(Object.keys(bindings.linearComparisons[0]), ['id', 'file']);
-assert.equal(Object.hasOwn(bindings, 'linearCanonicalComparisons'), false);
+// The comparisons the Linear draft adopted from a committed request, as it holds them: here none (OV-3826).
+assert.deepEqual(bindings.linearCanonicalComparisons, []);
 assert.equal(
   built.renderRequest.records[0].source.resourceId,
   bindings.circularSources[0].gb.resourceId

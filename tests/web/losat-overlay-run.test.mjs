@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const { runLosatJobsByFile, runUntilCanceled } = await import('../../gbdraw/web/js/services/losat.js');
-const { losatRunFailure } = await import('../../gbdraw/web/js/services/losat-runtime.js');
+const { losatBuildChangedFailure, losatRunFailure } = await import('../../gbdraw/web/js/services/losat-runtime.js');
 
 /** A step whose reply the test gives when it chooses. */
 const held = () => {
@@ -106,6 +106,18 @@ test('Cancel during a File stops the run: the abort is thrown and no later File 
     return [{ ...job, text: 'rows' }];
   }, { signal: controller.signal, status: () => {} }, 'findInOtherFiles'), (error) => error === canceled);
   assert.deepEqual(ran, ['a', 'b']);
+});
+
+// OV-2440: a LOSAT of another build fails every File the same way; the run stops with the one diagnostic that asks for
+// a reload (Save Session, Reload) instead of one text row per File.
+test('a LOSAT of another build stops the search by File with its own diagnostic', async () => {
+  const ran = [];
+  const changed = losatBuildChangedFailure('LOSAT pair #1: other build');
+  await assert.rejects(runLosatJobsByFile(jobs, async (job) => {
+    ran.push(job.fileKey);
+    throw changed;
+  }, { signal: new AbortController().signal, status: () => {} }, 'findInOtherFiles'), (error) => error === changed);
+  assert.deepEqual(ran, ['a']);
 });
 
 test('a File whose LOSAT exits with an error says what LOSAT reported and names the Search, not Generate', async () => {

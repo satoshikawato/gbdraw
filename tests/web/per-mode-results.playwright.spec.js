@@ -532,9 +532,10 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
   }
 });
 
-// §7.7 risk 2: the LOSAT caches stay shared and the protein identity manifest
-// is each drawing's (D-197), so a Linear BLASTP Result saved while Circular is
-// shown keeps its evidence: its searches, and its manifest in its own slot.
+// §7.7 risk 2: each drawing owns its LOSAT evidence, its searches and its
+// protein identity manifest (PD-OI-022 scenario revision 2: Clear LOSAT
+// results clears only the shown drawing's), so a Linear BLASTP Result saved
+// while Circular is shown keeps its evidence in its own slot.
 test('a Linear BLASTP Result saved while Circular is shown keeps its comparison cache', async ({ page, browser }, info) => {
   test.setTimeout(360_000);
   const BGC = 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw';
@@ -553,8 +554,9 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
   await settleLive(page);
   await generate(page);
-  // The Circular drawing shows its own (empty) manifest; the Linear one waits in its slot.
-  expect(await cache(page)).toEqual({ ...loadedCache, manifest: 0 });
+  // The Circular drawing shows its own (empty) evidence; the Linear one's waits in its slot.
+  const empty = { entries: 0, manifest: 0 };
+  expect(await cache(page)).toEqual(empty);
 
   const saved = await save(page, info.outputPath('blastp.gbdraw'));
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
@@ -566,7 +568,7 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
   try {
     await load(fresh, info.outputPath('blastp.gbdraw'));
     expect(await shown(fresh)).toMatchObject({ mode: 'circular', count: 1, mounted: true });
-    expect(await cache(fresh)).toEqual({ ...loadedCache, manifest: 0 });
+    expect(await cache(fresh)).toEqual(empty);
     await showMode(fresh, 'linear');
     expect(await cache(fresh)).toEqual(loadedCache);
     const restored = await shown(fresh);

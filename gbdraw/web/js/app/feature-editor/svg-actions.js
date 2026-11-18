@@ -38,7 +38,9 @@ import { legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, matchPopupOf, previewItemPopupOf, previewItemTarget } from '../../services/match-frame-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from '../../services/preview-affordances.js';
+import {
+  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken
+} from '../../services/preview-affordances.js';
 import { ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR } from '../../services/drawn-groups.js';
 import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from '../../services/drawn-attributes.generated.js';
 import {
@@ -610,8 +612,8 @@ export const createFeatureSvgActions = ({
         [
           FEATURE_SELECTOR,
           PAIRWISE_MATCH_SELECTOR,
-          'text[data-label-editable="true"]',
-          '[data-label-key]',
+          EDITABLE_LABEL_SELECTOR,
+          `[${LABEL_KEY_ATTRIBUTE}]`,
           '[data-label-feature-id]',
           '#legend',
           '#feature_legend',

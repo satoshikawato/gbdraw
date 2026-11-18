@@ -1,8 +1,10 @@
 import {
   compileLosatWasm,
   hasDirectLosatApi,
+  isLosatBuildChangedFailure,
   isLosatTrapFailure,
   reportedLosatFailure,
+  requireLosatBuild,
   requireLosatProgram,
   runLosatPairDirect,
   runLosatPairWasi
@@ -30,7 +32,7 @@ const loadWasiShim = async (wasiShimUrl) => {
 const loadLosatModule = async (wasmUrl = DEFAULT_WASM_URL) => {
   if (!wasmModulePromise || wasmModuleUrl !== wasmUrl) {
     wasmModuleUrl = wasmUrl;
-    wasmModulePromise = compileLosatWasm(wasmUrl, 'LOSAT wasm');
+    wasmModulePromise = compileLosatWasm(wasmUrl, 'losat.wasm');
   }
   return wasmModulePromise;
 };
@@ -132,8 +134,10 @@ const resolveSequence = (key, label) => {
 };
 
 self.onmessage = async (event) => {
-  const { id, type, job, sequences } = event.data || {};
+  const { id, type, job, sequences, losatBuild } = event.data || {};
   try {
+    // A page of another LOSAT build than this worker's (OV-2440).
+    requireLosatBuild(losatBuild);
     if (type === 'init') {
       await initializeWorkerRuntime(event.data || {});
       self.postMessage({ id, ok: true, type: 'init' });
@@ -162,7 +166,8 @@ self.onmessage = async (event) => {
       ok: false,
       error: error?.message ? String(error.message) : String(error || 'Unknown LOSAT worker error'),
       losatReported: reportedLosatFailure(error),
-      trap: isLosatTrapFailure(error)
+      trap: isLosatTrapFailure(error),
+      buildChanged: isLosatBuildChangedFailure(error)
     });
   }
 };

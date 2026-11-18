@@ -11,7 +11,7 @@ import re
 from pathlib import PurePath, PureWindowsPath
 from typing import Sequence
 
-from Bio.SeqFeature import CompoundLocation, ExactPosition, Location, SeqFeature, SimpleLocation
+from Bio.SeqFeature import CompoundLocation, Location, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, keep_window_source
@@ -20,7 +20,6 @@ from ..core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
     _read_coord_map,
-    _source_intervals,
     _source_period,
     _wrap_source_base,
     _write_coord_map,
@@ -354,31 +353,6 @@ def _unwrapped_location(location: Location, length: int) -> Location:
     return CompoundLocation(moved, operator=getattr(location, "operator", "join"))
 
 
-def _wrapped_location(location: Location, length: int) -> Location:
-    """``location``, read on a circle of ``length`` bases from its origin onwards for up to two turns, on one turn:
-    the inverse of ``_unwrapped_location``. A part past the origin moves one turn back, and a part across it is split
-    there (``_source_intervals``) into a part that ends at the origin and one that starts after it, in biological
-    order. The cut points at the origin are exact; the part's own ends keep their positions (a partial end stays
-    partial)."""
-
-    parts: list[Location] = []
-    for part in getattr(location, "parts", None) or [location]:
-        start = int(part.start)
-        intervals = _source_intervals(start, int(part.end), 1, 1, length)
-        if len(intervals) == 1:
-            parts.append(part if intervals[0][0] == start else part._shift(intervals[0][0] - start))
-            continue
-        # A position plus an offset keeps its kind (minus gives a plain int).
-        pieces = [
-            SimpleLocation(part.start, ExactPosition(length), strand=part.strand),
-            SimpleLocation(ExactPosition(0), part.end + (-length), strand=part.strand),
-        ]
-        parts.extend(reversed(pieces) if part.strand == -1 else pieces)
-    if len(parts) == 1:
-        return parts[0]
-    return CompoundLocation(parts, operator=getattr(location, "operator", None) or "join")
-
-
 def _two_turns(location: Location, length: int, window: tuple[int, int]) -> Location | None:
     """``location`` on the turns of the record read twice round that ``window`` shows, in biological order.
 
@@ -474,6 +448,8 @@ def _crop_record_to_region(
         coord_base=coord_base,
         coord_step=coord_step,
         period=_source_period(record),
+        # Only a record drawn circular reads a feature part past its end as the span over its origin it is (OV-3724).
+        record_length=len(source.seq) if circular else None,
     )
     cropped_base = _wrap_source_base(coord_base + (coord_step * start_0), period)
     cropped_step = coord_step

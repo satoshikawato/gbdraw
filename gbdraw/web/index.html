@@ -2587,9 +2587,11 @@
                     <button data-history-list-toggle data-history-ignore @click="historyList.toggleList" :disabled="!historyList.available.value" :aria-expanded="historyList.open.value ? 'true' : 'false'" :aria-controls="historyList.id" class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="t('History')" :aria-label="t('History')">
                         <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
                     </button>
-                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="Boolean(sessionOperationAvailability('not-during-run'))">
+                    <button data-history-managed @click="requestResetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Reset Settings')" :aria-label="t('Reset Settings')" :disabled="Boolean(sessionOperationAvailability('not-during-run'))" aria-describedby="reset-settings-run-reason">
                         <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> {{ t('Reset Settings') }}
                     </button>
+                    <!-- The toolbar's status line shows the same reason; this one is the button's description. -->
+                    <run-blocked-reason id="reset-settings-run-reason" class="sr-only"></run-blocked-reason>
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" :title="t('Save the current Result and settings draft without generating')" :aria-label="t('Save Session')" aria-describedby="session-save-help">
                         <gbdraw-loader v-if="sessionSavePending"></gbdraw-loader><i v-else class="ph ph-archive" aria-hidden="true"></i> {{ t('Save Session') }}
                     </button>
@@ -4089,9 +4091,10 @@
                                         <ul class="space-y-0.5"><li v-for="line in featureAnchorPreviewLines" :key="line">{{ line }}</li></ul>
                                         <p v-if="featureAnchorPreview.clearsAlignment">{{ t('Apply clears the active similarity alignment.') }}</p>
                                         <div class="grid grid-cols-2 gap-1">
-                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || Boolean(sessionOperationAvailability('not-during-run'))" data-testid="linear-anchor-feature-apply">{{ t('Align records') }}</button>
+                                            <button type="button" data-history-managed class="btn btn-primary px-1 py-0.5 text-[10px]" @click="applyFeatureAnchor" :disabled="featureAnchorBusy || Boolean(sessionOperationAvailability('not-during-run'))" aria-describedby="linear-anchor-feature-run-reason" data-testid="linear-anchor-feature-apply">{{ t('Align records') }}</button>
                                             <button type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="cancelFeatureAnchor" :disabled="featureAnchorBusy">{{ t('Cancel') }}</button>
                                         </div>
+                                        <run-blocked-reason id="linear-anchor-feature-run-reason"></run-blocked-reason>
                                     </div>
                                     <p v-if="featureAnchorError" role="alert" class="text-[10px] text-red-700" data-testid="linear-anchor-feature-error">{{ errorText(featureAnchorError.summaryParts) }}</p>
                                     <p v-if="featureAnchorNotice" role="status" aria-live="polite" class="text-[10px] text-slate-600" data-testid="linear-anchor-feature-notice">{{ featureAnchorNotice }}</p>
@@ -4100,8 +4103,9 @@
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">{{ t('LOSAT cache') }}</div>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'linear-losat-cache-reason' : null"><i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear the project\'s {count} LOSAT result', 'Clear the project\'s {count} LOSAT results') }}</button>
-                                <p v-if="clearableLosatResultCount === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || (losatResultRows.length === 0)" aria-describedby="linear-losat-cache-run-reason linear-losat-cache-reason"><i class="ph ph-trash" aria-hidden="true"></i> {{ losatResultRows.length === 0 ? t('Clear LOSAT results') : tn(losatResultRows.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}</button>
+                                <p v-show="losatResultRows.length === 0" id="linear-losat-cache-reason" class="ui-hint">{{ losatResultRows.length === 0 ? (projectHasLosatResults ? t('No LOSAT results in this drawing') : t('No LOSAT results yet')) : '' }}</p>
+                                <run-blocked-reason id="linear-losat-cache-run-reason"></run-blocked-reason>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('collinear-details') || linearComparisonUi.sectionKeys.advanced.includes('paralog-links')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -4479,14 +4483,15 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatResultRows.length === 0" :aria-describedby="losatResultRows.length === 0 ? 'circular-losat-cache-reason' : null">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs flex-auto" :disabled="losatResultRows.length === 0" aria-describedby="circular-losat-cache-reason">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> {{ t('Save Raw LOSAT TSV') }}
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="!semanticMutationAvailable || (clearableLosatResultCount === 0)" :aria-describedby="clearableLosatResultCount === 0 ? 'circular-losat-cache-reason' : null">
-                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ clearableLosatResultCount === 0 ? t('Clear LOSAT results') : tn(clearableLosatResultCount, 'Clear the project\'s {count} LOSAT result', 'Clear the project\'s {count} LOSAT results') }}
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs flex-auto" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || (losatResultRows.length === 0)" aria-describedby="circular-losat-cache-run-reason circular-losat-cache-reason">
+                                        <i class="ph ph-trash" aria-hidden="true"></i> {{ losatResultRows.length === 0 ? t('Clear LOSAT results') : tn(losatResultRows.length, 'Clear {count} LOSAT result', 'Clear {count} LOSAT results') }}
                                     </button>
                                 </div>
-                                <p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResultCount === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>
+                                <p v-show="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ losatResultRows.length === 0 ? (projectHasLosatResults ? t('No LOSAT results in this drawing') : t('No LOSAT results yet')) : '' }}</p>
+                                <run-blocked-reason id="circular-losat-cache-run-reason"></run-blocked-reason>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">{{ t('Series names') }} <help-tip id="help-circular-comparison-series-names" :text="t('Optional fallback names for rings, one per source. Use new lines or commas.')"></help-tip></span>
@@ -4751,7 +4756,8 @@
                                             </select>
                                         </div>
                                         <p v-if="linearWrapBlockedText" id="linear-wrap-blocked" class="ui-hint" data-linear-wrap-blocked>{{ linearWrapBlockedText }}</p>
-                                        <button v-if="linearWrapResetsPositions" type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="resetRecordPositions" :disabled="!semanticMutationAvailable || recordPositionResetBusy || Boolean(sessionOperationAvailability('not-during-run'))" data-testid="linear-wrap-reset-positions">{{ t('Reset record positions') }}</button>
+                                        <button v-if="linearWrapResetsPositions" type="button" data-history-managed class="btn btn-secondary px-1 py-0.5 text-[10px]" @click="resetRecordPositions" :disabled="!semanticMutationAvailable || recordPositionResetBusy || Boolean(sessionOperationAvailability('not-during-run'))" aria-describedby="linear-wrap-reset-positions-run-reason" data-testid="linear-wrap-reset-positions">{{ t('Reset record positions') }}</button>
+                                        <run-blocked-reason v-if="linearWrapResetsPositions" id="linear-wrap-reset-positions-run-reason"></run-blocked-reason>
                                     </div>
                                     <div data-setting="track-visibility" class="grid grid-cols-1 gap-y-1">
                                         <div class="flex items-center text-xs">
@@ -7496,7 +7502,7 @@
                             <label class="text-xs font-medium text-slate-500 block mb-1">{{ t('Legend name') }}</label>
                             <input type="text"
                                    v-committed-value="clickedFeature.legendName === clickedFeature.appliedLegendName ? shownLegendName(clickedFeature.legendName) : clickedFeature.legendName"
-                                   @input="clickedFeature.legendName = $event.target.value"
+                                   @input="clickedFeature.legendName = $event.target.value; clickedFeature.legendNameEdited = true"
                                    @change="settleCommittedField($event.target, handleLegendNameCommit())"
                                    @keydown.enter.prevent="settleCommittedField($event.target, handleLegendNameCommit())"
                                    data-history-managed
@@ -7541,7 +7547,7 @@
                                             @click="alignByClickedOrthogroup($event)"
                                             :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                             :aria-busy="similarityAlignmentBusy"
-                                            aria-describedby="clicked-alignment-action-description"
+                                            aria-describedby="clicked-alignment-action-description clicked-alignment-run-reason"
                                             class="min-w-0 px-2 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                                             :title="t('Align to this exact feature')">
                                         <i class="ph ph-arrows-left-right" aria-hidden="true"></i>
@@ -7554,12 +7560,13 @@
                                                 @click="alignByClickedOrthogroup($event, 'review')"
                                                 :disabled="!clickedOrthogroupDetail?.currentMember || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
                                                 :aria-busy="similarityAlignmentBusy"
-                                                aria-describedby="clicked-alignment-action-description"
+                                                aria-describedby="clicked-alignment-action-description clicked-alignment-run-reason"
                                                 class="match-link focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
                                                 :title="t('Review alignment options for this exact feature')">{{ t('Review alignment options…') }}</button>
                                         <help-tip id="clicked-alignment-action-description" :label="t('About Align and Review')"
                                                   :text="t('Align applies resolved targets immediately; ambiguity opens review. Review alignment options… lets you inspect or change anchors, Skip, and direction before applying.')"></help-tip>
                                     </div>
+                                    <run-blocked-reason id="clicked-alignment-run-reason" class="text-center"></run-blocked-reason>
                                 </div>
                             </div>
                             <action-menu v-if="canUseClickedOrthogroupActions || clickedOrthogroupDetail" :label="t('More')" icon="ph-dots-three" :title="t('Highlight, copy, or download this group')"
@@ -7711,6 +7718,7 @@
                                               :text="t('Coordinates refer to the original record.')"></help-tip>
                                 </p>
                                 </template>
+                                <run-blocked-reason id="feature-record-rotation-run-reason" class="mt-2"></run-blocked-reason>
                                 <p id="feature-record-rotation-reason"
                                    v-if="featureRecordRotationDraft.disabledReason.length"
                                    class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ errorText(featureRecordRotationDraft.disabledReason) }}</p>
@@ -7732,7 +7740,7 @@
                                     <button type="button"
                                             @click="applyFeatureRecordRotation"
                                             :disabled="Boolean(sessionOperationAvailability('not-during-run')) || !featureRecordRotationDraft.canApply || featureRecordRotationDraft.pending"
-                                            aria-describedby="feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
+                                            aria-describedby="feature-record-rotation-run-reason feature-record-rotation-reason feature-record-rotation-pending feature-record-rotation-preview"
                                             class="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed">
                                         {{ featureRecordRotationDraft.pending ? t('Applying…') : t('Apply now') }}
                                     </button>
@@ -8947,7 +8955,7 @@
                                 class="btn btn-secondary py-2 text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{{ t('Cancel') }}</button>
                         <button type="button"
                                 @click="applySimilarityAlignmentDraft"
-                                :disabled="Boolean(sessionOperationAvailability('not-during-run')) || !canApplySimilarityAlignment"
+                                :disabled="!canApplySimilarityAlignment"
                                 aria-describedby="similarity-alignment-apply-reason"
                                 class="btn btn-primary py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
                             <span v-if="similarityAlignmentStatus === 'applying'">{{ t('Applying…') }}</span>
@@ -9357,7 +9365,7 @@
                                     <button type="button"
                                             data-history-managed
                                             @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event)"
-                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
+                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason)"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
                                             :title="t('Align to the selected exact feature')"
@@ -9369,7 +9377,7 @@
                                             data-history-managed
                                             data-similarity-alignment-drawer-review
                                             @click="startSimilarityAlignmentFromDrawer(selectedOrthogroup.id, $event, 'review')"
-                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason) || similarityAlignmentBusy || Boolean(sessionOperationAvailability('not-during-run'))"
+                                            :disabled="Boolean(similarityAlignmentDrawer.disabledReason)"
                                             :aria-busy="similarityAlignmentBusy"
                                             aria-describedby="similarity-alignment-drawer-reason"
                                             :title="t('Review alignment options for the selected exact feature')"
@@ -9600,9 +9608,10 @@
             </div>
             <footer class="shrink-0 border-t border-slate-200 bg-slate-50 p-4">
                 <operation-error v-if="similarityAlignmentError" :error="similarityAlignmentError" :recovery="generationFailureRecovery" tabindex="-1" data-similarity-alignment-reset-error class="mb-2 text-xs text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-700"></operation-error>
+                <run-blocked-reason id="similarity-alignment-reset-run-reason" class="mb-2"></run-blocked-reason>
                 <div class="flex justify-end gap-2">
                     <button type="button" @click="cancelSimilarityAlignmentReset" :disabled="similarityAlignmentBusy" class="btn btn-secondary">{{ t('Cancel') }}</button>
-                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || similarityAlignmentBusy" class="btn btn-primary">{{ similarityAlignmentBusy ? t('Resetting…') : similarityAlignmentResetScope === 'positions-and-directions' ? t('Reset positions and directions') : t('Reset positions') }}</button>
+                    <button type="button" @click="applySimilarityAlignmentReset" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || similarityAlignmentBusy" aria-describedby="similarity-alignment-reset-run-reason" class="btn btn-primary">{{ similarityAlignmentBusy ? t('Resetting…') : similarityAlignmentResetScope === 'positions-and-directions' ? t('Reset positions and directions') : t('Reset positions') }}</button>
                 </div>
             </footer>
         </section>

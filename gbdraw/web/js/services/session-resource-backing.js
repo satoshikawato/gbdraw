@@ -15,6 +15,7 @@ import {
 import { CIRCULAR_SOURCE_FILE_SLOTS, SESSION_DRAWINGS_LAYOUT } from '../contracts/schema.generated.js';
 import { recordStructuralMetric, testByteCap } from './runtime-test-hooks.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { isPlainObject } from '../utils/contract-shape.js';
 import { MAX_EXPANDED_INPUT_BYTES } from '../contracts/schema.generated.js';
 
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
@@ -344,6 +345,13 @@ export const readSessionResources = (resources) => {
  * @typedef {Readonly<Record<string, unknown>> | null | undefined} WebFileBindingRow
  */
 /**
+ * One comparison a Session 51 Linear drawing's draft adopted from its committed request, as Save writes it in
+ * `linearCanonicalComparisons` (the draft's `BoundCanonicalComparison`): a resource-backed one names its table by
+ * `file`, a binding of the resource a committed comparison of its `kind` names; a generated protein pipeline has no
+ * file. `webFileBindingFaults` checks each entry; Load reads the rest of it as the draft's.
+ * @typedef {Readonly<{ kind: string, file?: WebFileLeafBinding | null, [field: string]: unknown }>} CanonicalComparisonBinding
+ */
+/**
  * `webFiles.bindings` after `validateWebFileBindings`. Each file slot holds null,
  * a leaf, or a list of them (a JSON list has no `kind`); only the `c_gb` of a
  * Session 41-50 may hold a composite. A Session 51 Circular drawing holds its
@@ -352,6 +360,7 @@ export const readSessionResources = (resources) => {
  *   schema: 1 | 2,
  *   c_gb?: WebFileCompositeBinding | WebFileLeafBinding | (ReadonlyArray<unknown> & { readonly kind?: undefined }) | null,
  *   circularSources?: ReadonlyArray<WebFileCircularSourceBinding>,
+ *   linearCanonicalComparisons?: ReadonlyArray<CanonicalComparisonBinding>,
  *   [field: string]: unknown
  * }>} WebFileBindings
  */
@@ -411,9 +420,11 @@ export const webBindingInputSlot = (drawingView, mode) => (drawingView
  *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
  * @param {WebBindingInputSlot} [inputSlot] The input slot schema 2 holds: `c_gb` for a Session 41-50, the
  *   drawing's mode's for a Session 51 drawing's one-drawing view (`gbdraw/session_io.py`).
+ * @param {unknown} [request] A Session 51 drawing's committed request, unvalidated: its comparisons are the ones the
+ *   drawing's draft can have adopted (`linearCanonicalComparisons`).
  * @returns {WebFileBindingFault[]}
  */
-export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb') => {
+export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb', request = null) => {
   if (!webFiles || !Object.hasOwn(webFiles, 'bindings')) return [];
   const bindings = webFiles.bindings;
   /**
@@ -473,7 +484,7 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
   ];
   if (current) {
     Object.keys(bindings).filter(key => ![
-      'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons',
+      'schema', ...slots, 'c_conservation_blasts_source', ...SESSION_DRAWINGS_LAYOUT.bindingModeSlots.linear,
       ...(modeScoped ? [] : ['circularSources'])
     ].includes(key)).forEach(key => faults.push({ at: [key], field: true }));
   }
@@ -507,7 +518,53 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
     (Array.isArray(bindings[slot]) ? bindings[slot] : []).forEach((/** @type {WebFileBindingRow} */ row, index) => (
       value(row?.file, [slot, index, 'file'])));
   });
+  if (Object.hasOwn(bindings, 'linearCanonicalComparisons')) {
+    faults.push(...adoptedComparisonFaults(bindings, modeScoped && current, modeScoped, request));
+  }
   return faults;
+};
+
+/**
+ * The faults of the comparisons a Session 51 Linear drawing's draft adopted from its committed request
+ * (`linearCanonicalComparisons`, OV-3826), as `_validate_adopted_comparisons` in gbdraw/session_io.py admits them (the
+ * admission vectors pin the two): a list of entries of a `kind`, each with a `file` naming the resource that a
+ * committed comparison of its kind names; an entry with no file (a generated protein pipeline) names none. A Session
+ * 41-50 inventory binds none: its drafts are projected from the committed request. An older one's is left to its move
+ * to the current writer, which drops it (`project_session_adjunct_for_current_write`).
+ * @param {Readonly<Record<string, unknown>>} bindings An object inventory that holds the list.
+ * @param {boolean} unwritten The inventory is a Session 41-50's of schema 2, which no writer gave the list.
+ * @param {boolean} modeScoped The inventory is a Session 50's or older.
+ * @param {unknown} request The drawing's committed request, unvalidated.
+ * @returns {WebFileBindingFault[]}
+ */
+const adoptedComparisonFaults = (bindings, unwritten, modeScoped, request) => {
+  const entries = bindings.linearCanonicalComparisons;
+  if (!unwritten && modeScoped) return [];
+  if (unwritten || !Array.isArray(entries)) return [{ at: ['linearCanonicalComparisons'], field: true }];
+  const committed = committedComparisonKeys(request);
+  return entries.flatMap((/** @type {unknown} */ entry, index) => (
+    !isPlainObject(entry) || typeof entry.kind !== 'string' || (isPlainObject(entry.file)
+      && !committed.has(comparisonKey(entry.kind, entry.file.resourceId)))
+      ? [{ at: ['linearCanonicalComparisons', index] }] : []));
+};
+
+/**
+ * The key of a comparison of `kind` stored in the resource `resourceId`.
+ * @param {string} kind
+ * @param {unknown} resourceId
+ */
+export const comparisonKey = (kind, resourceId) => JSON.stringify([kind, resourceId]);
+/**
+ * The keys of the stored comparisons a committed request holds (`comparisonKey`): the only ones a Linear drawing's
+ * draft can have adopted from it.
+ * @param {unknown} request The request, unvalidated.
+ * @returns {Set<string>}
+ */
+export const committedComparisonKeys = (request) => {
+  const comparisons = isPlainObject(request) ? request.comparisons : null;
+  return new Set((Array.isArray(comparisons) ? comparisons : []).flatMap((/** @type {unknown} */ comparison) => (
+    isPlainObject(comparison) && typeof comparison.kind === 'string' && typeof comparison.resourceId === 'string'
+      ? [comparisonKey(comparison.kind, comparison.resourceId)] : [])));
 };
 
 /**
@@ -537,11 +594,12 @@ export const webFileBindingsWithoutDepth = (bindings, resourceIds) => {
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
  * @param {WebBindingInputSlot} [inputSlot] As `webFileBindingFaults`.
+ * @param {unknown} [request] As `webFileBindingFaults`.
  * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked
  */
-export const validateWebFileBindings = (webFiles, resources = {}, inputSlot = 'c_gb') => {
+export const validateWebFileBindings = (webFiles, resources = {}, inputSlot = 'c_gb', request = null) => {
   // R6: the typed Session-fields error; Load lists each fault's place before (`readSessionInputs`).
-  if (webFileBindingFaults(webFiles, resources, inputSlot).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  if (webFileBindingFaults(webFiles, resources, inputSlot, request).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   // No fault: the checks prove the schema and each file slot.
   return /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
 };

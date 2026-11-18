@@ -3,7 +3,7 @@
 /** @import { StandaloneInteractivityOptions } from './standalone-interactivity.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { WebState } from '../state.js' */
-import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken } from './preview-affordances.js';
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE, setClassToken, stripLabelBinderMarks } from './preview-affordances.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /**
@@ -81,6 +81,7 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
     svg.querySelectorAll('[data-gbdraw-preview-item]').forEach((element) => {
       ['data-gbdraw-preview-item', 'role', 'tabindex', 'aria-haspopup'].forEach((name) => element.removeAttribute(name));
     });
+    stripLabelBinderMarks(svg);
   }
 };
 

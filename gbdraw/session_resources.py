@@ -141,12 +141,13 @@ class SessionResourceTable:
         *,
         preferred_id: str = "",
     ) -> str:
-        """The resource of one Web file's bytes; a binding carries its own name.
+        """The resource ID of one Web file's bytes.
 
         A held resource with equal bytes is shared. A new resource keeps
         ``preferred_id`` and the descriptor's name when both are free and safe;
         otherwise it is ``resource-NNNN``, named ``resource-NNNN-<name>``, as the
-        Web writer names it (``services/session-resources.js``).
+        Web writer names it (``services/session-resources.js``). The file's own
+        name stays in the caller's Web file binding, not in the resource name.
         """
 
         held = self._held.get(preferred_id)

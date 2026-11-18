@@ -1520,8 +1520,7 @@
       "vector": "tests/fixtures/resource-id-prefix-vectors.json",
       "reason": "Web Load reads a Session 46-51 without Python (a saved preview loads without starting the Worker), and Web-written Sessions of those versions hold resources that store no name: tables gbdraw made (resolved and LOSAT comparison tables, color tables) and test-written fixtures. Python names the same files for `gbdraw render --session` and stores the names when it moves a Session 31-45 to the current writer (loaded_resource_display_names), so the CLI and the Web show one name. A generator cannot carry the rule: it reads each resource's own ID. Both sides take a name as given; the Web first takes its base name and drops control characters (normalizeOriginalResourceName), which its writer has already done to every name it stores.",
       "retireWhen": "the Web reads a Session 46-51's file names through Python at Load, or no supported Session version holds a resource whose name carries its ID prefix without a stored name (the Web writer stores resourceOriginalNames for the tables gbdraw makes, and Sessions written before it are no longer read)",
-      "source": "review r1 of fix/loaded-resource-names-one-owner (OV-3660); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)",
-      "pending": true
+      "source": "review r1 of fix/loaded-resource-names-one-owner (OV-3660); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)"
     },
     {
       "id": "vector:tests/fixtures/record_order_row_vectors.json",

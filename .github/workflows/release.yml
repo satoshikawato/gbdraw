@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   build-release-distributions:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -75,7 +75,7 @@ jobs:
   # (docs/internal/WEB_PERIODIC_AUDIT.md, "Release evidence check").
   release-evidence:
     name: Release-tier evidence carries to the tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -102,7 +102,7 @@ jobs:
 
   pypi-publish:
     needs: [build-release-distributions, release-evidence]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: pypi
     permissions:

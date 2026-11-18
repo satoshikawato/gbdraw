@@ -513,7 +513,7 @@ export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
   bindingCardSlots: Object.freeze(['blacklist', 'd_color', 'qualifier_priority', 't_color', 'whitelist']),
   bindingModeSlots: Object.freeze({
     circular: Object.freeze(['c_conservation_blasts', 'c_conservation_blasts_source', 'c_conservation_fastas', 'c_conservation_sequence_sources', 'c_depth', 'circularSources']),
-    linear: Object.freeze(['linearComparisons', 'linearSeqs'])
+    linear: Object.freeze(['linearCanonicalComparisons', 'linearComparisons', 'linearSeqs'])
   }),
   bindingInputSlots: Object.freeze({
     circular: 'circularSources',

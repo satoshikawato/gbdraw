@@ -247,3 +247,123 @@ def test_cli_session_keeps_one_file_as_one_source_on_replay(
     assert replayed["renderRequest"]["records"] == records
     assert replayed["resources"] == session["resources"]
     assert replayed["losatCache"] == session["losatCache"]
+
+
+def _table_beside_search(tmp_path: Path, rows: str) -> tuple[list[str], Path]:
+    """Three BGC records, a BLAST table of #1 and #2, and a comparisons table of ``rows`` (OV-3688)."""
+
+    for name in ("BGC0000708.gbk", "BGC0000709.gbk", "BGC0000711.gbk"):
+        shutil.copy(INPUTS / name, tmp_path / name)
+    (tmp_path / "pair.tsv").write_text(
+        "BGC0000708\tBGC0000709\t90\t100\t0\t0\t1\t100\t1\t100\t1e-20\t200\n", encoding="utf-8"
+    )
+    (tmp_path / "comparisons.tsv").write_text("blast\tquery\tsubject\tsource\n" + rows, encoding="utf-8")
+    inputs = ["--gbk", *(str(tmp_path / f"BGC000070{n}.gbk") for n in (8, 9)), str(tmp_path / "BGC0000711.gbk")]
+    return [*inputs, "--comparisons_table", str(tmp_path / "comparisons.tsv")], tmp_path / "out"
+
+
+def _comparison_groups(svg: str) -> dict[tuple[str, str], list[str]]:
+    """The match paths of each comparison group of ``svg``, by its query and subject record indexes."""
+
+    import re
+
+    groups: dict[tuple[str, str], list[str]] = {}
+    for group in re.finditer(r'<g [^>]*id="comparison\d+"[^>]*>(.*?)</g>', svg, flags=re.S):
+        head = group.group(0)[: group.group(0).index(">")]
+        query = re.search(r'data-query-record-index="(\d+)"', head)
+        subject = re.search(r'data-subject-record-index="(\d+)"', head)
+        assert query and subject, head
+        groups[(query.group(1), subject.group(1))] = re.findall(r"<path [^>]*>", group.group(1))
+    return groups
+
+
+@pytest.mark.linear
+def test_a_blast_table_draws_beside_a_protein_search_of_other_pairs(tmp_path: Path) -> None:
+    """OV-3688: a comparisons table draws its ``source=table`` pair and searches its ``source=losat`` pair with
+    LOSATP, as the Web draws that Selected plan."""
+
+    losat, log = _fake_losat(tmp_path / "bin-dir")
+    argv, prefix = _table_beside_search(tmp_path, "pair.tsv\t#1\t#2\ttable\n\t#2\t#3\tlosat\n")
+    linear_main([
+        *argv, "--losat", "losatp", "--losatp_mode", "pairwise", "--losat_bin", losat,
+        "--losat_threads", "1", "-o", str(prefix), "-f", "svg", "--save_session",
+    ])
+    # Only the listed pair is searched: BGC0000709's proteins against BGC0000711's.
+    [search] = _searches(log)
+    described = [
+        [line.split()[1] for line in search[side].splitlines() if line.startswith(">")][0] for side in ("query", "subject")
+    ]
+    assert described == ["CAF33300.1", "CAH58684.1"]
+    groups = _comparison_groups(prefix.with_suffix(".svg").read_text(encoding="utf-8"))
+    assert sorted(groups) == [("0", "1"), ("1", "2")]
+    # The table's one row is a nucleotide ribbon; the search draws protein matches.
+    assert len(groups[("0", "1")]) == 1 and "data-query-protein-id" not in groups[("0", "1")][0]
+    assert groups[("1", "2")] and all("data-query-protein-id" in path for path in groups[("1", "2")])
+    session = drawing_view(read_session_payload(prefix.with_suffix(".gbdraw")))
+    assert [
+        (comparison["kind"], comparison.get("queryRecordIndex"), comparison.get("mode"))
+        for comparison in session["renderRequest"]["comparisons"]
+    ] == [
+        ("nucleotideBlast", 0, None),
+        ("precomputedProteinComparison", 1, None),
+        ("generatedProteinComparison", None, "none"),
+    ]
+
+
+@pytest.mark.linear
+def test_a_pair_that_a_table_and_a_protein_search_both_name_is_refused(tmp_path: Path) -> None:
+    """OV-3688: one record pair drawn from a BLAST table and searched by LOSATP is refused in words."""
+
+    from gbdraw.exceptions import ValidationError
+
+    losat, log = _fake_losat(tmp_path / "bin-dir")
+    argv, prefix = _table_beside_search(tmp_path, "pair.tsv\t#1\t#2\ttable\n\t#2\t#1\tlosat\n")
+    with pytest.raises(ValidationError, match="record pair #1 and #2 .*both"):
+        linear_main([
+            *argv, "--losat", "losatp", "--losatp_mode", "pairwise", "--losat_bin", losat,
+            "-o", str(prefix), "-f", "svg",
+        ])
+    assert not log.exists()
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("given", [(0, 1), (1, 0)])
+def test_a_given_comparison_of_a_pair_that_pairwise_searches_unlisted_is_refused(
+    tmp_path: Path, given: tuple[int, int]
+) -> None:
+    """OV-3728: a Pairwise LOSATP search that lists no pairs searches every adjacent pair, so a given comparison of one
+    is refused in words (either direction), not merged into the protein matches."""
+
+    import pandas as pd
+    from Bio import SeqIO
+
+    from gbdraw.api import (
+        InMemoryRecordSource, LinearDiagramOptions, LinearDiagramRequest, LosatSearchOptions, RecordInput,
+        render_request,
+    )
+    from gbdraw.api.options import LosatRuntimeOptions
+    from gbdraw.api.requests import RenderOutputRequest
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from gbdraw.linear_comparison import LinearComparison
+
+    losat, log = _fake_losat(tmp_path / "bin-dir")
+    names = ("BGC0000708", "BGC0000709", "BGC0000711")
+    row = [names[given[0]], names[given[1]], 90.0, 100, 0, 0, 1, 100, 1, 100, 1e-20, 200.0]
+    request = LinearDiagramRequest(
+        output=RenderOutputRequest(output_prefix="out", output_directory=tmp_path, overwrite=True),
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(SeqIO.read(INPUTS / f"{name}.gbk", "genbank")), record_key=f"r{i}")
+            for i, name in enumerate(names)
+        ),
+        options=LinearDiagramOptions(
+            linear_comparisons=(LinearComparison(*given, pd.DataFrame([row], columns=COMPARISON_COLUMNS)),),
+            losat_search=LosatSearchOptions(
+                program="losatp", losatp_mode="pairwise",
+                runtime=LosatRuntimeOptions(losat_executable=losat, threads=1),
+            ),
+        ),
+    )
+    with pytest.raises(ValidationError, match="record pair #1 and #2 .*both"):
+        render_request(request)
+    assert not log.exists()

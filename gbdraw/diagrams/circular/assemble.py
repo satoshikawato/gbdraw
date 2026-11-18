@@ -66,7 +66,7 @@ from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
 from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...exceptions import ValidationError
-from ...features.factory import FeatureBuildResult, create_feature_layers
+from ...features.factory import FeatureBuildResult, FeatureLayerMode, create_feature_layers
 from ...features.objects import FeatureObject
 from ...labels.label_ink import circular_label_ink
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
@@ -3705,7 +3705,7 @@ def _record_feature_layers(
         profile.strandedness,
         profile.resolve_overlaps,
         label_filtering,
-        split_overlaps_by_strand=split_overlaps_by_strand,
+        layer_mode=FeatureLayerMode(split_overlaps_by_strand=split_overlaps_by_strand),
         record_features=record_feature_inputs[position] if position < len(record_feature_inputs) else None,
         placement_slot=placement_slot,
         feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,

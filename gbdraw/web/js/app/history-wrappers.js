@@ -221,6 +221,8 @@ export const createFeatureEditHistory = ({
  * @property {(choice: string) => unknown} handleLegendRenameChoice
  * @property {(restore: () => unknown) => unknown} restoreLegendRows Runs a Restore of deleted Legend rows.
  * @property {(indexes?: number[] | null) => unknown} restoreDeletedLegendEntries
+ * @property {() => Promise<void>} whenLegendFactsCurrent Resolves once Python's Legend row facts are those of the
+ *   drawing's current edits (editor intent).
  * @property {() => void} cancelLegendRename
  * @property {(choice: string) => unknown} handlePaletteColorsChoice
  * @property {() => void} cancelPaletteColorsDialog
@@ -235,7 +237,7 @@ export const createFeatureEditHistory = ({
  */
 export const createLegendEditHistory = ({
   state, undoableAction, scopeChoiceWithHistory, runUndoableCheckpoint, handleLegendNameCommit, joinLegendGroup,
-  moveLegendEntry, handleLegendRenameChoice, restoreLegendRows, restoreDeletedLegendEntries, cancelLegendRename,
+  moveLegendEntry, handleLegendRenameChoice, restoreLegendRows, restoreDeletedLegendEntries, whenLegendFactsCurrent, cancelLegendRename,
   handlePaletteColorsChoice, cancelPaletteColorsDialog, handleResetColorChoice, cancelResetColor
 }) => {
   const { legendRenameDialog } = state;
@@ -294,12 +296,14 @@ export const createLegendEditHistory = ({
   // Restore of that row (by its Python key), then the merge, in one History
   // checkpoint: the merge's rule commit joins it, so one Undo returns both.
   // Keep both onto a deleted row in the renamed row's color restores it the
-  // same way: the two are one row (D-28).
+  // same way: the two are one row (D-28). That Restore reads Python's Legend row
+  // facts, so it runs once the drawing is drawn from its current edits (OV-2412).
   /** @param {string} choice */
-  const chooseLegendRename = (choice) => {
+  const chooseLegendRename = async (choice) => {
     const key = legendRenameDialog.deletedTargetKey;
     const restores = choice === 'merge' || (choice === 'keep-both' && legendRenameDialog.keepBothRestores);
     if (!restores || !key) return handleLegendRenameChoice(choice);
+    await whenLegendFactsCurrent();
     return runUndoableCheckpoint(msg('Rename legend item'), async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
       const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === key);

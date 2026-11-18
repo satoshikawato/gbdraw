@@ -586,6 +586,92 @@ test('HMMT Session: the popup names the Legend row the figure draws a default fe
   }
 });
 
+// OV-244 (c): the Legend editor's rename of a type's palette row (the CDS row
+// of the HMMT Session, which no color rule draws) names the row only: no rule
+// is written, Python draws the name at Generate as the live edit shows it, and
+// the popup's Legend name of a CDS shows the new name.
+test('HMMT Session: the rename of the CDS row, which no color rule draws, names the row and writes no rule (OV-244)', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, HMMT_SESSION);
+  try {
+    const rules = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => `${rule.cap}: ${rule.val}`));
+    const before = await rules();
+    expect(await legendCaptions(page, { source: 'result' })).toContain('CDS');
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), 'Coding');
+    });
+    await settle(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rename onto a new name asks nothing').toBe(false);
+    expect(await rules(), 'the rename writes no rule').toEqual(before);
+    const live = await legendCaptions(page, { source: 'mounted' });
+    expect(live, 'live').toContain('Coding');
+    expect(live, 'live').not.toContain('CDS');
+    await generate(page);
+    expect(await legendCaptions(page, { source: 'result' }), 'Generate draws the live rows').toEqual(live);
+    expect(await rules(), 'Generate writes no rule').toEqual(before);
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === 'cytochrome b'), null);
+    });
+    await expect(page.getByLabel('Feature legend name', { exact: true })).toHaveValue('Coding');
+    // V-OD26: the name is the type's. A captioned rule for COX1 ("This feature only") takes one CDS: Python
+    // draws no CDS row then, and the other CDS are drawn in the type's "other" row, named "Coding" live and at
+    // Generate, in the Legend tab and in the popup. V-OD27: renaming that row from the Legend tab names the type
+    // ("Proteins"), and removing the rule draws the CDS row by that name.
+    const featureRows = async (source) => (await legendCaptions(page, { source })).filter((caption) => !/RNA|GC/.test(caption));
+    const panelRows = () => page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return app.legendEntries.filter((entry) => !app.legendEntryMerged(entry)).map((entry) => app.shownLegendEntryName(entry))
+        .filter((name) => !/RNA|GC/.test(name));
+    });
+    const popupOfCytb = async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.product === 'cytochrome b'), null);
+      });
+      const value = await page.getByLabel('Feature legend name', { exact: true }).inputValue();
+      await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+      return value;
+    };
+    await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      const feature = app.extractedFeatures.find((item) => item.product === 'cytochrome c oxidase subunit I');
+      await app.openFeatureEditorFromList(feature, null);
+      await app.requestFeatureColorChange(feature, '#ff0000', 'Marker');
+    });
+    const scope = page.getByRole('dialog').filter({ has: page.locator('#feature-style-scope-title') });
+    if (await scope.isVisible()) await scope.getByRole('button', { name: 'This feature only' }).click();
+    await settle(page);
+    await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+    for (const [state, rows, edit] of [['with the rule', ['Marker', 'Coding'], null], ['the "other" row renamed', ['Marker', 'Proteins'], async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.originalCaption === 'other proteins'), 'Proteins');
+      });
+      await settle(page);
+    }], ['the rule removed', ['Proteins'], async () => {
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.removeSpecificRule(app.manualSpecificRules.findIndex((rule) => rule.cap === 'Marker'));
+      });
+      await settle(page);
+    }]]) {
+      if (edit) await edit();
+      const name = rows.at(-1);
+      expect(await featureRows('mounted'), `${state}: live`).toEqual(rows);
+      expect(await panelRows(), `${state}: the Legend tab`).toEqual(rows);
+      expect(await popupOfCytb(), `${state}: the popup names the drawn row`).toBe(name);
+      await generate(page);
+      expect(await featureRows('result'), `${state}: Generate draws the live rows`).toEqual(rows);
+      expect(await panelRows(), `${state}: the Legend tab after Generate`).toEqual(rows);
+      expect(await popupOfCytb(), `${state}: the popup after Generate`).toBe(name);
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
 // The Linear LAMBDA Gallery Session on one page. A page error anywhere in the
 // case fails the legend-free step.
 test('lambda: a Linear legend side change applies on Generate or at once, and a position change after a legend-free Generate raises no page error', async ({ browser }) => {

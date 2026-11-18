@@ -416,14 +416,25 @@ completeCase('reset cancels the canonical interaction without reconciliation');
 // The stylesheet's Editor reserve resolves through a probe element.
 const layout = { width: 997, height: 817 };
 let editorReserve = 0;
-const visualBox = () => {
-  const width = uiState.zoom.value * layout.width;
-  const height = uiState.zoom.value * layout.height;
-  const left = 606.5 + uiState.canvasPan.x - width / 2;
-  const top = 58 + uiState.canvasPan.y;
-  return { left, top, width, height, right: left + width, bottom: top + height };
+/** The box of the figure under a pan and zoom; `measured` rounds it to single precision, as Chromium measures. */
+const boxUnder = ({ x, y, zoom }, measured = false) => {
+  const round = measured ? Math.fround : (value) => value;
+  const width = zoom * layout.width;
+  const height = zoom * layout.height;
+  const left = 606.5 + x - width / 2;
+  const top = 58 + y;
+  return { left: round(left), top: round(top), width: round(width), height: round(height),
+    right: round(left + width), bottom: round(top + height) };
 };
-const fakeSvg = { getBoundingClientRect: visualBox };
+// The view the figure shows once Vue has projected it.
+const visualBox = () => boxUnder({ x: uiState.canvasPan.x, y: uiState.canvasPan.y, zoom: uiState.zoom.value });
+// What a measure reads: the transform the surface's style holds now.
+const measuredBox = () => {
+  const [, x, y, zoom] = wrapper.style.transform.match(/^translate\((.+)px, (.+)px\) scale\((.+)\)$/).map(Number);
+  return boxUnder({ x, y, zoom }, true);
+};
+const fakeSvg = { getBoundingClientRect: measuredBox };
+globalThis.getComputedStyle = (element) => ({ transform: element.style.transform });
 let probes = 0;
 // The canvas's computed padding: where it lays out its content (p-2, 0.5rem).
 let canvasPaddingLeft = '8px';
@@ -455,10 +466,19 @@ const control = {
 const workspace = {
   querySelector: (selector) => (selector === ':scope > [data-preview-edge-control]' ? control : null)
 };
-Object.assign(wrapper, { querySelector: (selector) => (selector === 'svg' ? fakeSvg : null), getBoundingClientRect: visualBox });
+Object.assign(wrapper, { querySelector: (selector) => (selector === 'svg' ? fakeSvg : null), getBoundingClientRect: measuredBox });
 Object.defineProperty(canvas, 'parentElement', { get: () => (edgeControl ? workspace : null), configurable: true });
+// The canvas's classic scrollbars (8 px, index.html) narrow its client box while the shown figure overflows it.
+let scrollbars = false;
+const clientInset = () => {
+  if (!scrollbars) return 0;
+  const box = measuredBox();
+  return box.left < 100 || box.right > 996 || box.top < 50 || box.bottom > 436 ? 8 : 0;
+};
+Object.defineProperty(canvas, 'clientWidth', { get: () => 896 - clientInset(), configurable: true });
+Object.defineProperty(canvas, 'clientHeight', { get: () => 386 - clientInset(), configurable: true });
 Object.assign(canvas, {
-  clientLeft: 0, clientTop: 0, clientWidth: 896, clientHeight: 386,
+  clientLeft: 0, clientTop: 0,
   getBoundingClientRect: () => ({ left: 100, top: 50, width: 896, height: 386 }),
   appendChild: () => { probes += 1; },
   ownerDocument: {
@@ -474,7 +494,8 @@ Object.assign(canvas, {
     }
   }
 });
-const expectFitted = (zoom) => {
+const expectFitted = async (zoom) => {
+  await Vue.nextTick();
   const box = visualBox();
   const right = 996 - editorReserve;
   const margins = [box.left - 100, right - box.right, box.top - 50, 436 - box.bottom];
@@ -491,28 +512,54 @@ Object.assign(uiState.canvasPan, { x: 30, y: -20 });
 panZoom.handleWheel(wheelEvent);
 panZoom.fitPreviewToViewport();
 // 370 / 817 = 0.4529 rounds down to the whole percent, so the diagram fills the frame.
-expectFitted(0.45);
+await expectFitted(0.45);
 assert.equal(panZoom.isPreviewTransformActive(), false);
 assert.equal(timers.size, 0);
+// OV-3697: the Fit reads the layout, not the single-precision box of the pan and zoom it starts from, so a
+// second Fit, and a Fit from another view, give the same view to the last bit.
 const fittedPan = { ...uiState.canvasPan };
 panZoom.fitPreviewToViewport();
-expectFitted(0.45);
-assert.equal(Math.hypot(uiState.canvasPan.x - fittedPan.x, uiState.canvasPan.y - fittedPan.y) < 1e-9, true);
+await expectFitted(0.45);
+assert.equal(JSON.stringify(uiState.canvasPan), JSON.stringify(fittedPan));
+for (const [zoom, x, y] of [[0.3, -754.671875, 0.83625], [2.7, 123.456, -98.7]]) {
+  uiState.zoom.value = zoom;
+  Object.assign(uiState.canvasPan, { x, y });
+  await Vue.nextTick();
+  panZoom.fitPreviewToViewport();
+  await expectFitted(0.45);
+  assert.equal(JSON.stringify(uiState.canvasPan), JSON.stringify(fittedPan), `a Fit from ${zoom} at (${x}, ${y})`);
+}
+// The frame is measured in the same layout read: a 300x200 figure zoomed to 3 overflows the canvas and its
+// scrollbars take 8 px off the client box, but the Fit reads the room the fitted view has, (386 - 16) / 200.
+scrollbars = true;
+Object.assign(layout, { width: 300, height: 200 });
+uiState.zoom.value = 3;
+Object.assign(uiState.canvasPan, { x: 0, y: 0 });
+await Vue.nextTick();
+assert.equal(canvas.clientWidth, 888);
+panZoom.fitPreviewToViewport();
+await expectFitted(1.85);
+const fittedSmallPan = { ...uiState.canvasPan };
+panZoom.fitPreviewToViewport();
+await expectFitted(1.85);
+assert.equal(JSON.stringify(uiState.canvasPan), JSON.stringify(fittedSmallPan));
+scrollbars = false;
+Object.assign(layout, { width: 997, height: 817 });
 // An open Editor drawer reserves 360 px: Fit uses the 536 px left of it,
 // (536 - 16) / 997 = 0.5215 for a wide diagram.
 editorReserve = 360;
 Object.assign(layout, { width: 997, height: 300 });
 panZoom.fitPreviewToViewport();
-expectFitted(0.52);
+await expectFitted(0.52);
 editorReserve = 0;
 Object.assign(layout, { width: 50, height: 40 });
 panZoom.fitPreviewToViewport();
-expectFitted(5);
+await expectFitted(5);
 // A 40x40 control in the middle of the right edge, from x 956. The fitted 50x40 diagram (250x200 px,
 // centred at x 548) stays clear of it and keeps its Fit.
 edgeControl = { left: 956, top: 223, width: 40, height: 40 };
 panZoom.fitPreviewToViewport();
-expectFitted(5);
+await expectFitted(5);
 // A wide diagram fitted to the whole frame, 0.88 of 997 px, would end at x 987 over the control: it is
 // fitted to the 856 px left of the control instead, (856 - 16) / 997 = 0.8425, with the same margins.
 Object.assign(layout, { width: 997, height: 300 });
@@ -528,13 +575,14 @@ assert.equal(JSON.stringify(controlCopies.map(({ deep, placed }) => ({ deep, pla
 assert.equal(control.style.transition, 'transform 0.3s');
 edgeControl = { left: 0, top: 0, width: 0, height: 0 };
 panZoom.fitPreviewToViewport();
-expectFitted(0.88);
+await expectFitted(0.88);
 edgeControl = null;
 Object.assign(layout, { width: 50, height: 40 });
 panZoom.fitPreviewToViewport();
-expectFitted(5);
-// The Fit measures the current transform with the transition held off, and the Fit shown at
-// once reads its fitted view with no transition before the transition comes back.
+await expectFitted(5);
+// The Fit measures the layout under the identity transform with the transition held off, and the browser
+// takes the shown view back before the transition returns; the Fit shown at once reads its fitted view with
+// no transition before the transition comes back.
 const transitionsSeen = [];
 const svgBox = fakeSvg.getBoundingClientRect;
 fakeSvg.getBoundingClientRect = () => {
@@ -551,9 +599,9 @@ Object.assign(uiState.canvasPan, { x: 30, y: -20 });
 panZoom.showHiddenPreview({ fit: true });
 const fittedTransform = `translate(${uiState.canvasPan.x}px, ${uiState.canvasPan.y}px) scale(0.45)`;
 assert.equal(transitionsSeen.join('\n'), [
-  'measure translate(30px, -20px) scale(2) none', `read ${fittedTransform} none`
+  'measure translate(0px, 0px) scale(1) none', 'read translate(30px, -20px) scale(2) none', `read ${fittedTransform} none`
 ].join('\n'));
-expectFitted(0.45);
+await expectFitted(0.45);
 assert.equal(uiState.previewTransitionHeld.value, false);
 fakeSvg.getBoundingClientRect = svgBox;
 globalThis.getComputedStyle = computedStyle;
@@ -586,7 +634,11 @@ const arriving = panZoom.showArrivingFigure();
 assert.equal(uiState.previewHiddenUntilShown.value, true);
 await arriving;
 expectCentred(0.5, 996);
-assert.equal(placements.join('\n'), `read translate(${uiState.canvasPan.x}px, 0px) scale(0.5) none hidden`);
+// The layout read takes the departing view back with no transition; the placed view then shows at once.
+assert.equal(placements.join('\n'), [
+  'read translate(30px, -20px) scale(0.5) none hidden',
+  `read translate(${uiState.canvasPan.x}px, 0px) scale(0.5) none hidden`
+].join('\n'));
 // An open Editor drawer: the room ends at its reserve.
 editorReserve = 360;
 await panZoom.showArrivingFigure();

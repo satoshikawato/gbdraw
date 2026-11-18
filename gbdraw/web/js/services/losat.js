@@ -5,10 +5,13 @@ import { t } from '../utils/i18n.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import { losatSearchTask } from './losat-cache.js';
+import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
 import {
   compileLosatWasm,
   hasDirectLosatApi,
+  isLosatBuildChangedFailure,
   isLosatOwnFailure,
+  losatBuildChangedFailure,
   losatRunFailure,
   losatThreadedTrapFailure,
   losatThreadsFailure,
@@ -32,6 +35,7 @@ const THREADED_TRAP_RETRY_LIMIT = 2;
 const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
 
 /** @typedef {NonNullable<ReturnType<typeof normalizeUserFacingError>>} UserFacingDiagnostic */
+/** @import { LosatWasmFile } from './losat-build.generated.js' */
 
 /**
  * One pair job, as planned by `linear-sources.js`. Only the fields this module
@@ -98,7 +102,8 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
 /**
  * What the LOSAT workers post back. `init` and `run` replies carry `ok`; a failed
  * `run` whose LOSAT exited with an error carries what LOSAT reported
- * (`reportedLosatFailure`), one whose LOSAT trapped carries `trap` (`isLosatTrapFailure`); the threaded worker adds
+ * (`reportedLosatFailure`), one whose LOSAT trapped carries `trap` (`isLosatTrapFailure`), and a failed `init` or
+ * `run` of a worker of another LOSAT build carries `buildChanged` (`isLosatBuildChangedFailure`); the threaded worker adds
  * `hostFailure` (`isLosatThreadsFailure`) and `spawnCount`; a thread-fault arrives on the fault BroadcastChannel with
  * `tid`, `stderr` and `trap` (the thread's code trapped).
  * @typedef {object} LosatWorkerReply
@@ -110,6 +115,7 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  * @property {boolean} [hostFailure]
  * @property {string} [text]
  * @property {boolean} [trap]
+ * @property {boolean} [buildChanged]
  * @property {number} [spawnCount]
  * @property {number} [tid]
  * @property {string} [stderr]
@@ -119,9 +125,11 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  * What the page posts to a threaded LOSAT job worker (workers/losat-threaded-worker.js `runThreadedJob`) to run one
  * pair job: the compiled threaded module and the URLs to load it and the WASI shim from, the job with its two FASTA
  * texts, the threads per job, and the name of the job's fault BroadcastChannel (empty without BroadcastChannel).
+ * `losatBuild` is the page's `LOSAT_WASM_BUILD.version`; a worker of another build refuses the message.
  * @typedef {object} LosatThreadedRunMessage
  * @property {'run'} type
  * @property {string} id
+ * @property {string} losatBuild
  * @property {WebAssembly.Module} module
  * @property {string} wasmUrl
  * @property {string} wasiShimUrl
@@ -133,10 +141,23 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  */
 
 /**
- * The first message to a pool worker.
+ * What the page posts to a pool worker (workers/losat-worker.js) to run one pair job, with the FASTA texts of the
+ * job's sequences that worker has not loaded yet (`buildJobSequencePayload`); `losatBuild` as in
+ * `LosatThreadedRunMessage`.
+ * @typedef {object} LosatWorkerRunMessage
+ * @property {'run'} type
+ * @property {string} id
+ * @property {string} losatBuild
+ * @property {LosatJob} job
+ * @property {{ key: string, fasta: string }[]} sequences
+ */
+
+/**
+ * The first message to a pool worker; `losatBuild` as in `LosatThreadedRunMessage`.
  * @typedef {object} LosatWorkerInit
  * @property {'init'} type
  * @property {string} id
+ * @property {string} losatBuild
  * @property {WebAssembly.Module} wasmModule
  * @property {string} wasmUrl
  * @property {string} wasiShimUrl
@@ -219,13 +240,14 @@ const loadWasiShim = async () => {
 };
 
 /**
- * @param {string} [wasmPath]
+ * @param {string} wasmPath
+ * @param {LosatWasmFile} file the shipped file the path serves
  * @returns {Promise<WebAssembly.Module>}
  */
-const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
-  const key = String(wasmPath || DEFAULT_WASM_PATH);
+const loadLosatModule = async (wasmPath, file) => {
+  const key = String(wasmPath);
   if (!wasmModulePromises.has(key)) {
-    wasmModulePromises.set(key, compileLosatWasm(resolveAssetUrl(wasmPath), 'LOSAT wasm'));
+    wasmModulePromises.set(key, compileLosatWasm(resolveAssetUrl(wasmPath), file));
   }
   return /** @type {Promise<WebAssembly.Module>} */ (wasmModulePromises.get(key)); // set above
 };
@@ -280,7 +302,7 @@ export const getLosatThreadingSupport = async ({
   const key = String(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
   if (!threadedSupportPromises.has(key)) {
     threadedSupportPromises.set(key, (async () => {
-      const wasmModule = await loadLosatModule(threadedWasmPath);
+      const wasmModule = await loadLosatModule(threadedWasmPath, 'losat-threaded.wasm');
       if (!moduleHasThreadedWasiShape(wasmModule)) {
         return buildThreadingStatus(
           'unavailable',
@@ -293,15 +315,17 @@ export const getLosatThreadingSupport = async ({
         'Threaded LOSAT is available.',
         { wasmModule }
       );
-    })().catch((error) =>
-      buildThreadingStatus(
+    })().catch((error) => {
+      // Another build's file is not a matter of threading: the run reports it (`isLosatBuildChangedFailure`).
+      if (isLosatBuildChangedFailure(error)) throw error;
+      return buildThreadingStatus(
         'unavailable',
         // The argument is never falsy (`error || {...}`), so a model is returned, not null.
         /** @type {UserFacingDiagnostic} */ (
           normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'initialization' })
         ).summary
-      )
-    ));
+      );
+    }));
   }
   return /** @type {Promise<LosatRuntimeStatus>} */ (threadedSupportPromises.get(key)); // set above
 };
@@ -327,7 +351,7 @@ export const runLosatPair = async ({
 
   const [wasiShim, wasmModule] = await Promise.all([
     loadWasiShim(),
-    loadLosatModule(wasmPath)
+    loadLosatModule(wasmPath, 'losat.wasm')
   ]);
   throwIfAborted(signal);
   if (hasDirectLosatApi(wasmModule)) {
@@ -425,10 +449,20 @@ const formatPairErrorPrefix = (job) => {
  */
 const failedRun = (job, data, fallback) => {
   const detail = `${formatPairErrorPrefix(job)}: ${data.error || fallback}`;
+  if (data.buildChanged === true) return losatBuildChangedFailure(detail);
   if (typeof data.losatReported === 'string') return losatRunFailure(data.losatReported);
   if (data.hostFailure === true) return losatThreadsFailure(detail);
   return data.trap === true ? losatTrapFailure(detail) : new Error(detail);
 };
+
+/**
+ * Whether a failure ends the run as it is, on every engine: LOSAT itself failed (`isLosatOwnFailure`), so the same
+ * search fails the same way, or a file or worker of another LOSAT build refused it (`isLosatBuildChangedFailure`),
+ * so no engine of this page runs until it is reloaded.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+const endsLosatRun = (error) => isLosatOwnFailure(error) || isLosatBuildChangedFailure(error);
 
 /**
  * The failure of a thread that reported a fault on its job's fault channel: LOSAT's trap (`losatTrapFailure`, OV-3327)
@@ -542,7 +576,7 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal, wa
       }
     } catch (error) {
       if (isAbortError(error, signal)) throw getAbortReason(signal);
-      if (isLosatOwnFailure(error)) throw error;
+      if (endsLosatRun(error)) throw error;
       const message = error?.message ? String(error.message) : String(error || 'Unknown LOSAT error');
       throw new Error(`${formatPairErrorPrefix(job)}: ${message}`);
     }
@@ -584,7 +618,8 @@ const initializeLosatWorker = (worker, payload, signal) =>
         settle(() => resolve(worker));
         return;
       }
-      settle(() => reject(new Error(data.error || 'LOSAT worker initialization failed')));
+      const detail = data.error || 'LOSAT worker initialization failed';
+      settle(() => reject(data.buildChanged === true ? losatBuildChangedFailure(detail) : new Error(detail)));
     };
 
     /** @param {ErrorEvent} event */
@@ -628,7 +663,7 @@ const runLosatPairsWithWorkers = async (
   const resolvedWorkerUrl = workerUrl || resolveWorkerUrl();
   const resolvedWasmUrl = resolveAssetUrl(wasmPath || DEFAULT_WASM_PATH);
   const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
-  const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH);
+  const wasmModule = await loadLosatModule(wasmPath || DEFAULT_WASM_PATH, 'losat.wasm');
   throwIfAborted(signal);
   const results = new Array(jobs.length);
   /** @type {Worker[]} */
@@ -653,6 +688,7 @@ const runLosatPairsWithWorkers = async (
           {
             type: 'init',
             id: `init-${index}-${Date.now()}`,
+            losatBuild: LOSAT_WASM_BUILD.version,
             wasmModule,
             wasmUrl: resolvedWasmUrl,
             wasiShimUrl: resolvedWasiShimUrl
@@ -717,6 +753,7 @@ const runLosatPairsWithWorkers = async (
       const id = `${Date.now()}-${requestId}`;
       requestId += 1;
       const loadedKeys = workerLoadedSequenceKeys.get(worker) || new Set();
+      /** @type {{ key: string, fasta: string }[]} */
       let sequencePayload = [];
       try {
         sequencePayload = buildJobSequencePayload(job, sequenceStore, loadedKeys);
@@ -770,12 +807,13 @@ const runLosatPairsWithWorkers = async (
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
-      worker.postMessage({
+      worker.postMessage(/** @type {LosatWorkerRunMessage} */ ({
         type: 'run',
         id,
+        losatBuild: LOSAT_WASM_BUILD.version,
         job,
         sequences: sequencePayload
-      });
+      }));
     };
 
     try {
@@ -818,7 +856,7 @@ const runLosatPairsThreaded = async (
   const resolvedWorkerUrl = threadedWorkerUrl || resolveThreadedWorkerUrl();
   const resolvedWasmUrl = resolveAssetUrl(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
   const resolvedWasiShimUrl = resolveAssetUrl(WASI_SHIM_URL);
-  const compiledModule = wasmModule || await loadLosatModule(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
+  const compiledModule = wasmModule || await loadLosatModule(threadedWasmPath || DEFAULT_THREADED_WASM_PATH, 'losat-threaded.wasm');
   const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
   const results = new Array(jobs.length);
   /** @type {Set<Worker>} */
@@ -985,6 +1023,7 @@ const runLosatPairsThreaded = async (
       worker.postMessage(/** @type {LosatThreadedRunMessage} */ ({
         type: 'run',
         id,
+        losatBuild: LOSAT_WASM_BUILD.version,
         module: compiledModule,
         wasmUrl: resolvedWasmUrl,
         wasiShimUrl: resolvedWasiShimUrl,
@@ -1070,7 +1109,7 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
         if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
         // Auto falls back for a failure of the threaded host only: LOSAT's own error exit would recur on the serial
         // engine, or the serial engine would refuse the task instead of showing LOSAT's report (OV-3289).
-        if (executionMode === 'threaded' || reportedLosatFailure(error) !== null) throw error;
+        if (executionMode === 'threaded' || reportedLosatFailure(error) !== null || isLosatBuildChangedFailure(error)) throw error;
         // The argument is never falsy (`error || {...}`), so a model is returned, not null.
         const diagnostic = /** @type {UserFacingDiagnostic} */ (
           normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' })
@@ -1107,8 +1146,8 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
     if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
-    // LOSAT itself failed: the same engine in this thread would fail the same way.
-    if (isLosatOwnFailure(error)) throw error;
+    // LOSAT itself failed, and the same engine in this thread would fail the same way, or the build changed.
+    if (endsLosatRun(error)) throw error;
     console.warn('LOSAT Worker pool failed; falling back to sequential execution.', normalizeUserFacingError(error));
     return runLosatPairsSequential(jobList, options);
   }
@@ -1121,7 +1160,7 @@ export const prepareLosatRuntime = async ({
 } = {}) => {
   const prepared = await Promise.all([
     loadWasiShim(),
-    loadLosatModule(wasmPath)
+    loadLosatModule(wasmPath, 'losat.wasm')
   ]);
   if (!includeThreaded) return { wasiShim: prepared[0], wasmModule: prepared[1], threaded: null };
   const threaded = await getLosatThreadingSupport({ threadedWasmPath });
@@ -1179,7 +1218,8 @@ export const runUntilCanceled = async (signal, write, task) => {
 /**
  * The jobs of a search by File (Find in other files, PD-OI-123): one job per File, one after another, so the status
  * says "File k of N". A File whose job fails keeps its reason (`error`) and the next File still runs; Cancel stops
- * the run (the abort is thrown).
+ * the run (the abort is thrown), and so does a LOSAT of another build (OV-2440), which every File would meet: its one
+ * diagnostic asks for a reload.
  * @param {readonly LosatJob[]} jobs
  * @param {(job: LosatJob) => Promise<LosatJobResult[]>} execute
  * @param {Pick<LosatOverlayRun, 'signal' | 'status'>} run
@@ -1194,7 +1234,7 @@ export const runLosatJobsByFile = async (jobs, execute, { signal, status }, oper
     try {
       results.push(...await execute(job));
     } catch (error) {
-      if (signal.aborted) throw error;
+      if (signal.aborted || isLosatBuildChangedFailure(error)) throw error;
       results.push({ ...job, text: '', error: errorText(normalizeCaughtError(error, { stage: 'losat', operation }).summaryParts) });
     }
   }

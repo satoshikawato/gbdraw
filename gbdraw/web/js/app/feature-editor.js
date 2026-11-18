@@ -189,7 +189,8 @@ export const createFeatureEditor = ({
     findLegendRowNamed,
     keepBothNamesOf,
     legendEntryName,
-    writeLegendRowColor
+    writeLegendRowColor,
+    runUndoableCheckpoint
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature
@@ -237,6 +238,8 @@ export const createFeatureEditor = ({
     // D-36: the root says when a shown rerender drew the current paint; History reads and restores it (D-174).
     redrawShown: labelActions.redrawShown,
     isRedrawOwed: labelActions.isRedrawOwed,
+    // OV-2412: a Restore reads Python's Legend row facts once the drawing is drawn from its current edits.
+    whenRedrawn: labelActions.whenRedrawn,
     redrawRestored: labelActions.redrawRestored,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,

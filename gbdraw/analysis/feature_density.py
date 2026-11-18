@@ -28,6 +28,7 @@ from Bio.SeqRecord import SeqRecord
 from numpy.typing import NDArray
 
 from gbdraw.analysis.windows import sliding_windows
+from gbdraw.core.record_metadata import location_over_origin
 from gbdraw.core.color import interpolate_color, normalize_hex_color
 from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.exceptions import InputFileError, ValidationError
@@ -272,7 +273,8 @@ def _feature_parts(
     for feature in record.features:
         if feature.type == "source" or feature.location is None or not query.matches(feature, record_id=record_id):
             continue
-        parts = feature.location.parts
+        # A part past the end of a record drawn circular is the span over its origin it is (OV-3724).
+        parts = location_over_origin(feature.location, length).parts
         for part in parts:
             part_starts.append(int(part.start))
             part_ends.append(int(part.end))

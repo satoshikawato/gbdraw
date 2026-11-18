@@ -658,3 +658,37 @@ rows stay as history.
 | `hepatoplasmataceae_orthogroup` | `manual-02-01-upload-row-context.webp` | Recapture; recipe unchanged | Session; records read: **Record options** shows the AP027078.1 rotation row instead of **Inspect records**, and the Region Record select names the choice instead of "Not inspected"; no **Files in this Session** chooser | Recaptured at DSF 3, 1422x2040; compared side by side |
 | `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Keep; recipe repaired (OV-3329) | The capture no longer replaces the loaded file with a renamed copy, a replacement the reader never makes (the Session's file already shows `NC_001416.gb`) | Recaptured; the crop shows no record state and matched the committed image, so the committed bytes stay |
 | `hepatoplasmataceae_collinear`, `majanivirus_orthogroup`, `BGC0000708-BGC0000713` (steps 2, 3), `vibrio-harveyi-group-collinear` (steps 2, 3) | upload-step crops | Keep | Already read (replay) or no record state in the crop; a recapture differs only by later changes on dev (the uploader's **Files in this Session** chooser, the Linear window controls), which the full Gallery refresh takes | Recaptured and reverted |
+
+## Find in other files tutorials (2026-11-16)
+
+Two new tutorials, `bacillus_velezensis_fengycin` and
+`vibrio_parahaemolyticus_pva1`, follow the same eleven steps: draw the
+reference File alone, add the other two Files, select a region, find it in the
+other Files, create the new drawing, then group, color, name, and finish it.
+Step 8 also sets Match style to Curve, and step 11 clears Separate Strands,
+so the Gallery figure draws the genes of both strands on one lane and the
+similarity-group matches as curves.
+Steps 1 to 5 happen in the reference drawing and steps 7 to 11 in the drawing
+that step 7 creates. The Gallery Session therefore holds both drawings: the
+reference drawing without a render and the created drawing, which the Gallery
+shows. Each capture loads the Session, deletes the drawing the steps create
+(`createdDrawings`), clicks Reset Settings, and replays the steps through
+`replayThrough`; steps 2 and 4 read their files from the Session's own inputs
+(`sessionFile`), step 5 drags a region with real mouse events, and every
+capture from step 6 on searches again (about 6 minutes for the plasmid, about
+10 for the chromosome). Step 1 reuses the generic Linear-mode crop of
+`majanivirus_orthogroup` (`genericMedia: true`). Every operation is
+`dataDependent: true` and asserts its row names, file names, or button text in
+the crop.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| both | `manual-02-01-reference-file.webp` | Add | Replay through step 2; the File 1 card with the reference file and its record names; `visibleText` the file name | Captured at DSF 2; accepted |
+| both | `manual-03-01-reference-preview.webp` | Add | Replay through step 3; the reference row drawn alone; `visibleText` the record ID | Captured; accepted |
+| both | `manual-04-01-other-files.webp` | Add | Replay through step 4; the File 3 card with the draft assembly and its record count; File 2 is named in the step text | Captured; accepted |
+| both | `manual-05-01-region-popup.webp` | Add | Replay through step 5 (Fit, Select region, drag on the reference row); the whole region popup, its header with the selected span and its buttons through **Find in other files** (the popup's dialog element; the first capture cropped only the button list) | Recaptured; accepted |
+| both | `manual-06-01-proposal.webp` | Add | Replay through step 6; the **Find in other files** dialog panel with the proposal for each File and **Create new drawing** (the panel, not the full-page overlay, which the first capture cropped) | Recaptured; accepted |
+| both | `manual-07-01-windows.webp` to `manual-11-01-final.webp` | Add | Replay through steps 7 to 11; the generated preview at 1370 px; `visibleText` the record IDs (steps 7 to 9) or the strain names the rows show from step 10 on | Captured; accepted |
+| both | `manual-08-01-similarity-groups.webp` to `manual-11-01-final.webp` | Recapture; recipe extended | Step 8 sets Match style to Curve (`assertAppState` `adv.pairwise_match_style`); step 11 clears Separate Strands (`form.separate_strands`); the Gallery Session is the Session the Web app holds after the replay through step 11, refreshed | Recaptured; accepted |
+| `bacillus_velezensis_fengycin` | `manual-05-01-region-popup.webp` | Recapture; recipe corrected | Both step 5 targets also hide the preview's feature search bar, which covered the top of the fengycin popup; the plasmid crop does not change | Recaptured; accepted |
+| both | `manual-03-01-reference-preview.webp`, `manual-07-01-windows.webp` | Recapture | Redrawn with the current feature drawing; no step change | Recaptured; accepted |

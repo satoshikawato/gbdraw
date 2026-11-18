@@ -1041,7 +1041,7 @@ Use `--comparisons_table` in Linear mode when comparison endpoints are not impli
 | `query` | yes | Displayed query record selector, such as `#1` or a unique record ID; a `source=losat` row may name one window of a record drawn in several windows, such as `NC_009725.2:1911335-1989004`. |
 | `subject` | yes | Displayed subject record selector. |
 
-Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record. The `n`th `-b` file belongs to loaded records `n` and `n + 1`, so more `-b` files than adjacent record pairs stop the run before drawing. With `-b` and two or more input files, or with GFF3 input, each file contributes one record: the first, or the first that matches `--record_id`.
+Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. With `--losat`, an optional `source` column marks each row `table` (draw its `blast` file) or `losat` (compare the pair with LOSAT; leave `blast` empty), so one table can draw BLAST files beside searched pairs. With `--losat losatp`, a record pair that both a `table` row and a `losat` row name stops the run. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record. The `n`th `-b` file belongs to loaded records `n` and `n + 1`, so more `-b` files than adjacent record pairs stop the run before drawing. With `-b` and two or more input files, or with GFF3 input, each file contributes one record: the first, or the first that matches `--record_id`.
 
 Both `--comparisons_table` and `-b/--blast` read the first 12 outfmt 6 columns and ignore extra columns. Coordinates refer to the selected and cropped record on its source strand; `--reverse_complement` and reversed regions do not change how a table is read, and a row outside the record stops the run. See [Comparison and numeric tables](REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables). A missing, unreadable, or malformed BLAST file stops the run with a non-zero exit status; `-b` no longer skips it. A table whose `qseqid` or `sseqid` names the other endpoint or another displayed record is rejected. See [Comparison and numeric tables](REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
@@ -1137,6 +1137,19 @@ rRNA			1
 CDS	Protein-coding genes		2
 tRNA		true	3
 ```
+
+A line that names a feature type's own row, such as `CDS`, renames that row
+and keeps its default color, as renaming the row in the Web app's Legend
+editor does:
+
+```tsv
+key	name	hidden	position
+CDS	Coding
+```
+
+While a color rule with a Legend name takes some of the type's features, the
+type's name names its "other" row (`other proteins` for `CDS`), unless the
+table gives that row a name of its own.
 
 `--canvas_padding TOP,RIGHT,BOTTOM,LEFT` adds room in px around the figure
 (config key `canvas.padding`); see

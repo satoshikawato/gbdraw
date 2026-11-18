@@ -11,6 +11,7 @@ import { LEGEND_POSITIONS } from '../../contracts/schema.generated.js';
 import { LEGEND_GROUP_SELECTOR, LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
 /** @import { LayoutBox, CompositionCanvasPaddingPx, CompositionSpacingPx, CompositionOverlayPolicy, RequestedCanvas } from '../../services/legend-layout.js' */
 /** @import { LoadRepair } from '../../utils/load-repairs.js' */
+/** @import { HistoryIntentChange } from '../../services/history.js' */
 
 /**
  * Bounds as the metadata and the editor hold them.
@@ -1714,6 +1715,28 @@ export const normalizeLegacyComposition = (
 
 /** @param {Element} svg */
 export const compositionUserDeltas = (svg) => userDeltas(bindCompositionMetadata(svg));
+
+/**
+ * What a History step changed of the layout of the displayed figure (B17, OV-3709): the line keys of the Results
+ * whose composition offsets it changed, and whether it changed the canvas padding. A step without a change list
+ * names no Result and counts as a padding change, so the restored padding is shown again.
+ * @param {readonly HistoryIntentChange[] | undefined} changes
+ * @returns {{ compositionResults: Set<string>, canvasPadding: boolean }}
+ */
+export const layoutChangesOf = (changes) => {
+  /** @type {Set<string>} */
+  const compositionResults = new Set();
+  if (!changes) return { compositionResults, canvasPadding: true };
+  let canvasPadding = false;
+  changes.forEach(({ path, before, after }) => {
+    if (path[0] !== 'ui') return;
+    canvasPadding = canvasPadding || path[1] === 'canvasPadding';
+    if (path[1] !== 'compositionUserDeltas') return;
+    if (path.length > 2) compositionResults.add(path[2]);
+    else [before, after].forEach((record) => Object.keys(record || {}).forEach((key) => compositionResults.add(key)));
+  });
+  return { compositionResults, canvasPadding };
+};
 
 /**
  * @param {Element} target

@@ -241,7 +241,8 @@ column) or `losat`. A `table` row reads its `blast` file. A `losat` row leaves
 searches that record or window pair (LOSATP compares the listed pairs, the
 `pairwise` mode, unless `--losatp_mode` names another mode, which stops the
 run). One table can mix both
-sources. A `losat` row without `--losat`, or `--losat` without a `losat` row,
+sources; with `--losat losatp`, the run stops when a `table` row and a `losat` row (or a protein search) name
+the same record pair. A `losat` row without `--losat`, or `--losat` without a `losat` row,
 is an error. The `comparisons.tsv` that `--losat_output_dir` writes uses this
 format.
 

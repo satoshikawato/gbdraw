@@ -1110,6 +1110,19 @@ export const FileUploader = {
   }
 };
 
+// Why a control that waits for a run (a Generate, a Rotate or Align run, a Session Save or Load) is disabled: the
+// reason of the one owner of that availability, `sessionOperationAvailability('not-during-run')`, which the control's
+// `:disabled` reads too. The control names `id` in its aria-describedby, so the element with that id is always
+// there (an aria-describedby names no missing element); it is empty and hidden while no run blocks the control.
+export const RunBlockedReason = {
+  props: { id: { type: String, required: true } },
+  setup() {
+    const reason = computed(() => tm(state.sessionOperationAvailability('not-during-run')?.reason ?? ''));
+    return { reason };
+  },
+  template: `<p v-show="reason" :id="id" data-run-blocked-reason class="ui-hint">{{ reason }}</p>`
+};
+
 /**
  * The lines a preview notice shows at most, its "and {count} more" line included (OV-3495: one LOSATP run of a
  * record against 60 contigs warned of 56 record pairs without a match, and the notice pushed the figure out of view).

@@ -2,6 +2,8 @@
 import { LEGACY_SVG_ATTRIBUTE_RENAMES } from '../contracts/schema.generated.js';
 import { LEGEND_MERGED_ROW } from './result-records.generated.js';
 import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from './drawn-attributes.generated.js';
+// A Session saved before OV-3848 holds the label binder's marks in its Results.
+import { LABEL_BINDER_ATTRIBUTES } from './preview-affordances.js';
 
 export const SVG_SANITIZE_OPTIONS = Object.freeze({
   USE_PROFILES: { svg: true },
@@ -41,11 +43,9 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-legend-name',
     'data-legend-owner',
     LEGEND_MERGED_ROW,
-    'data-label-key',
+    ...LABEL_BINDER_ATTRIBUTES,
     'data-label-feature-id',
     'data-gbdraw-label-binding-schema',
-    'data-label-source-text',
-    'data-label-editable',
     'data-gbdraw-label-visibility-preview',
     'data-collinearity-block-id',
     'data-collinearity-block-kind',

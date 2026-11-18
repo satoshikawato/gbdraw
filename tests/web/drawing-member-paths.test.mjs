@@ -522,12 +522,6 @@ const KNOWN_LOSSES = {
   // the object (`mergeStoredSettings`, services/config-field-readers.js), so
   // the Undo of the step that set `one_circle_left` keeps it.
   ...Object.fromEntries(MODES.map((mode) => [`${mode} adv history: Undo`, { defect: 'OV-3705', leaves: ['one_circle_left'] }])),
-  // OV-3707: Reset this drawing keeps the canvas padding, though a drawing's
-  // reset resets every slice through its own reset (R15) and Reset returns
-  // the drawing's edits to their defaults (PD-OI-090); `resetSettings`
-  // (services/reset.js) leaves the canvas slice out.
-  ...Object.fromEntries(MODES.map((mode) => [`${mode} canvasPadding resetUndo: Reset this drawing`,
-    { defect: 'OV-3707', leaves: ['bottom', 'left', 'right', 'top'] }]))
 };
 /** The leaves where two captures of a member differ (a leaf under another that differs is in it). */
 const differingLeaves = (member, expected, actual) => {

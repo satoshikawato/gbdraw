@@ -51,7 +51,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
     editableLabels: { value: [] }, manualPriorityRules: [],
     deletedLegendEntries: { value: [] }, dormantLegendEntries: { value: [] }, legendStrokeOverrides: {},
     specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false },
-    svgContainer: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }, displayedResultMetadata: () => null,
+    svgContainer: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }, displayedResultMetadata: () => null, legendKeyIsStale: () => false,
     errorLog: { value: null }, selectedResultIndex: { value: 0 },
     biologicalFeatures: { value: [] }, mode: { value: 'circular' }, svgContent: { value: null }
   };
@@ -69,6 +69,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   let prepareLegend = async () => {};
   let previousIntents = [];
   let lastRekeyed = null;
+  let lastDefaultRowOf = null;
   let openTransaction = null;
   const legendApplies = [];
   let rerenders = 0;
@@ -85,9 +86,10 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state: view, ...ruleOwnerPorts(preparation),
     runUndoableCheckpoint: history?.runUndoableCheckpoint || transact('checkpoint'),
     runUndoable: history?.runUndoable || transact('intent'),
-    prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents,rekeyed}) => {
+    prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents,rekeyed,defaultRowOf}) => {
     previousIntents=previousFileIntents;
     lastRekeyed=rekeyed;
+    lastDefaultRowOf=defaultRowOf;
     await prepareLegend(intents);
     if (!isCurrent()) return false;
     return { diff: diffLegendIntents(state.legendEntries.value, intents), isCurrent: () => true, apply: () => {
@@ -102,7 +104,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   // app-setup.js: the root's color of each Legend row as it shows (OV-282, D-26).
   readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, []),
   projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}, watch, ...options});
-  return {state,view,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
+  return {state,view,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, defaultRowOf:()=>lastDefaultRowOf, rerenders:()=>rerenders, setRerendering};
 };
 // Waits until a held Legend preparation has started (`ready`). A commit that
 // ends or throws before its Legend step fails the test at once instead of
@@ -508,6 +510,23 @@ test('a rule captioned with its own feature type commits the type\'s row in its 
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#54bcf8' }], 'the commit owns the type\'s row');
 });
 
+// V-OD27: the commit tells the Legend owner each type's default row in the next table, by which a renamed type row
+// the commit stops drawing keeps its name dormant: a captioned rule for some CDS leaves the others in "other
+// proteins"; a rule that takes every CDS (a whole-row Merge) leaves CDS no default row.
+test('a rule commit gives the Legend owner the default row each type keeps in the next table', async () => {
+  for (const [val, row] of [['^a$', 'other proteins'], ['.', null]]) {
+    const s = setup();
+    s.state.originalLegendOrder = { value: ['CDS'] };
+    s.state.originalLegendColors = { value: { CDS: '#54bcf8' } };
+    s.state.legendEntries.value = [{ caption: 'Coding', originalCaption: 'CDS' }];
+    s.state.svgContainer = mounted([['CDS', '#54bcf8']]);
+    s.setLegendPreparation(async () => {});
+    assert.equal(await s.actions.commitSpecificRules(() => [{ feat: 'CDS', qual: 'gene', val, color: '#ff0000', cap: 'Marker' }]), true);
+    assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#54bcf8' }], `${val}: the commit takes the CDS row`);
+    assert.equal(s.defaultRowOf()('CDS'), row, val);
+  }
+});
+
 // OV-310: the commit owns the listed row of a Python row its rules take by
 // the row's key, and diffs it by the caption and the swatch the row shows: a
 // Legend color on the type's row is no other row of that caption.
@@ -740,7 +759,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
   const state = {
     manualSpecificRules: [rule], svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000']]),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
@@ -772,7 +791,7 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
     manualSpecificRules: [rule],
     // Python drew CDS in its palette color; its Legend color makes it the rule's swatch.
     svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
     // Rows of Python's hold no color (V-OD22): CDS's Legend color is its override.
     legendEntries: ref([
@@ -979,7 +998,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const state = {
     featureCatalog: { value: catalog }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
-    displayedResultMetadata: () => null, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},

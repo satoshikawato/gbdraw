@@ -858,7 +858,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-      displayedResultMetadata: () => null, extractedFeatures: { value: [] },
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
@@ -896,7 +896,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-      displayedResultMetadata: () => null, extractedFeatures: { value: [] },
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] }, legendColorOverrides: {} })
     },
@@ -936,7 +936,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   const strokeOptionsOpen = new Set();
   const state = {
     results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-    displayedResultMetadata: () => null, extractedFeatures: { value: [] },
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: { value: [] },
     originalLegendOrder: { value: ['CDS', 'GC content'] }, originalLegendColors: { value: {} },
     legendStrokeOptionsOpen: strokeOptionsOpen,
     activeDrawing: () => drawing,
@@ -1613,7 +1613,7 @@ test('the Legend extraction after Load reads no user color as Python\'s swatch',
     const ref = (value) => ({ value });
     const state = withDrawings({
       results: ref(results), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }),
-      displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]), adv: {},
       legendEntries: ref([]), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
       originalLegendOrder: ref(['CDS', 'tRNA', 'rRNA']), originalLegendColors: ref({ ...originalColors }),
       legendStrokeOverrides: {}, legendColorOverrides: { ...saved.legendColorOverrides }, manualSpecificRules: [],
@@ -1793,6 +1793,26 @@ test('Load gives each kind of feature part the stroke Python drew for it in this
     }
   });
   assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f__line1, 'lightgray 5.0');
+});
+
+// OV-3726: a Result saved before the fix shows a stroke edit on a partial
+// block's fill path as well as on its outline. Load reads Python's stroke of
+// the fill path from the unedited blocks drawn under an outline (none), not
+// from the outlined ones, so Reset opens the partial end again.
+test('Load returns a partial block\'s fill path to no stroke and its outline to the block stroke', () => {
+  const part = (id, stroke) => new FakeElement('path', {
+    id, 'data-gbdraw-feature-id': id.replace(/__outline$/, ''), 'data-gbdraw-feature-part': 'block',
+    fill: id.endsWith('__outline') ? 'none' : '#54bcf8', stroke, 'stroke-width': '2.0'
+  });
+  const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES), {
+    patch: (root) => {
+      root.appendChild(part('f38ba7c3f__outline', '#2a9d8f'));
+      root.appendChild(part('fpartial', 'none'));
+      root.appendChild(part('fpartial__outline', 'gray'));
+    }
+  });
+  const reset = partStrokes(resetPaint(svg));
+  assert.deepEqual([reset.f38ba7c3f, reset.f38ba7c3f__outline], ['none 2.0', 'gray 2.0']);
 });
 
 // A kind of part every one of which shows a stroke edit has no known Python

@@ -241,11 +241,15 @@ under "Cited ids without a record".
 
 - [PD-OI-021](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-021-optional-collinear-self-search-and-orthogroup-inference): Optional Collinear self-search and orthogroup inference. ACCEPTED, concern `diagram-generation.collinear-optional-orthogroup-inference`, scenario revision 2, supersedes scenario revision 1.
 
-- [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation): Reuse completed LOSAT searches after cancellation. ACCEPTED, concern `diagram-generation.completed-losat-search-retry`, scenario revision 1.
+- [PD-OI-022](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-022-reuse-completed-losat-searches-after-cancellation): Reuse completed LOSAT searches after cancellation. ACCEPTED, concern `diagram-generation.completed-losat-search-retry`, scenario revision 2, supersedes scenario revision 1.
   - `tests/web/losat-cache.test.mjs`
+  - `tests/web/losat-display-pair-reuse.playwright.spec.js`
   - `tests/web/losat-rows-walk.test.mjs`
+  - `tests/web/mode-scoped-session.test.mjs`
+  - `tests/web/per-mode-results.playwright.spec.js`
   - `tests/web/run-analysis-derived-cache.test.mjs`
   - `tests/web/run-analysis-simple-path.test.mjs`
+  - `tests/web/session-cli-compatibility.test.mjs`
 
 - [PD-OI-023](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-023-lossless-protein-paths-during-normal-generation-and-saving): Lossless protein paths during normal generation and saving. ACCEPTED, concern `protein-comparison.path-representation`, scenario revision 1.
 
@@ -583,8 +587,9 @@ under "Cited ids without a record".
   - `tests/web/popup-color-work.test.mjs`
   - `tests/web/specific-color-actions.test.mjs`
 
-- [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette): Default colors a user edits win over the palette. ACCEPTED, concern `web.default-colors-over-palette`, scenario revision 2, supersedes scenario revision 1.
+- [PD-OI-089](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-089-default-colors-a-user-edits-win-over-the-palette): Default colors a user edits win over the palette. ACCEPTED, concern `web.default-colors-over-palette`, scenario revision 3, supersedes scenario revision 2.
   - `tests/web/feature-color-actions.test.mjs`
+  - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/palette-default-colors.playwright.spec.js`
   - `tests/web/palette-default-colors.test.mjs`
 
@@ -739,7 +744,7 @@ under "Cited ids without a record".
 - [PD-OI-105](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-105-a-click-on-a-drawn-element-shows-its-settings-in-a-popup): A click on a drawn element shows its settings in a popup. ACCEPTED, concern `web.result.element-settings-entry`, scenario revision 1.
   - `tests/web/legacy-session-load.test.mjs`
 
-- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 8, supersedes scenario revision 7.
+- [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 9, supersedes scenario revision 8.
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/i18n-catalogs.test.mjs`
   - `tests/web/sequence-search.playwright.spec.js`

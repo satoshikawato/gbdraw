@@ -7,7 +7,7 @@ const ownerUrl = new URL('../../gbdraw/web/js/services/losat.js', import.meta.ur
 const ownerSource = (await readFile(ownerUrl, 'utf8'))
   .replace(/from '([^']+)'/g, (_match, path) => `from '${new URL(path, ownerUrl)}'`)
   .replaceAll('import.meta.url', JSON.stringify(ownerUrl.href));
-const wasmBytes = await readFile(new URL('../../gbdraw/web/wasm/losat/losat-threaded.wasm', import.meta.url));
+const { fetchShippedLosatWasm } = await import('./helpers/shipped-losat-wasm.mjs');
 const privateText = '/private/specimen.fasta >patient_sequence\nACGT PRIVATE_LOSAT_STDERR';
 const job = { pairIndex: 0, program: 'blastp', querySequenceKey: 'q', subjectSequenceKey: 's' };
 const options = {
@@ -33,9 +33,9 @@ const setup = async (t, { supportError, threadedError, holdThreaded = false } = 
   const workers = [];
   globalThis.window = { location: { href: 'https://example.test/gbdraw/web/' } };
   globalThis.crossOriginIsolated = true;
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url) => {
     if (supportError) throw supportError;
-    return { ok: true, arrayBuffer: async () => wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength) };
+    return fetchShippedLosatWasm(url);
   };
   // Keep the real module compilation and orchestration; replace only Worker transport.
   globalThis.Worker = class {

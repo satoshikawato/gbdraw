@@ -241,10 +241,14 @@ try {
     ['old-dormant', { ...currentRaw, subjectProteinSetHash: 'former-source' }],
     ['removed-record', { ...currentRaw, queryRecordInstanceKey: 'removed' }],
     ['valid-dormant', { ...currentRaw, args: ['--max-target-seqs', '5'], text: '' }],
+    ['kept-unused', { ...currentRaw, args: ['--max-target-seqs', '9'], text: '' }],
     ['nucleotide', { schema: 2, kind: 'raw-losat', program: 'blastn', text: '' }]
   ];
   state.losatCache.value = new Map(entries);
   state.losatCacheInfo.value = [{ key: 'old-displayed' }, { key: 'current' }];
+  // The Result uses the two searches without a row; 'kept-unused' is a search the
+  // drawing only keeps, so Save leaves it out (OV-3825).
+  state.losatNamedKeys.value = new Set(['current', 'valid-dormant', 'nucleotide']);
   const originalJsonStringify = JSON.stringify;
   let rawTextCloneAttempts = 0;
   JSON.stringify = function observedJsonStringify(value, ...args) {

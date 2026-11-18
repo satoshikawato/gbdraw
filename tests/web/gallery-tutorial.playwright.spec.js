@@ -929,7 +929,7 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
 
   const cards = page.locator('.sample-card');
-  await expect(cards).toHaveCount(12);
+  await expect(cards).toHaveCount(14);
   await expect(cards.nth(0)).not.toContainText('Beginner');
   await expect(cards.nth(0)).not.toContainText('Under 5 min');
   await expect(cards.nth(0).locator('.tag')).toHaveText(['Circular', 'Interactive SVG']);
@@ -938,19 +938,19 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
 
   const tagFilters = page.getByRole('group', { name: 'Filter by tag' });
   await tagFilters.getByRole('button', { name: 'Linear', exact: true }).click();
-  await expect(cards).toHaveCount(6);
-  await expect(page.locator('#sample-count')).toHaveText('6 of 12 examples');
+  await expect(cards).toHaveCount(8);
+  await expect(page.locator('#sample-count')).toHaveText('8 of 14 examples');
   await tagFilters.getByRole('button', { name: 'LOSAT', exact: true }).click();
-  await expect(cards).toHaveCount(5);
-  await expect(page.locator('#sample-count')).toHaveText('5 of 12 examples');
-  await expect(cards.locator('.tag-row')).toContainText(['LOSAT', 'LOSAT', 'LOSAT', 'LOSAT', 'LOSAT']);
+  await expect(cards).toHaveCount(7);
+  await expect(page.locator('#sample-count')).toHaveText('7 of 14 examples');
+  await expect(cards.locator('.tag-row')).toContainText(Array(7).fill('LOSAT'));
   await tagFilters.getByRole('button', { name: 'Circular', exact: true }).click();
   await expect(cards).toHaveCount(0);
   await expect(page.locator('#no-tag-matches')).toBeVisible();
-  await expect(page.locator('#sample-count')).toHaveText('0 of 12 examples');
+  await expect(page.locator('#sample-count')).toHaveText('0 of 14 examples');
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(cards).toHaveCount(12);
-  await expect(page.locator('#sample-count')).toHaveText('12 examples');
+  await expect(cards).toHaveCount(14);
+  await expect(page.locator('#sample-count')).toHaveText('14 examples');
 
   const harveyiCard = page.locator('[data-sample-id="vibrio-harveyi-group-collinear"]');
   await expect(harveyiCard.locator('.tag')).toHaveText([
@@ -962,7 +962,7 @@ test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   ]);
   await harveyiCard.click();
   await page.locator('#selected-tags').getByRole('button', { name: 'Multi-record' }).click();
-  await expect(cards).toHaveCount(2);
+  await expect(cards).toHaveCount(4);
   await expect(tagFilters.getByRole('button', { name: 'Multi-record' })).toHaveAttribute(
     'aria-pressed',
     'true'

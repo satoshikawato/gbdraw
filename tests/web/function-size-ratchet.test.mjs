@@ -78,7 +78,7 @@ const FUNCTION_STATEMENTS = {
   'app/circular-record-controls.js::createCircularSourceEdits': 86,
   'app/circular-track-slots.js::createCircularTrackSlotEditor': 857,
   'app/drawing-list.js::createDrawingList': 107,
-  'app/feature-editor/color-actions.js::createFeatureColorActions': 920,
+  'app/feature-editor/color-actions.js::createFeatureColorActions': 919,
   'app/feature-editor/label-actions.js::createFeatureLabelActions': 620,
   'app/feature-editor/placement-actions.js::createFeaturePlacementActions': 100,
   'app/feature-editor/rule-actions.js::createFeatureRuleActions': 646,
@@ -94,7 +94,7 @@ const FUNCTION_STATEMENTS = {
   'app/label-fit-dialog.js::createLabelFitDialog': 99,
   'app/legend-layout/diagram-drag.js::createDiagramDragActions': 338,
   'app/legend/drag-actions.js::createLegendDragActions': 154,
-  'app/legend/entry-actions.js::createLegendEntryActions': 480,
+  'app/legend/entry-actions.js::createLegendEntryActions': 466,
   'app/legend/entry-actions.js::createLegendEntryActions.prepareFileLegendEntries': 98,
   'app/linear-comparison-edits.js::createLinearComparisonGapEdits': 98,
   'app/linear-comparison-edits.js::createLinearComparisonPairEdits': 102,
@@ -103,7 +103,7 @@ const FUNCTION_STATEMENTS = {
   'app/orthogroups.js::createOrthogroupEditor': 259,
   'app/preview-runtime.js::createPreviewRuntime': 381,
   'app/record-display-options.js::createRecordDisplayControls': 307,
-  'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 163,
+  'app/record-display/feature-record-rotation.js::createFeatureRecordRotationWorkflow': 155,
   'app/record-selection.js::createRecordSelection': 115,
   'app/region-drawing.js::createRegionDrawing': 94,
   'app/region-select.js::createRegionSelect': 240,
@@ -117,7 +117,7 @@ const FUNCTION_STATEMENTS = {
   'app/run-info.js::appendInputArgs': 92,
   'app/sequence-search.js::createSequenceSearch': 89,
   'app/settings-pane.js::createSettingsPaneController': 123,
-  'app/similarity-alignment.js::createSimilarityAlignmentActions': 586,
+  'app/similarity-alignment.js::createSimilarityAlignmentActions': 585,
   'app/svg-styles.js::createSvgStyles': 97,
   'app/svg-styles.js::createSvgStyles.applyPaletteToSvg': 87,
   'app/ui.js::createPreviewTransformInteraction': 88,
@@ -150,7 +150,7 @@ const FUNCTION_STATEMENTS = {
   'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 98,
   'utils/contract-repair.js::repairPlace': 121,
   'workers/diagram-generation-worker.js::runGeneration': 96,
-  'workers/losat-threaded-worker.js::runThreadedLosat': 104
+  'workers/losat-threaded-worker.js::runThreadedLosat': 96
 };
 
 const COMPOSITION_ROOT_LOGIC_STATEMENTS = {

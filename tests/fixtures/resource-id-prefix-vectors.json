@@ -1,0 +1,16 @@
+{
+  "description": "The shown name of a resource that stores none: its name without each leading \"<resource ID>-\" while a name remains (the Web writer names a resource \"<ID>-<file>\"). Read by tests/test_input_summary.py (Python: gbdraw/session_migration.py _without_resource_id_prefix) and tests/web/resource-id-prefix.test.mjs (Web: services/session-request.js withoutResourceIdPrefix); tools/twins.json row vector:tests/fixtures/resource-id-prefix-vectors.json.",
+  "cases": [
+    { "case": "one prefix", "resourceId": "resource-0001", "name": "resource-0001-x.gb", "shown": "x.gb" },
+    { "case": "the prefix twice", "resourceId": "record-1-genbank", "name": "record-1-genbank-record-1-genbank-x.gbk", "shown": "x.gbk" },
+    { "case": "the prefix alone stays", "resourceId": "resource-0001", "name": "resource-0001-", "shown": "resource-0001-" },
+    { "case": "a second prefix with nothing after it stays", "resourceId": "resource-0001", "name": "resource-0001-resource-0001-", "shown": "resource-0001-" },
+    { "case": "another resource's prefix stays", "resourceId": "resource-0001", "name": "resource-0002-x.gb", "shown": "resource-0002-x.gb" },
+    { "case": "the ID without its dash stays", "resourceId": "record-1-genbank", "name": "record-1-genbankx.gb", "shown": "record-1-genbankx.gb" },
+    { "case": "the ID alone stays", "resourceId": "record-1", "name": "record-1", "shown": "record-1" },
+    { "case": "the prefix later in the name stays", "resourceId": "record-1", "name": "x-record-1-y.gb", "shown": "x-record-1-y.gb" },
+    { "case": "no name", "resourceId": "record-1", "name": "", "shown": "" },
+    { "case": "an ID with regular-expression characters", "resourceId": "a.b+(c)[1]*", "name": "a.b+(c)[1]*-x.tsv", "shown": "x.tsv" },
+    { "case": "an ID with a dot matches only a dot", "resourceId": "a.b", "name": "aXb-x.tsv", "shown": "aXb-x.tsv" }
+  ]
+}

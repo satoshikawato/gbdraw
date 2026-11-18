@@ -6937,30 +6937,94 @@ Decision date: 2026-10-21
 ### PD-OI-022: Reuse completed LOSAT searches after cancellation
 
 - Concern key: `diagram-generation.completed-losat-search-retry`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-022`, scenario revision `1`, only the sentence "Clear Cache
+  invalidates retained evidence." Every other scenario revision `1` term stays
+  in force.
 - Status: `ACCEPTED`
 - Normative outcome: After LOSAT raw search completes, canceling downstream
   Collinear work does not require the same raw search to run again on Generate.
   A member-only change recomputes the dependent analysis and reuses matching
-  completed raw evidence. Cache reuse still validates the actual inputs and
-  raw search settings; changing Max target seqs can require a new search.
-  Clear Cache invalidates retained evidence. Session/History replacement must
-  not revive unrelated retry data. Failure or cancellation preserves the last
-  successful Result and committed request under `OIPC-C07`.
-- Rationale: The maintainer reported a completed LOSATP search restarting after
-  canceling Collinear work and changing only member hits, and requested a fix
-  with durable regression protection.
-- Must preserve: Correct raw and derived identities; deterministic cancellation;
-  explicit clearing; last successful output. Partial raw batches are not falsely
-  admitted as completed searches.
-- May retire: Unnecessary raw reruns caused solely by downstream cancellation
-  or a member-limit edit.
-- Accepted residual risk: No new persistence or cross-reload guarantee is
-  introduced; no additional risk waiver was supplied.
+  completed raw evidence. Cache reuse still validates the actual inputs and raw
+  search settings; changing Max target seqs can require a new search. Clear
+  LOSAT results invalidates the shown drawing's retained evidence: its result
+  rows and every search no other drawing names. A search another drawing names
+  stays for that drawing and is reused when the inputs, the raw search settings
+  and the LOSAT build match. Session/History replacement must not revive
+  unrelated retry data. Failure or cancellation preserves the last successful
+  Result and committed request under `OIPC-C07`.
+- Rationale (scenario revision `1`): The maintainer reported a completed LOSATP
+  search restarting after canceling Collinear work and changing only member
+  hits, and requested a fix with durable regression protection.
+- Must preserve (scenario revision `1`): Correct raw and derived identities;
+  deterministic cancellation; explicit clearing; last successful output. Partial
+  raw batches are not falsely admitted as completed searches.
+- May retire (scenario revision `1`): Unnecessary raw reruns caused solely by
+  downstream cancellation or a member-limit edit.
+- Accepted residual risk (scenario revision `1`): No new persistence or
+  cross-reload guarantee is introduced; no additional risk waiver was supplied.
 - Acceptance contracts: `OIC-002`, `OIC-005`, `OIC-013`, `OIC-019`.
-- Decision source: Explicit maintainer request to fix the reported cancellation
-  cache behavior and add Product Decisions/Contracts against regression.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- Decision source (scenario revision `1`): Explicit maintainer request to fix
+  the reported cancellation cache behavior and add Product Decisions/Contracts
+  against regression.
+- Owner and decision date (scenario revision `1`): `satoshikawato`,
+  `2026-09-14`.
+- Decision source (scenario revision `2`): the Product Decision Owner's approval
+  of `2026-11-13` described in the Revision #2101 entry below. The JSON below
+  reproduces the approved receipt byte for byte, without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (scenario revision `2`; the JSON block, UTF-8, without its
+  final newline):
+  `2ae5a2c4f42ac39e7bf1fecd2cd942e7ff4ce837f1990f484c6cad29fd017a5c`.
+
+```json
+{
+  "concern": "diagram-generation.completed-losat-search-retry",
+  "scenarioRevision": 2,
+  "choice": "B. Clear LOSAT results は表示中の drawing の結果だけを消す",
+  "rationale": "表示中の drawing の Pairwise Comparisons で押す Clear LOSAT results は、その drawing の結果だけを消すべき（Owner 2026-11-13「むしろonly those of the shown drawingが削除されるべきでは！？」）。",
+  "mustPreserve": "scenario revision 1 のうち消去の範囲以外のすべて：raw と derived の正しい同一性、決定的なキャンセル、明示的な消去、最後に成功した出力、部分的な raw の結果を完了した検索として扱わないこと、再利用が実際の入力と raw 検索の設定を確かめること、Session/History の置き換えで無関係な retry を復活させないこと、失敗とキャンセルで最後に成功した Result と committed request を保つこと（OIPC-C07）。ボタンの件数は表示中の drawing の結果の数で、押すとその結果がすべて一覧から消える。ほかの drawing の結果一覧と Save Raw LOSAT TSV は変わらない。drawing が 1 つのプロジェクトでは、これまでどおりすべての結果が消える。",
+  "mayRetire": "Clear LOSAT results が、表示していない drawing の結果を含むプロジェクト全体の LOSAT 結果を一度に消すこと。",
+  "acceptedResidualRisk": "ほかの drawing も使っている検索はキャッシュに残るので、消した drawing の次の Generate は LOSAT を走らせずにその検索を再利用する（入力・検索設定・LOSAT の版を確かめるので結果は同じ）。共有された検索を走らせ直すには、それを使うすべての drawing で Clear する必要がある。プロジェクト全体を一度に消す操作は無くなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-13"
+}
+```
+
+#### Revision #2101
+
+`PD-OI-022` is replaced for scenario revision `2` (concern
+`diagram-generation.completed-losat-search-retry`). **Clear LOSAT results**
+clears only the shown drawing's LOSAT results: its result rows, its protein
+identity manifest, and every search and converted payload no other drawing
+names. A search another drawing names stays for that drawing, whose result list
+and **Save Raw LOSAT TSV** do not change, and the cleared drawing's next
+Generate reuses it when the inputs, the raw search settings and the LOSAT build
+match. The button counts the shown drawing's results ("Clear N LOSAT results").
+In a project of one drawing, Clear removes every LOSAT result, as before. It
+comes from the Product Decision Owner `satoshikawato`'s replies of `2026-11-13`
+in the campaign `circular-multi-file-20261108` (`DECISIONS.md`, Q2).
+
+- Q2 (`2026-11-13`). On a pull request sentence saying that Clear clears "the
+  LOSAT results of every drawing, not only those of the shown drawing", the
+  Owner wrote 「むしろonly those of the shown drawingが削除されるべきでは！？」. The session then
+  asked whether Clear should clear only the shown drawing's results, a search
+  another drawing also uses staying for that drawing and being reused (option
+  B), and the Owner replied 「Q2=B」. This replaces the reply 「Q2=A」 of
+  `2026-11-10`, which kept the whole-project Clear.
+- Receipt (`2026-11-13`). The session showed the complete JSON receipt above and
+  asked for its approval. The Owner replied 「receipt 承認」.
+- The JSON in the record reproduces the approved receipt byte for byte, without
+  translation or additional terms. New receipt SHA-256 (the JSON block):
+  `2ae5a2c4f42ac39e7bf1fecd2cd942e7ff4ce837f1990f484c6cad29fd017a5c`.
+- `OIC-019` is unchanged: a search that stays has the same inputs, raw search
+  settings and LOSAT build.
+- No other record is amended or retired.
+- This change is a static Product Contract co-change: the runtime, tests, and
+  changelog that implement it are in the same pull request, and the Review is
+  `REQUIRED`.
 
 ### PD-OI-023: Lossless protein paths during normal generation and saving
 
@@ -10630,15 +10694,19 @@ approval is quoted in the Revision #2108 entry of `PD-OI-2108`.
 ### PD-OI-089: Default colors a user edits win over the palette
 
 - Concern key: `web.default-colors-over-palette`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-089`, scenario revision `1`
-  (`A / USER_DEFAULT_COLORS_OVER_PALETTE`), only by renaming one option of
-  the Color/Stroke Change Scope dialog; every scenario-1 term stays in force.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-089`, scenario revision `2` (its Revision #2110 entry
+  below). Scenario revision `3` keeps every term of scenario revisions `1`
+  and `2` and adds the outcome of a rename of a Legend row that no Specific
+  color rule draws (`B / TYPE_DEFAULT_ROW_NAME`). Scenario revision `2`
+  superseded scenario revision `1` (`A / USER_DEFAULT_COLORS_OVER_PALETTE`),
+  only by renaming one option of the Color/Stroke Change Scope dialog; every
+  scenario-1 term stays in force.
 - Status: `ACCEPTED`
 - Selected outcomes: `A / USER_DEFAULT_COLORS_OVER_PALETTE` (scenario revision
-  `1`) and the label change of scenario revision `2`, whose receipt names no
-  choice code
-- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  `1`), the label change of scenario revision `2`, whose receipt names no
+  choice code, and `B / TYPE_DEFAULT_ROW_NAME` (scenario revision `3`)
+- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts and
   their nine-field JSON representations below, read together. Where the
   scenario-1 receipt names **Apply to all** on a Legend row, it means the
   option now labelled `Legend item "<legend name>" (N)`.
@@ -10656,6 +10724,12 @@ approval is quoted in the Revision #2108 entry of `PD-OI-2108`.
   Contract co-change).
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `68eb7c40ac71b1363789062e85b82f7171603a9a026a331fc4019d862346c07d`.
+- Decision source (scenario revision `3`): the approval quoted in its Revision
+  #2110 entry below. The third receipt and JSON below reproduce its fields
+  without translation or additional terms. The runtime that implements it
+  merges with it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `6912e6d05c23155b25a9e47cc9332e351cd6f9d5333d10958b5cb26985bf4d11`.
 - Acceptance contracts: `OIC-029`. These obligations and the complete selected
   outcome are jointly required.
 
@@ -10714,6 +10788,50 @@ Decision date: 2026-10-11
   "decisionDate": "2026-10-11"
 }
 ```
+
+Scenario revision `3` receipt, confirmed by `satoshikawato` on `2026-11-17`:
+
+```text
+PRODUCT_DECISION
+Concern: web.default-colors-over-palette
+Scenario revision: 3
+Choice: B / TYPE_DEFAULT_ROW_NAME: Specific color rule が描かない Legend 行（その feature type の既定の行。例：CDS）の名前を Legend タブか popup の Legend name で変えると、名前だけが変わり、Specific color rule は書かない。名前は Python が描き、その type の既定の行に付く。caption 付きの rule がその type の一部の feature を別の行に描く間は、残りの feature の行（other proteins など）に、rule を外すと元の行に、同じ名前が描かれる。どちらの状態で名前を変えても同じで、入力した名前が描かれ、既定の名前を入力すると既定の名前に戻る。色は今までどおりパレットと Default colors に従う。
+Rationale: R-09（2026-10-10）の「Python が描く type の表示名」。色（scenario revision 1 の Legend item）と同じく、名前でも product ごと・feature ごとの rule を書かない。後から行に加わる feature も同じ名前になり、Generate、コマンドライン（--legend_rows）、--session の再描画で同じ図になる。
+Must preserve: PD-OI-061 の Merge と Keep both（Merge は rule を書く）、複数の feature がある行の「This feature only」と popup の一覧からの選択と行と同じ色の color rule group の名前の入力は rule を書くこと、Specific color rule が描く行の改名は rule を変えること、feature ごとの色の編集がある行の改名は rule を書くこと（OIC-029 の色と同じ条件）、Reset が改名を戻すこと（R-10）、即時の編集と次の Generate の一致（PD-OI-066）、Session の形式、コマンドラインで other 行に付けた名前（--legend_rows）がその行で勝つこと。
+May retire: Specific color rule が描かない Legend 行の改名が product ごと・feature ごとの Specific color rule を書く動作（OV-244）。caption 付きの rule がある間に other 行に付けた名前が、rule を外すと消える動作。
+Accepted residual risk: caption 付きの rule がその type にある間、Legend では rule の行が先、名前を付けた行が後に並ぶ（rule を書いていた今までは名前の行が先）。名前は Legend の行の名前で、Default colors の一覧や -d の TSV には入らない（コマンドラインでは --legend_rows で再現する）。行の全体を別の行に Merge すると名前は消え、後でその rule を消して行が戻ると既定の名前になる。
+Owner: satoshikawato
+Decision date: 2026-11-17
+```
+
+```json
+{
+  "concern": "web.default-colors-over-palette",
+  "scenarioRevision": 3,
+  "choice": "B / TYPE_DEFAULT_ROW_NAME: Specific color rule が描かない Legend 行（その feature type の既定の行。例：CDS）の名前を Legend タブか popup の Legend name で変えると、名前だけが変わり、Specific color rule は書かない。名前は Python が描き、その type の既定の行に付く。caption 付きの rule がその type の一部の feature を別の行に描く間は、残りの feature の行（other proteins など）に、rule を外すと元の行に、同じ名前が描かれる。どちらの状態で名前を変えても同じで、入力した名前が描かれ、既定の名前を入力すると既定の名前に戻る。色は今までどおりパレットと Default colors に従う。",
+  "rationale": "R-09（2026-10-10）の「Python が描く type の表示名」。色（scenario revision 1 の Legend item）と同じく、名前でも product ごと・feature ごとの rule を書かない。後から行に加わる feature も同じ名前になり、Generate、コマンドライン（--legend_rows）、--session の再描画で同じ図になる。",
+  "mustPreserve": "PD-OI-061 の Merge と Keep both（Merge は rule を書く）、複数の feature がある行の「This feature only」と popup の一覧からの選択と行と同じ色の color rule group の名前の入力は rule を書くこと、Specific color rule が描く行の改名は rule を変えること、feature ごとの色の編集がある行の改名は rule を書くこと（OIC-029 の色と同じ条件）、Reset が改名を戻すこと（R-10）、即時の編集と次の Generate の一致（PD-OI-066）、Session の形式、コマンドラインで other 行に付けた名前（--legend_rows）がその行で勝つこと。",
+  "mayRetire": "Specific color rule が描かない Legend 行の改名が product ごと・feature ごとの Specific color rule を書く動作（OV-244）。caption 付きの rule がある間に other 行に付けた名前が、rule を外すと消える動作。",
+  "acceptedResidualRisk": "caption 付きの rule がその type にある間、Legend では rule の行が先、名前を付けた行が後に並ぶ（rule を書いていた今までは名前の行が先）。名前は Legend の行の名前で、Default colors の一覧や -d の TSV には入らない（コマンドラインでは --legend_rows で再現する）。行の全体を別の行に Merge すると名前は消え、後でその rule を消して行が戻ると既定の名前になる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-11-17"
+}
+```
+
+#### Revision #2110
+
+- On `2026-11-17`, at 21:07 JST, the Product Decision Owner `satoshikawato` answered
+  「PD-OI-089 r3=承認」 to the full receipt text of `PD-OI-089` scenario revision `3`,
+  shown with three Before/After image pairs of this pull request and the answer template
+  「PD-OI-089 r3=承認」 (campaign `v015-residuals-20261024`, `DECISIONS.md`; the same
+  message also answered another session's questions). Scenario revision `3` supersedes
+  scenario revision `2` and keeps every term of scenario revisions `1` and `2`; its
+  receipt above is serialized byte for byte as approved.
+- Receipt SHA-256 of the new scenario revision (UTF-8, excluding the final newline):
+  `6912e6d05c23155b25a9e47cc9332e351cd6f9d5333d10958b5cb26985bf4d11`.
+- `OIC-029` gains one sentence for the rename (Acceptance contracts below).
+- No other record is amended or retired. The runtime that implements it merges with it (static Product Contract
+  co-change); this entry supplies no runtime acceptance evidence.
 
 ### PD-OI-090: Project with drawings
 
@@ -12670,13 +12788,11 @@ Decision date: 2026-10-13
 ### PD-OI-106: Web UI language
 
 - Concern key: `product.web-ui-language`
-- Scenario revision: `8`
-- Supersedes: `PD-OI-106`, scenario revision `7`. Scenario revision `8` keeps
-  every outcome of scenario revision `7`, adds three languages to the header
-  Language menu (اردو, العربية and فارسی), and states how a number field reads
-  other digit sets, how the Web UI reads from right to left in ar, fa and ur,
-  and which typefaces show their text; its Revision #2056 entry below says what
-  changes. As scenario revisions `1` to `7`, it narrows `PD-OI-093`: that
+- Scenario revision: `9`
+- Supersedes: `PD-OI-106`, scenario revision `8`. Scenario revision `9` keeps
+  every outcome of scenario revision `8` and changes one thing: hi, bn, ar, fa
+  and ur ship in 0.16.0, not in 0.15.0; its Revision #2135 entry below says what
+  changes. As scenario revisions `1` to `8`, it narrows `PD-OI-093`: that
   record's limit of browser storage to one display choice no longer holds (see
   the receipt's May retire); `PD-OI-093` keeps its text and its stored display
   choice.
@@ -12684,10 +12800,12 @@ Decision date: 2026-10-13
 - Selected outcome: `WEB-UI-LANGUAGE-MANUAL`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
-- Decision source: the Owner replies of `2026-11-08` and `2026-11-15` in the
-  Claude Code sessions of the campaign `i18n-rtl-indic-20261108`, quoted in its
-  Revision #2056 entry below; scenario revision `7` came from the Owner replies
-  of `2026-11-08` (Revision 150 entry), scenario revision `6` from those of
+- Decision source: the Owner statements of `2026-11-18` in the Claude Code
+  session gbdraw-work-05, quoted in its Revision #2135 entry below; scenario
+  revision `8` came from the Owner replies of `2026-11-08` and `2026-11-15` in
+  the Claude Code sessions of the campaign `i18n-rtl-indic-20261108` (Revision
+  #2056 entry below), scenario revision `7` from those of `2026-11-08`
+  (Revision 150 entry), scenario revision `6` from those of
   `2026-10-31` (Revision 108 entry), scenario revision `5` from those of
   `2026-10-22` (Revision 79 entry), scenario revision `4` from those of the
   same day (Revision 78 entry), scenario revision `3` from those of
@@ -12702,33 +12820,34 @@ Decision date: 2026-10-13
   record supplies no runtime acceptance evidence. The JSON `concern` holds the
   concern key without the receipt's parenthetical description.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `7b1c31582adbb89f3e7ba324ee0c56e80714470bbaeb8b3dc16a93bf98752b9e`.
+  `6406059f0b3b8f013c57fa2775eedf9e1d5ca054a56a8bdbed42ecb1e0e479ce`.
 
 ```text
 PRODUCT_DECISION
 Concern: product.web-ui-language (language of the Web UI text)
-Scenario revision: 8
+Scenario revision: 9
 Choice: WEB-UI-LANGUAGE-MANUAL. A header Language menu (English,
   Bahasa Indonesia, Deutsch, Español, Français, Italiano, Polski,
   Português, Tiếng Việt, Türkçe, Русский, Українська, اردو,
   العربية, فارسی, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어)
   switches the Web UI text at once, without reload, and without
   changing the Result, the settings or the History; switching is
-  not a History step. ar and fa ship together in 0.15.0; ur ships
-  in 0.15.0 with its bundled typeface. English is shown on a first
-  visit; the browser language never chooses. The chosen language
-  is remembered per browser and is not part of the Session,
-  History or any export. Names fixed in English by PD-OI-093 and
-  PD-OI-105 keep that English in the English UI and are translated
-  in the other languages. pt follows the Brazilian norm; one
-  Portuguese catalog. A language with singular and plural forms
-  shows the form its own plural rule selects for the count,
-  including the few and many forms of pl, ru and uk and the zero,
-  two, few and many forms of ar. Numbers keep the digits 0-9, the
-  English decimal point and the English digit grouping in every
-  language; a number field reads Persian, Arabic-Indic, Bengali
-  and Devanagari digits and the Arabic decimal separator, typed on
-  a keyboard or pasted into it, as 0-9 and the English decimal
+  not a History step. hi and bn ship together in 0.16.0; ar and fa
+  ship together in 0.16.0; ur ships in 0.16.0 with its bundled
+  typeface. English is shown on a first visit; the browser
+  language never chooses. The chosen language is remembered per
+  browser and is not part of the Session, History or any export.
+  Names fixed in English by PD-OI-093 and PD-OI-105 keep that
+  English in the English UI and are translated in the other
+  languages. pt follows the Brazilian norm; one Portuguese
+  catalog. A language with singular and plural forms shows the
+  form its own plural rule selects for the count, including the
+  few and many forms of pl, ru and uk and the zero, two, few and
+  many forms of ar. Numbers keep the digits 0-9, the English
+  decimal point and the English digit grouping in every language;
+  a number field reads Persian, Arabic-Indic, Bengali and
+  Devanagari digits and the Arabic decimal separator, typed on a
+  keyboard or pasted into it, as 0-9 and the English decimal
   point. In ar, fa and ur the Web UI reads from right to left:
   panes, menus, lists, dialogs and controls are mirrored, and
   arrows that mean back, forward, open or move point the other
@@ -12783,20 +12902,20 @@ Accepted residual risk: Python-produced warnings, Gallery
   other languages; a translation report needs a GitHub account and
   is public.
 Owner: satoshikawato
-Decision date: 2026-11-15
+Decision date: 2026-11-18
 ```
 
 ```json
 {
   "concern": "product.web-ui-language",
-  "scenarioRevision": 8,
-  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Deutsch, Español, Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский, Українська, اردو, العربية, فارسی, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. ar and fa ship together in 0.15.0; ur ships in 0.15.0 with its bundled typeface. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count, including the few and many forms of pl, ru and uk and the zero, two, few and many forms of ar. Numbers keep the digits 0-9, the English decimal point and the English digit grouping in every language; a number field reads Persian, Arabic-Indic, Bengali and Devanagari digits and the Arabic decimal separator, typed on a keyboard or pasted into it, as 0-9 and the English decimal point. In ar, fa and ur the Web UI reads from right to left: panes, menus, lists, dialogs and controls are mirrored, and arrows that mean back, forward, open or move point the other way; the figure, the Preview and every view drawn in the figure's shape, every export, the command, recipe and replay text, sequences, coordinates, colors and number fields keep their left-to-right order, and a file, record or feature name keeps the direction of its own letters. Thai, Devanagari and Bengali text, and the Arabic-script text of ar and fa, is shown in the typeface of the user's system for its script; Urdu text is shown in the bundled Nastaliq typeface, and in a Naskh typeface of the user's system while that typeface loads; Vietnamese, Polish and Turkish letters and Cyrillic text are shown in the bundled Latin typeface; every script is shown at the sizes and line heights it needs, with no mark cut off; the figure is unchanged. No text states that the translations are reviewed. Beside the Language menu, in every language, a link named \"Suggest a translation fix\" opens the GitHub translation feedback issue form in a new tab with the shown language and the gbdraw version filled in; no file, setting, Result or Session content is put in the link.",
+  "scenarioRevision": 9,
+  "choice": "WEB-UI-LANGUAGE-MANUAL. A header Language menu (English, Bahasa Indonesia, Deutsch, Español, Français, Italiano, Polski, Português, Tiếng Việt, Türkçe, Русский, Українська, اردو, العربية, فارسی, हिन्दी, বাংলা, ไทย, 日本語, 简体中文, 繁體中文, 한국어) switches the Web UI text at once, without reload, and without changing the Result, the settings or the History; switching is not a History step. hi and bn ship together in 0.16.0; ar and fa ship together in 0.16.0; ur ships in 0.16.0 with its bundled typeface. English is shown on a first visit; the browser language never chooses. The chosen language is remembered per browser and is not part of the Session, History or any export. Names fixed in English by PD-OI-093 and PD-OI-105 keep that English in the English UI and are translated in the other languages. pt follows the Brazilian norm; one Portuguese catalog. A language with singular and plural forms shows the form its own plural rule selects for the count, including the few and many forms of pl, ru and uk and the zero, two, few and many forms of ar. Numbers keep the digits 0-9, the English decimal point and the English digit grouping in every language; a number field reads Persian, Arabic-Indic, Bengali and Devanagari digits and the Arabic decimal separator, typed on a keyboard or pasted into it, as 0-9 and the English decimal point. In ar, fa and ur the Web UI reads from right to left: panes, menus, lists, dialogs and controls are mirrored, and arrows that mean back, forward, open or move point the other way; the figure, the Preview and every view drawn in the figure's shape, every export, the command, recipe and replay text, sequences, coordinates, colors and number fields keep their left-to-right order, and a file, record or feature name keeps the direction of its own letters. Thai, Devanagari and Bengali text, and the Arabic-script text of ar and fa, is shown in the typeface of the user's system for its script; Urdu text is shown in the bundled Nastaliq typeface, and in a Naskh typeface of the user's system while that typeface loads; Vietnamese, Polish and Turkish letters and Cyrillic text are shown in the bundled Latin typeface; every script is shown at the sizes and line heights it needs, with no mark cut off; the figure is unchanged. No text states that the translations are reviewed. Beside the Language menu, in every language, a link named \"Suggest a translation fix\" opens the GitHub translation feedback issue form in a new tab with the shown language and the gbdraw version filled in; no file, setting, Result or Session content is put in the link.",
   "rationale": "Let users work in their own language while every scientific output stays identical in all languages.",
   "mustPreserve": "the English UI text and accessible names; the figure, every export, the Session, CLI / Source recipe / Exact replay text and diagnostics are identical in every language; the stored settings-pane display choice of PD-OI-093.",
   "mayRetire": "PD-OI-093's limit of browser storage to one display choice; storage now holds that choice and the UI language.",
   "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi, th, de, it, pl, tr, ru, uk, hi, bn, ar, fa and ur wording is drafted and checked without a native reviewer until one corrects it; id, vi, de, it, pl, tr, ru and uk readers see the English number format (1,000.5) where their convention writes 1.000,5 or 1 000,5; hi and bn readers see 1,234,567 where their convention writes 12,34,567; bn and fa readers see the digits 0-9 where their convention writes ০-৯ or ۰-۹, ar readers see them where their regional convention writes ٠-٩, and fa readers see 1,234.5 where their convention writes ۱٬۲۳۴٫۵; digits that an input method composes reach a number field as the browser reads them: Chromium leaves them out, and Firefox leaves out the Arabic decimal separator unless the UI is Persian; in Chromium, Undo after a paste that a number field reads this way also removes the digits typed just before it; the number-field reading, the right-to-left layout and the Urdu typeface are not checked in Safari or on macOS, iOS or Android; es, fr, it and pt readers see their usual plural sentence for counts that are exact multiples of a million, where their grammar adds de or di before the noun; Urdu rows and buttons are taller than in the other languages; a translation report needs a GitHub account and is public.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-11-15"
+  "decisionDate": "2026-11-18"
 }
 ```
 
@@ -12865,6 +12984,47 @@ Decision Owner `satoshikawato`'s replies to the campaign
   ur, the right-to-left layout and the number-field reading: it changes no
   runtime by itself and supplies no runtime acceptance evidence. The Review is
   `REQUIRED`.
+
+#### Revision #2135
+
+`PD-OI-106` is replaced for scenario revision `9` (concern
+`product.web-ui-language`). The receipt keeps every outcome of scenario
+revision `8` word for word and changes one sentence, the release in which the
+five new languages ship. Scenario revision `8` said that ar and fa ship
+together in 0.15.0 and that ur ships in 0.15.0 with its bundled typeface, and
+it no longer carried the sentence "hi and bn ship together in 0.15.0" of
+scenario revision `7`. The receipt now says that hi and bn ship together in
+0.16.0, that ar and fa ship together in 0.16.0, and that ur ships in 0.16.0
+with its bundled typeface. The Language menu list, the digits, the right-to-left
+reading, the typefaces, the line heights and the Accepted residual risk,
+including the Urdu typeface and the taller Urdu rows and buttons, are those of
+scenario revision `8`. The Revision #2056 entry above records scenario
+revision `8` as approved; this entry replaces its statements about 0.15.0. It
+comes from the Product Decision Owner `satoshikawato`'s statements in the
+Claude Code session gbdraw-work-05 on `2026-11-18` (campaign
+`i18n-rtl-indic-20261108`; `DECISIONS.md` `D-D19` of its lane `lane-D-ur`):
+
+- `22:29 JST`. 「ウルドゥー語は今回は中止しよう」 ("let's cancel Urdu this
+  time"). It stopped the Urdu work for 0.15.0.
+- `22:34 JST`. 「v0.15.0ではこれら5言語のshipmentは中止。v0.16.0にまわそう」
+  ("cancel the shipment of these five languages in v0.15.0; move them to
+  v0.16.0"). None of hi, bn, fa, ar and ur ships in 0.15.0, and all five move
+  to 0.16.0. The first statement stays on record; Urdu is not removed from the
+  Contract, and it ships in 0.16.0 with the other four.
+- `22:35 JST`. 「これまでに入れたアーキテクチャなどの修正はそのままでいい。ユーザーには言語は出さない」
+  ("the architecture and other fixes put in so far can stay as they are; do not show the languages to users"). No
+  language is added to the Language menu of 0.15.0; what is already on `dev` stays.
+- The release order of `D-11` to `D-17` (hi and bn, then ar and fa, then ur) is
+  not changed; the receipt does not state it.
+- New receipt SHA-256: `PD-OI-106` scenario revision `9`
+  `6406059f0b3b8f013c57fa2775eedf9e1d5ca054a56a8bdbed42ecb1e0e479ce`.
+- `PD-OI-106` scenario revision `9` supersedes scenario revision `8`; the
+  former text stays in the Git history. No other record is amended or retired;
+  `PD-OI-093` and `PD-OI-105` keep their text.
+- This change is authority only, a Product Contract change without runtime
+  (the route of `Revision #2056`; `docs/internal/NORMS_INDEX.md` is
+  regenerated). It changes no runtime, no Language menu and no catalog, and it
+  supplies no runtime acceptance evidence. The Review is `REQUIRED`.
 
 ### PD-OI-107: Organism name lines from record metadata
 
@@ -15044,7 +15204,7 @@ Owner `satoshikawato`'s replies to the campaign `ci-review-20261110/D`
 | `OIC-026` | `PD-OI-035` and `PD-OI-039`: identity, keyboard Select/Skip, non-rendered candidates, no position-only selection, desktop canvas, focus and transient overlay exclusion remain required with all PD-OI-031/034 outcomes. Compact review retains visible, operable canvas at full available width and at least 200 px height at 390×844/740, scrollable candidates and reachable Apply/Cancel, local no-Worker draft edits, atomic batch validation, failure/error/retry and artifact/orientation/History recovery. At every width the review is docked in the Result, closes Editor through its owner while retaining tab, disables reopening with a reason until review ends, then reopens an Editor that was open on the same tab; the review cannot be dragged. During the review the feature popup is hidden, a click on the figure neither opens, switches nor closes it, search Open switches its target, and it returns when the review ends. The figure is fitted when the review opens and the earlier zoom and pan return when it ends; a Session saved during the review and the History of its Apply keep the earlier zoom and pan. While the review shows the figure it fitted, the figure is fitted again, as by the Fit button and without a History step, whenever the width or height of its room changes; a zoom and pan changed by hand stay while the room does not change, and outside a review a change of the room keeps the zoom and pan. Browser verification must show presentation changes leave draft and Result unchanged. |
 | `OIC-027` | `PD-OI-066` scenario revision `2`: a live-edited Result, including after Session load and export, agrees with a Result freshly generated from the same draft in the meaning (position, color, text, and visibility) of every edited element when no pending Applies on Generate value changes those elements; otherwise it agrees with a Generate of the committed Session plus the applied live values. Settings shown as Applies on Generate do not change the Result before Generate. A live edit that the Generate compiler cannot reproduce is shown as Applies on Generate instead. |
 | `OIC-028` | `PD-OI-088`: the color scope, Legend name, and Reset fill color dialogs, whether opened from the feature popup's fill color, the Features drawer color input, a popup stroke edit, or a Legend panel rename (`Merge into "<name>"` or `Keep both: name it "<name 2>"`), open from the saved rules before the rules a choice may add are prepared. A choice is one History step and Cancel records none. From a choice until its step ends, the dialog stays open, its choices and Cancel are disabled, it states that the edit is applying, and no second choice, Cancel, Escape, or backdrop click starts or closes anything; the dialog closes when the step ends. |
-| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
+| `OIC-029` | `PD-OI-089`: a user default color is a Default colors value that differs from the selected palette's color (case, named colors, and `#rgb` compared as one color; Auto is none). A palette switch with user colors opens one dialog: Keep my N colors (the new palette plus the user colors), Use the palette's colors, or Cancel (no change, no History step, the select shows the old palette); without user colors it switches as one step. Switching back to the applied palette while another is queued asks the same when user colors exist; the queued palette is dropped and the kept colors apply now. Default colors Reset with user colors asks first. Dialog bodies name up to three keys. `Legend item "<legend name>" (N)` on a Legend row that no Specific color rule draws sets that feature type's default color as one History step and writes no Specific color rule; the scope dialog shows under it "Sets the <type> default color (<type> features without their own color or rule, also hidden ones)." or, when the type has a user color, "Replaces your <type> default color ■ #hex." While a palette is queued, that choice sets the color in the queued palette's colors and in the shown Result now. A rename, in the Legend tab or the popup's Legend name, of a Legend row that no Specific color rule draws (a feature type's default row) changes only the row's name and writes no Specific color rule: Python draws the name on the type's row, or, while a rule with a Legend name draws some of the type's features in another row, on the row of the rest (such as `other proteins`); typing the default name gives the default name back. Under the same condition as the color above, the rename of a row that a per-feature color edit draws writes rules. Generate and the Source recipe write `-p` and only the user colors as `-d`. |
 | `OIC-030` | `PD-OI-090`: an edit, Generate, failure, cancel, or Undo/Redo of a step in one drawing leaves every other drawing's settings, Legend edits, History, and Result unchanged, and Reset all drawings is the only action that resets more than the shown drawing; Reset this drawing keeps the values that are one per Session (LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, Instant Preview), and Reset all drawings resets them as 0.14.0 Reset Settings did; Undo/Redo in any drawing walks the shown drawing's steps and the project steps (drawing add, duplicate, rename, reorder, delete, Reset all drawings, replacing an input file for every drawing that uses it, and edits that change only the Session title, Auto Reflow, PNG DPI, palette Instant Preview, LOSAT execution and threads, or input drafts) newest first, one step per operation; the Undo of a drawing add, duplicate, or delete shows the drawing that was shown before it, and its Redo the drawing shown after it; deleting the shown drawing shows the next tab's drawing, else the previous tab's; the Undo of a delete restores that drawing with its settings, edits, Result, and History; the Default colors, Specific rules, Blacklist, Whitelist, and Priority files change only the shown drawing; an operation that also changes a drawing value is one step of that drawing; turning Instant Preview on applies every drawing's queued palette in that one step; a drawing switch writes no setting and is not an Undo step; a drawing switch is refused while a color rule table edit is being matched, and that edit becomes one History step of its drawing; Save and a fresh Load restore every saved drawing, its Result, and the drawing that was shown, or, when the shown drawing had no file, changed setting, edit, or Result and was not saved, the saved drawing of the next tab, else of the previous tab; when no drawing qualifies, Save writes the shown drawing; each Session 27-44 fixture and each Session 46, 47, and 48 fixture converts with no saved value lost and its first drawing renders as the old Session replays; a converted Session opens the drawing of the mode shown at Save, or, when that mode has no stored Result and the other mode has one, that Result's drawing, and still creates the shown mode's drawing; the drawing it opens is the first tab and the other drawing the second; a Session 46, 47, 48, or 49 preview-only Load starts no Python Worker, except that a Session 46 or 47 holding protein comparison results stored on a reversed record shows its stored figure first and then starts it once to convert them; the Python and CLI replay and render one or all drawings with distinct output paths; a region drawing keeps the source coordinates and carries over exactly what `PD-OI-090` lists. |
 | `OIC-031` | `PD-OI-099`: a Load of a file with something it cannot fully restore lists it in one dialog before any setting, Result, input file, History, or screen changes, and Cancel changes none of them. Every Gallery Session, and every Session fixture that loses nothing, loads with no row; a fixture that is lossy on purpose lists exactly its loss. A refusal of the Web Load comes before the dialog, never after [Load]. No file the Web loaded before the dialog existed is refused. The receipt's 〔拒否〕 classes are refused; once the interim of its Accepted residual risk ends, they are the only refusals of the Web Load. |
 

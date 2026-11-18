@@ -126,9 +126,11 @@ import {
 import {
   createDefaultLinearComparisonPlan,
   linearComparisonEdgeKey,
+  loadedSourceNameField,
   losatEdgeOfPair,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
+  restoreComparisonEdgeFile,
   resolveLinearComparisonPlan,
   setComparisonEdgeFile,
   windowLosatFilenamesField,
@@ -138,7 +140,7 @@ import { windowLosatFilenamesOf } from './linear-comparison-retained.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
 import { buildSessionDrawingResources } from './session-resources.js';
 import { savedDrawingsOf } from './session-drawings.js';
-import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend, requestStateOfDrawing } from './artifact-slot.js';
+import { ARTIFACT_SLOT_KEYS, createArtifactSlot, installShownSetLegend, requestStateOfDrawing, withArtifactSlotValues } from './artifact-slot.js';
 import {
   base64ToBytes,
   contentFactsOfStream,
@@ -187,7 +189,8 @@ import {
 } from './orthogroup-feature-metadata.js';
 import {
   isResourceBackedCanonicalComparison,
-  mapResourceBackedCanonicalComparison
+  mapResourceBackedCanonicalComparison,
+  writeDraftComparisons
 } from './canonical-comparisons.js';
 import {
   browserStorageFreeBytes,
@@ -236,7 +239,10 @@ import {
   validateProteinRawEntryReferences,
   validateProteinIdentityManifest,
   losatEntryDrawingKind,
-  losatRowsOnePerKey
+  losatRowsOnePerKey,
+  LOSAT_EVIDENCE_EMPTY,
+  emptyLosatEvidence,
+  LOSAT_EVIDENCE_KEYS
 } from './losat-cache.js';
 import { NO_CONSERVATION_PAIRS, conservationPairKey, conservationPairsOfEntries } from './circular-conservation-keys.js';
 /** @import { AdoptedConservationPairs, ConservationPairs } from './circular-conservation-keys.js' */
@@ -396,14 +402,14 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { CircularSourceInput } from './input-types.js' */
 /** @import { NamedCardRecord, NamedCardRecords } from './record-draw-selection.js' */
 /** @import { CircularListRecord } from './record-discovery.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundFileValue, CircularCardMark, CircularRecordEntry, CircularSource, DrawingInputFiles, InputType, LinearSeqWindow, LoadedFileValue, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { DiagnosticContext, ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { ConfirmLoadRepairs, LoadRepair, Repaired } from '../utils/load-repairs.js' */
-/** @import { ProteinIdentityManifest } from './losat-cache.js' */
+/** @import { LosatCacheInfoEntry, LosatDerivedCacheEntry, LosatEvidence, ProteinIdentityManifest, RawLosatCacheEntry } from './losat-cache.js' */
 /** @import { DownloadChoicePort } from './text-download.js' */
 
 // The Session document's types are generated from gbdraw/session_contract.py:
@@ -1997,7 +2003,7 @@ const readSessionLosatArtifacts = async (data, sourceSessionVersion, repairs, at
 
 /**
  * The envelopes of retired LOSAT artifacts a Session keeps, as they were read.
- * @typedef {{ entries?: readonly unknown[] }} LegacyArtifactEnvelope
+ * @typedef {{ schema?: number, entries?: readonly unknown[] }} LegacyArtifactEnvelope
  */
 /**
  * @param {{ legacyRawCandidates?: LegacyArtifactEnvelope | null,
@@ -2809,7 +2815,6 @@ const drawingProjectionInputOf = (view, {
     // derives its draft from the request (D-02); the comparison plan of a
     // Python re-save is stated the same way as the CLI's (OV-296).
     initializeCliInputs: !hasStoredDraft,
-    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
     linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
       ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
       : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
@@ -4001,38 +4006,8 @@ export const setPreviewRuntime = (ports) => {
 };
 
 /**
- * One row of `state.losatCacheInfo`, the pairs a Generate keeps cache entries for: a circular conservation
- * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
- * @typedef {object} LosatCacheInfoEntry
- * @property {unknown} key The raw cache key: a string from Generate; a Session load stores the saved key (truthy, unchecked).
- * @property {string} filename A file name: Generate's, or the saved one a Session load reads (a default when it is
- *   no text or empty).
- * @property {boolean} display
- * @property {DrawingId} drawingId The drawing whose Generate wrote the row, or whose saved entries a Session load read
- *   it from: a change of that drawing's ring files clears it (OV-3196). Runtime only; Save writes no drawing.
- * @property {string} [edgeKey]
- * @property {number} [ordinal]
- * @property {string} [queryUid]
- * @property {string} [subjectUid]
- * @property {number} [queryIndex]
- * @property {number} [subjectIndex]
- */
-/**
- * The write of the project's cache-info rows from a pass over them (a filter, a reindex, a clear): the Linear
- * drawing's pass and the conservation clears use it; Generate, a Session load, History restore and Reset still
- * assign the array directly. Rows equal one by one keep the array, so the readers of the ref (for example
- * `linearLosatCacheInfoByEdgeKey`) are not triggered and the History owner-set capture keeps the same array (OV-2210).
- * A transport identity no longer names the array (OV-2212).
- * @param {LosatCacheInfoEntry[]} next
- */
-export const writeLosatCacheInfo = (next) => {
-  const current = state.losatCacheInfo.value;
-  if (Array.isArray(current) && current.length === next.length && next.every((entry, index) => entry === current[index])) return;
-  state.losatCacheInfo.value = next;
-};
-/**
  * The fields of a cache-info row that name a linear pair's comparison edge.
- * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display' | 'drawingId'>} LosatCacheInfoIdentity
+ * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display'>} LosatCacheInfoIdentity
  */
 /** @type {readonly ('edgeKey' | 'queryUid' | 'subjectUid')[]} */
 const LOSAT_CACHE_INFO_STRING_FIELDS = ['edgeKey', 'queryUid', 'subjectUid'];
@@ -4114,18 +4089,17 @@ const restoredLosatCacheInfoIdentity = (drawing, entry, places) => {
 };
 
 /**
- * The project's raw LOSAT entries Save writes, one per key, with the manifests a current Session's Load validated each
- * adopted protein entry with (`validatedWith`); each drawing writes those of them its own manifest resolves
- * (`losatEntriesResolvingIn`).
+ * The raw LOSAT entries of a drawing's evidence that Save writes (D-221: the drawing's own, never another drawing's,
+ * OV-3475): one per listed key with the row's file name and edge (`losatRowsOnePerKey`), then every other search its
+ * Result uses (`losatNamedKeys`, the set Generate commits and Load reads back; OV-3825) as `display: false`, never one
+ * it only keeps for its own reuse under other settings, with the manifests a current Session's Load validated each
+ * adopted protein entry with (`validatedWith`; `losatEntriesResolvingIn` reuses them).
+ * @param {Pick<LosatEvidence, 'losatCacheInfo' | 'losatCache' | 'losatNamedKeys'>} evidence
  * @returns {{ entries: Record<string, unknown>[], validatedWith: WeakMap<object, ReadonlySet<unknown>> }}
  */
-const serializeLosatCache = () => {
-  const cacheMap = state.losatCache?.value;
+const serializeLosatCache = ({ losatCacheInfo: info, losatCache: cacheMap, losatNamedKeys: named }) => {
   /** @type {WeakMap<object, ReadonlySet<unknown>>} */
   const validatedWith = new WeakMap();
-  if (!cacheMap || cacheMap.size === 0) return { entries: [], validatedWith };
-  /** @type {LosatCacheInfoEntry[]} */
-  const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   /** @type {Record<string, unknown>[]} */
   const entries = [];
   const seen = new Set();
@@ -4157,12 +4131,11 @@ const serializeLosatCache = () => {
     return entry;
   };
 
-  // One entry per raw key (`losatRowsOnePerKey`), with its first row's file name.
   losatRowsOnePerKey(info).forEach((entry) => {
     const idx = info.indexOf(entry);
     const cached = cacheMap.get(entry.key);
-    if (!isCurrentRawLosatCacheEntry(cached)) return;
-    entries.push(buildEntry(String(entry.key), cached, {
+    if (!cached || !isCurrentRawLosatCacheEntry(cached)) return;
+    entries.push(buildEntry(entry.key, cached, {
       ...entry,
       filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
       display: entry.display !== false
@@ -4170,12 +4143,73 @@ const serializeLosatCache = () => {
     seen.add(entry.key);
   });
 
-  cacheMap.forEach((/** @type {Record<string, unknown>} */ value, /** @type {string} */ key) => {
-    if (seen.has(key)) return;
-    if (!isCurrentRawLosatCacheEntry(value)) return;
-    entries.push(buildEntry(key, value));
+  cacheMap.forEach((value, key) => {
+    if (seen.has(key) || !named.has(key) || !isCurrentRawLosatCacheEntry(value)) return;
+    entries.push(buildEntry(String(key), /** @type {Record<string, unknown>} */ (value)));
   });
   return { entries, validatedWith };
+};
+
+/**
+ * The LOSAT entries Save writes into a drawing: its own evidence's (`serializeLosatCache`), of the kind and pairs its
+ * written request names (`losatEntriesOfDrawing`), and of its protein searches those its manifest resolves
+ * (`losatEntriesResolvingIn`).
+ * @param {SessionArtifactView} artifact The drawing's artifact.
+ * @param {{ request: SessionResourceDrawing['renderRequest'], conservationPairs: ConservationPairs, catalog: Parameters<typeof catalogUnitPlaces>[0],
+ *   manifest: unknown }} written
+ * @returns {Record<string, unknown>[]}
+ */
+const savedLosatEntriesOf = (artifact, { request, conservationPairs, catalog, manifest }) => {
+  const { losatCacheInfo, losatCache, losatNamedKeys } = artifact;
+  const { entries, validatedWith } = serializeLosatCache({ losatCacheInfo, losatCache, losatNamedKeys });
+  return losatEntriesResolvingIn(losatEntriesOfDrawing(request, conservationPairs, entries, catalog), manifest, validatedWith);
+};
+
+/**
+ * Entries once each by their content, in the order they first appear: a Duplicate shares a drawing's legacy envelopes,
+ * and a write in the copy (a promotion, History) makes new envelopes whose entries are copies, so identity cannot tell
+ * them apart. The first entry of a content is kept unless `prefer` takes a later one, so the drawings' order decides
+ * nothing that `prefer` decides.
+ * @template T
+ * @param {readonly T[]} entries
+ * @param {(entry: T) => unknown} contentOf
+ * @param {(entry: T, kept: T) => boolean} [prefer]
+ * @returns {T[]}
+ */
+const onceByContent = (entries, contentOf, prefer = () => false) => {
+  /** @type {Map<string, T>} */
+  const kept = new Map();
+  entries.forEach((entry) => {
+    const content = JSON.stringify(contentOf(entry));
+    const earlier = kept.get(content);
+    if (earlier === undefined || prefer(entry, earlier)) kept.set(content, entry);
+  });
+  return [...kept.values()];
+};
+/**
+ * The project's `legacyArtifacts` Save writes: each older Session's protein candidate still pending in a drawing's
+ * evidence (Load gives them to one drawing, D-224), once by its original entry, with the older derived evidence, each
+ * entry once by its content (review 2 M1). A candidate one drawing rejected is written pending while another drawing
+ * holds it pending (review 3 L-1): a protein Generate there may still promote it, and one that rejects it again
+ * changes nothing.
+ * @param {readonly SessionArtifactView[]} views Every drawing's artifact.
+ */
+const savedLegacyArtifactsOf = (views) => {
+  /** @param {'legacyProteinRawCandidates' | 'legacyProteinDerivedEvidence'} key */
+  const envelopes = (key) => [...new Set(views.map((view) => toRaw(view[key])).filter(Boolean))];
+  return buildSessionLegacyArtifacts({
+    legacyRawCandidates: {
+      schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA,
+      entries: onceByContent(envelopes('legacyProteinRawCandidates')
+        .flatMap((envelope) => serializableLegacyProteinCandidateEnvelope(envelope).entries), (candidate) => candidate.originalEntry,
+        (candidate, kept) => candidate.state === 'pending' && kept.state !== 'pending')
+    },
+    legacyDerivedEvidence: normalizeLegacyDerivedEvidence({
+      schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
+      entries: onceByContent(envelopes('legacyProteinDerivedEvidence')
+        .flatMap((envelope) => /** @type {{ entries?: unknown[] }} */ (envelope).entries ?? []), (entry) => entry)
+    })
+  });
 };
 
 /** @type {ReadonlySet<unknown>} An entry Load did not adopt was validated with no manifest. */
@@ -4215,96 +4249,166 @@ const losatEntriesResolvingIn = (entries, manifest, validatedWith) => {
 /** @param {unknown} entry @returns {'current' | 'legacy' | 'dropped'} */
 const savedLosatCacheEntryKind = (entry) => {
   if (classifyRawLosatCacheEntry(entry) === 'protein-legacy') return 'legacy';
-  // A current entry is an object (`isCurrentRawLosatCacheEntry`).
-  return isCurrentRawLosatCacheEntry(entry) && /** @type {{ key?: unknown }} */ (entry).key ? 'current' : 'dropped';
+  // A current entry is an object (`isCurrentRawLosatCacheEntry`) under a key of text, as the checked Session has it.
+  const { key } = /** @type {{ key?: unknown }} */ (entry);
+  return isCurrentRawLosatCacheEntry(entry) && typeof key === 'string' && key ? 'current' : 'dropped';
 };
 
 /**
  * A saved current entry's cache value: the entry less its row fields; Load adopts a current Session's entry as it is
- * (`adoptCurrent`; `applyLosatCache` marks the manifests it was validated with).
- * @param {Record<string, unknown>} entry @param {boolean} adoptCurrent
- * @returns {Record<string, unknown>}
+ * (`adoptCurrent`; `loadedLosatEvidenceOf` marks the manifests it was validated with).
+ * @param {RawLosatCacheEntry} entry A current entry (`savedLosatCacheEntryKind`). @param {boolean} adoptCurrent
+ * @returns {RawLosatCacheEntry}
  */
 const restoredLosatCacheValue = (entry, adoptCurrent) => {
   const excludedFields = new Set(['key', 'filename', 'display', ...LOSAT_CACHE_INFO_STRING_FIELDS, ...LOSAT_CACHE_INFO_INTEGER_FIELDS]);
-  if (!adoptCurrent) {
-    const restored = cloneJsonData(entry);
-    excludedFields.forEach((field) => delete restored[field]);
-    return restored;
-  }
-  return Object.fromEntries(Object.entries(entry).filter(([field]) => !excludedFields.has(field)));
+  const { kind, text } = entry;
+  const restored = adoptCurrent ? { ...entry } : cloneJsonData(entry);
+  excludedFields.forEach((field) => delete restored[field]);
+  return { ...restored, kind, text };
 };
 
 /**
- * The project's raw LOSAT cache, from each drawing's saved entries (DESIGN
- * §4.1: a Session 51 drawing's entries merge into the one cache, keyed by
- * their content; a Session 27-50's one list is its Linear drawing's). Its
- * cache-info rows name the drawing whose entries they are (`drawingId`), so a
- * ring edit clears only its drawing's rows (OV-3201): an entry of a drawing's
- * own kind (`losatEntryDrawingKind`, the rule Save writes by: a ring entry of
- * a Circular drawing, any other of a Linear one) is that drawing's, one row for each drawing that holds it; a Session 27-50's
- * ring entries are its Circular part's (`ringDrawingId`); an entry that no
- * drawing of its kind holds keeps one row, its first holder's.
+ * A drawing's LOSAT evidence as Load read it, with its saved protein identity manifest (unvalidated: its loaded slot
+ * holds the validated one).
+ * @typedef {Omit<LosatEvidence, 'proteinIdentityManifest'> & { savedManifest: unknown }} LoadedLosatEvidence
+ */
+/**
+ * Each drawing's saved raw LOSAT entries with its saved converted payloads, by drawing.
+ * @template {{ drawing: DrawingState, entries: unknown }} Source
+ * @param {readonly Source[]} sources @param {readonly Source[]} payloads The same drawings' `losatDerivedCache` entries.
+ * @returns {(Source & { derived: unknown })[]}
+ */
+const withSavedPayloads = (sources, payloads) => sources.map((source) => ({
+  ...source, derived: payloads.find(({ drawing }) => drawing.id === source.drawing.id)?.entries
+}));
+/**
+ * The older Session's protein candidates and derived evidence a file keeps (`legacyArtifacts`), unvalidated.
+ * @param {{ legacyArtifacts?: unknown }} file
+ */
+const savedLegacyArtifacts = ({ legacyArtifacts }) => {
+  const saved = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (legacyArtifacts);
+  return { candidates: saved?.proteinRawCandidates, evidence: saved?.proteinDerivedEvidence };
+};
+/**
+ * Each drawing's LOSAT evidence from its saved entries (D-221; DESIGN §4.1): a Session 51 drawing's own entries, a
+ * Session 27-50's one list its Linear part's (`legacy.drawingId`). An entry is read once and every drawing that saved
+ * it holds the same value. A drawing lists an entry of its own kind (`losatEntryDrawingKind`, the rule Save writes by:
+ * a ring entry of a Circular drawing, any other of a Linear one), once per key, by that drawing alone; a Session
+ * 27-50's ring entries are its Circular part's (`ringDrawingId`). A drawing never holds an entry of the other kind
+ * while the file has a drawing of that kind (a Session 27-44 that Python converted saved its one list into every
+ * drawing): it could never list the entry, and holding it would keep it for reuse after the Clear of the drawing that
+ * lists it (OV-3769). Only in a file without a drawing of its kind does such an entry stay among the drawing's
+ * searches, listed in no drawing (review 2 L1). The older Session's protein candidates go to `legacy.drawingId`.
+ * A drawing names (`losatNamedKeys`, OV-3785) each entry of its own kind it holds, listed or not, and its saved converted
+ * payloads: Save writes a drawing the searches it lists or names (`serializeLosatCache`, OV-3825), so these are the
+ * searches its Result used when the file was saved (a file an older writer saved may hold more, until the drawing's
+ * next Generate). It never names an entry of the other kind (its Result cannot use it), so no other drawing's Generate
+ * reuses one.
  * @param {readonly {
- *   drawing: DrawingState, entries: unknown, manifest: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
+ *   drawing: DrawingState, entries: unknown, derived: unknown, manifest: unknown, places?: ReadonlyMap<string, LinearUnitPlace>,
  *   ringDrawingId?: DrawingId | null
  * }[]} sources
- *   Each drawing's saved entries, with the units of the Result it shows (`catalogUnitPlaces`; none when not shown), and
- *   the manifest Load's preflight validated them with: the drawing's own (D-197; a Session 27-50's, the file's one).
- * @param {unknown} [legacyEnvelope]
- * @param {{ adoptCurrent?: boolean }} [options]
+ *   Each drawing's saved entries and converted payloads, with the units of the Result it shows (`catalogUnitPlaces`;
+ *   none when not shown), and the manifest Load's preflight validated them with: the drawing's own (D-197; a Session
+ *   27-50's, the file's one).
+ * @param {{ legacy: { drawingId: DrawingId, candidates: unknown, evidence: unknown }, adoptCurrent?: boolean, listed?: boolean }} options
+ *   `listed`: false when Load collapsed a file, so no drawing lists a result.
+ * @returns {Map<DrawingId, LoadedLosatEvidence>}
  */
-const applyLosatCache = (
-  sources,
-  legacyEnvelope = null,
-  { adoptCurrent = false } = {}
-) => {
-  const map = new Map();
+const loadedLosatEvidenceOf = (sources, { legacy, adoptCurrent = false, listed = true }) => {
+  /** @type {Map<DrawingId, unknown>} */
+  const savedManifests = new Map(sources.map(({ drawing, manifest }) => [drawing.id, manifest]));
+  /** @type {Map<string, RawLosatCacheEntry>} */
+  const values = new Map();
   /** @type {Record<string, unknown>[]} */
   const legacyEntries = [];
-
-  /** @type {{ row: LosatCacheInfoEntry, owned: boolean }[]} */
-  const rows = [];
-  sources.forEach(({ drawing, entries, manifest, places = new Map(), ringDrawingId = null }) => {
-    if (!Array.isArray(entries)) return;
-    // An entry an earlier drawing holds (the same key, the same content) is read once.
-    const earlier = new Set(map.keys());
-    entries.forEach((entry, idx) => {
+  /** @type {unknown[]} */
+  const legacyDerived = [];
+  /** @type {Map<DrawingId, { rows: Map<string, LosatCacheInfoEntry>, cache: Map<string, RawLosatCacheEntry>, derived: Map<string, LosatDerivedCacheEntry>, named: Set<string> }>} */
+  const drawings = new Map();
+  /** @param {DrawingId} id */
+  const of = (id) => drawings.get(id) ?? drawings.set(id, { rows: new Map(), cache: new Map(), derived: new Map(), named: new Set() }).get(id);
+  of(legacy.drawingId);
+  const fileModes = new Set(sources.map(({ drawing }) => drawing.mode));
+  sources.forEach(({ drawing, entries, derived, manifest, places = new Map(), ringDrawingId = null }) => {
+    const own = /** @type {NonNullable<ReturnType<typeof of>>} */ (of(drawing.id));
+    (Array.isArray(entries) ? entries : []).forEach((entry, idx) => {
       const kind = savedLosatCacheEntryKind(entry);
       if (kind === 'legacy') legacyEntries.push(entry);
       if (kind !== 'current') return;
-      if (!earlier.has(entry.key)) map.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent));
-      // The value an earlier drawing holds is also valid in this drawing's manifest (OV-3273).
-      if (adoptCurrent) markValidatedWith(map.get(entry.key), manifest);
-      if (entry.display === false) return;
       const drawingKind = losatEntryDrawingKind(entry);
       const owner = drawing.mode === drawingKind ? drawing.id : drawingKind === 'circular' ? ringDrawingId : null;
-      rows.push({ owned: owner !== null, row: {
+      if (owner === null && fileModes.has(drawingKind)) return;
+      if (!values.has(entry.key)) values.set(entry.key, restoredLosatCacheValue(entry, adoptCurrent));
+      const value = /** @type {RawLosatCacheEntry} */ (values.get(entry.key));
+      // The value an earlier drawing holds is also valid in this drawing's manifest (OV-3273).
+      if (adoptCurrent) markValidatedWith(value, manifest);
+      const holder = /** @type {NonNullable<ReturnType<typeof of>>} */ (of(owner ?? drawing.id));
+      holder.cache.set(entry.key, value);
+      if (owner !== null) holder.named.add(entry.key);
+      if (entry.display === false || owner === null || holder.rows.has(entry.key)) return;
+      holder.rows.set(entry.key, {
         key: entry.key,
         // A saved name that is no text is read as none (OV-981).
         filename: typeof entry.filename === 'string' && entry.filename ? entry.filename : `losat_pair_${idx + 1}.tsv`,
         display: true,
-        drawingId: owner ?? drawing.id,
         ...restoredLosatCacheInfoIdentity(drawing, entry, places)
-      } });
+      });
     });
+    const read = readLosatDerivedCache(derived, { adoptCurrent });
+    read.map.forEach((payload, key) => {
+      own.derived.set(key, payload);
+      own.named.add(key);
+    });
+    legacyDerived.push(...read.legacyEntries);
   });
-  const ownedKeys = new Set(rows.filter(({ owned }) => owned).map(({ row }) => row.key));
-  const written = new Set();
-  const info = rows.filter(({ row, owned }) => {
-    const id = owned ? JSON.stringify([row.key, row.drawingId]) : JSON.stringify([row.key]);
-    if (written.has(id) || (!owned && ownedKeys.has(row.key))) return false;
-    written.add(id);
-    return true;
-  }).map(({ row }) => row);
+  return new Map([...drawings].map(([id, { rows, cache, derived, named }]) => [id, {
+    losatCacheInfo: listed ? [...rows.values()] : [],
+    losatCache: cache,
+    losatDerivedCache: derived,
+    losatNamedKeys: named,
+    savedManifest: savedManifests.get(id),
+    ...(id === legacy.drawingId ? {
+      legacyProteinRawCandidates: { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [
+        ...normalizeLegacyProteinCandidateEnvelope(legacy.candidates).entries, ...createLegacyProteinCandidateEnvelope(legacyEntries).entries
+      ] },
+      legacyProteinDerivedEvidence: normalizeLegacyDerivedEvidence(legacy.evidence, legacyDerived)
+    } : {
+      legacyProteinRawCandidates: createLegacyProteinCandidateEnvelope([]),
+      legacyProteinDerivedEvidence: normalizeLegacyDerivedEvidence(null)
+    })
+  }]));
+};
 
-  state.losatCache.value = map;
-  state.losatCacheInfo.value = info;
-  const restoredEnvelope = normalizeLegacyProteinCandidateEnvelope(legacyEnvelope);
-  const importedEnvelope = createLegacyProteinCandidateEnvelope(legacyEntries);
-  state.legacyProteinRawCandidates.value = {
-    schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA,
-    entries: [...restoredEnvelope.entries, ...importedEnvelope.entries]
+/**
+ * Puts each drawing's loaded LOSAT evidence where the drawing's artifact is (D-221): the state for the artifact Load
+ * installed itself (`inState`, the committed set's drawing when the Session opens on it), else the drawing's loaded
+ * slot (the opening one or a stashed one); a drawing with evidence but no slot gets its empty slot with it and its
+ * own manifest.
+ * @param {ReadonlyMap<DrawingId, LoadedLosatEvidence>} loaded
+ * @param {{ opening: Readonly<ArtifactSlot> | null, stashed: readonly Readonly<ArtifactSlot>[], inState: DrawingId | null }} slots
+ * @returns {LoadedArtifactSlots & { stashed: Readonly<ArtifactSlot>[] }}
+ */
+const slotsWithLoadedLosatEvidence = (loaded, { opening, stashed, inState }) => {
+  /** @param {DrawingId | null} id @returns {Partial<LosatEvidence>} */
+  const evidenceOf = (id) => {
+    const { savedManifest: _manifest, ...evidence } = (id === null ? null : loaded.get(id)) ?? { savedManifest: null };
+    return evidence;
+  };
+  const shown = evidenceOf(inState);
+  LOSAT_EVIDENCE_KEYS.filter((key) => key !== 'proteinIdentityManifest').forEach((key) => {
+    state[key].value = shown[key] ?? LOSAT_EVIDENCE_EMPTY[key]();
+  });
+  /** @param {Readonly<ArtifactSlot>} slot */
+  const withEvidence = (slot) => withArtifactSlotValues(slot, state.drawingOf(slot.drawingId), evidenceOf(slot.drawingId));
+  const slotted = new Set([opening, ...stashed].map((slot) => slot?.drawingId));
+  return {
+    opening: opening && withEvidence(opening),
+    stashed: [...stashed.map(withEvidence), ...[...loaded].filter(([id]) => id !== inState && !slotted.has(id)).map(([id, { savedManifest }]) => createArtifactSlot({
+      drawing: state.drawingOf(id),
+      values: { ...evidenceOf(id), proteinIdentityManifest: loadedProteinIdentityManifest(savedManifest, { adoptCurrent: true }) }
+    }))]
   };
 };
 
@@ -4345,6 +4449,7 @@ const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
  * @param {{ adoptCurrent?: boolean }} [options]
  */
 const readLosatDerivedCache = (entries, { adoptCurrent = false } = {}) => {
+  /** @type {Map<string, LosatDerivedCacheEntry>} */
   const map = new Map();
   /** @type {unknown[]} */
   const legacyEntries = [];
@@ -4371,17 +4476,6 @@ const readLosatDerivedCache = (entries, { adoptCurrent = false } = {}) => {
   dropped += Math.max(0, map.size - LOSAT_DERIVED_CACHE_LIMIT);
   pruneLosatDerivedCache(map);
   return { map, legacyEntries, dropped };
-};
-
-/**
- * @param {unknown} entries
- * @param {unknown} [legacyEvidence]
- * @param {{ adoptCurrent?: boolean }} [options]
- */
-const applyLosatDerivedCache = (entries, legacyEvidence = null, { adoptCurrent = false } = {}) => {
-  const { map, legacyEntries } = readLosatDerivedCache(entries, { adoptCurrent });
-  state.losatDerivedCache.value = map;
-  state.legacyProteinDerivedEvidence.value = normalizeLegacyDerivedEvidence(legacyEvidence, legacyEntries);
 };
 
 /**
@@ -4695,25 +4789,15 @@ export const serializeActiveRenderFiles = async (
       .filter((/** @type {LinearComparisonResolvedEdge} */ edge) => edge.source === 'upload' && edge.fileActive && edge.file)
       .map(async (/** @type {LinearComparisonResolvedEdge} */ edge) => ({
       id: String(edge.id || ''),
-      file: await serializeFileValue(store, edge.file)
+      file: await serializeFileValue(store, edge.file),
+      // The name a loaded request stored for the file, which the request writes as stored (OV-3592).
+      ...loadedSourceNameField(edge.loadedSourceName)
     }))
   ) : [];
   const linearCanonicalComparisons = mode === 'linear'
     && resolvedComparisonPlan?.mode !== 'none'
     && resolvedComparisonPlan?.edges?.length > 0
-    ? await Promise.all(
-    (Array.isArray(sourceFiles.linearCanonicalComparisons)
-      ? sourceFiles.linearCanonicalComparisons
-      : []
-    ).map(async (/** @type {BoundCanonicalComparison} */ comparison) => (
-      isResourceBackedCanonicalComparison(comparison)
-        ? {
-            ...mapResourceBackedCanonicalComparison(comparison),
-            file: await serializeFileValue(store, comparison.file)
-          }
-        : cloneJsonData(comparison)
-    ))
-    )
+    ? await writeDraftComparisons(sourceFiles.linearCanonicalComparisons, (file) => serializeFileValue(store, file))
     : [];
   const conservationEnabled = mode === 'circular'
     && Boolean(drawing.circularConservation?.enabled);
@@ -5395,6 +5479,11 @@ const withStoredComparisonPlan = (config, readFiles) => {
  */
 /** A Circular source card as Load reads it back: each file as stored. @typedef {{ uid: string, gb: FileLike | null, gff: FileLike | null, fasta: FileLike | null }} RestoredCircularSource */
 /**
+ * One comparison-plan edge's row of the files Load binds (`linearComparisons`, unvalidated): the edge's ID, its file,
+ * and the name its request stored for the file (`LoadedSourceName`, read through `loadedSourceNameField`, OV-3592).
+ * @typedef {{ id?: unknown, file?: unknown, loadedSourceName?: unknown }} LoadedComparisonFileRow
+ */
+/**
  * Reads the saved inputs into the Load candidate (`targetState`).
  * `targetDrawing` holds the Linear record layout and comparison plan that the
  * Files reconcile (the candidate's). The Linear record rows the Files hold are
@@ -5520,20 +5609,22 @@ const applyFiles = (filesData, {
         })
       });
     }
-    const comparisonFiles = new Map(
-      /** @type {[string, any][]} */ ((Array.isArray(read.linearComparisons) ? read.linearComparisons : [])
-        .map((comparison) => [
-          String(comparison?.id || ''),
-          deserializeFile(comparison?.file)
-        ]))
-        .filter(([id]) => id)
-    );
+    /** @type {readonly LoadedComparisonFileRow[]} */
+    const comparisonRows = Array.isArray(read.linearComparisons) ? read.linearComparisons : [];
+    const comparisonFiles = new Map(comparisonRows
+      .map((comparison) => /** @type {const} */ ([String(comparison?.id || ''), {
+        // A Load candidate's edge holds its loaded file until `bindLoadedInputs` registers it (`LinearComparisonEdge`).
+        file: /** @type {InputFileRef | null} */ (deserializeFile(comparison?.file)),
+        loadedSourceName: comparison?.loadedSourceName
+      }]))
+      .filter(([id]) => id));
     const planWithFiles = normalizeLinearComparisonPlan(targetDrawing.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
-      const file = comparisonFiles.get(edge.id) || null;
+      const { file = null, loadedSourceName = undefined } = comparisonFiles.get(edge.id) || {};
       // A retained file stays inactive; an edge Load leaves with no file (its
-      // binding dropped) is as the pair card's Remove leaves it (OV-899).
-      if (file) edge.file = file;
+      // binding dropped) is as the pair card's Remove leaves it (OV-899). A
+      // file Load bound from the request keeps the name it stored (OV-3592).
+      if (file) restoreComparisonEdgeFile(edge, file, loadedSourceName);
       else setComparisonEdgeFile(edge, null);
     });
     installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, collapsed));
@@ -5833,12 +5924,8 @@ const captureSessionImportSnapshot = (shownDrawingId) => ({
   results: previewRuntimePorts.currentResults(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
-  losatCache: state.losatCache.value,
-  losatDerivedCache: state.losatDerivedCache.value,
-  proteinIdentityManifest: keptProteinIdentityManifest(state.proteinIdentityManifest.value),
-  legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
-  legacyProteinDerivedEvidence: cloneJsonData(state.legacyProteinDerivedEvidence.value),
-  losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
+  // The shown drawing's LOSAT evidence, by reference (D-221): no step writes into these values, it replaces them.
+  losat: Object.fromEntries(LOSAT_EVIDENCE_KEYS.map((key) => [key, toRaw(state[key].value)])),
   committedCanonicalSession: isAdoptedCanonicalSession(committedCanonicalSession)
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
@@ -5869,12 +5956,7 @@ const restoreSessionImportSnapshot = async (snapshot, restoreHistoryMembers) => 
     state.appliedPaletteName.value = shownUi.appliedPaletteName;
     state.appliedPaletteColors.value = cloneColors(shownUi.appliedPaletteColors);
     state.richFeaturePopup.value = snapshot.richFeaturePopup;
-    state.losatCache.value = snapshot.losatCache;
-    state.losatDerivedCache.value = snapshot.losatDerivedCache;
-    state.proteinIdentityManifest.value = keptProteinIdentityManifest(snapshot.proteinIdentityManifest);
-    state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
-    state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
-    state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
+    LOSAT_EVIDENCE_KEYS.forEach((key) => { state[key].value = snapshot.losat[key]; });
     loadedTrackSettings = snapshot.loadedTrackSettings;
     setCommittedCanonicalSession(isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
       ? snapshot.committedCanonicalSession
@@ -6202,12 +6284,8 @@ const resetSessionProject = () => {
   state.labelFitReports.value = [];
   state.inputSummaries.value = [];
   state.linearReorderNotice.value = '';
-  state.losatCache.value = new Map();
-  state.losatDerivedCache.value = new Map();
-  state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
-  state.legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
-  state.legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-  state.losatCacheInfo.value = [];
+  const emptyEvidence = emptyLosatEvidence();
+  LOSAT_EVIDENCE_KEYS.forEach((key) => { state[key].value = emptyEvidence[key]; });
   state.orthogroups.value = [];
   state.collinearGroups.value = [];
   state.featureOrthogroupIndex.value = new Map();
@@ -6748,7 +6826,8 @@ const artifactUiState = (view) => ({
  *   written: readonly SavedSessionDrawing[],
  *   activeDrawingId: DrawingId,
  *   projectUi: Record<string, unknown>,
- *   isCurrent: () => boolean
+ *   isCurrent: () => boolean,
+ *   legacyArtifacts: ReturnType<typeof buildSessionLegacyArtifacts>
  * }} ExportSessionDocumentOptions
  */
 /**
@@ -6875,7 +6954,7 @@ const exportSessionDocument = async (
   {
     askChoice = async () => 'cancel',
     drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written, planLinearUnits,
-    readOfDrawing, activeDrawingId, projectUi, isCurrent
+    readOfDrawing, activeDrawingId, projectUi, isCurrent, legacyArtifacts
   }
 ) => {
   const resolvedTitle =
@@ -6900,7 +6979,6 @@ const exportSessionDocument = async (
   }
 
   recordSessionLifecycleEvent('session-save-projection-start');
-  const { entries: losatEntries, validatedWith } = serializeLosatCache();
   // Each drawing's Results, catalog and committed request; its slice's
   // unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
   const parts = [];
@@ -6958,12 +7036,6 @@ const exportSessionDocument = async (
       renderRequest: built.written[index].renderRequest, resources: built.resources
     });
   }
-  const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
-    state.legacyProteinRawCandidates.value
-  );
-  const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
-    state.legacyProteinDerivedEvidence.value
-  );
   // Each drawing writes its own protein identity manifest (D-197): a drawing without an artifact has the empty one.
   const proteinIdentityManifests = parts.map(({ artifact }) => {
     const manifest = artifact ? artifact.proteinIdentityManifest : emptyProteinIdentityManifest();
@@ -6975,10 +7047,6 @@ const exportSessionDocument = async (
   // The project's original-name hints, from every drawing's request metadata; the Session file holds the inputs' bytes.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
   const createdAt = new Date().toISOString();
-  const legacyArtifacts = buildSessionLegacyArtifacts({
-    legacyRawCandidates,
-    legacyDerivedEvidence
-  });
   // Each drawing as its one-drawing view; `sessionDocumentOfViews` places its
   // fields in the Session 51 layout (DESIGN §1, §4.4).
   const sessionData = sessionDocumentOfViews(parts.map(({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs }, index) => {
@@ -7016,10 +7084,10 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(state.drawingOf(saved.id)) ? { cliOptions: cloneJsonData(preservedCliOptions.get(state.drawingOf(saved.id))) } : {}),
-        losatCache: { entries: losatEntriesResolvingIn(
-          losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries, editorState?.featureCatalog ?? null),
-          proteinIdentityManifests[index], validatedWith
-        ) },
+        losatCache: { entries: artifact ? savedLosatEntriesOf(artifact, {
+          request: built.written[index].renderRequest, conservationPairs, catalog: editorState?.featureCatalog ?? null,
+          manifest: proteinIdentityManifests[index]
+        }) : [] },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest: keptProteinIdentityManifest(proteinIdentityManifests[index]),
         ...(cliInvocation ? { cliInvocation } : {})
@@ -9192,36 +9260,19 @@ const importSessionDocument = async (e, options = {}) => {
      */
     const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId, loadedProteinManifest)
       .map(({ id, ...source }) => (shownDrawing.id === id ? { ...source, drawing: shownDrawing, places: catalogUnitPlaces(admittedFeatureCatalog(artifactEditorState.featureCatalog)) } : { ...source, drawing: state.drawingOf(id) }));
-    if (canonicalSession) {
-      applyLosatCache(
-        losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),
-        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
-        { adoptCurrent: currentSchemaSession }
-      );
-      applyLosatDerivedCache(
-        losatSourcesOf(projectionResult.artifactState.losatDerivedCache?.entries, 'losatDerivedCache')
-          .flatMap(({ entries }) => (Array.isArray(entries) ? entries : [])),
-        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence,
-        { adoptCurrent: currentSchemaSession }
-      );
-      applyProteinIdentityManifest(loadedProteinManifest, {
-        adoptCurrent: currentSchemaSession, valid: loadedProteinManifestValid
-      });
-    } else {
-      const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
-      applyLosatCache(
-        [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries, manifest: loadedProteinManifest, ringDrawingId: fileDrawingIdOf('circular') }],
-        legacyArtifacts?.proteinRawCandidates
-      );
-      applyLosatDerivedCache(
-        /** @type {UnvalidatedFields<'entries'>} */ (data.losatDerivedCache)?.entries,
-        legacyArtifacts?.proteinDerivedEvidence
-      );
-      applyProteinIdentityManifest(loadedProteinManifest, { valid: loadedProteinManifestValid });
-    }
-    if ([projectedFiles, ...storedFiles.values()].some(({ collapsed }) => collapsed)) {
-      state.losatCacheInfo.value = [];
-    }
+    // Each drawing's LOSAT evidence (D-221), put where its artifact is once the slots are known.
+    const loadedLosat = loadedLosatEvidenceOf(canonicalSession
+      ? withSavedPayloads(losatSourcesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache'),
+        losatSourcesOf(projectionResult.artifactState.losatDerivedCache?.entries, 'losatDerivedCache'))
+      : [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries,
+        derived: /** @type {UnvalidatedFields<'entries'>} */ (data.losatDerivedCache)?.entries, manifest: loadedProteinManifest, ringDrawingId: fileDrawingIdOf('circular') }], {
+      legacy: { drawingId: losatPartDrawingId, ...savedLegacyArtifacts(canonicalSession ? projectionResult.artifactState : data) },
+      adoptCurrent: canonicalSession ? currentSchemaSession : false,
+      listed: ![projectedFiles, ...storedFiles.values()].some(({ collapsed }) => collapsed)
+    });
+    applyProteinIdentityManifest(loadedProteinManifest, {
+      adoptCurrent: canonicalSession ? currentSchemaSession : false, valid: loadedProteinManifestValid
+    });
 
     state.skipCaptureBaseConfig.value = false;
 
@@ -9283,11 +9334,16 @@ const importSessionDocument = async (e, options = {}) => {
     // The composition root keeps the loaded artifacts: the opening one is shown, the stashed one waits.
     /** @type {((slots: LoadedArtifactSlots) => void) | undefined} */
     const installLoadedArtifactSlots = options.installLoadedArtifactSlots;
-    /** @type {Readonly<ArtifactSlot>[]} Every loaded set's slot but the opening one, each in its drawing. */
-    const stashedSlots = [...(committedSetSlot ? [committedSetSlot] : []), ...storedSetSlots, ...draftAlignmentSlots]
-      .filter((slot) => slot !== openingSlot);
+    const loadedSlots = slotsWithLoadedLosatEvidence(loadedLosat, {
+      opening: openingSlot,
+      stashed: [...(committedSetSlot ? [committedSetSlot] : []), ...storedSetSlots, ...draftAlignmentSlots]
+        .filter((slot) => slot !== openingSlot),
+      inState: openingSlot ? null : committedSetDrawingId
+    });
+    /** @type {Readonly<ArtifactSlot>[]} Every loaded slot but the opening one, each in its drawing. */
+    const stashedSlots = loadedSlots.stashed;
     {
-      installLoadedArtifactSlots?.({ opening: openingSlot, stashed: stashedSlots });
+      installLoadedArtifactSlots?.(loadedSlots);
       if (openingSlot) desiredResultIndex = Number(state.selectedResultIndex.value) || 0;
     }
     const previewReadiness = typeof options?.beforePreviewMount === 'function'
@@ -9584,7 +9640,8 @@ export const exportSession = (titleOverride = null, options) => {
       };
     });
     const result = await exportSessionDocument(title, {
-      ...options, ...prepared, drawing, written, activeDrawingId, projectUi, isCurrent
+      ...options, ...prepared, drawing, written, activeDrawingId, projectUi, isCurrent,
+      legacyArtifacts: savedLegacyArtifactsOf([...artifacts.values()])
     });
     if (result?.status === 'saved') options.onSaved?.(result);
     return result;
