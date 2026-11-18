@@ -22,7 +22,7 @@ import { createInputFileStore } from './services/history-files.js';
 import { keepFileCopy, releaseFileCopy, residentBytesOf, useInputCopyStore } from './services/file-content-cache.js';
 import { createBrowserInputCopyStore } from './services/input-copies.js';
 import { INPUTS_SLICE } from './services/drawing/inputs.js';
-import { sessionResourceSource } from './services/session-resource-backing.js';
+import { sessionResourceSourceKey } from './services/session-resource-backing.js';
 import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
@@ -208,9 +208,10 @@ const losatThreadingStatus = typedRef(/** @type {LosatRuntimeStatus} */ ({
 useInputCopyStore(createBrowserInputCopyStore());
 // The project's input file store: History steps and the input bindings name
 // its files by `InputFileRef` (services/history-files.js). The views of one
-// Session resource share its descriptor, so their refs share a `sourceId`.
+// Session resource share its descriptor, so their refs share a `sourceId`; a
+// Linear File card's view is its own source (`sessionResourceSourceKey`).
 const inputFiles = createInputFileStore({
-  sourceOf: (file) => /** @type {{ descriptor?: object } | null} */ (sessionResourceSource(file))?.descriptor,
+  sourceOf: sessionResourceSourceKey,
   // A held File is copied when it is chosen, and its copy is deleted when no step or binding names it (PD-OI-121).
   onHold: keepFileCopy,
   onRelease: releaseFileCopy,

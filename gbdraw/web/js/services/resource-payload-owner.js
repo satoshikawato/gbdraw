@@ -1,5 +1,5 @@
 // @ts-check
-import { getSessionResourceSource } from './file-content-cache.js';
+import { sessionResourceSourceKey } from './session-resource-backing.js';
 import { recordSourceOf } from './input-types.js';
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 
@@ -40,8 +40,13 @@ export const getResourcePayloadOwner = (descriptor) => {
   return (key && payloadOwners.get(key)) || key;
 };
 
-/** @param {object} value @returns {object | null} The source descriptor of a Session resource view. */
-const viewSourceOf = (value) => /** @type {{ descriptor?: object } | null} */ (getSessionResourceSource(value))?.descriptor || null;
+/**
+ * The source descriptor of a Session resource view, the one the input file store gives its refs
+ * (`sessionResourceSourceKey`): a view of one Linear File card stands for itself, so two cards that read equal
+ * stored bytes stay two files of the request, as their two Files were before Save (OV-3710).
+ * @param {object} value @returns {object | null}
+ */
+const viewSourceOf = (value) => sessionResourceSourceKey(value);
 
 /**
  * The object whose bytes a File, a Session resource view or a descriptor

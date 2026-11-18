@@ -814,6 +814,13 @@ otherwise the selector stays `#N`, and the Web app places it over the records of
 the cards as they were loaded, taken together in card order. Python validates and preserves a draft binding of a
 Session 41 to 50 without combining its components for rendering.
 
+A Session 51 Linear drawing names the File card of each row: a row of
+`webFiles.bindings.linearSeqs` may hold `fileUid`, the uid of its card. Two
+cards whose files have the same bytes share one stored resource, and the key
+keeps them two File cards when the Session is loaded. A row without it, as in
+a Session written before the key existed, belongs to the File of every row
+that names the same resource.
+
 A Session 51 Circular drawing binds each similarity ring's comparison genome as
 a list of files (`c_conservation_fastas` and `c_conservation_sequence_sources`,
 one list per ring, in the ring's file order), and its

@@ -83,6 +83,8 @@ import { MAX_EXPANDED_INPUT_BYTES } from '../contracts/schema.generated.js';
 const tableBackings = new WeakMap();
 /** @type {WeakMap<WeakKey, LeafBacking>} */
 const fileViewBackings = new WeakMap();
+/** @type {WeakSet<object>} The files Load made as one Linear File card's file (`asLinearFileCardView`). */
+const cardFileViews = new WeakSet();
 
 /**
  * The reader of each file-backed descriptor: a descriptor of the page, never
@@ -513,6 +515,11 @@ export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb
   }
   (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach((/** @type {WebFileBindingRow} */ sequence, index) => {
     ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot], ['linearSeqs', index, slot]));
+    // The row's File card (`fileUid`, OV-3703): a non-empty trimmed text, or left out.
+    const fileUid = object(sequence) && Object.hasOwn(sequence, 'fileUid') ? sequence.fileUid : undefined;
+    if (fileUid !== undefined && (typeof fileUid !== 'string' || !fileUid || fileUid !== fileUid.trim())) {
+      faults.push({ at: ['linearSeqs', index, 'fileUid'], field: true });
+    }
   });
   ['linearComparisons', 'linearCanonicalComparisons'].forEach(slot => {
     (Array.isArray(bindings[slot]) ? bindings[slot] : []).forEach((/** @type {WebFileBindingRow} */ row, index) => (
@@ -874,6 +881,32 @@ export const createSessionResourceFileView = (table, resourceId, metadata = {}) 
   });
   fileViewBackings.set(view, backing);
   return view;
+};
+
+/**
+ * `view` as the file of one Linear File card (`fileUid`, OV-3703): the source of its refs is the view itself, not
+ * its resource (`sessionResourceSourceKey`), so another card that reads the same stored bytes stays a File of its
+ * own. Load gives every row of the card this one view.
+ * @template {object} T
+ * @param {T} view
+ * @returns {T}
+ */
+export const asLinearFileCardView = (view) => {
+  cardFileViews.add(view);
+  return view;
+};
+
+/**
+ * The source whose bytes `file` stands for: a Session resource view's descriptor, so the views of one resource are
+ * one source, or null (the file is its own source) for any other file and for a view of one Linear File card
+ * (`asLinearFileCardView`). The one rule of both the refs' `sourceId` (`createInputFileStore`'s `sourceOf`) and the
+ * request's resources (`getResourcePayloadIdentity`).
+ * @param {unknown} file
+ * @returns {object | null}
+ */
+export const sessionResourceSourceKey = (file) => {
+  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
+  return !backing || backing.dirty || cardFileViews.has(/** @type {object} */ (file)) ? null : backing.descriptor;
 };
 
 /**

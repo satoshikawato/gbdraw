@@ -21,6 +21,7 @@ import {
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { losatRecordGencode, ringGenomeIdLists } from './drawing/inputs.js';
+import { linearSourceUidOf } from './linear-sources.js';
 import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
@@ -640,12 +641,17 @@ export const buildSessionDrawingResources = async (state, sets) => {
     )
   });
   /**
-   * @param {SessionBindingDrawing} drawing
+   * @param {SessionBindingDrawing} drawing Its rows: each names its File card (`fileUid`, the card's uid), since
+   *   Save stores equal bytes once and Load would otherwise read two cards of equal files as one (OV-3703).
    * @param {unknown} renderRequest The request this drawing's Session entry writes.
+   * @param {(sequence: Readonly<LinearSeq>) => string} [fileUidOf] The File card uid of each row.
    */
-  const linearBindings = async ({ files, linearSeqs, linearComparisonPlan }, renderRequest) => ({
+  const linearBindings = async (
+    { files, linearSeqs, linearComparisonPlan }, renderRequest, fileUidOf = linearSourceUidOf(linearSeqs)
+  ) => ({
     linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => ({
       uid: String(sequence?.uid || ''),
+      fileUid: fileUidOf(sequence),
       gb: await bindFile(sequence?.gb),
       gff: await bindFile(sequence?.gff),
       fasta: await bindFile(sequence?.fasta),

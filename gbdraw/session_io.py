@@ -1127,6 +1127,10 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         if isinstance(sequence, Mapping):
             for slot in ("gb", "gff", "fasta", "depth", "blast"):
                 value(sequence.get(slot))
+            # The row's Linear File card (OV-3703): a non-empty trimmed text, or left out.
+            file_uid = sequence.get("fileUid", "-")
+            if not isinstance(file_uid, str) or not file_uid or file_uid != file_uid.strip():
+                raise ValidationError("A Linear row's fileUid must be a non-empty text.", diagnostic=_SESSION_FIELDS_INVALID)
     for slot in ("linearComparisons", "linearCanonicalComparisons"):
         entries = bindings.get(slot)
         if isinstance(entries, list):
@@ -5988,10 +5992,15 @@ def _web_card_binding(
     add_file: Callable[[object], object],
     add_value: Callable[[object], object],
 ) -> dict[str, object]:
-    """One Linear card's bindings, the card shape the Web writes (``linearBindings`` in services/session-resources.js)."""
+    """One Linear card's bindings, the card shape the Web writes (``linearBindings`` in services/session-resources.js).
 
+    ``fileUid`` names the row's File card (OV-3703); a row without one keeps none.
+    """
+
+    file_uid = sequence.get("fileUid")
     return {
         "uid": str(sequence.get("uid") or ""),
+        **({"fileUid": file_uid} if isinstance(file_uid, str) and file_uid else {}),
         "gb": add_file(sequence.get("gb")),
         "gff": add_file(sequence.get("gff")),
         "fasta": add_file(sequence.get("fasta")),

@@ -56,6 +56,21 @@ export const groupLinearSourceRecords = (sequences) => {
   return groups;
 };
 
+/**
+ * The uid of the File card of each row of `sequences` (its group's, `groupLinearSourceRecords`): what Save writes as
+ * a row's `fileUid`, so Load keeps the cards apart even when they read equal bytes (OV-3703).
+ * @template {Partial<LinearSeq>} S
+ * @param {readonly S[]} sequences
+ * @returns {(sequence: S) => string}
+ */
+export const linearSourceUidOf = (sequences) => {
+  /** @type {Map<S, string>} */
+  const uids = new Map();
+  groupLinearSourceRecords(sequences).forEach(({ uid, records }) => (
+    records.forEach(({ sequence }) => uids.set(sequence, String(uid)))));
+  return (sequence) => String(uids.get(sequence));
+};
+
 /** @param {LinearSourceView | null | undefined} source */
 export const linearSourceHasPrimaryInput = (source) => Boolean(
   source?.records?.some(({ sequence }) => sequence?.gb || sequence?.gff || sequence?.fasta)

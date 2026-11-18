@@ -268,6 +268,7 @@ import {
 } from './file-content-cache.js';
 import {
   adoptedSessionResourceDescriptor,
+  asLinearFileCardView,
   createSessionResourceFileView,
   expandInputBytes,
   fileBackedDescriptor,
@@ -5769,11 +5770,32 @@ const applyWebFileBindings = (
     bindings.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null;
 
   if (Array.isArray(bindings.linearSeqs)) {
+    /** @type {Map<string, unknown>} One file per Linear File card and slot (OV-3703). */
+    const cardFiles = new Map();
+    /**
+     * A record file of a row: the rows of one File card (`fileUid`) share one file, which is a source of its own
+     * (`asLinearFileCardView`), so two cards that read equal stored bytes stay two Files; a row without `fileUid`
+     * reads its own file, and the views of one resource are one source.
+     * @param {WebFileBindingRow} sequence @param {'gb' | 'gff' | 'fasta'} slot
+     */
+    const recordFile = (sequence, slot) => {
+      const binding = sequence?.[slot];
+      const file = () => webBindingValueAsLegacyFile(resources, binding, resolveBinding, bindings.schema);
+      // `webFileBindingFaults` dropped a `fileUid` that is no non-empty text.
+      const fileUid = sequence?.fileUid;
+      if (typeof fileUid !== 'string' || !binding || typeof binding !== 'object') return file();
+      const key = JSON.stringify([fileUid, slot, /** @type {{ resourceId?: unknown }} */ (binding).resourceId]);
+      if (!cardFiles.has(key)) {
+        const made = file();
+        cardFiles.set(key, made && typeof made === 'object' ? asLinearFileCardView(made) : made);
+      }
+      return cardFiles.get(key);
+    };
     restored.linearSeqs = bindings.linearSeqs.map((/** @type {WebFileBindingRow} */ sequence, /** @type {number} */ index) => ({
       uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
-      gb: webBindingValueAsLegacyFile(resources, sequence?.gb, resolveBinding, bindings.schema),
-      gff: webBindingValueAsLegacyFile(resources, sequence?.gff, resolveBinding, bindings.schema),
-      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveBinding, bindings.schema),
+      gb: recordFile(sequence, 'gb'),
+      gff: recordFile(sequence, 'gff'),
+      fasta: recordFile(sequence, 'fasta'),
       depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveBinding, bindings.schema),
       blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveBinding, bindings.schema),
       losat_filename: String(sequence?.losat_filename || ''),

@@ -1,0 +1,11 @@
+{
+  "purpose": "Positive fixture of Session 51's fileUid on a Linear row binding (OV-3703): a Web Save Session of a Linear drawing without a Result whose two File cards hold a.gb and b.gb, chosen separately with the same bytes (tests/fixtures/forced_label_underlay.gb), with LOSAT (blastn) between them. Save stores the equal bytes once (resource-0001, both rows) and names each row's File card, so Load keeps two File cards.",
+  "sourceCommit": "a6b558d1d5d13a6388d227f54fede0c002d6e9c4 with the working-tree change that adds this file",
+  "history": "branch fix/linear-file-card-identity; Session 51 is not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "a Playwright probe in the browser (one worker, Chromium): open the app, show the Linear drawing, set a.gb on the first card and b.gb on a second card, choose LOSAT for all adjacent pairs (blastn), then Save Session with an empty title before any Generate; the downloaded container is this file, unchanged",
+  "values": "drawings[0].webFiles.bindings.linearSeqs: two rows, each gb {resourceId: 'resource-0001', name 'a.gb' / 'b.gb'}, each fileUid its own row uid; resources: resource-0001 only",
+  "documentSha256": "f8b9c32ab8fc49bfb912f22e7567c07d52847b3251b4df88e9f8aa75a5c1b2f5",
+  "sessionDocumentSha256": "311de0f16f6bf511a7ce5970fcd5b8e21a3230e377dbdbd577281fa021dd3669",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

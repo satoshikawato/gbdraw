@@ -1017,6 +1017,8 @@ class CliLinearSeqFiles(TypedDict):
     """One Linear record's files (``files.linearSeqs[i]``) and the fields the Web keeps beside them."""
 
     uid: str
+    # The File card of the row: each --gbk value, or --gff/--fasta pair, is a card of its own (OV-3703).
+    fileUid: str
     gb: SessionResourceFile | None
     gff: SessionResourceFile | None
     fasta: SessionResourceFile | None
@@ -1406,6 +1408,7 @@ def _ensure_linear_seq(files: CliSessionFiles, index: int) -> None:
         linear_seqs.append(
             {
                 "uid": f"cli-seq-{ordinal}",
+                "fileUid": f"cli-seq-{ordinal}",
                 "gb": None,
                 "gff": None,
                 "fasta": None,
