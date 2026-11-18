@@ -148,6 +148,8 @@ export const createEditorIntentShow = ({
     });
     return plan.operationsByResult[resultIndex] || null;
   };
+  // Whether the show below asked the palette and rules projection to prepare the rule matches and it still runs.
+  let preparingRows = false;
   // The port of the editor intent onto the displayed Result (design §5.4):
   // the operations of `domains` Generate compiles from the active drawing
   // (the compile runs only the stages they need) unless given, reconciled by
@@ -186,8 +188,13 @@ export const createEditorIntentShow = ({
     // A Legend row stroke reaches the features in the row, which their rule
     // matches decide; until they are prepared (a Result just loaded), a
     // feature keeps the stroke it shows. The palette and rules projection
-    // prepares them and shows the strokes again, once: it shows them prepared.
-    if (shown && shown.legendStrokes.length > 0 && !isRulePrepared()) void projectPaletteAndRules();
+    // prepares them and shows the strokes again; the show it makes while it
+    // runs asks for no second one, so a rule Python never prepares asks once
+    // per show.
+    if (shown && shown.legendStrokes.length > 0 && !preparingRows && !isRulePrepared()) {
+      preparingRows = true;
+      void Promise.resolve(projectPaletteAndRules()).finally(() => { preparingRows = false; });
+    }
     return applied;
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
