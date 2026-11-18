@@ -236,8 +236,7 @@ def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -
         merged = _merged_origin_spanning_block(feature_object, total_length)
         if merged is not None:
             return [merged]
-    coords = (feature_object.location if feature_object.display_parts is None
-              else [part.location for part in feature_object.display_parts])
+    coords = feature_object.drawn_location
     parts: list[tuple[CircularCoordDict, bool]] = []
     for coord in coords:
         coord_dict: CircularCoordDict = {

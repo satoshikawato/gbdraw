@@ -487,6 +487,51 @@ def test_radial_growth_holds_only_the_tracks_inside_the_inner_label_lanes(
     assert refused is None, refused  # growth widened the inner labels' room
 
 
+def test_label_placement_reads_feature_blocks_where_they_are_drawn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The intervals labels keep clear of lie where the blocks are drawn, also from a display start (OV-3861).
+
+    ``feature_block_intervals`` read the record's location; the rotated tobacco plastome draws its blocks 5,500 bp
+    on, so the clearance of labels and the ends of radial leaders looked at other blocks.
+    """
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from gbdraw.layout.circular import feature_block_intervals
+    from gbdraw.svg.circular_arcs import circle_point, position_angle
+
+    captured = []
+    original = assemble_module.prepare_label_list
+
+    def capture(*args, **kwargs):
+        captured.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "prepare_label_list", capture)
+    output = tmp_path / "rotated"
+    run_circular_from_namespace(_get_args(_rotated_tobacco_argv(tmp_path, output)))
+
+    svg_text = output.with_suffix(".svg").read_text(encoding="utf-8")
+    drawn: dict[str, list[list[tuple[float, float]]]] = {}
+    for element in re.findall(r'<path [^>]*data-gbdraw-feature-part="block"[^>]*/>', svg_text):
+        feature_id = re.search(r'data-gbdraw-feature-id="([^"]+)"', element).group(1)
+        drawn.setdefault(feature_id, []).extend(_block_outlines(element))
+    total_length = 155943
+    misplaced = []
+    for feature in captured[-1].values():
+        for _block, start, end in feature_block_intervals(feature, total_length):
+            outlines = drawn.get(str(feature.feature_hash), [])
+            middle_angle = position_angle((start + end) / 2.0, total_length)
+            if not any(
+                _inside(circle_point(0.5 * (min(radii) + max(radii)), middle_angle), outline)
+                for outline in outlines
+                for radii in ([math.hypot(x, y) for x, y in outline],)
+            ):
+                misplaced.append((feature.feature_hash, start, end))
+    assert captured and drawn
+    assert not misplaced, misplaced[:5]
+
+
 def test_radial_leader_ends_leave_out_positions_under_another_lane() -> None:
     """A radial leader ends where no feature of another lane lies between its feature and the labels (OV-3841).
 

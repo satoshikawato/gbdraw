@@ -428,11 +428,13 @@ def feature_radii_for_coordinate(
 def feature_block_intervals(
     feature_object: FeatureObject, total_length: int
 ) -> list[tuple[FeatureLocationPart, float, float]]:
-    """The record intervals each drawn block of a feature covers, with the block: ``(block, start, end)``, a block
-    over the origin in two pieces. Label placement avoids these intervals."""
+    """The intervals each drawn block of a feature covers, with the block: ``(block, start, end)``, a block over the
+    origin in two pieces. Label placement avoids these intervals, so they are in the drawing's coordinates
+    (``FeatureObject.drawn_location``): read from the record's location, they missed every block of a record drawn
+    from a display start (OV-3861)."""
 
     intervals: list[tuple[FeatureLocationPart, float, float]] = []
-    for block in feature_object.location:
+    for block in feature_object.drawn_location:
         start_raw, end_raw = int(block.start), int(block.end)
         if block.kind != "block" or start_raw == end_raw:
             continue
