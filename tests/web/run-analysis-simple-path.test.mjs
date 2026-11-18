@@ -258,6 +258,8 @@ const {
   requireLegacyProteinReferencesMigrate,
   showDiagramProgress
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
+const { createRulePreparation } = await import('../../gbdraw/web/js/app/rule-matching.js');
+const { ruleMatcher } = await import('../../gbdraw/web/js/services/rule-matchers.js');
 const {
   linearComparisonEdgeKey,
   resolveLinearComparisonPlan
@@ -4461,4 +4463,89 @@ test('a gzip Circular reference stages for the LOSAT ring plan as Generate names
   const stagedBytes = Buffer.from(await staged.blob.arrayBuffer());
   assert.deepEqual(stagedBytes, chosen);
   assert.equal(gunzipSync(stagedBytes).toString('utf8'), text);
+});
+
+// The admitted features reach the rule preparation through both hops of a
+// Generate (`prepareAndAdmitCandidate`, then the preparation's
+// `prepareCandidate`): the commit reads the row matches of the admitted
+// catalog's objects, not of the page's previous features.
+test('a Generate with a Legend row stroke prepares the rule matches of the catalog it admits', async () => {
+  installShownDrawing('linear');
+  modeDrawing(state, 'linear').inputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'row-stroke';
+  drawing.form.show_depth = false;
+  drawing.form.multi_record_canvas = false;
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearRecordRows.splice(0);
+  drawing.linearComparisonPlan.mode = 'none';
+  drawing.linearComparisonPlan.edges.splice(0);
+  drawing.annotationSets.splice(0);
+  drawing.linearSeqs.splice(0, drawing.linearSeqs.length, {
+    uid: 'row-stroke', gb: bound(new AuditFile(['LOCUS rowstroke\nORIGIN\n        1 acgtacgtac\n//\n'], 'row-stroke.gb')),
+    gff: null, fasta: null, depth: null, blast: null, losat_gencode: 1, definition: '', record_subtitle: '',
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false, windows: []
+  });
+  Object.assign(drawing.adv, { linear_track_slots_enabled: false, linear_track_slots: [] });
+  /** @type {number[]} */
+  const evaluated = [];
+  const rulePreparation = createRulePreparation({
+    state,
+    evaluate: async ({ features }) => {
+      evaluated.push(features.length);
+      return { matches: features.map(() => [0]), priorities: features.map(() => [0]) };
+    }
+  });
+  const admitted = [];
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    rulePreparation,
+    isCurrentFeature: () => true,
+    writeSessionDocumentFile,
+    serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
+      serializeActiveRenderFiles(state, activeDrawing, snapshot)
+    ),
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => {
+      admitted.push(catalogAdmission.featureState);
+      return {
+        results: structuredClone(generationResponse.results),
+        featureState: featureStateFromCatalog(catalogAdmission.catalog),
+        featureColorOverrides: structuredClone(featureColorOverrides)
+      };
+    },
+    resetPreviewViewport: () => {}
+  }));
+  const generate = async (name) => {
+    const generated = result(`${name}.svg`, name);
+    workerResponses.push(response(generated, validCatalog(generated.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+  };
+  try {
+    await generate('row-stroke-1');
+    const previous = state.extractedFeatures.value;
+    assert.equal(previous.length, 1);
+    const rule = { feat: 'CDS', qual: 'product', val: 'audit', color: '#2266aa', cap: 'Audit row' };
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, rule);
+    drawing.legendStrokeOverrides['Audit row'] = { strokeColor: '#e63946', strokeWidth: 2 };
+    evaluated.splice(0);
+    await generate('row-stroke-2');
+    const rendered = [...admitted.at(-1).renderedFeaturesByResult[0].values()];
+    assert.equal(rendered.length, 1);
+    assert.ok(rendered.every((feature) => !previous.includes(feature)), 'the admitted catalog holds new objects');
+    const matcher = ruleMatcher([rule]);
+    assert.ok(
+      rendered.every((feature) => matcher.firstIfKnown(feature) !== undefined),
+      'the commit reads the matches of the admitted features'
+    );
+    // The page's features first (the request's rules), then the admitted ones (the commit's row strokes):
+    // each time the rendered feature and its biological feature.
+    assert.deepEqual(evaluated, [2, 2]);
+  } finally {
+    drawing.manualSpecificRules.splice(0);
+    delete drawing.legendStrokeOverrides['Audit row'];
+  }
 });

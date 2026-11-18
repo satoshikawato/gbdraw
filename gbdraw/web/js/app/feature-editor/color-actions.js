@@ -17,6 +17,7 @@ import {
   drawnLegendRowStroke,
   legendRowFeatureIds,
   legendRowKeys,
+  legendStrokeRowKey,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
 import {
@@ -536,7 +537,7 @@ export const createFeatureColorActions = ({
   // The stroke a Legend row edit gives a feature without a stroke edit of its
   // own, which the feature shows once its own edit is removed, as the executor
   // draws it: a row reaches the features in it, by the row each feature is in
-  // (`legendRowFeatureIds`, `drawnFeatureRowKeys`; OV-123, OV-288). The
+  // (`legendRowFeatureIds`, `legendStrokeRowKey`, `drawnFeatureRowKeys`; OV-123, OV-288). The
   // stroked rows are the compile's (`draftLegendRows`): a deleted row strokes
   // nothing. Null when no row's stroke reaches it, also while the feature's row
   // is not known (opening the popup prepares its matches).
@@ -568,7 +569,7 @@ export const createFeatureColorActions = ({
         namedIds: caption === namedCaption ? [id] : [],
         ownStrokeIds: []
       };
-      return legendRowFeatureIds(reach, pythonRows.has(row.targetCaption) ? row.targetCaption : null, featureRows).reached.length > 0;
+      return legendRowFeatureIds(reach, legendStrokeRowKey(pythonRows, row.targetCaption), featureRows).reached.length > 0;
     })?.[1] || null;
   };
 

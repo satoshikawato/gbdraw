@@ -291,7 +291,7 @@ const strokeReachesOf = ({ operationsByResult, catalogAdmission, livePreview, ru
     /** @type {LegendRowFeature[]} */
     const features = [...(livePreview
       ? livePreview.features ?? []
-      : catalogAdmission.renderedFeaturesByResult?.[resultIndex]?.values() ?? [])];
+      : catalogAdmission.renderedFeaturesByResult[resultIndex]?.values() ?? [])];
     const reach = {
       ownStrokeIds: operationsByResult[resultIndex].featureStrokes.map(({ renderedId }) => /** @type {RenderedFeatureId} */ (renderedId)),
       /** @param {ReadonlyMap<PythonLegendKey, PythonLegendRow>} pythonRows */

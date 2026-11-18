@@ -598,9 +598,22 @@ export const namedLegends = (svg) => {
 // `pending`: the executor keeps what it shows (services/svg-result-ingestion.js).
 // The executor reads it for every Result it styles, and the feature popup for
 // the feature it shows.
+// The key a stroke on the Legend row `key` reaches features by in one Result
+// (`legendRowFeatureIds`): the key where the Result shows the row, a row
+// Python drew or one the editor added (a rule committed live), as
+// `pythonLegendRows` reads the Result's rows; else null. The executor reads it
+// on the Result it styles, the feature popup on the displayed Result.
+/**
+ * @param {ReadonlyMap<PythonLegendKey, PythonLegendRow>} rows The Result's rows (`pythonLegendRows`).
+ * @param {PythonLegendKey} key
+ * @returns {PythonLegendKey | null}
+ */
+export const legendStrokeRowKey = (rows, key) => (rows.has(key) ? key : null);
+
 /**
  * @param {LegendRowReach} reach
- * @param {PythonLegendKey | null} rowKey The row's key where this Result draws the row, else null.
+ * @param {PythonLegendKey | null} rowKey The row's key where this Result shows the row (`legendStrokeRowKey`),
+ *   else null.
  * @param {FeatureRowKeys} featureRows
  * @returns {{ reached: RenderedFeatureId[], pending: RenderedFeatureId[] }}
  */

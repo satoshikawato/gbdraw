@@ -41,7 +41,8 @@ import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 import { sessionSourceFactsOf } from '../../gbdraw/web/js/services/session-drawings-upgrade.js';
 import { LEGEND_ORDER_RECORD, stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
 import {
-  getLegendEntrySwatch as legendSwatch, legendEntryAnchor, legendRowKeys, legendRowTakesPlace, shownPythonLegendRow
+  getLegendEntrySwatch as legendSwatch, legendEntryAnchor, legendRowKeys, legendRowTakesPlace, legendStrokeRowKey, pythonLegendRows,
+  shownPythonLegendRow
 } from '../../gbdraw/web/js/services/legend-svg.js';
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
@@ -2703,4 +2704,36 @@ test('after Load, a shown Legend row stroke leaves the other row\'s features onc
     'the Undo shows the saved stroke on the row\'s own features only');
   show(OWN_ROW_STROKE.strokeColor, features);
   assert.equal(strokes().filter((stroke) => stroke === 'gray').length, 4, 'a second show changes nothing');
+});
+
+// The row of a rule committed live is shown at once (a rule commit's row,
+// added where the Result lacks it) and is a row the Result shows: a stroke on
+// it reaches the row's features, and the feature popup, which reads the
+// displayed Result's rows, finds the same row key (`legendStrokeRowKey`). A
+// feature whose own stroke is removed shows the row's stroke again.
+test('a stroke on a rule row committed live reaches its features, and the popup reads the same row key', () => {
+  const figure = ownRowFigure('#54bcf8', ['CDS'], [['n1', 'CDS', 'ND1'], ['n2', 'CDS', 'ND2'], ['c1', 'CDS', 'COX1']]);
+  const rules = [geneRule('^ND', 'Complex I', '#2266aa')];
+  const admission = figure.admit();
+  const features = recordGeneMatches(admission, rules);
+  const live = parseSvgText(figure.content);
+  const domains = ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder', 'featureStrokes', 'legendStrokes'];
+  const n1 = features.find((feature) => feature.svg_id === 'n1');
+  const show = (featureStrokeOverrides) => reconcileMountedResult(live, compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }, { caption: 'Complex I', originalCaption: 'Complex I', color: '#2266aa' }],
+    originalLegendOrder: ['CDS'],
+    legendStrokeOverrides: { 'Complex I': OWN_ROW_STROKE },
+    featureStrokeOverrides,
+    manualSpecificRules: rules,
+    livePreview: {
+      domains, paletteColors: {}, drawnTracks: [], drawnContext: null, features,
+      ruleRows: { add: [{ caption: 'Complex I', color: '#2266aa', before: '' }] }
+    }
+  }).operationsByResult[0], { domains });
+  show({ [featureOverrideKey(n1)]: { strokeColor: '#111111' } });
+  assert.deepEqual(strokedIds(live), ['n2'], 'n1 keeps its own stroke');
+  show({});
+  assert.deepEqual(strokedIds(live), ['n1', 'n2'], 'without its own stroke, n1 shows the row\'s');
+  assert.equal(legendStrokeRowKey(pythonLegendRows(live), 'Complex I'), 'Complex I', 'the popup reads the row the executor strokes by');
 });

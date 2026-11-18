@@ -23,6 +23,7 @@ import {
   legendRowName,
   legendRowShown,
   legendRowSwatch,
+  legendStrokeRowKey,
   LEGEND_MERGED_ROW,
   namedLegends,
   moveLegendEntryToAnchor,
@@ -1185,10 +1186,6 @@ const applyLegendOperations = (index, operations, {
 } = {}) => {
   /** @param {SvgMutationOperations['legendFills'][number] | LegendStrokeOperation} operation A fill, a stroke, or the like: each names its row by `caption`. */
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
-  // The row key of each feature the Result draws, by Python's rows of the
-  // Result as this pass finds them, read once per reach; a feature the reach
-  // does not name (one the preview does not draw) is not known.
-  const featureRowsOf = legendRowKeysOf(index, operations.legendStrokes.length > 0 ? pythonLegendRows(index.svg) : new Map());
   let changed = false;
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
@@ -1261,10 +1258,12 @@ const applyLegendOperations = (index, operations, {
       setPaintAttribute(index, swatch, 'fill', color);
     });
   });
+  // Read after this pass added its rows, as the feature popup reads the displayed Result.
+  const strokeRows = legendStrokeRowsOf(index, operations.legendStrokes.length > 0);
   operations.legendStrokes.forEach((/** @type {LegendStrokeOperation} */ operation) => {
     const { strokeColor, strokeWidth, reach } = operation;
     const rows = requireRow(operation);
-    const { reached, pending } = legendRowFeatureIds(reach, rows.length > 0 ? operation.caption : null, featureRowsOf(reach));
+    const { reached, pending } = legendRowFeatureIds(reach, strokeRows.rowKey(operation.caption), strokeRows.featureRows(reach));
     reached.forEach((renderedId) => strokeFeature(index, { renderedId, strokeColor, strokeWidth }));
     pending.forEach((renderedId) => strokeFeature(index, { renderedId, strokeColor, strokeWidth }, true));
     rows.forEach((entry) => {
@@ -1301,25 +1300,35 @@ const applyLegendOperations = (index, operations, {
   return changed;
 };
 
-// The row keys of the features a Result draws, for each reach of one pass
-// (`LegendStrokeReach.featureRows`): one keying per reach (the compile gives
-// the strokes of one Result one reach), every drawn feature with the key the
-// reach gives it, undefined (not known) for one it does not name.
+// What the Legend row strokes of one pass read of the Result: its rows
+// (`pythonLegendRows`), read once when the pass strokes a row, after the pass
+// added its rows, as the feature popup reads the displayed Result's.
+// `rowKey`: the key a stroke on a row reaches features by, where the Result
+// shows the row (`legendStrokeRowKey`). `featureRows`: the row keys of the
+// features the Result draws, for each reach (`LegendStrokeReach.featureRows`):
+// one keying per reach (the compile gives the strokes of one Result one
+// reach), every drawn feature with the key the reach gives it, undefined (not
+// known) for one it does not name.
 /**
  * @param {LazyMutationIndex} index
- * @param {ReadonlyMap<PythonLegendKey, PythonLegendRow>} pythonRows
- * @returns {(reach: LegendStrokeReach) => FeatureRowKeys}
+ * @param {boolean} strokes Whether the pass strokes a Legend row; without one, no row is read.
+ * @returns {{ rowKey: (key: PythonLegendKey) => PythonLegendKey | null, featureRows: (reach: LegendStrokeReach) => FeatureRowKeys }}
  */
-const legendRowKeysOf = (index, pythonRows) => {
+const legendStrokeRowsOf = (index, strokes) => {
+  /** @type {ReadonlyMap<PythonLegendKey, PythonLegendRow>} */
+  const pythonRows = strokes ? pythonLegendRows(index.svg) : new Map();
   /** @type {Map<LegendStrokeReach['featureRows'], FeatureRowKeys>} */
   const keyed = new Map();
-  return ({ featureRows }) => {
-    const known = keyed.get(featureRows);
-    if (known) return known;
-    const keys = new Map(featureRows(pythonRows));
-    const rows = [...index.features().keys()].map((id) => /** @type {const} */ ([/** @type {RenderedFeatureId} */ (id), keys.get(/** @type {RenderedFeatureId} */ (id))]));
-    keyed.set(featureRows, rows);
-    return rows;
+  return {
+    rowKey: (key) => legendStrokeRowKey(pythonRows, key),
+    featureRows: ({ featureRows }) => {
+      const known = keyed.get(featureRows);
+      if (known) return known;
+      const keys = new Map(featureRows(pythonRows));
+      const rows = [...index.features().keys()].map((id) => /** @type {const} */ ([/** @type {RenderedFeatureId} */ (id), keys.get(/** @type {RenderedFeatureId} */ (id))]));
+      keyed.set(featureRows, rows);
+      return rows;
+    }
   };
 };
 
