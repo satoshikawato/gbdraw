@@ -1506,6 +1506,10 @@
       "vector": null,
       "reason": "The Web export enriches the SVG in the browser after its own edits; the CLI, Python API and Gallery enrich it in Python. Both mark the same three kinds by the feature catalog's identities. No shared vector: tests/test_interactive_svg_cli_format.py and tests/test_record_display_interactive_browser.py pin the Python side, and tests/web/interactive-svg-export.test.mjs (with tests/web/interactive-svg-v3.playwright.spec.js) pins the Web side.",
       "retireWhen": "the viewer decides interactivity from the embedded catalog and both enrichers stop marking",
+      "whyNotAskPython": "The Web export marks the SVG the user has just edited in the page, and a Worker round trip per export would hand Python an SVG it did not draw; the marking is a few attribute writes over the catalog the page already holds.",
+      "whyNotGenerate": "The two enrichers walk different trees (an ElementTree in Python, the live DOM in the browser) with different selectors, so there is no shared source to generate one from.",
+      "retireBy": "2027-03-31",
+      "waiver": "No row was retired first: this twin exists since #2148 made Python mark region annotations as the Web already did, and no pull request that changes production code has retired a row for it.",
       "source": "PR #2148 (CLI interactive SVG marked no region annotations)"
     },
     {
