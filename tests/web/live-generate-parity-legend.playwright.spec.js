@@ -2296,29 +2296,85 @@ test('a rule commit beside a rule row with a Legend color of its own is applied,
   await expectLiveEqualsGenerate(page, { label: 'a rule row with a Legend color of its own recolored' });
 });
 
-test('a stroked rule row deleted, its feature renamed in the popup, restores and generates', async ({ page }) => {
-  test.fail(true, 'OV-2412: Generate after this Restore fails with "The generated result could not be accepted"');
-  test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
-  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2a9d8f', cap: 'Alpha row' });
-  await settleLive(page);
-  await legendRowStrokeColor(page, 'Alpha row', '#7b2cbf');
-  await settleLive(page);
-  await deleteLegendRow(page, 'Alpha row');
-  await generate(page);
-  await evaluateWithRetainedPromise(page, async () => {
+// OV-2412, OV-3851: a deleted row whose key Python stops drawing while it is
+// deleted (its rule removed or recaptioned, its feature renamed in the popup)
+// is stale. Restore takes it off the deleted list but lists it no more, as
+// Generate lists no row for it; a Legend stroke or color stored under its key
+// stays there and no longer makes the next Generate fail. Undo deletes it again.
+const STALE_ALPHA_RULE = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2a9d8f', cap: 'Alpha row' };
+const STALE_ROUTES = {
+  'its feature renamed in the popup': (page) => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.locus_tag === 'FL1'), null);
     await window.Vue.nextTick();
     app.clickedFeature.legendName = 'Other name';
     await app.handleLegendNameCommit();
     app.clickedFeature = null;
-  });
-  await settleLive(page);
-  await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
-  await settleLive(page);
-  await expectLiveEqualsGenerate(page, { label: 'the Restore after the popup rename' });
+  }).then(() => settleLive(page)),
+  'its rule removed': async (page, row) => appAction(page, 'removeSpecificRule', await ruleIndex(page, row)),
+  'its rule recaptioned': async (page, row) => appAction(page, 'setSpecificRuleField', await ruleIndex(page, row), 'cap', 'Other name')
+};
+// The editor's rows and deleted rows, and the keys of the drawing's Legend strokes and colors.
+const legendEditorState = (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const drawing = (await import('/gbdraw/web/js/state.js')).state.activeDrawing();
+  return {
+    listed: app.legendEntries.map((entry) => entry.caption),
+    deleted: app.deletedLegendEntries.map((entry) => entry.originalCaption || entry.caption),
+    edits: [Object.keys(drawing.legendStrokeOverrides), Object.keys(drawing.legendColorOverrides)]
+  };
 });
+// The rule row of a Legend edit: `Alpha row` (a stroke, or none), or a type row
+// with a Legend color of its own that a popup Legend name gives a rule
+// (`Walk group`, OV-2265), which keeps the color under the row's key.
+const STALE_ROWS = {
+  stroke: async (page) => {
+    await addColorRule(page, STALE_ALPHA_RULE);
+    await legendRowStrokeColor(page, 'Alpha row', '#7b2cbf');
+    return 'Alpha row';
+  },
+  color: async (page) => {
+    await legendRowColor(page, 'repeat_region', '#123456');
+    await popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' });
+    await settleLive(page);
+    return 'Walk group';
+  },
+  none: async (page) => {
+    await addColorRule(page, STALE_ALPHA_RULE);
+    return 'Alpha row';
+  }
+};
+for (const { mode, route, edit } of [
+  { mode: 'linear', route: 'its feature renamed in the popup', edit: 'stroke' },
+  { mode: 'circular', route: 'its feature renamed in the popup', edit: 'stroke' },
+  { mode: 'linear', route: 'its rule removed', edit: 'stroke' },
+  { mode: 'linear', route: 'its rule recaptioned', edit: 'stroke' },
+  { mode: 'linear', route: 'its rule removed', edit: 'color' },
+  { mode: 'linear', route: 'its feature renamed in the popup', edit: 'none' },
+  { mode: 'circular', route: 'its rule removed', edit: 'none' }
+]) {
+  test(`a ${mode} rule row with ${edit === 'none' ? 'no Legend edit' : `a Legend ${edit}`} deleted, ${route}, restores as Generate lists it (OV-2412, OV-3851)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    const row = await STALE_ROWS[edit](page);
+    await deleteLegendRow(page, row);
+    await generate(page);
+    await STALE_ROUTES[route](page, row);
+    const before = await legendEditorState(page);
+    expect(before.deleted, 'the row stays deleted').toEqual([row]);
+    await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
+    await settleLive(page);
+    const restored = await legendEditorState(page);
+    expect(restored, 'Restore lists no row for the stale key and keeps its edits').toEqual({
+      listed: before.listed, deleted: [], edits: before.edits
+    });
+    await history(page, 'undo');
+    expect(await legendEditorState(page), 'Undo deletes the row again').toEqual(before);
+    await history(page, 'redo');
+    await expectLiveEqualsGenerate(page, { label: `the Restore after ${route}` });
+    expect((await legendEditorState(page)).listed, 'Generate lists the rows Restore listed').toEqual(restored.listed);
+  });
+}
 
 // PD-OI-114 scenario revision 2 (issue #1427): a Legend rename, deletion,
 // Restore, Move, and Sort, and Canvas padding, reach Python through the

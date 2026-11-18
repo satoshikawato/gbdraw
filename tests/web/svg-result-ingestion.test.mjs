@@ -858,7 +858,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-      displayedResultMetadata: () => null, extractedFeatures: { value: [] },
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
@@ -896,7 +896,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
   const owner = createLegendEntryActions({
     state: {
       results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-      displayedResultMetadata: () => null, extractedFeatures: { value: [] },
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: { value: [] },
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] }, legendColorOverrides: {} })
     },
@@ -936,7 +936,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
   const strokeOptionsOpen = new Set();
   const state = {
     results: { value: [] }, svgContainer: { value: { querySelector: () => mounted } },
-    displayedResultMetadata: () => null, extractedFeatures: { value: [] },
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: { value: [] },
     originalLegendOrder: { value: ['CDS', 'GC content'] }, originalLegendColors: { value: {} },
     legendStrokeOptionsOpen: strokeOptionsOpen,
     activeDrawing: () => drawing,
@@ -1613,7 +1613,7 @@ test('the Legend extraction after Load reads no user color as Python\'s swatch',
     const ref = (value) => ({ value });
     const state = withDrawings({
       results: ref(results), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }),
-      displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]), adv: {},
       legendEntries: ref([]), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
       originalLegendOrder: ref(['CDS', 'tRNA', 'rRNA']), originalLegendColors: ref({ ...originalColors }),
       legendStrokeOverrides: {}, legendColorOverrides: { ...saved.legendColorOverrides }, manualSpecificRules: [],

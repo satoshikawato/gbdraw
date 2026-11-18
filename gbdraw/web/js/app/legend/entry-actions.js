@@ -100,6 +100,19 @@ const restoredEntry = (entry, { inventory, overrides, context }) => {
   const ruleColor = python ? '' : legendRowRules(key, context)[0]?.color;
   return withOwnLegendColor(ruleColor ? { ...entry, color: ruleColor } : entry, key, { python, overrides });
 };
+// The returning rows Restore lists: an editor row, and a row of Python's (the
+// inventory's) that a committed Result of the drawing still reports; a stale one
+// (`legendKeyIsStale`, svg-result-ingestion.js) leaves the deleted list unlisted
+// (OV-2412, OV-3851).
+/**
+ * @param {readonly EntryRecord[]} returning
+ * @param {readonly string[]} inventory
+ * @param {(key: string) => boolean} isStale
+ */
+const listedOnRestore = (returning, inventory, isStale) => returning.filter((entry) => {
+  const key = legendEntryKey(entry);
+  return !inventory.includes(key) || !isStale(key);
+});
 // The rows this owner builds from a Result's rows (`listLegendRows`), the
 // rows of the drawing's lists, and rows made from them are Legend rows (the
 // casts: `EntryRecord` is their shape as this owner reads it).
@@ -154,7 +167,7 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
  * @typedef {object} LegendEntryActionsOptions
  * @property {Pick<WebState, 'activeDrawing' | 'sessionOperationAvailability' | 'svgContainer' | 'results'
  *   | 'originalLegendOrder' | 'originalLegendColors' | 'legendStrokeOptionsOpen' | 'extractedFeatures'
- *   | 'displayedResultMetadata'>} state
+ *   | 'displayedResultMetadata' | 'legendKeyIsStale'>} state
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
  * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
@@ -1060,7 +1073,9 @@ export const createLegendEntryActions = ({
   // Generate gives it. Returns the Python keys of the restored rows, which the
   // composition root shows through the port (Python's row returns as Python
   // drew it, its stroke included) and asks Python for when the Result lacks
-  // them (O-2); false when no row returned.
+  // them (O-2); false when no row returned. A stale row of Python's leaves the
+  // deleted list unlisted (`listedOnRestore`), as Generate lists no row for it;
+  // its Legend stroke and color stay under its key.
   /** @param {number[] | null} [indexes] Indexes into the deleted list; every row when omitted. */
   const restoreDeletedLegendEntries = (indexes = null) => {
     const drawing = state.activeDrawing();
@@ -1072,12 +1087,12 @@ export const createLegendEntryActions = ({
     const returning = deleted.filter((/** @type {unknown} */ _, /** @type {number} */ index) => picked.has(index));
     if (!svgContainer.value?.querySelector?.('svg') || returning.length === 0) return false;
     const inventory = originalLegendOrder.value.map((/** @type {unknown} */ caption) => String(caption || '').trim());
+    const listed = listedOnRestore(returning, inventory, state.legendKeyIsStale);
     const returns = { inventory, overrides: drawing.legendColorOverrides, context: displayedLegendRowContext(state, drawing) };
-    /** @type {EntryRecord[]} */
-    let entries = [...drawing.legendEntries.value];
-    for (const entry of returning) entries = withEntryAtDefaultPlace(entries, restoredEntry(entry, returns), inventory);
+    const entries = listed.reduce((/** @type {EntryRecord[]} */ list, entry) => (
+      withEntryAtDefaultPlace(list, restoredEntry(entry, returns), inventory)), [...drawing.legendEntries.value]);
     restoreLegendRows(drawing.slices.paint, picked, listedRowsOf(entries));
-    return returning.map(legendEntryKey).filter((key) => inventory.includes(key));
+    return listed.map(legendEntryKey).filter((key) => inventory.includes(key));
   };
 
   return {

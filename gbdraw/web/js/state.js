@@ -38,7 +38,8 @@ import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
   getCommittedSvgResultMetadata,
-  getCommittedSvgResultRuntimeIdentity
+  getCommittedSvgResultRuntimeIdentity,
+  isStaleLegendKey
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import { drawnLinearSequences } from './services/record-draw-selection.js';
@@ -730,6 +731,9 @@ const newFeatureToAdd = typedRef(defaultEditorDraftState.newFeatureToAdd);
 
 // The committed metadata of the displayed Result (svg-result-ingestion.js).
 const displayedResultMetadata = () => getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
+// Whether no committed Result of the drawing reports Legend key `key` (`isStaleLegendKey`).
+/** @param {string} key */
+const legendKeyIsStale = (key) => isStaleLegendKey(toRaw(results.value), key);
 
 // The Features drawer and Search features list the displayed Result's catalog
 // features (`listFeatureRows`, R-5): a hidden feature stays listed so it can be
@@ -1281,6 +1285,7 @@ export const state = Object.freeze({
   results,
   selectedResultIndex,
   displayedResultMetadata,
+  legendKeyIsStale,
   failedGeneratePreservedResult,
   generationFailureRecovery,
   resultPanelTab,

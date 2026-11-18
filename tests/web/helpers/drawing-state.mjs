@@ -137,7 +137,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'lengthBarOriginalTransform', 'plotTitleElement', 'plotTitleDragging', 'plotTitleDragStart',
   'plotTitleAutoTransform', 'showCanvasControls', 'skipCaptureBaseConfig',
   'skipExtractOnSvgChange', 'trustedArtifactRestoreInProgress', 'newColorFeat', 'newColorVal',
-  'newPriorityRule', 'newFeatureToAdd', 'displayedResultMetadata', 'featureList', 'featureListState', 'filteredFeatures',
+  'newPriorityRule', 'newFeatureToAdd', 'displayedResultMetadata', 'legendKeyIsStale', 'featureList', 'featureListState', 'filteredFeatures',
   'filteredEditableLabels', 'ruleMatchingPending', 'downloadWhiteBackground'
 ]);
 
