@@ -13,8 +13,17 @@ const { join } = require('node:path');
 const folders = new Set();
 let watching = false;
 
+// Each folder is removed on its own: a folder that cannot be removed (a child
+// process still writing into it) must not change the exit status, keep the
+// other folders, or skip the other 'exit' listeners.
 const removeTempDirs = () => {
-  for (const folder of folders) rmSync(folder, { recursive: true, force: true });
+  for (const folder of folders) {
+    try {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 2 });
+    } catch {
+      // Left for the next cleanup of TMPDIR.
+    }
+  }
   folders.clear();
 };
 

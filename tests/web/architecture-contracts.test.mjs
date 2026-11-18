@@ -4,12 +4,14 @@ import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
+  writeFileSync
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import {
   dirname,
   extname,
@@ -43,7 +45,6 @@ import {
   literalImportSpecifiers,
   maskJavaScript
 } from '../../tools/web-change-source.mjs';
-import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const JAVASCRIPT_ROOT = join(REPOSITORY_ROOT, 'gbdraw/web/js');
@@ -2458,57 +2459,61 @@ const writeFixtureFile = (root, path, content) => {
 };
 
 const withChangeBudgetRepository = (runCase) => {
-  const root = makeTempDirSync('gbdraw-web-budget-');
-  Object.entries(BUDGET_FIXTURE).forEach(([path, content]) => {
-    writeFixtureFile(root, path, content);
-  });
-  const git = (args) => spawnSync('git', args, {
-    cwd: root,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  assert.equal(git(['init', '--quiet']).status, 0);
-  assert.equal(git(['config', 'user.email', 'web-budget@example.invalid']).status, 0);
-  assert.equal(git(['config', 'user.name', 'Web Budget Test']).status, 0);
-  assert.equal(git(['add', '.']).status, 0);
-  assert.equal(git(['commit', '--quiet', '-m', 'baseline']).status, 0);
-  const commit = (message) => {
-    assert.equal(git(['add', '.']).status, 0);
-    assert.equal(git(['commit', '--quiet', '-m', message]).status, 0);
-    const revision = git(['rev-parse', 'HEAD']);
-    assert.equal(revision.status, 0);
-    return revision.stdout.trim();
-  };
-  const execute = ({ base = '', head = '', environment = {} } = {}) => {
-    const arguments_ = [CHANGE_BUDGET_CHECKER];
-    if (base) arguments_.push('--base', base);
-    if (head) arguments_.push('--head', head);
-    const result = spawnSync(process.execPath, arguments_, {
+  const root = mkdtempSync(join(tmpdir(), 'gbdraw-web-budget-'));
+  try {
+    Object.entries(BUDGET_FIXTURE).forEach(([path, content]) => {
+      writeFixtureFile(root, path, content);
+    });
+    const git = (args) => spawnSync('git', args, {
       cwd: root,
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        GITHUB_ACTIONS: '',
-        GITHUB_EVENT_NAME: '',
-        GITHUB_EVENT_PATH: '',
-        GITHUB_REPOSITORY: '',
-        GITHUB_STEP_SUMMARY: '',
-        ...environment
-      },
       stdio: ['ignore', 'pipe', 'pipe']
     });
-    return {
-      status: result.status,
-      output: `${result.stdout || ''}${result.stderr || ''}`
+    assert.equal(git(['init', '--quiet']).status, 0);
+    assert.equal(git(['config', 'user.email', 'web-budget@example.invalid']).status, 0);
+    assert.equal(git(['config', 'user.name', 'Web Budget Test']).status, 0);
+    assert.equal(git(['add', '.']).status, 0);
+    assert.equal(git(['commit', '--quiet', '-m', 'baseline']).status, 0);
+    const commit = (message) => {
+      assert.equal(git(['add', '.']).status, 0);
+      assert.equal(git(['commit', '--quiet', '-m', message]).status, 0);
+      const revision = git(['rev-parse', 'HEAD']);
+      assert.equal(revision.status, 0);
+      return revision.stdout.trim();
     };
-  };
-  return runCase({
-    commit,
-    execute,
-    git,
-    root,
-    write: (path, content) => writeFixtureFile(root, path, content)
-  });
+    const execute = ({ base = '', head = '', environment = {} } = {}) => {
+      const arguments_ = [CHANGE_BUDGET_CHECKER];
+      if (base) arguments_.push('--base', base);
+      if (head) arguments_.push('--head', head);
+      const result = spawnSync(process.execPath, arguments_, {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_ACTIONS: '',
+          GITHUB_EVENT_NAME: '',
+          GITHUB_EVENT_PATH: '',
+          GITHUB_REPOSITORY: '',
+          GITHUB_STEP_SUMMARY: '',
+          ...environment
+        },
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      return {
+        status: result.status,
+        output: `${result.stdout || ''}${result.stderr || ''}`
+      };
+    };
+    return runCase({
+      commit,
+      execute,
+      git,
+      root,
+      write: (path, content) => writeFixtureFile(root, path, content)
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 };
 
 const runChangeBudgetCase = (mutate, environment = {}) => withChangeBudgetRepository(
@@ -2945,59 +2950,63 @@ const withTrustedArchitectureRepository = (
   baseFiles = {},
   executionEnvironment = {}
 ) => {
-  const root = makeTempDirSync('gbdraw-architecture-ratchet-');
-  const fixtureFiles = { ...TRUSTED_ARCHITECTURE_FIXTURE_FILES, ...baseFiles };
-  if (!Object.hasOwn(baseFiles, 'tools/web-product-impact-map.json')) {
-    fixtureFiles['tools/web-product-impact-map.json'] = productImpactMapSourceForRules(
-      fixtureFiles['tools/web-architecture-rules.json']
-    );
+  const root = mkdtempSync(join(tmpdir(), 'gbdraw-architecture-ratchet-'));
+  try {
+    const fixtureFiles = { ...TRUSTED_ARCHITECTURE_FIXTURE_FILES, ...baseFiles };
+    if (!Object.hasOwn(baseFiles, 'tools/web-product-impact-map.json')) {
+      fixtureFiles['tools/web-product-impact-map.json'] = productImpactMapSourceForRules(
+        fixtureFiles['tools/web-architecture-rules.json']
+      );
+    }
+    Object.entries(fixtureFiles)
+      .forEach(([path, content]) => writeFixtureFile(root, path, content));
+    const git = (args) => spawnSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    assert.equal(git(['init', '--quiet']).status, 0);
+    assert.equal(git(['config', 'user.email', 'ratchet@example.invalid']).status, 0);
+    assert.equal(git(['config', 'user.name', 'Ratchet Fixture']).status, 0);
+    assert.equal(git(['add', '.']).status, 0);
+    assert.equal(git(['commit', '--quiet', '-m', 'trusted base']).status, 0);
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    mutateHead((path, content) => writeFixtureFile(root, path, content));
+    assert.equal(git(['add', '-A']).status, 0);
+    assert.equal(git(['commit', '--quiet', '-m', 'candidate head']).status, 0);
+    const head = git(['rev-parse', 'HEAD']).stdout.trim();
+    assert.equal(git(['checkout', '--quiet', '--detach', base]).status, 0);
+    const extraEnvironment = typeof executionEnvironment === 'function'
+      ? executionEnvironment({ base, head, root })
+      : executionEnvironment;
+    const result = spawnSync(process.execPath, [
+      'tools/check-web-change-budget.mjs',
+      '--base', base,
+      '--head', head
+    ], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: '',
+        GITHUB_EVENT_NAME: '',
+        GITHUB_EVENT_PATH: '',
+        GITHUB_REPOSITORY: '',
+        GITHUB_STEP_SUMMARY: '',
+        ...extraEnvironment
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    runCase({
+      base,
+      head,
+      root,
+      status: result.status,
+      output: `${result.stdout || ''}${result.stderr || ''}`
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
-  Object.entries(fixtureFiles)
-    .forEach(([path, content]) => writeFixtureFile(root, path, content));
-  const git = (args) => spawnSync('git', args, {
-    cwd: root,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  assert.equal(git(['init', '--quiet']).status, 0);
-  assert.equal(git(['config', 'user.email', 'ratchet@example.invalid']).status, 0);
-  assert.equal(git(['config', 'user.name', 'Ratchet Fixture']).status, 0);
-  assert.equal(git(['add', '.']).status, 0);
-  assert.equal(git(['commit', '--quiet', '-m', 'trusted base']).status, 0);
-  const base = git(['rev-parse', 'HEAD']).stdout.trim();
-  mutateHead((path, content) => writeFixtureFile(root, path, content));
-  assert.equal(git(['add', '-A']).status, 0);
-  assert.equal(git(['commit', '--quiet', '-m', 'candidate head']).status, 0);
-  const head = git(['rev-parse', 'HEAD']).stdout.trim();
-  assert.equal(git(['checkout', '--quiet', '--detach', base]).status, 0);
-  const extraEnvironment = typeof executionEnvironment === 'function'
-    ? executionEnvironment({ base, head, root })
-    : executionEnvironment;
-  const result = spawnSync(process.execPath, [
-    'tools/check-web-change-budget.mjs',
-    '--base', base,
-    '--head', head
-  ], {
-    cwd: root,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      GITHUB_ACTIONS: '',
-      GITHUB_EVENT_NAME: '',
-      GITHUB_EVENT_PATH: '',
-      GITHUB_REPOSITORY: '',
-      GITHUB_STEP_SUMMARY: '',
-      ...extraEnvironment
-    },
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  runCase({
-    base,
-    head,
-    root,
-    status: result.status,
-    output: `${result.stdout || ''}${result.stderr || ''}`
-  });
 };
 
 test('synthetic architecture fixtures grow through evidence dependencies, not alternate authority', () => {

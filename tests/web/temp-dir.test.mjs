@@ -23,7 +23,7 @@ import { makeTempDir, makeTempDirSync } from ${JSON.stringify(HELPER_URL)};
 const end = process.env.TEMP_DIR_CASE;
 if (end === 'handled') process.on('SIGTERM', () => process.exit(0));
 const made = [makeTempDirSync('case-sync-'), await makeTempDir('case-async-')];
-writeFileSync(process.env.TEMP_DIR_REPORT, JSON.stringify(made));
+writeFileSync(process.env.TEMP_DIR_REPORT, JSON.stringify({ pid: process.pid, made }));
 test('case', async () => {
   if (end === 'fail') throw new Error('failed on purpose');
   if (end === 'throw') setTimeout(() => { throw new Error('uncaught on purpose'); }, 0);
@@ -35,12 +35,27 @@ const fixtureDirectory = makeTempDirSync('gbdraw-temp-dir-fixture-');
 const fixture = join(fixtureDirectory, 'case.test.mjs');
 writeFileSync(fixture, FIXTURE);
 
-/** @param {string} report @returns {Promise<string[]>} */
-const reported = async (report) => {
-  for (const started = Date.now(); !existsSync(report);) {
-    assert.ok(Date.now() - started < 10_000, 'the fixture never made its folders');
+/** @param {() => boolean} done @param {string} message */
+const waitFor = async (done, message) => {
+  for (const started = Date.now(); !done();) {
+    assert.ok(Date.now() - started < 10_000, message);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+};
+
+/** @param {number} pid */
+const running = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** @param {string} report @returns {Promise<{ pid: number, made: string[] }>} */
+const reported = async (report) => {
+  await waitFor(() => existsSync(report), 'the fixture never made its folders');
   return JSON.parse(readFileSync(report, 'utf8'));
 };
 
@@ -68,7 +83,9 @@ const runFixture = async (end, { runner = true, stop } = {}) => {
     stop(/** @type {number} */ (child.pid));
   }
   await exited;
-  const made = await reported(report);
+  // `node --test` may exit before the test-file process that made the folders.
+  const { pid, made } = await reported(report);
+  await waitFor(() => !running(pid), 'the test-file process never ended');
   return { made, left: readdirSync(directory), existing: made.filter((folder) => existsSync(folder)) };
 };
 
