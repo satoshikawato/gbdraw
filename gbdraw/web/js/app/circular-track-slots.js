@@ -63,11 +63,11 @@ import {
   axisIndexAfterReconcile,
   axisIndexAfterRowRemoval,
   axisIndexAfterRowsLeave,
+  buildsTrackStackFromSimpleControls,
   clampTrackAxisIndex,
   nextCopyId,
   nextNumberedId,
   overlayAnnotationZ,
-  isUnsavedDefaultStack,
   paramsKeptOnRendererChange,
   placesTrackStack,
   parseOptionalCircularScalar,
@@ -75,6 +75,7 @@ import {
   prependMissingAnnotationTrackSlots,
   setOverlayAnnotationParam,
   trackAddBlockReason,
+  turnedOffTrackStack,
   validateCustomTrackPlan
 } from '../services/track-slot-validation.js';
 import {
@@ -1215,16 +1216,19 @@ export const createCircularTrackSlotEditor = ({
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    drawing.adv.circular_track_slots_enabled = Boolean(enabled);
-    if (!drawing.adv.circular_track_slots_enabled) return;
-    const rows = drawing.adv.circular_track_slots;
-    if (!Array.isArray(rows) || isUnsavedDefaultStack(rows, circularStacksNoSessionSaved(drawing.adv.nt, drawing.form.track_type))) {
-      // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
+    // Turned off, a stack the request drew stays placed (OV-3926).
+    if (!enabled) return void Object.assign(drawing.adv, turnedOffTrackStack(drawing.adv, 'circular', currentAxisIndex(drawing, drawing.adv.circular_track_slots)));
+    const rebuild = buildsTrackStackFromSimpleControls(drawing.adv, 'circular',
+      circularStacksNoSessionSaved(drawing.adv.nt, drawing.form.track_type));
+    drawing.adv.circular_track_slots_enabled = true;
+    if (rebuild) {
+      // A stack nobody arranged is built from the simple controls (OV-3174, OV-3926).
       resetSlotsToPreset(drawing, drawing.form.track_type);
     } else {
       // The stack it turns on holds the managed comparison ring rows and the rows of the Region Annotation sets it does not name (D-35).
       syncConservationSlots(drawing);
-      drawing.adv.circular_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentSlots(drawing, rows),
+      drawing.adv.circular_track_slots_axis_index = prependMissingAnnotationTrackSlots(drawing.adv.circular_track_slots,
+        axisIndexForCurrentSlots(drawing, drawing.adv.circular_track_slots),
         drawing.annotationSets, 'circular', (added) => normalizeCircularTrackSlots(added, drawing.adv.nt, drawing.form.track_type), CIRCULAR_SLOT_SIZE_FIELDS);
     }
   };

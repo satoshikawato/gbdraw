@@ -27,7 +27,7 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
-import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterReconcile, axisIndexAfterRowRemoval, axisIndexAfterRowsLeave, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterReconcile, axisIndexAfterRowRemoval, axisIndexAfterRowsLeave, buildsTrackStackFromSimpleControls, clampTrackAxisIndex, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, turnedOffTrackStack, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -585,13 +585,16 @@ export const createLinearTrackSlotEditor = ({
     const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    drawing.adv.linear_track_slots_enabled = Boolean(enabled);
-    if (!drawing.adv.linear_track_slots_enabled) return;
-    const rows = drawing.adv.linear_track_slots;
-    // A stack no Session saved is built from the simple controls, with the feature density rows (OV-3174).
-    if (isUnsavedDefaultStack(rows, linearStacksNoSessionSaved(drawing.adv.nt, drawing.form.linear_track_layout))) return resetLinearTrackSlotsFromSimpleControls();
+    // Turned off, a stack the request drew stays placed (OV-3926).
+    if (!enabled) return void Object.assign(drawing.adv, turnedOffTrackStack(drawing.adv, 'linear', currentLinearAxisIndex(drawing, drawing.adv.linear_track_slots)));
+    const rebuild = buildsTrackStackFromSimpleControls(drawing.adv, 'linear',
+      linearStacksNoSessionSaved(drawing.adv.nt, drawing.form.linear_track_layout));
+    drawing.adv.linear_track_slots_enabled = true;
+    // A stack nobody arranged is built from the simple controls (OV-3174, OV-3926).
+    if (rebuild) return resetLinearTrackSlotsFromSimpleControls();
     // The stack it turns on holds the rows of the Region Annotation sets it does not name (D-35).
-    drawing.adv.linear_track_slots_axis_index = prependMissingAnnotationTrackSlots(rows, axisIndexForCurrentLinearSlots(drawing, rows),
+    drawing.adv.linear_track_slots_axis_index = prependMissingAnnotationTrackSlots(drawing.adv.linear_track_slots,
+      axisIndexForCurrentLinearSlots(drawing, drawing.adv.linear_track_slots),
       drawing.annotationSets, 'linear', (added) => normalizeLinearTrackSlots(added, drawing.adv.nt, drawing.form.linear_track_layout));
   };
 

@@ -1405,9 +1405,9 @@ export const axisIndexAfterReconcile = (stored, placed, readsAs) => (isUnsetValu
 
 /**
  * Whether a stored stack is one the Web holds when a Session saved none (`unsaved`, the mode's stacks for that case):
- * row for row the same ids, renderers, switches, sides and params as one of them. Use custom stack builds such a stack
- * again from the simple controls, with the feature density rows; it adds no row to any other stored stack, so rows a
- * user deleted or turned off do not come back (as PD-OI-058 decides for Depth rows).
+ * row for row the same ids, renderers, switches, sides and params as one of them. While Use custom stack is off, the
+ * Feature density section's Add and Duplicate put no row into such a stack (PD-OI-126): Use custom stack builds it again
+ * from the simple controls with every track (`buildsTrackStackFromSimpleControls`).
  * @typedef {{ id: string, renderer: string, enabled?: boolean, side?: string | null, params?: Record<string, unknown> }} StoredStackRow
  */
 /**
@@ -1418,6 +1418,40 @@ export const axisIndexAfterReconcile = (stored, placed, readsAs) => (isUnsetValu
 export const isUnsavedDefaultStack = (rows, unsaved) => {
   const key = (/** @type {readonly StoredStackRow[]} */ list) => JSON.stringify(list.map(({ id, renderer, enabled, side, params }) => [id, renderer, enabled, side, params]));
   return unsaved.some((stack) => key(stack) === key(rows));
+};
+
+/**
+ * Whether Use custom stack, turned on, builds the drawing's stack of `stack` again from the simple controls (with the
+ * Depth, GC and feature density rows they draw), so the custom stack draws what the simple layout drew: a stack nobody
+ * placed (`placesTrackStack`; rows that joined it, such as a Depth file's, leave it unplaced, OV-3926), or a stack that is
+ * row for row one no Session saved (`isUnsavedDefaultStack`; a Web before OV-3696 set the Axis index of every stack it
+ * normalized). Any other stack is kept as it is; a stack the request drew stays placed when it is turned off
+ * (`turnedOffTrackStack`). Read before the switch is written. One rule for both modes.
+ * @param {Readonly<Record<string, unknown>>} adv The drawing's settings.
+ * @param {'circular' | 'linear'} stack
+ * @param {readonly (readonly StoredStackRow[])[]} unsaved The mode's stacks no Session saved.
+ * @returns {boolean}
+ */
+export const buildsTrackStackFromSimpleControls = (adv, stack, unsaved) => {
+  const rows = adv[`${stack}_track_slots`];
+  // A list of the drawing's rows, read as the stored rows the comparison reads.
+  return !Array.isArray(rows) || !placesTrackStack(adv, stack) || isUnsavedDefaultStack(/** @type {readonly StoredStackRow[]} */ (rows), unsaved);
+};
+
+/**
+ * The settings that Use custom stack, turned off, writes for the drawing's stack of `stack`: the switch off, and for a
+ * stack the request drew an unset Axis index set to `readsAs`, the index its rows read as (no row changes side), as an
+ * edit of the stack sets it. So that stack stays placed, and Use custom stack turned on again keeps it
+ * (`buildsTrackStackFromSimpleControls`, OV-3926). Writes nothing; the stack editor applies them. One rule for both modes.
+ * @param {Readonly<Record<string, unknown>>} adv The drawing's settings.
+ * @param {'circular' | 'linear'} stack
+ * @param {number | null} readsAs
+ * @returns {Record<string, unknown>}
+ */
+export const turnedOffTrackStack = (adv, stack, readsAs) => {
+  const axisKey = `${stack}_track_slots_axis_index`;
+  const drawn = adv[`${stack}_track_slots_enabled`] === true && isUnsetValue(adv[axisKey]);
+  return { [`${stack}_track_slots_enabled`]: false, ...(drawn ? { [axisKey]: readsAs } : {}) };
 };
 
 /**

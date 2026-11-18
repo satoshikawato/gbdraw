@@ -1338,9 +1338,9 @@ test('a row changed from or to Feature density drops or picks its track, in both
   }
 });
 
-// #1836 review r1 finding 4: Use custom stack builds a stack no Session saved (the mode's stack of an empty list) from
-// the simple controls, with a row per feature density track; it adds no row to a stack the user changed, so density
-// rows the user deleted do not come back (as PD-OI-058 decides for Depth rows).
+// #1836 review r1 finding 4: Use custom stack builds a stack nobody placed (here the mode's stack of an empty list) from
+// the simple controls, with a row per feature density track; it adds no row to a stack the user changed (an edit placed
+// it), so density rows the user deleted do not come back (as PD-OI-058 decides for Depth rows).
 test('Use custom stack adds feature density rows only to the stack no Session saved, in both modes', () => {
   for (const [mode, open] of Object.entries(MODES)) {
     const row = mode === 'circular' ? circularRow : linearRow;
@@ -1468,5 +1468,78 @@ for (const mode of ['circular', 'linear']) {
     assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], 1);
     assert.equal(ids.indexOf('features'), 1, `${mode}: the features row keeps the Axis`);
     assert.equal(opened.slots()[1].side, features().side);
+  });
+}
+
+// OV-3926: Use custom stack builds a stack nobody placed (`placesTrackStack` false) from the simple controls, so the
+// custom stack draws what the simple layout drew, also after a Depth file added its row to the stack: the features row
+// where the Track layout draws it (Linear), the GC rows the simple controls draw, and a row per feature density track
+// (here one added before the Depth file, when the stack still was a new drawing's). Its rows, order and sides are those
+// Reset builds. A stack an edit placed keeps its rows and sides. In both modes.
+const PRESETS = { circular: ['tuckin', 'middle', 'spreadout'], linear: ['above', 'middle', 'below'] };
+const presetOf = (mode, preset) => (mode === 'circular' ? { track_type: preset } : { linear_track_layout: preset });
+const addDepthFile = (opened, mode) => {
+  const drawing = opened.state.activeDrawing();
+  if (mode === 'circular') opened.editor.changeCircularDepthSources(drawing, () => { drawing.files.c_depth = [depthFile]; });
+  else opened.editor.changeLinearDepthSources(drawing, () => { opened.state.linearSeqs[0].depth = [depthFile]; });
+};
+const stackShape = (opened, mode) => ({
+  axis: opened.state.activeDrawing().adv[`${mode}_track_slots_axis_index`],
+  rows: opened.slots().map(({ id, renderer, enabled, side, params }) => [id, renderer, enabled, side ?? null, params?.lane_direction ?? null])
+});
+/** A new drawing's stack in `preset`, Use custom stack off, with a feature density track and then a Depth file. */
+const unplacedWithDepth = (mode, preset) => {
+  const opened = MODES[mode](createDefaultAdv(mode)[`${mode}_track_slots`]);
+  const drawing = opened.state.activeDrawing();
+  Object.assign(drawing.form, presetOf(mode, preset));
+  drawing.adv[`${mode}_track_slots_enabled`] = false;
+  drawing.adv[`${mode}_track_slots_axis_index`] = null;
+  drawing.adv.feature_density_tracks = [{ id: 'genes' }];
+  addDepthFile(opened, mode);
+  return opened;
+};
+for (const mode of ['circular', 'linear']) {
+  for (const preset of PRESETS[mode]) {
+    test(`${mode} ${preset}: Use custom stack builds a stack nobody placed from the simple controls, with its Depth row (OV-3926)`, () => {
+      const opened = unplacedWithDepth(mode, preset);
+      assert.equal(opened.state.activeDrawing().adv[`${mode}_track_slots_axis_index`], null, 'the Depth file places no stack');
+      assert.equal(opened.slots().some(({ renderer }) => renderer === 'depth'), true, 'the Depth file adds its row');
+      opened.turnOn(true);
+      const turnedOn = stackShape(opened, mode);
+      const renderers = turnedOn.rows.map(([, renderer]) => renderer);
+      if (mode === 'linear') {
+        const features = turnedOn.rows.find(([, renderer]) => renderer === 'features');
+        assert.equal(features[3], preset === 'middle' ? 'overlay' : preset, 'the features row is where the Track layout draws it');
+        assert.deepEqual(renderers.filter((renderer) => renderer.startsWith('dinucleotide')), ['dinucleotide_content', 'dinucleotide_skew'],
+          'the GC rows Show GC content and skew draw');
+      }
+      assert.equal(renderers.includes('depth'), true, 'the Depth row stays');
+      assert.equal(renderers.includes('feature_density'), true, 'the feature density track the simple stack drew');
+      opened.reset();
+      assert.deepEqual(turnedOn, stackShape(opened, mode), 'the stack Reset builds from the simple controls');
+    });
+  }
+  test(`${mode}: Use custom stack keeps a placed stack as it is (OV-3926)`, () => {
+    const opened = unplacedWithDepth(mode, PRESETS[mode][0]);
+    opened.duplicate(0);
+    opened.turnOn(false);
+    const placed = stackShape(opened, mode);
+    assert.notEqual(placed.axis, null, 'the Duplicate placed the stack');
+    opened.turnOn(true);
+    assert.deepEqual(stackShape(opened, mode), placed);
+  });
+  // A stack the request drew with an unset Axis index (a Load keeps it unset) holds the user's rows; turned off, it
+  // stays placed, so turned on again it keeps them instead of being built from the simple controls.
+  test(`${mode}: Use custom stack off and on keeps a drawn stack whose Axis index is unset (OV-3926)`, () => {
+    const opened = MODES[mode](ROWS[mode]());
+    const drawing = opened.state.activeDrawing();
+    drawing.adv[`${mode}_track_slots_axis_index`] = null;
+    const drawn = stackShape(opened, mode);
+    opened.turnOn(false);
+    // Circular: the features row lies outside, so the Axis follows it; Linear: the features row is on the Axis.
+    const readsAs = { circular: 1, linear: 0 }[mode];
+    assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], readsAs, 'turned off, the stack keeps the index its rows read as');
+    opened.turnOn(true);
+    assert.deepEqual(stackShape(opened, mode).rows, drawn.rows);
   });
 }
