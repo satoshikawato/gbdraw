@@ -113,8 +113,10 @@ def test_a_join_over_the_origin_reads_one_anchor_and_ends_where_its_strand_does(
     feature = features["ends"]
     assert feature.joins_over_origin
     if start is None:
-        start_bp, end_bp, _, span, _ = _candidate_segment(feature, _LENGTH)
+        start_bp, end_bp, _, span, label_strand = _candidate_segment(feature, _LENGTH)
         assert (start_bp, end_bp, span) == (2700, 300, 600)
+        # OV-3868: the joined block's label reads the strand it is drawn on (dev read "undefined").
+        assert label_strand == ("positive" if strand == 1 else "negative")
         # The arrowhead is at the 3' end over the origin: base 300 on the plus strand, base 2701 on the minus.
         last = next(part for part in feature.location if part.is_last)
         assert (last.start, last.end) == ((0, 300) if strand == 1 else (2700, 3000))

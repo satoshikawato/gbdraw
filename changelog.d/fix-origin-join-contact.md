@@ -17,4 +17,7 @@
   ends of the record is drawn as written, with its connector line, since a
   linear record has no origin to join over; and two parts on different strands
   at both ends of a circular record are drawn as two blocks, each with its own
-  strand, in the whole view as from a display start.
+  strand, in the whole view as from a display start. From a display start, the
+  label of a two-part join that covers both ends of a circular record with
+  parts that touch or overlap each other stands on the middle of its longer
+  part.

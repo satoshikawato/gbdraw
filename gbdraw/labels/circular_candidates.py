@@ -26,7 +26,8 @@ def _candidate_segment(feature: FeatureObject, total_length: int) -> tuple[float
         end = float(left.end)
         span = (float(total_length) - start) + end
         middle = (start + (0.5 * span)) % float(total_length)
-        return start, end, middle, span, get_strand(right.strand)
+        # The location's parts carry the strand by name already (``Strand``).
+        return start, end, middle, span, right.strand
 
     best: tuple[float, float, float, float, str] | None = None
     for coordinate in feature.coordinates:
