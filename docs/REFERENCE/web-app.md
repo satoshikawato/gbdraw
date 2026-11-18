@@ -2276,9 +2276,11 @@ per-feature edits become `--feature_placement_table` and
 makes the recipe unavailable. A protein comparison (LOSATP) is written as
 `--losat losatp` with its `--losatp_mode` and each setting that differs from the
 CLI default, so the command runs the search again. For Pairwise, the compared
-record pairs become `source=losat` rows of the comparisons table. A BLAST table
-beside a protein comparison makes the recipe unavailable, because `gbdraw linear`
-does not draw both in one figure.
+record pairs become `source=losat` rows of the comparisons table, after a
+`source=table` row for each BLAST table beside them. A BLAST table beside a
+protein comparison that compares every adjacent pair, or one in Similarity groups
+or Collinear blocks mode, makes the recipe unavailable, because the command lists
+the record pairs of a protein comparison beside BLAST tables.
 See [Replay boundaries](session-and-request-compatibility.md#replay-boundaries)
 for required files and the distinction from saving subsequent editor changes.
 Rotation may split one logical comparison match into several SVG paths. Popups
