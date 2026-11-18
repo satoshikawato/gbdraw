@@ -318,6 +318,20 @@ test('a failed Apply and regenerate states its reason once', async () => {
   assert.doesNotMatch(errorText(transient.workflow.draft.status), /Worker stopped/);
 });
 
+// Carried (a): Apply now refused while a run holds it (a Generate) states the run's reason, as Apply on Generate does,
+// not "Record rotation failed.".
+test('Apply now refused while a run holds it states the run\'s reason', async () => {
+  const harness = createHarness();
+  harness.workflow.open({ feature });
+  harness.setApplyOutcome({ status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' });
+  assert.equal((await harness.workflow.apply()).status, 'busy');
+  const { draft } = harness.workflow;
+  assert.equal(errorText(draft.status), 'Generating diagram. Retry after generation finishes.');
+  assert.equal(draft.statusKind, 'error');
+  assert.equal(draft.pending, false);
+  assert.equal(draft.canApply, true, 'Apply is offered again once the run ends');
+});
+
 test('Apply on Generate stages the resolved transform with the same validation and no candidate', async () => {
   const harness = createHarness();
   harness.workflow.open({ feature });

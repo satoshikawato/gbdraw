@@ -24,6 +24,7 @@ const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { SOURCE_LOCALE, setUiLocale, t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { templateBinding } = await import('./helpers/template-binding.mjs');
+const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
 const reviewView = await import('../../gbdraw/web/js/services/alignment-review-view.js');
 const { writeCanonicalRecordReverseComplement } = await import('../../gbdraw/web/js/services/record-display-model.js');
 const { CompositionMetadataError } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
@@ -61,7 +62,11 @@ const renderRequest = {
 const state = () => {
   // The shown Linear drawing's rows.
   const linearSeqs = ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false, windows: [] }));
+  // What `sessionOperationAvailability('not-during-run')` returns: a test sets it while a run holds the owner.
+  const runBlock = ref(null);
   return {
+    runBlock,
+    sessionOperationAvailability: (operation = 'mutation') => (operation === 'not-during-run' ? runBlock.value : null),
     ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
     activeDrawing: () => ({ mode: 'linear', recordsOff: [], linearSeqs }),
     activeDrawingId: ref('linear-1'),
@@ -167,6 +172,8 @@ const create = ({
   let svg = null;
   const bytes=Buffer.from('fixture source');
   let canonical={renderRequest:structuredClone(renderRequest),resources:{source:{name:'source.gbk',kind:'genbank',encoding:'base64',data:bytes.toString('base64'),size:bytes.length}}};
+  // Counts replacements of the committed Session, as services/config.js does, so a computed follows them.
+  const committedRevision = ref(0);
   const projectCommittedAlignment=({committed,plan,translations,orientations})=>{
     const next={...committed,renderRequest:structuredClone(committed.renderRequest)};
     next.renderRequest.layout={recordTranslations:structuredClone(translations),similarityAlignment:structuredClone(plan??null)};
@@ -212,7 +219,7 @@ const create = ({
     selectedOrthogroupDetail: { get value() {
       return { group: currentGroup, id: currentGroup.id, members: currentGroup.members };
     } },
-    getCommittedRequest:()=>getCommittedRequest?.()||canonical.renderRequest,
+    getCommittedRequest:()=>{ void committedRevision.value; return getCommittedRequest?.()||canonical.renderRequest; },
     getCommittedSession:()=>({...canonical,renderRequest:getCommittedRequest?.()||canonical.renderRequest}),
     projectCommittedAlignment,
     getCurrentSvg: () => svg,
@@ -267,7 +274,10 @@ const create = ({
   return { actions, state: controllerState, helperCalls, generationCalls, currentGroup, history,
     enrichCalls: () => enrichCalls,
     // A Session load or a Generate of the same files commits a Session with its own resources.
-    replaceCommittedResources: () => { canonical = { ...canonical, resources: structuredClone(canonical.resources) }; },
+    replaceCommittedResources: () => {
+      canonical = { ...canonical, resources: structuredClone(canonical.resources) };
+      committedRevision.value += 1;
+    },
     showResultSvg: (value) => { svg = value; } };
 };
 const startReview = (fixture, selected = reference) => fixture.actions.startFromPopup({
@@ -332,7 +342,7 @@ test('normal Align applies only-usable and unusable targets with one helper and 
   assert.equal(fixture.actions.summary.value, null);
   assert.equal(fixture.state.results.value, priorResult);
   assert.equal(fixture.helperCalls.length, 1);
-  assert.deepEqual(await startAlign(fixture), { status: 'busy' });
+  assert.deepEqual(await startAlign(fixture), { status: 'busy', reason: 'Applying the alignment plan.' });
   applying.resolve({ status: 'ok' });
   assert.deepEqual(await operation, { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 1);
@@ -496,7 +506,7 @@ test('busy is synchronous, duplicate starts are ignored, and exact popup referen
   const operation = startReview(fixture);
   assert.equal(fixture.actions.status.value, 'resolving');
   assert.equal(fixture.actions.busy.value, true);
-  assert.deepEqual(await startReview(fixture, otherReference), { status: 'busy' });
+  assert.deepEqual(await startReview(fixture, otherReference), { status: 'busy', reason: 'Resolving the current alignment.' });
   assert.equal(fixture.helperCalls.length, 1);
   assert.deepEqual(fixture.helperCalls[0].payload.request.reference,
     anchor('a', 'clicked', 4));
@@ -606,8 +616,10 @@ test('duplicate Apply while validation is pending starts one batch', async () =>
   const operation = fixture.actions.applyDraft();
   assert.equal(fixture.actions.status.value, 'applying');
   assert.equal(fixture.actions.busy.value, true);
-  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'rejected' });
-  assert.deepEqual(await startReview(fixture), { status: 'busy' });
+  // The work in flight refuses both, with its reason.
+  const applyingWork = { status: 'busy', reason: 'Applying the alignment plan.' };
+  assert.deepEqual(await fixture.actions.applyDraft(), applyingWork);
+  assert.deepEqual(await startReview(fixture), applyingWork);
   pending.resolve();
   assert.deepEqual(await operation, { status: 'ok' });
   assert.equal(fixture.helperCalls.length, 2);
@@ -1225,7 +1237,6 @@ test('a failed repair run keeps the failure\'s normalized parts in the repair no
   assert.ok(Array.isArray(reason), 'the note keeps error text parts');
   assert.equal(JSON.stringify(reason).includes('PRIVATE'), false, 'no raw exception text');
   assert.equal(fixture.actions.notice.value.includes('PRIVATE'), false);
-  const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
   const english = errorText(reason);
   assert.match(english, /^The exact reference is no longer available\. /);
   await setUiLocale('ja', async () => ({ default: {
@@ -1712,6 +1723,48 @@ test('a Generate of another drawing whose plan needs repair keeps the open revie
   assert.equal(fixture.actions.draft.value, review, 'a stale reference of the shown drawing keeps it too');
   assert.equal(fixture.actions.status.value, 'reviewing');
   assert.equal(fixture.actions.repair.value.kind, 'reference');
+});
+
+const GENERATING = { status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' };
+
+// Carried (c): a run refuses Align and Review before the resolve, so an ambiguous group opens no review either; the
+// drawer's controls are disabled with the run's reason (carried (b)).
+test('a run refuses Align and Review before the resolve and the drawer states its reason', async () => {
+  const fixture = create({ members: [reference, targetA, targetB, targetC],
+    helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
+  fixture.state.runBlock.value = GENERATING;
+  assert.equal(fixture.actions.drawer.value.disabledReason, GENERATING.reason);
+  assert.deepEqual(await startReview(fixture), GENERATING);
+  assert.deepEqual(await startAlign(fixture), GENERATING);
+  assert.equal(fixture.helperCalls.length, 0, 'no resolve runs');
+  assert.equal(fixture.actions.dialogOpen.value, false);
+  assert.equal(fixture.actions.status.value, 'idle');
+  assert.equal(fixture.state.errorLog.value, null, 'a refusal is no failure');
+  fixture.state.runBlock.value = null;
+  assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
+});
+
+// OV-2447: a review opened before a Generate stays open; while the run holds it and after the Generate commits
+// another Result, its Apply is disabled with the reason, and an Apply that still runs fails with a recognized code.
+test('a review across a Generate disables Apply with the reason and a stale Apply fails as ALIGNMENT_STALE', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  assert.equal(fixture.actions.canApply.value, true);
+  fixture.state.runBlock.value = GENERATING;
+  assert.equal(fixture.actions.canApply.value, false);
+  assert.equal(fixture.actions.applyDisabledReason.value, GENERATING.reason);
+  assert.deepEqual(await fixture.actions.applyDraft(), GENERATING);
+  assert.equal(fixture.helperCalls.length, 1, 'a refused Apply runs no resolve');
+  fixture.replaceCommittedResources();
+  fixture.state.runBlock.value = null;
+  assert.equal(fixture.actions.dialogOpen.value, true, 'the review stays open');
+  assert.equal(fixture.actions.canApply.value, false);
+  assert.equal(fixture.actions.applyDisabledReason.value,
+    'The diagram changed after this review opened. Start alignment again.');
+  assert.deepEqual(await fixture.actions.applyDraft(), { status: 'stale' });
+  assert.equal(fixture.state.errorLog.value.code, 'ALIGNMENT_STALE');
+  assert.equal(errorText(fixture.state.errorLog.value.summaryParts),
+    'The diagram changed after this review opened. Start alignment again.');
 });
 
 // D-40 (S2, N1): a switch waits for the alignment work in flight, with the reason the Apply line gives.

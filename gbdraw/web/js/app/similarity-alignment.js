@@ -4,7 +4,9 @@
  * @import { CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalRecordWindow,
  *   CanonicalSimilarityAlignmentPlan } from '../contracts/request.generated.js'
  */
-import { normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import {
+  ALIGNMENT_STALE_TEXT, diagnosticError, normalizeCaughtError, normalizeUserFacingError
+} from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { ErrorTextPart, UserFacingError } from '../utils/error-normalization.js' */
 /** @import { Wording } from '../utils/i18n.js' */
@@ -1224,7 +1226,8 @@ const replacementTranslations = (state, recordKeys) => recordTranslationsFor(
  * (the committed request to Python, R7) and stay `Record<string, any>`.
  * @typedef {object} SimilarityAlignmentActionsOptions
  * @property {Pick<WebState, 'activeDrawing' | 'activeDrawingId' | 'featureCatalog' | 'linearRecordTranslations' | 'mode'
- *   | 'selectedOrthogroupId' | 'similarityAlignmentPlan' | 'similarityAlignmentResetReceipt'>} state
+ *   | 'selectedOrthogroupId' | 'similarityAlignmentPlan' | 'similarityAlignmentResetReceipt'
+ *   | 'sessionOperationAvailability'>} state
  *   the Web state members the alignment actions read and write: the shown drawing's alignment
  * @property {(drawingId: DrawingId, values: { similarityAlignmentPlan: null, similarityAlignmentResetReceipt: null }) => void}
  *   writeArtifactValues writes the artifact slot values of a drawing that is not shown (the History snapshot service's)
@@ -1341,6 +1344,35 @@ const planClearOfDrawing = (state, writeArtifactValues, endWorkOf, clearShownPla
 const alignmentWorkBusy = (status) => {
   if (status === 'resolving') return { status: 'busy', reason: msg('Resolving the current alignment.') };
   if (status === 'applying') return { status: 'busy', reason: msg('Applying the alignment plan.') };
+  return null;
+};
+
+/**
+ * Why Apply of a review cannot run now, or null when it can: the one predicate that Apply's disabled state, its reason
+ * and Apply itself read, in this order. `reason` is the shown text; a review whose drawing is on its way out (a Load's
+ * commit, `awayName` null) has none: it ends in the same task (OV-3618).
+ * @typedef {{ status: 'busy', reason: string, busy: { status: 'busy', reason: string } }
+ *   | { status: 'rejected' | 'stale', reason: string }} ApplyRefusal
+ * @param {{
+ *   blocked: { status: 'busy', reason: string } | null, away: boolean, awayName: () => string | null,
+ *   reviewing: boolean, current: () => boolean, unresolved: number
+ * }} facts the alignment work or run that blocks it (`actionBlock`), whether the review is another drawing's (D-39:
+ *   Apply waits, with the review's choices, until its drawing is shown again), whether a review is open, whether the
+ *   Result it opened on is still the shown one, and how many records still need a choice
+ * @returns {ApplyRefusal | null}
+ */
+const applyRefusalOf = ({ blocked, away, awayName, reviewing, current, unresolved }) => {
+  if (blocked) return { status: 'busy', reason: tm(blocked.reason), busy: blocked };
+  if (away) {
+    const name = awayName();
+    return { status: 'rejected', reason: name === null ? '' : t('Show {name} to apply this alignment.', { name }) };
+  }
+  if (!reviewing) return { status: 'rejected', reason: t('Open an alignment review before applying.') };
+  if (!current()) return { status: 'stale', reason: tm(ALIGNMENT_STALE_TEXT) };
+  if (unresolved > 0) {
+    return { status: 'rejected', reason: tn(unresolved, 'Choose a candidate or Skip for {count} record.',
+      'Choose a candidate or Skip for {count} records.') };
+  }
   return null;
 };
 
@@ -1462,6 +1494,10 @@ export const createSimilarityAlignmentActions = ({
   // endWork, resetAlignment): a stale return leaves the status to the newer work (OV-3619).
   const working = computed(() => alignmentWorkBusy(status.value));
   const busy = computed(() => working.value !== null);
+  // Why no alignment can start or apply now: the work in flight, or a run (a Generate, a Rotate, a Session Save or
+  // Load) that would replace the Result the alignment reads. The one predicate that Align, Review, Apply and Reset
+  // refuse by and whose reason their disabled controls show.
+  const actionBlock = computed(() => working.value || state.sessionOperationAvailability('not-during-run'));
   const error = ref(null);
   const summary = ref(null);
   // A "cleared" notice holds only while no plan is active, so an Undo that
@@ -1539,11 +1575,13 @@ export const createSimilarityAlignmentActions = ({
       && current.resources === artifactStamp.resources
       && current.translations === artifactStamp.translations;
   };
+  // The review's Result is no longer the shown one (a Generate, an Undo, a Load): Apply is disabled with this reason
+  // (`refuseApply`), and an Apply that still reaches the check ends the review with the same words.
   const rejectStaleDraft = () => {
     clearDraft();
     activeBaseline = null;
     status.value = 'idle';
-    publishError(new Error('The diagram, source, crop, or Similarity Group changed. Start alignment again.'));
+    publishError(diagnosticError('ALIGNMENT_STALE', {}, { operation: 'align', stage: 'helper' }));
     return { status: 'stale' };
   };
 
@@ -1810,7 +1848,9 @@ export const createSimilarityAlignmentActions = ({
 
   /** @param {AlignmentStartOptions} options */
   const start = async ({ groupId, reference, source, mode = 'align' }) => {
-    if (busy.value) return { status: 'busy' };
+    // Before the resolve: a run refuses an ambiguous group as it refuses a resolved one.
+    const blocked = actionBlock.value;
+    if (blocked) return blocked;
     const id = String(groupId || '').trim();
     if (!reference) {
       publishError(new Error(
@@ -1882,11 +1922,10 @@ export const createSimilarityAlignmentActions = ({
   };
 
   const applyDraft = async () => {
-    // D-39: over another drawing Apply waits, with the review's choices, until its drawing is shown again.
-    if (!activeRequest || status.value !== 'reviewing' || unresolvedCount.value > 0 || !workIsShown()) {
-      return { status: 'rejected' };
-    }
-    if (!artifactIsCurrent()) return rejectStaleDraft();
+    const refusal = refuseApply();
+    if (refusal?.status === 'stale') return rejectStaleDraft();
+    // `refuseApply` refuses a review without its request; the second test narrows the type.
+    if (refusal || !activeRequest) return refusal?.status === 'busy' ? refusal.busy : { status: 'rejected' };
     const expectedActionId = actionId;
     const choices = rowChoices();
     const request = deepFreeze({ ...cloneJson(activeRequest), choices });
@@ -2019,7 +2058,9 @@ export const createSimilarityAlignmentActions = ({
 
   /** @param {ReturnType<typeof referenceOptionsOf>} options */
   const disabledReasonOf = (options) => {
-    if (busy.value) return t('Wait for the current alignment operation to finish.');
+    // The alignment work in flight, in the drawer's words, or the run's reason.
+    const blocked = actionBlock.value;
+    if (blocked) return busy.value ? t('Wait for the current alignment operation to finish.') : tm(blocked.reason);
     if (!options.length) return t('No exact reference features are available for this group.');
     if (!pickedReference(options)) {
       return t('Select an exact reference record and feature before aligning.');
@@ -2054,7 +2095,8 @@ export const createSimilarityAlignmentActions = ({
     if (!state.similarityAlignmentPlan.value) return {status:'noop'};
     if (!['positions', 'positions-and-directions'].includes(scope)) return {status:'rejected'};
     if (scope === 'positions-and-directions' && resetPreview.value.disabledReason) return {status:'rejected'};
-    if (busy.value) return {status:'busy'};
+    const blocked = actionBlock.value;
+    if (blocked) return blocked;
     const expectedActionId = ++actionId;
     status.value = 'applying';
     let promise;
@@ -2308,17 +2350,12 @@ export const createSimilarityAlignmentActions = ({
 
   const unresolvedCount = computed(() => recordsNeedingChoice(draft.value?.rows || []).length);
 
-  const applyDisabledReason = computed(() => {
-    if (working.value) return tm(working.value.reason);
-    // A drawing on its way out (a Load's commit) has no name: its review ends in the same task (OV-3618).
-    const name = draft.value && !workIsShown() ? drawingNameOf(workDrawingId()) : null;
-    if (name !== null) return t('Show {name} to apply this alignment.', { name });
-    if (unresolvedCount.value > 0) {
-      return tn(unresolvedCount.value, 'Choose a candidate or Skip for {count} record.', 'Choose a candidate or Skip for {count} records.');
-    }
-    if (status.value !== 'reviewing') return t('Open an alignment review before applying.');
-    return '';
-  });
+  const refuseApply = () => applyRefusalOf({ blocked: actionBlock.value, away: Boolean(draft.value) && !workIsShown(),
+    awayName: () => drawingNameOf(workDrawingId()), reviewing: status.value === 'reviewing' && Boolean(activeRequest),
+    current: artifactIsCurrent, unresolved: unresolvedCount.value });
+  // What the review shows; Apply itself asks again (`refuseApply`), as a source of the stamp may change unobserved.
+  const applyRefusal = computed(refuseApply);
+  const applyDisabledReason = computed(() => applyRefusal.value?.reason ?? '');
 
   return {
     draft,
@@ -2337,7 +2374,7 @@ export const createSimilarityAlignmentActions = ({
     reviewIsShown: workIsShown,
     unresolvedCount,
     applyDisabledReason,
-    canApply: computed(() => status.value === 'reviewing' && unresolvedCount.value === 0 && workIsShown()),
+    canApply: computed(() => applyRefusal.value === null),
     validateBeforeGenerate,
     resetAlignment,
     clearForMutation: planClearOfDrawing(state, writeArtifactValues, endWorkOf, clearCommittedPlan),

@@ -269,6 +269,10 @@ export const RULE_INPUT_CHANGE_WORDS = msg("colors, color rules, the Legend, or 
 // The code of an engine that ran out of memory (its DEFINITIONS entry below): the service that owns the Worker
 // replaces that engine when a reply carries it.
 export const OUT_OF_MEMORY_CODE = 'OUT_OF_MEMORY';
+// A Review alignment whose Result is no longer the shown one (a Generate, an Undo or a Load committed another): its
+// Apply is disabled with this sentence, and an Apply that still reaches the check fails with ALIGNMENT_STALE, whose
+// message it is (OV-2447).
+export const ALIGNMENT_STALE_TEXT = msg('The diagram changed after this review opened. Start alignment again.');
 /**
  * Per code: the message, the actions offered, and the correction guidance when the context gives no reason.
  * @type {Readonly<Record<string, readonly [string, readonly string[], string?]>>}
@@ -336,6 +340,7 @@ const DEFINITIONS = Object.freeze({
   // The same request fails the same way until the setting or the mode changes.
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
   // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
+  ALIGNMENT_STALE: [ALIGNMENT_STALE_TEXT, ['edit-input']],
   ALIGNMENT_RESET_EVIDENCE: ['What Reset alignment would restore no longer matches the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
   REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],

@@ -1114,6 +1114,18 @@ export const FileUploader = {
  * The lines a preview notice shows at most, its "and {count} more" line included (OV-3495: one LOSATP run of a
  * record against 60 contigs warned of 56 record pairs without a match, and the notice pushed the figure out of view).
  */
+// Why a control that waits for a run (a Generate, a Rotate or Align run, a Session Save or Load) is disabled: the
+// reason of the one owner of that availability, `sessionOperationAvailability('not-during-run')`, which the control's
+// `:disabled` reads too. The control names `id` in its aria-describedby; nothing shows while no run blocks it.
+export const RunBlockedReason = {
+  props: { id: { type: String, required: true } },
+  setup() {
+    const reason = computed(() => tm(state.sessionOperationAvailability('not-during-run')?.reason ?? ''));
+    return { reason };
+  },
+  template: `<p v-if="reason" :id="id" data-run-blocked-reason class="ui-hint">{{ reason }}</p>`
+};
+
 export const NOTICE_LINE_LIMIT = 4;
 
 // The lines of a preview notice (OV-3495, OV-3562): the input summary's warnings, the skipped annotation rows, the

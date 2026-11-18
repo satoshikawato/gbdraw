@@ -386,6 +386,20 @@ const readFailureParts = (outcome) => (outcome?.status === 'error' ? failurePart
 const unlessShown = (failure, fallback, reason) => (
   failure.length && renderErrorText(failure) !== renderErrorText(reason) ? failure : fallback
 );
+// The status line after Apply now: applied, canceled, refused before it ran (a Generate, a Session Save or Load: its
+// reason, as Apply on Generate words it), or failed, unless the reason line already states the failure.
+/**
+ * @param {{ status?: unknown, reason?: string } | null | undefined} outcome
+ * @param {ErrorTextPart[]} failure @param {ErrorTextPart[]} reason The reason line.
+ * @returns {{ status: ErrorTextPart[], statusKind: 'success' | 'idle' | 'error' }}
+ */
+const appliedStatus = (outcome, failure, reason) => {
+  const kept = { text: msg('The previous Result was kept.') };
+  if (outcome?.status === 'ok') return { status: keyParts(msg('Record rotation applied and regenerated.')), statusKind: 'success' };
+  if (outcome?.status === 'canceled') return { status: [{ text: msg('Record rotation canceled.') }, kept], statusKind: 'idle' };
+  if (outcome?.status === 'busy') return { status: keyParts(outcome.reason || ''), statusKind: 'error' };
+  return { status: [...unlessShown(failure, keyParts(msg('Record rotation failed.')), reason), kept], statusKind: 'error' };
+};
 // "Pending for Generate: <start sentence>", the staged start and orientation (PD-OI-085), or null without one.
 /**
  * @param {{ startCoordinate: number, reverseComplement: boolean } | null} pending
@@ -652,17 +666,7 @@ export const createFeatureRecordRotationWorkflow = ({
     if (generation !== draftGeneration) return outcome;
     draft.pending = false;
     recompute();
-    const kept = { text: msg('The previous Result was kept.') };
-    if (outcome?.status === 'ok') {
-      draft.status = keyParts(msg('Record rotation applied and regenerated.'));
-      draft.statusKind = 'success';
-    } else if (outcome?.status === 'canceled') {
-      draft.status = [{ text: msg('Record rotation canceled.') }, kept];
-      draft.statusKind = 'idle';
-    } else {
-      draft.status = [...unlessShown(failure, keyParts(msg('Record rotation failed.')), draft.disabledReason), kept];
-      draft.statusKind = 'error';
-    }
+    Object.assign(draft, appliedStatus(outcome, failure, draft.disabledReason));
     return outcome;
   };
 
