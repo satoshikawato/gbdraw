@@ -1,0 +1,18 @@
+{
+  "purpose": "Positive fixture of a Session 27, the oldest version the current Web and Python readers accept: a Circular diagram of one GenBank record with its Result, written by the Web app of the last main commit whose writer wrote Session 27 (no Python writer of Session 27 exists). tests/web/session-fixture-round-trip.test.mjs loads it.",
+  "sourceCommit": "2de4578a61335cd32a1e96dbe9cd88deea8591c0 (PR #256, 2026-06-22)",
+  "history": "origin/main first-parent: Session 27 from f265bdd7d (#242, 2026-06-15) until cf73c49e3 (#257, 2026-06-24, Session 28); only gbdraw/web/js/services/config.js wrote it (SESSION_VERSION = 27); no release tag holds Session 27 (0.12.0 writes 29)",
+  "route": "Served the extracted tree; opened /gbdraw/web/index.html in headless Chromium; waited for Pyodide ready; mode Circular (default), GenBank input type; set the GenBank file on the first uploader input; clicked 'Generate Diagram'; waited for processing to end and the SVG; clicked 'Save Session' (prompt answered 'v27 mito circular'); captured the download.",
+  "command": [
+    "git archive 2de4578a61335cd32a1e96dbe9cd88deea8591c0 | tar -x -C v27-src",
+    "cd v27-src && PYTHONPATH=$PWD python tools/prepare_browser_wheel.py (built gbdraw-0.12.0-py3-none-any.whl)",
+    "cd v27-src && python -m http.server <port> --bind 127.0.0.1",
+    "a Python Playwright script (headless Chromium, one worker) doing the route above; the download was plain JSON, written again with gzip -n -9 into this file"
+  ],
+  "inputs": {
+    "tests/fixtures/sessions/cli-web-mito.gb": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
+  },
+  "decompressedSha256": "3c613551b4dbf11078c4ceb64fa412b9dd8a035cd4df2ceca947b0ccc5273ac0",
+  "compression": "gzip -n -9",
+  "sessionVersion": 27
+}

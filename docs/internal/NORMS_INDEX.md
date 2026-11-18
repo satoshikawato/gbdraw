@@ -354,6 +354,7 @@ under "Cited ids without a record".
   - `tests/web/preview-fit.playwright.spec.js`
   - `tests/web/record-display-options.test.mjs`
   - `tests/web/record-draw-selection.playwright.spec.js`
+  - `tests/web/session-fixture-round-trip.test.mjs`
 
 - [PD-OI-045](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-045-exclusive-semantic-session-operations-with-responsive-browsing): Exclusive semantic Session operations with responsive browsing. ACCEPTED, concern `web.session-operation-consistency`, scenario revision 1.
   - `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`
@@ -546,6 +547,7 @@ under "Cited ids without a record".
 - [PD-OI-079](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-079-generate-before-saving-a-legacy-session): Generate before saving a legacy Session. ACCEPTED, concern `web.session.legacy-save`, scenario revision 1.
   - `tests/web/drawing-list.test.mjs`
   - `tests/web/per-mode-results.playwright.spec.js`
+  - `tests/web/session-fixture-round-trip.test.mjs`
   - `tests/web/stored-request-read.test.mjs`
 
 - [PD-OI-080](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-080-dinucleotide-alphabet): Dinucleotide alphabet. ACCEPTED, concern `options.dinucleotide-alphabet`, scenario revision 1.

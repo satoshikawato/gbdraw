@@ -1,0 +1,14 @@
+{
+  "purpose": "Positive fixture of a Session 28, which the current Web and Python readers accept (Load refuses only versions before 27): a Circular diagram of one GenBank record with its Result, written by the gbdraw command of the first main commit whose writer wrote Session 28. tests/web/session-fixture-round-trip.test.mjs loads it.",
+  "sourceCommit": "cf73c49e3f06e8b666b342482f659b2d7fa986ea (Merge pull request #257, 2026-06-24 10:21 +0900)",
+  "history": "origin/main first-parent: Session 28 from cf73c49e3 (#257, gbdraw/session_io.py CURRENT_SESSION_VERSION = 28, gbdraw/web/js/services/config.js SESSION_VERSION = 28) until f8b240042 (#258, 2026-06-24 14:48 +0900, Session 29); no release tag holds Session 28 (0.12.0 and 0.12.1 write 29)",
+  "route": "the gbdraw circular command of that commit with --session_output, run from an archive of the whole tree at that commit",
+  "command": "git archive cf73c49e3 | tar -x -C v28-src; cp tests/fixtures/sessions/cli-web-mito.gb mito.gb; PYTHONPATH=v28-src python -c \"import sys; from gbdraw.cli import main; sys.argv=['gbdraw','circular','--gbk','mito.gb','-o','mito','--session_output','mito.v28.json']; main()\"; gzip -n -9 -c mito.v28.json > this file",
+  "inputs": {
+    "tests/fixtures/sessions/cli-web-mito.gb": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
+  },
+  "values": "title mito, ui.mode circular, one Result mito.svg, files.c_gb mito.gb, cliInvocation args --gbk mito.gb -o mito",
+  "decompressedSha256": "4711475c6744b289d3e34deac89c40e5d696bb43bc5bf1f4f999030c4ab37d1c",
+  "compression": "gzip -n -9",
+  "sessionVersion": 28
+}
