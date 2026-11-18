@@ -22,6 +22,9 @@ import {
   REGION_LABEL_FRONT_SELECTOR, TICK_GROUPS, trackGroupSelector
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
+import {
+  LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
+} from '../../services/preview-affordances.js';
 
 /**
  * A feature row of the displayed Result's catalog or of the extracted list: the
@@ -62,7 +65,7 @@ export const EXCLUDED_GROUP_SELECTOR = [
   trackGroupSelector(DEPTH_GROUPS),
   trackGroupSelector(DINUCLEOTIDE_CONTENT_GROUPS)
 ].join(', ');
-const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
+const EDITABLE_LABEL_SELECTOR = `text[${LABEL_EDITABLE_ATTRIBUTE}="true"]`;
 const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';
 const LABEL_BINDING_SCHEMA = '1';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
@@ -613,20 +616,42 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
   return assignments;
 };
 
+/**
+ * The elements of one SVG bound to each feature, in document order, by the
+ * feature id they carry (trimmed): read once, for every label of a projection
+ * (OV-2438).
+ * @typedef {ReadonlyMap<string, readonly Element[]>} LabelPartsIndex
+ */
+/** @param {Element} svg @returns {LabelPartsIndex} */
+const indexLabelParts = (svg) => {
+  /** @type {Map<string, Element[]>} */
+  const index = new Map();
+  svg.querySelectorAll(`[${LABEL_FEATURE_ID_ATTRIBUTE}]`).forEach((element) => {
+    const featureId = String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+    const parts = index.get(featureId);
+    if (parts) parts.push(element);
+    else index.set(featureId, [element]);
+  });
+  return index;
+};
+
 // The parts a label is drawn with: every element bound to its feature, when
-// the label carries the current binding schema.
-/** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl */
-const resolveCompleteLabelVisualUnit = (svg, textEl) => {
+// the label carries the current binding schema. `index` is the SVG's parts
+// index when the caller resolves many labels of it.
+/**
+ * @param {Element | null | undefined} svg
+ * @param {Element | null | undefined} textEl
+ * @param {LabelPartsIndex | null} [index]
+ * @returns {{ featureId: string, parts: readonly Element[] } | null}
+ */
+const resolveCompleteLabelVisualUnit = (svg, textEl, index = null) => {
   if (!svg || !textEl) return null;
   const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
   if (!featureId) return null;
   if (textEl.getAttribute(LABEL_BINDING_SCHEMA_ATTRIBUTE) !== LABEL_BINDING_SCHEMA) {
     return null;
   }
-  const parts = Array.from(svg.querySelectorAll(`[${LABEL_FEATURE_ID_ATTRIBUTE}]`))
-    .filter((element) => (
-      String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim() === featureId
-    ));
+  const parts = (index || indexLabelParts(svg)).get(featureId) || [];
   if (!parts.includes(textEl)) return null;
   return { featureId, parts };
 };
@@ -641,7 +666,7 @@ const labelFeatureAssignments = (svg, labelElements, mode) => assignFeatureIdsTo
 // text the binder recorded on the label, else the text it shows.
 /** @param {{ labelSourceText?: string | null } | null | undefined} row @param {Element} element */
 const labelSourceTextOf = (row, element) => row?.labelSourceText
-  ?? element.getAttribute('data-label-source-text') ?? getLabelText(element);
+  ?? element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? getLabelText(element);
 // A label's feature row: the drawing's row of the feature's identity (R2).
 /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
 const rowOf = (drawing, feature) => {
@@ -898,7 +923,7 @@ export const createFeatureLabelActions = ({
       const sourceText = labelSourceTextOf(labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed), textEl);
       if (getLabelText(textEl) === sourceText) return;
       setLabelText(textEl, sourceText);
-      textEl.setAttribute('data-label-source-text', sourceText);
+      textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
       changed = true;
     });
     return changed;
@@ -915,7 +940,7 @@ export const createFeatureLabelActions = ({
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const row = labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
       const sourceText = labelSourceTextOf(row, textEl);
-      textEl.setAttribute('data-label-source-text', sourceText);
+      textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
       // The source text is free text, so the bulk table is read by own key.
       const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
       const desiredText = row?.labelText ?? bulkText ?? sourceText;
@@ -926,9 +951,14 @@ export const createFeatureLabelActions = ({
     return changed;
   };
 
-  /** @param {Element | null | undefined} svg @param {Element | null | undefined} textEl @param {unknown} modeRaw */
-  const applyLabelVisibilityPreview = (svg, textEl, modeRaw) => {
-    const visualUnit = resolveCompleteLabelVisualUnit(svg, textEl);
+  /**
+   * @param {Element | null | undefined} svg
+   * @param {Element | null | undefined} textEl
+   * @param {unknown} modeRaw
+   * @param {LabelPartsIndex | null} [index] The SVG's parts index, for a projection of many labels.
+   */
+  const applyLabelVisibilityPreview = (svg, textEl, modeRaw, index = null) => {
+    const visualUnit = resolveCompleteLabelVisualUnit(svg, textEl, index);
     if (!visualUnit) return { available: false, changed: false };
     const visibilityMode = normalizeVisibilityMode(modeRaw);
     let changed = false;
@@ -971,6 +1001,7 @@ export const createFeatureLabelActions = ({
     const context = drawnContext(drawing);
     /** @type {Set<string>} */
     const labelled = new Set();
+    const index = indexLabelParts(svg);
     svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
@@ -980,7 +1011,7 @@ export const createFeatureLabelActions = ({
       const visibilityMode = !featureId
         ? 'default'
         : (featureHidden(drawing, feature, context) ? 'off' : rowOf(drawing, feature)?.labelVisibility);
-      const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode);
+      const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode, index);
       changed = projection.changed || changed;
       if (projection.available && feature) labelled.add(featureIdentityKeyOf(feature));
       if (normalizeVisibilityMode(visibilityMode) !== 'default' && !projection.available) {
@@ -1003,10 +1034,10 @@ export const createFeatureLabelActions = ({
     /** @type {EditableLabelEntry[]} */
     const nextEntries = [];
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl, index) => {
-      const key = textEl.getAttribute('data-label-key');
+      const key = textEl.getAttribute(LABEL_KEY_ATTRIBUTE);
       if (!key) return;
       const text = getLabelText(textEl);
-      const sourceText = textEl.getAttribute('data-label-source-text') || text;
+      const sourceText = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || text;
       const featureId = textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '';
       const kind = textEl.querySelector('textPath') ? 'embedded' : 'regular';
       nextEntries.push({
@@ -1145,11 +1176,11 @@ export const createFeatureLabelActions = ({
     const featureAssignments = labelFeatureAssignments(svg, labelElements, mode.value);
     labelElements.forEach((textEl, index) => {
       textEl.style.cursor = 'text';
-      textEl.setAttribute('data-label-editable', 'true');
-      textEl.setAttribute('data-label-key', `label-${index + 1}`);
+      textEl.setAttribute(LABEL_EDITABLE_ATTRIBUTE, 'true');
+      textEl.setAttribute(LABEL_KEY_ATTRIBUTE, `label-${index + 1}`);
       const currentText = getLabelText(textEl);
-      if (!textEl.hasAttribute('data-label-source-text')) {
-        textEl.setAttribute('data-label-source-text', currentText);
+      if (!textEl.hasAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE)) {
+        textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, currentText);
       }
       const featureId = featureAssignments.get(textEl);
       if (featureId) {
@@ -1312,7 +1343,7 @@ export const createFeatureLabelActions = ({
     if (!svg) return { svg: null, changed: false };
     const entry = getEditableLabelByFeatureId(featureId);
     if (!entry?.key) return { svg, changed: false };
-    const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
+    const targetEl = svg.querySelector(`text[${LABEL_KEY_ATTRIBUTE}="${CSS.escape(entry.key)}"]`);
     if (!targetEl) return { svg, changed: false };
     const currentText = getLabelText(targetEl);
     if (currentText === nextText) return { svg, changed: false };
@@ -1331,7 +1362,7 @@ export const createFeatureLabelActions = ({
     if (!svg) return { available: false, changed: false };
     const entry = getEditableLabelByFeatureId(featureId);
     if (!entry?.key) return { available: false, changed: false };
-    const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
+    const targetEl = svg.querySelector(`text[${LABEL_KEY_ATTRIBUTE}="${CSS.escape(entry.key)}"]`);
     const projection = applyLabelVisibilityPreview(svg, targetEl, visibilityMode);
     return { ...projection, svg };
   };
@@ -1648,7 +1679,7 @@ export const createFeatureLabelActions = ({
       let hasUntrackableMatch = false;
       const displayed = displayedFeatures(drawing);
       svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((/** @type {Element} */ textEl) => {
-        const candidateSource = textEl.getAttribute('data-label-source-text') || '';
+        const candidateSource = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || '';
         if (candidateSource !== sourceText) return;
         matchedCount += 1;
         const candidate = labelFeature(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
@@ -1665,7 +1696,7 @@ export const createFeatureLabelActions = ({
       else delete bulk[sourceText];
       replaceBulkLabelEdits(drawing.slices.labelTables, bulk);
     } else if (choice === 'single' && targetKey) {
-      const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
+      const targetEl = svg.querySelector(`text[${LABEL_KEY_ATTRIBUTE}="${CSS.escape(targetKey)}"]`);
       if (targetEl) {
         setLabelText(targetEl, newText);
       }
