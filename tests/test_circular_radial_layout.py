@@ -1010,6 +1010,59 @@ def test_cli_pinned_row_with_an_explicit_width_keeps_it(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize("width", ["8", "33"])
+def test_a_typed_width_wider_than_the_inside_band_names_its_own_row(tmp_path: Path, width: str) -> None:
+    # OV-2314: a bare width is a factor of the radius, so w=8 asks for 800 % of it. The GC content row takes the
+    # whole inside band and the Auto GC skew row under it then has none; the failure names the GC content row, with
+    # its width, not the Auto row. The CLI and the typed request (the Web's route) name the same row.
+    from Bio import SeqIO
+
+    from gbdraw.api import CircularDiagramOptions, CircularRequestTrackOptions
+    from gbdraw.api.diagram import build_circular_diagram
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    args = _gx05_args(f"w={width}", tmp_path / "cli")
+    with pytest.raises(ValidationError, match=r"'gc_content' \(\d+\.\dpx wide\) cannot fit inside between") as cli:
+        circular_main(args)
+    slots = [args[index + 1] for index, arg in enumerate(args) if arg == "--circular_track_slot"]
+    record = next(SeqIO.parse(str(_HMMTDNA), "genbank"))
+    with pytest.raises(ValidationError) as typed:
+        build_circular_diagram(
+            record,
+            options=CircularDiagramOptions(
+                tracks=CircularRequestTrackOptions(circular_track_slots=slots, circular_track_axis_index=0)
+            ),
+        )
+    for error in (cli.value, typed.value):
+        context = serialize_web_error(error, operation="generate", stage="render")["context"]
+        assert (context["reason"], context["slotIndex"], context["slotTrack"]) == ("CANNOT_FIT", 2, "gc_content")
+        assert context["slotWidthPx"] > context["outerPx"] - context["innerPx"]
+
+
+@pytest.mark.parametrize("width", ["8", "500px"])
+def test_a_wide_typed_row_after_the_failed_row_is_not_named(tmp_path: Path, width: str) -> None:
+    # OV-2314, the reverse order: thirty Auto GC content rows fail at 'gc26' before the wide GC skew row under them
+    # is placed. The innermost row may be wider than the band (it is clamped at the centre), so a wide row placed
+    # after the failure is not its cause; the failure names 'gc26', without a width.
+    args = _gx05_args("w=auto", tmp_path / "reverse")
+    slots = [
+        "features:features@lane_direction=inside",
+        "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+        *(f"gc{index}:dinucleotide_content@side=inside" for index in range(30)),
+        f"wide:dinucleotide_skew@side=inside,w={width}",
+    ]
+    first = args.index("--circular_track_slot")
+    last = len(args) - 1 - args[::-1].index("--circular_track_slot")
+    args[first : last + 2] = [item for slot in slots for item in ("--circular_track_slot", slot)]
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    with pytest.raises(ValidationError, match=r"Circular track slot 'gc26' cannot fit inside between") as error:
+        circular_main(args)
+    context = serialize_web_error(error.value, operation="generate", stage="render")["context"]
+    assert (context["slotIndex"], context["slotTrack"]) == (28, "gc_content")
+    assert "slotWidthPx" not in context
+
+
 def test_cli_preset_stack_with_nothing_typed_draws_the_default_figure(tmp_path: Path) -> None:
     # GX-19: the Web sends this stack when "Use custom stack" is turned on and
     # nothing is typed. On MG1655 Middle it packed gc_content under the ticks

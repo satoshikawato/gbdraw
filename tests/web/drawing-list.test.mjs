@@ -1081,7 +1081,8 @@ test('Every drawing while the drawing switch is busy writes nothing and shows th
     runDrawingStep: (label, apply) => { calls.push(['drawingStep', label]); apply(); },
     applyInputReplacementToDrawings: () => calls.push(['replace']),
     askScope: async () => 'all',
-    onBusy: (reason) => calls.push(['busy', reason])
+    onBusy: (reason) => calls.push(['busy', reason]),
+    historyRevision: () => 0
   });
   const outcome = await replacement.replaceFromShownDrawing(
     shared, { fileId: 'f2', name: 'b.gb' }, () => calls.push(['writeShown'])

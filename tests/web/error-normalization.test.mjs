@@ -162,7 +162,7 @@ assert(normalizeUserFacingError(source, { summaryLimit: 5000, detailLimit: 9000 
 
 // Diagnostic numeric boundaries must survive transport exactly, while larger,
 // fractional, nonfinite and nonnumeric values are omitted rather than clamped.
-for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx']) {
+for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'slotWidthPx', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx']) {
   const maximum = key === 'codepoint' ? 0x10ffff : 10000000;
   const bounded = value => roundtrip({ ...source, context: { [key]: value, positionUnit: 'python-character' } });
   for (const value of [0, maximum]) assert.equal(bounded(value).context[key], value, key);
@@ -669,6 +669,10 @@ test('a Circular placement names the room the GC rows keep inside it and their r
   const ticks = layout({ reason: 'CENTER_RESERVED', innerPx: 123, outerPx: 386, slotTrack: 'ticks' });
   assert.equal(ticks.context.slotTrack, 'ticks');
   assert.match(ticks.summary, / Available band: 123–386 px\. To make room, do the following\. Clear Show Coordinate Scale \(with Custom Track Slots on, remove the Ticks row\)\.$/);
+  // OV-2314: a row whose own (typed) width is wider than the band is the failed row, with its width
+  // (tests/test_circular_radial_layout.py, HmmtDNA with a GC content row of w=8).
+  const wide = layout({ reason: 'CANNOT_FIT', slotIndex: 2, slotWidthPx: 3120, innerPx: 0, outerPx: 386, slotTrack: 'gc_content' });
+  assert.match(wide.summary, /^A circular track does not fit\. Track row 3\. Track width: 3120 px\. Move the track.* Available band: 0–386 px\. To make room, do one of the following\. Select Hide GC Content, or reduce GC Content Width \(with Custom Track Slots on, the row width\)\.$/);
   // Unknown or repeated names are dropped; nothing is left of a list without a known name.
   assert.equal(layout({ reason: 'CANNOT_FIT', keptInsideTracks: 'gc_skew,PRIVATE,gc_skew' }).context.keptInsideTracks, 'gc_skew');
   for (const keptInsideTracks of ['PRIVATE', '', ['gc_content'], 7]) {

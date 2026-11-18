@@ -448,7 +448,7 @@ const KEPT_INSIDE_AMONG = Object.freeze({
 const PHRASES = Object.freeze({
   diagramLinear: 'Diagram: Linear.', diagramCircular: 'Diagram: Circular.', sessionTable: 'Session table: {table}.',
   sequence: 'Sequence {n}.', pair: 'Pair: #{query} to #{subject}.', featureCaption: 'Feature: {caption}.',
-  line: 'Line {row}.', column: 'Column {column}.', trackRow: 'Track row {row}.', depthSeries: 'Depth series {series}.',
+  line: 'Line {row}.', column: 'Column {column}.', trackRow: 'Track row {row}.', trackWidth: 'Track width: {px} px.', depthSeries: 'Depth series {series}.',
   setting: 'Setting: {path}.', feature: 'Feature: {feature}.', featuresAffected: 'Features affected: {count}.',
   field: 'Field: {field}.', band: 'Available band: {inner}–{outer} px.',
   sessionTooNew: 'Session version {version} is newer than this gbdraw supports ({latest}).',
@@ -628,6 +628,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [recordIndex]
  * @property {number} [seriesIndex]
  * @property {number} [slotIndex]
+ * @property {number} [slotWidthPx] The failed row's own width, when that width alone is wider than the band (OV-2314).
  * @property {number} [recordCount]
  * @property {number} [columnCount]
  * @property {number} [codepoint]
@@ -974,8 +975,8 @@ const contextFor = (value) => {
     }
     if (value.legendRemedy === true) context.legendRemedy = true;
   }
-  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi' | 'recordPosition'>} */ ([
-    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
+  for (const key of /** @type {Array<'position' | 'row' | 'column' | 'inputOrdinal' | 'recordIndex' | 'seriesIndex' | 'slotIndex' | 'slotWidthPx' | 'recordCount' | 'columnCount' | 'codepoint' | 'innerPx' | 'outerPx' | 'keptInsidePx' | 'placementIndex' | 'queryRecordIndex' | 'subjectRecordIndex' | 'limit' | 'width' | 'height' | 'rowLength' | 'dpi' | 'recordPosition'>} */ ([
+    'position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'slotWidthPx', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'keptInsidePx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex',
     'limit', 'width', 'height', 'rowLength', 'dpi', 'recordPosition'
   ])) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
@@ -1196,7 +1197,7 @@ export const normalizeUserFacingError = (value, {
   }
   const [, actions] = definitionOf(result);
   const lead = leadSentence(result);
-  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
+  const { inputOrdinal, row, column, slotIndex, slotWidthPx, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable, diagramMode } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount, field, reason, position, columnCount, recordCount } = result.context;
   const { recordName, recordPosition, codepoint } = result.context;
   // A letter Python names by its code point: itself when printable, else its U+ form.
@@ -1235,6 +1236,7 @@ export const normalizeUserFacingError = (value, {
     row !== undefined && { text: PHRASES.line, params: { row } },
     column !== undefined && { text: PHRASES.column, params: { column } },
     slotIndex !== undefined && { text: PHRASES.trackRow, params: { row: slotIndex + 1 } },
+    slotWidthPx !== undefined && { text: PHRASES.trackWidth, params: { px: slotWidthPx } },
     seriesIndex !== undefined && { text: PHRASES.depthSeries, params: { series: seriesIndex + 1 } },
     configPath !== undefined && !figureSize && { text: PHRASES.setting, params: { path: configPath } },
     featureName && { text: PHRASES.feature, params: { feature: featureName } },

@@ -229,12 +229,17 @@ class _RadialSlotIntent:
 
 
 def cannot_fit_diagnostic(
-    slot_index: int | None, window: PlacementWindow | None = None, *, renderer: str | None = None
+    slot_index: int | None,
+    window: PlacementWindow | None = None,
+    *,
+    renderer: str | None = None,
+    width_px: float | None = None,
 ) -> dict[str, object]:
     """Track row and usable band of a fit failure; the slot ID stays private.
 
     A pinned slot has no band to report, and an unbounded band is omitted. The
-    room kept below the band and the rows with an off option it is kept for (OV-1274) are named.
+    room kept below the band and the rows with an off option it is kept for (OV-1274) are named, and the row's own
+    width when that width alone is wider than the band (``slotWidthPx``, OV-2314).
     """
 
     diagnostic: dict[str, object] = {"code": "TRACK_LAYOUT", "reason": "CANNOT_FIT"}
@@ -248,6 +253,8 @@ def cannot_fit_diagnostic(
             diagnostic["keptInsideTracks"] = [track.diagnostic_id for track in kept_tracks]
     if slot_index is not None:
         diagnostic["slotIndex"] = int(slot_index)
+    if width_px is not None:
+        diagnostic["slotWidthPx"] = round(float(width_px))
     # The failed row, when it has an off option (OV-1276: the scale ticks).
     switched = _SWITCHED_TRACKS.get(renderer) if renderer is not None else None
     if switched is not None:
@@ -1317,11 +1324,7 @@ def _place_inside_auto(
         )
         if resolved is not None:
             return resolved
-    raise _InsideFitError(
-        f"Circular track slot '{intent.slot_id}'",
-        intent=intent,
-        placement_window=placement_window,
-    )
+    raise _InsideFitError(None, intent=intent, placement_window=placement_window, rows=(intent,))
 
 
 def _place_inside_auto_fixed_width(
@@ -1566,17 +1569,51 @@ def _inner_limit_above_rows(
     )
 
 
+def _row_wider_than_window(
+    intents: Sequence[_RadialSlotIntent], placement_window: PlacementWindow
+) -> _RadialSlotIntent | None:
+    """The first of ``intents`` whose width does not narrow (a typed width, or a row that is not an Auto numeric row)
+    and is wider than the window's band with the room it keeps inside (OV-2314).
+
+    ``intents`` are the rows placed up to and including the failed one: a wide row there leaves the failed row no
+    room, so the failure names it. A wide row placed after the failure is not its cause (the innermost row may be
+    wider than the band; it is clamped at the centre).
+    """
+
+    room = float(placement_window.outer_px) - placement_window.usable_inner_px + float(placement_window.kept_inside_px)
+    return next(
+        (
+            intent
+            for intent in intents
+            if not _shrinkable_inside_numeric(intent) and float(intent.width_px) > room + LAYOUT_EPSILON
+        ),
+        None,
+    )
+
+
 class _InsideFitError(ValidationError):
-    """An inside slot or group that cannot be placed in its window."""
+    """An inside slot or group that cannot be placed in its window.
+
+    ``subject`` names the rows placed (``None``: the failed row, by slot ID). ``rows`` are the rows placed up to and
+    including the failed one; a row of them wider than the window (``_row_wider_than_window``) is the failure's row,
+    with its width, in place of ``intent``.
+    """
 
     def __init__(
         self,
-        subject: str,
+        subject: str | None,
         *,
         intent: _RadialSlotIntent | None,
         placement_window: PlacementWindow,
+        rows: Sequence[_RadialSlotIntent] = (),
         hint: str = "",
     ) -> None:
+        wide = _row_wider_than_window(rows, placement_window)
+        if wide is not None:
+            intent = wide
+            subject = f"Circular track slot '{wide.slot_id}' ({float(wide.width_px):.1f}px wide)"
+        elif subject is None:
+            subject = f"Circular track slot '{intent.slot_id if intent is not None else '<empty>'}'"
         self.subject = subject
         self.placement_window = placement_window
         self.hint = hint
@@ -1586,6 +1623,7 @@ class _InsideFitError(ValidationError):
             None if intent is None else intent.slot_index,
             placement_window,
             renderer=None if intent is None else intent.renderer,
+            width_px=None if wide is None else wide.width_px,
         )
         super().__init__(
             f"{self._between()}{f'; below it, {kept}' if kept else ''}. Move the slot, reduce widths, "
@@ -1644,7 +1682,7 @@ def _place_inside_auto_stack_group(
     occupied: Sequence[tuple[str, RadialBand]],
     placement_window: PlacementWindow,
 ) -> tuple[CircularResolvedSlot, ...]:
-    failure: _RadialSlotIntent | None = None
+    failure: int | None = None
     for scale in _inside_auto_stack_width_scales(intents):
         working_occupied = list(occupied)
         working_outer = float(placement_window.outer_px)
@@ -1662,7 +1700,7 @@ def _place_inside_auto_stack_group(
                 placement_window=replace(placement_window, outer_px=working_outer),
             )
             if resolved is None:
-                failure = intent
+                failure = intent_index
                 failed = True
                 break
             resolved_group.append(resolved)
@@ -1683,13 +1721,13 @@ def _place_inside_auto_stack_group(
         if not failed:
             return tuple(resolved_group)
 
-    # Name the slot that failed at the smallest scale; the band is the group's.
-    failed_intent = failure
-    failed_slot_id = failed_intent.slot_id if failed_intent is not None else "<empty>"
+    # Name the slot that failed at the smallest scale, or a row placed before it too wide for the band; the band is the
+    # group's.
     raise _InsideFitError(
-        f"Circular track slot '{failed_slot_id}'",
-        intent=failed_intent,
+        None,
+        intent=None if failure is None else intents[failure],
         placement_window=placement_window,
+        rows=() if failure is None else intents[: failure + 1],
         hint=_inside_stack_failure_hint(intents),
     )
 
@@ -1986,11 +2024,13 @@ def _place_preferred_numeric_group(
         if placed is not None:
             return placed
 
+    # The group fails as a whole: a wide row names the failure only when a row of the group is placed after it.
     group_name = ",".join(intent.slot_id for intent in intents) or "<empty>"
     raise _InsideFitError(
         f"Preferred numeric group '{group_name}'",
         intent=intents[0] if intents else None,
         placement_window=placement_window,
+        rows=intents[:-1],
     )
 
 

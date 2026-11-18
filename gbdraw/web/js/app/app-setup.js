@@ -254,7 +254,8 @@ import { createFeatureEditHistory, createLegendEditHistory, createSelectedFeatur
 import { createPreservedConfigOverrides } from './preserved-config-overrides.js';
 import { createSessionStatus } from './session-status.js';
 import { createFeatureChoiceReaders, createScaleStyleAvailability, createShownDrawingMembers } from './shown-drawing-settings.js';
-import { createCircularMultiRecordCanvas, createCircularRecordDisplay, createCircularSourceEdits } from './circular-record-controls.js';
+import { createCircularMultiRecordCanvas, createCircularRecordDisplay, createCircularSourceEdits,
+  createCircularSourceReplacementQuestion } from './circular-record-controls.js';
 import { createAnnotationRecordRebind, createDrawingRecordCatalog } from './drawing-record-catalog.js';
 import { createRecordDiscoveryRequests, createRecordDiscoveryRuns } from './record-discovery-requests.js';
 import { createRecordSettingsSources, createRecordSettingsTransitions } from './record-settings.js';
@@ -3354,7 +3355,8 @@ export const createAppSetup = () => {
     askScope,
     // The busy outcome has no control to disable: the notice banner words the
     // drawing list's own busy reason, as the tabs' title does (R15).
-    onBusy: (busy) => showNotice(keptTextWarning(busy.reason))
+    onBusy: (busy) => showNotice(keptTextWarning(busy.reason)),
+    historyRevision: () => history.revision.value
   });
   // The uploaders of the shown drawing's bound input files: each names the
   // file its control binds and its own write; `replaceFromShownDrawing`
@@ -3365,8 +3367,10 @@ export const createAppSetup = () => {
     uploadCircularSourceFile, uploadCircularDepthFile, uploadLinearSeqPrimaryFile, uploadLinearDepthFile,
     uploadLinearSourceDepthFile, uploadLinearComparisonCardFile
   } = createInputUploads({
-    shownAction, replaceFromShownDrawing, replaceCircularSourceFile, replaceCircularDepthFile, replaceLinearSourceFile,
-    setLinearDepthFiles, setLinearSourceDepthFile, linearComparisonPairForEdgeKey, setLinearComparisonCardFile
+    shownAction, replaceFromShownDrawing, replaceCircularSourceFile,
+    askCircularSourceReplacement: createCircularSourceReplacementQuestion({ state, askChoice, barTabs: drawingBar.tabs }),
+    replaceCircularDepthFile, replaceLinearSourceFile, setLinearDepthFiles, setLinearSourceDepthFile,
+    linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });
 
   const {
