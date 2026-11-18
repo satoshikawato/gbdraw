@@ -3,3 +3,7 @@
   into the arrowhead or touches its outline (for example ndhD in the tobacco plastome of the Gallery), and a
   label whose letters fit is drawn inside even when its laid-out box with its spacing is longer than the
   feature (for example ND4L, and "NADH dehydrogenase subunit 4" in the human mitochondrial genome).
+- Fixed: Circular radial labels: a leader now ends on the edge of its feature's outline that faces the label, at the
+  point nearest the label, and its slanted part runs outside the feature band, so features no longer hide it.
+  In a crowded cluster the inner labels keep enough room for their leaders to rise clear of the band; when the
+  circle does not have that room, the figure grows instead of refusing the labels.

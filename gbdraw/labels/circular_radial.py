@@ -21,6 +21,9 @@ from .circular_types import CircularLabel, CircularLabelLayoutResult
 _TAU = 2.0 * math.pi
 _ANGLE_EPSILON = 1e-9
 _RADIAL_CLEARANCE_PX = 4.0
+# OV-3841: the slanted part of a radial leader rises at least this far from the feature band.
+_LEADER_MIN_SLOPE_RAD = math.radians(20.0)
+_LEADER_ROOM_TOLERANCE_PX = 1e-3
 _CONVERGENCE_LIMIT = 256
 # Radius growth at or below this is none: the assembly stops growing the
 # canvas, and an inner side waits for growth only above it (OV-694).
@@ -72,23 +75,57 @@ def _radius_of_point(x_coord: float, y_coord: float) -> float:
     return math.hypot(float(x_coord), float(y_coord))
 
 
-def _outer_base_anchor(label: CircularLabel, outer_reserved_radius_px: float) -> float:
+def _leader_anchor(label: CircularLabel, elbow: tuple[float, float]) -> tuple[float, float]:
+    """Where a radial leader ends: the point of its feature's outline edge facing the label nearest ``elbow``."""
+    points = label.get("feature_edge_points")
+    if not points:
+        return float(label.get("feature_anchor_x", 0.0)), float(label.get("feature_anchor_y", 0.0))
+    return min(points, key=lambda point: math.dist(point, elbow))
+
+
+def _leader_room_text_radius(label: CircularLabel, placed_angle_rad: float, *, is_inner: bool) -> float:
+    """The text radius whose leader keeps outside the feature band (OV-3841), for a label placed at ``placed_angle_rad``.
+
+    The leader runs from the elbow (``_RADIAL_CLEARANCE_PX`` from the text, at the label's angle) to the point of its
+    feature's facing outline nearest the elbow. The elbow keeps ``_RADIAL_CLEARANCE_PX`` off the lane edge facing the
+    label, and away from the leader's end by a radial drop that lets the slanted part rise at least
+    ``_LEADER_MIN_SLOPE_RAD`` from the band; without it, leaders of a crowded cluster ran side by side along the band
+    or crossed. Features are drawn over leaders, so a leader inside the band is hidden.
+    """
+    radial_angle = placed_angle_rad - (0.5 * math.pi)
+    lane_edge = float(label["feature_inner_radius_px"] if is_inner else label["feature_outer_radius_px"])
+    sign = -1.0 if is_inner else 1.0
+    elbow_radius = lane_edge + sign * _RADIAL_CLEARANCE_PX
+    anchor = _leader_anchor(label, (elbow_radius * math.cos(radial_angle), elbow_radius * math.sin(radial_angle)))
+    anchor_radius = math.hypot(*anchor)
+    turn = abs(((math.atan2(anchor[1], anchor[0]) - radial_angle + math.pi) % _TAU) - math.pi)
+    drop = max(
+        _RADIAL_CLEARANCE_PX,
+        math.tan(_LEADER_MIN_SLOPE_RAD) * anchor_radius * math.sin(min(turn, 0.5 * math.pi)),
+    )
+    if is_inner:
+        elbow_radius = min(elbow_radius, anchor_radius - drop)
+    else:
+        elbow_radius = max(elbow_radius, anchor_radius + drop)
+    return elbow_radius + sign * _RADIAL_CLEARANCE_PX
+
+
+def _outer_base_anchor(label: CircularLabel, outer_reserved_radius_px: float, total_length: int) -> float:
     elbow_radius = _radius_of_point(label.get("middle_x", 0.0), label.get("middle_y", 0.0))
-    feature_outer = float(label.get("feature_outer_radius_px", 0.0))
     configured_minimum = float(label.get("min_outer_start_radius_px", 0.0))
     return max(
         elbow_radius + _RADIAL_CLEARANCE_PX,
-        feature_outer + _RADIAL_CLEARANCE_PX,
+        _leader_room_text_radius(label, _preferred_angle_rad(label, total_length), is_inner=False),
         configured_minimum,
         float(outer_reserved_radius_px) + _RADIAL_CLEARANCE_PX,
     )
 
 
-def _inner_base_anchor(label: CircularLabel) -> float:
+def _inner_base_anchor(label: CircularLabel, total_length: int) -> float:
     elbow_radius = _radius_of_point(label.get("middle_x", 0.0), label.get("middle_y", 0.0))
-    feature_inner = float(label.get("feature_inner_radius_px", elbow_radius))
-    configured_maximum = float(label.get("max_inner_start_radius_px", feature_inner))
-    return max(0.0, min(elbow_radius - _RADIAL_CLEARANCE_PX, feature_inner - _RADIAL_CLEARANCE_PX, configured_maximum))
+    band_clear = _leader_room_text_radius(label, _preferred_angle_rad(label, total_length), is_inner=True)
+    configured_maximum = float(label.get("max_inner_start_radius_px", band_clear))
+    return max(0.0, min(elbow_radius - _RADIAL_CLEARANCE_PX, band_clear, configured_maximum))
 
 
 def _seam_order(labels: Sequence[CircularLabel], total_length: int) -> list[CircularLabel]:
@@ -228,6 +265,7 @@ def _make_placed_label(
         elbow_radius = max(0.0, text_anchor_radius_px - _RADIAL_CLEARANCE_PX)
     elbow_x = elbow_radius * radial_x
     elbow_y = elbow_radius * radial_y
+    anchor_x, anchor_y = _leader_anchor(source, (elbow_x, elbow_y))
 
     label.update(
         {
@@ -245,6 +283,8 @@ def _make_placed_label(
             "dominant_baseline": dominant_baseline,
             "middle_x": elbow_x,
             "middle_y": elbow_y,
+            "feature_anchor_x": anchor_x,
+            "feature_anchor_y": anchor_y,
             "leader_start_x": text_x,
             "leader_start_y": text_y,
             "oriented_corners": box.corners,
@@ -337,20 +377,21 @@ def _place_side(
     max_width = max(float(label.get("width_px", 0.0)) for label in ordered)
     density_radius = _required_collision_radius(ordered, spacing_px)
     required_growth = 0.0
+    minimum_anchor = 0.0
     if is_inner:
-        base_anchors = [_inner_base_anchor(label) for label in ordered]
+        base_anchors = [_inner_base_anchor(label, total_length) for label in ordered]
         minimum_anchor = max(
             float(inner_reserved_outer_radius_px) + max_width + _RADIAL_CLEARANCE_PX,
             density_radius + max_width + 1.0,
         )
         anchor_radius = max(min(base_anchors), minimum_anchor)
-        required_growth = max(0.0, max(anchor_radius - base for base in base_anchors))
         collision_radius = max(1.0, anchor_radius - max_width)
     else:
-        base_anchors = [_outer_base_anchor(label, outer_reserved_radius_px) for label in ordered]
+        base_anchors = [_outer_base_anchor(label, outer_reserved_radius_px, total_length) for label in ordered]
         anchor_radius = max(max(base_anchors), density_radius + 1.0)
         collision_radius = anchor_radius
 
+    pushed_out = False
     for _ in range(_CONVERGENCE_LIMIT):
         angles = _pack_angles(ordered, total_length, collision_radius, spacing_px)
         placed = [
@@ -362,6 +403,24 @@ def _place_side(
             )
             for label, angle in zip(ordered, angles, strict=True)
         ]
+        # The leaders' room at the packed angles (OV-3841): inner text moves inward to it while it may, else the
+        # radius must grow; outer text moves outward to it.
+        room = [
+            _leader_room_text_radius(label, angle, is_inner=is_inner)
+            for label, angle in zip(ordered, angles, strict=True)
+        ]
+        if is_inner:
+            limit = min(min(base_anchors), min(room))
+            target = max(limit, minimum_anchor)
+            if not pushed_out and anchor_radius > target + _LEADER_ROOM_TOLERANCE_PX:
+                collision_radius -= anchor_radius - target
+                anchor_radius = target
+                continue
+            required_growth = max(0.0, anchor_radius - limit)
+        elif max(room) > anchor_radius + _LEADER_ROOM_TOLERANCE_PX:
+            collision_radius += max(room) - anchor_radius
+            anchor_radius = max(room)
+            continue
         collisions = _text_collision_pairs(placed, spacing_px)
         leader_text_collisions = _leader_text_collision_count(placed)
         leader_crossings = leader_crossing_count(placed)
@@ -385,8 +444,7 @@ def _place_side(
         )
         anchor_radius += radial_deficit
         collision_radius += radial_deficit
-        if is_inner:
-            required_growth += radial_deficit
+        pushed_out = True
     raise LabelLayoutError(
         "radial label packing did not converge after deterministic radius expansion; "
         f"side={'inner' if is_inner else 'outer'}, labels={len(ordered)}"
