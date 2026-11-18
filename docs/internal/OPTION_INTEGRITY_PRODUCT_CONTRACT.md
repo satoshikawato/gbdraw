@@ -12791,7 +12791,7 @@ Decision date: 2026-10-13
 - Scenario revision: `9`
 - Supersedes: `PD-OI-106`, scenario revision `8`. Scenario revision `9` keeps
   every outcome of scenario revision `8` and changes one thing: hi, bn, ar, fa
-  and ur ship in 0.16.0, not in 0.15.0; its Revision #<PR> entry below says what
+  and ur ship in 0.16.0, not in 0.15.0; its Revision #2135 entry below says what
   changes. As scenario revisions `1` to `8`, it narrows `PD-OI-093`: that
   record's limit of browser storage to one display choice no longer holds (see
   the receipt's May retire); `PD-OI-093` keeps its text and its stored display
@@ -12801,7 +12801,7 @@ Decision date: 2026-10-13
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its JSON representation below.
 - Decision source: the Owner statements of `2026-11-18` in the Claude Code
-  session gbdraw-work-05, quoted in its Revision #<PR> entry below; scenario
+  session gbdraw-work-05, quoted in its Revision #2135 entry below; scenario
   revision `8` came from the Owner replies of `2026-11-08` and `2026-11-15` in
   the Claude Code sessions of the campaign `i18n-rtl-indic-20261108` (Revision
   #2056 entry below), scenario revision `7` from those of `2026-11-08`
@@ -12985,7 +12985,7 @@ Decision Owner `satoshikawato`'s replies to the campaign
   runtime by itself and supplies no runtime acceptance evidence. The Review is
   `REQUIRED`.
 
-#### Revision #<PR>
+#### Revision #2135
 
 `PD-OI-106` is replaced for scenario revision `9` (concern
 `product.web-ui-language`). The receipt keeps every outcome of scenario
