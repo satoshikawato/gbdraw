@@ -2053,3 +2053,33 @@ def test_cli_interactive_svg_of_a_record_drawn_in_windows_embeds_every_feature_s
     sources = list(item.get("sequenceSources") or [])
     assert len(item["recordKeys"]) == 2 and len(rows) == 25
     assert [row["biologicalFeatureId"] for row in rows if not materialize_catalog_nucleotide_sequence(row, sources)] == []
+
+
+@pytest.mark.parametrize("main", [circular_cli.circular_main, linear_cli.linear_main], ids=["circular", "linear"])
+def test_cli_interactive_svg_marks_the_catalog_annotations_as_interactive(tmp_path: Path, main) -> None:
+    """The viewer opens a region annotation's popup only on an element marked interactive; the CLI marks the
+    annotation groups whose id the embedded catalog lists, as the Web export does."""
+
+    inputs = Path(__file__).resolve().parent / "test_inputs"
+    main([
+        "--gbk", str(inputs / "NC_001416.gb"), "--annotation_table", str(inputs / "lambda_wrap_regions.tsv"),
+        "-f", "interactive_svg", "-o", str(tmp_path / "regions"),
+    ])
+
+    source = (tmp_path / "regions.interactive.svg").read_text(encoding="utf-8")
+    dom_ids = {annotation["dom_id"] for annotation in _catalog_item(source)["annotations"]}
+    groups = [element for element in ET.fromstring(source).iter() if element.get("data-gbdraw-annotation-id")]
+    marked = {element.get("id") for element in ET.fromstring(source).iter()
+              if element.get("data-gbdraw-interactive-annotation") == "true"}
+    assert len(dom_ids) == 3 and {element.get("id") for element in groups} == dom_ids == marked
+    assert all("gbdraw-interactive-annotation" in (element.get("class") or "").split() for element in groups)
+
+
+def test_enrich_svg_clears_an_annotation_mark_the_catalog_does_not_list() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px" viewBox="0 0 100 80">
+      <g id="stale" class="kept gbdraw-interactive-annotation" data-gbdraw-interactive-annotation="true" />
+    </svg>"""
+
+    stale = next(element for element in ET.fromstring(enrich_svg(svg)).iter() if element.get("id") == "stale")
+
+    assert stale.get("data-gbdraw-interactive-annotation") is None and stale.get("class") == "kept"
