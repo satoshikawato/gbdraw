@@ -1,14 +1,18 @@
-// The SVG export of a Result whose labels the editor bound and edited.
-// OV-3848: the label binder's marks (data-label-editable, data-label-key,
-// data-label-source-text) stay on the page; an export never carries them, so
-// its bytes do not depend on whether a label was clicked, and a renamed
-// label's old text does not leave the page. OV-2438: a label text edit and a
-// label hide show their result on the mounted Result (the projection that
-// reads each label's parts from one index of the SVG).
+// The export and the stored Result of a Result whose labels the editor bound
+// and edited. OV-3848: the label binder's marks (data-label-editable,
+// data-label-key, data-label-source-text) live only on the mounted root; an
+// export and a Result's text (Save, History) never carry them, so neither
+// depends on whether a label was clicked, and a renamed label's old text does
+// not leave the page. A label's source text is its feature row's, so Reset
+// shows it after a remount and a Load. OV-2438: a label text edit and a label
+// hide show their result on the mounted Result (the projection that reads each
+// label's parts from one index of the SVG).
 const { expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { open, popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
+const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { download, load } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -70,4 +74,59 @@ test('a label text edit and a label hide show on the Result, and the export hold
   expect(exported).not.toMatch(BINDER_MARK);
   expect(exported).toContain('renamed label');
   expect(exported).not.toContain('alpha protein');
+});
+
+// The text of each feature's label (by locus_tag) on the displayed Result.
+const labelTexts = (page, tags) => page.evaluate(async (wanted) => {
+  const { state } = await import('./js/state.js');
+  const app = window.__GBDRAW_APP__;
+  const svg = state.svgContainer.value.querySelector('svg');
+  return Object.fromEntries(wanted.map((tag) => {
+    const feature = app.filteredFeatures.find((item) => item.locus_tag === tag);
+    const text = feature && svg.querySelector(`text[data-label-feature-id="${CSS.escape(feature.svg_id)}"]`);
+    return [tag, text ? text.textContent : null];
+  }));
+}, tags);
+
+test('renamed labels show their original text after Reset label edits, also after a Result switch and a Save and Load', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  const tags = ['TESTA_0001', 'TESTA_0002', 'TESTA_0003'];
+  const original = await labelTexts(page, tags);
+  expect(original).toEqual({ TESTA_0001: 'duplicate protein', TESTA_0002: 'duplicate protein', TESTA_0003: 'origin spanning protein' });
+
+  // One label renamed in its popup, and every label of one text renamed (the label list's "all labels" choice).
+  await popupEdit(page, 'TESTA_0003', { labelText: 'renamed single' });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.filteredFeatures.find((item) => item.locus_tag === 'TESTA_0001');
+    const entry = app.editableLabels.find((item) => item.featureId === feature.svg_id);
+    // The app's actions wait for the edit queue; each is awaited.
+    await app.requestLabelTextChangeByKey(entry.key, 'renamed bulk');
+    await app.handleLabelTextScopeChoice('all');
+  });
+  await settleLive(page);
+  const renamed = { TESTA_0001: 'renamed bulk', TESTA_0002: 'renamed bulk', TESTA_0003: 'renamed single' };
+  expect(await labelTexts(page, tags)).toEqual(renamed);
+
+  // The Result remounts from its stored text, which holds no binder mark.
+  await showResult(page, 1);
+  await showResult(page, 0);
+  expect(await labelTexts(page, tags)).toEqual(renamed);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content).join('')))
+    .not.toMatch(BINDER_MARK);
+
+  const saved = testInfo.outputPath('renamed-labels.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  try {
+    for (const shown of [page, loaded]) {
+      expect(await labelTexts(shown, tags)).toEqual(renamed);
+      await evaluateWithRetainedPromise(shown, async () => { await window.__GBDRAW_APP__.resetAllLabelTextOverrides(); });
+      await settleLive(shown);
+      expect(await labelTexts(shown, tags)).toEqual(original);
+    }
+  } finally {
+    await loaded.context().close();
+  }
 });

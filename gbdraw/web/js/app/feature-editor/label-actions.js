@@ -23,7 +23,7 @@ import {
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 import {
-  LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
+  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
 } from '../../services/preview-affordances.js';
 
 /**
@@ -65,7 +65,6 @@ export const EXCLUDED_GROUP_SELECTOR = [
   trackGroupSelector(DEPTH_GROUPS),
   trackGroupSelector(DINUCLEOTIDE_CONTENT_GROUPS)
 ].join(', ');
-const EDITABLE_LABEL_SELECTOR = `text[${LABEL_EDITABLE_ATTRIBUTE}="true"]`;
 const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';
 const LABEL_BINDING_SCHEMA = '1';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
@@ -74,6 +73,26 @@ const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview
 // when it needs them, so a feature a rule hides hides its label (OV-35).
 const VISIBILITY_LABEL_SELECTOR = `${EDITABLE_LABEL_SELECTOR}, `
   + `text[${LABEL_BINDING_SCHEMA_ATTRIBUTE}="${LABEL_BINDING_SCHEMA}"][${LABEL_FEATURE_ID_ATTRIBUTE}]`;
+
+// The extracted features by SVG ID (the first of an ID), made once per list:
+// the state replaces the list, never edits it, and every label of a projection
+// reads it (OV-2438).
+/** @type {WeakMap<readonly (LabelFeature | null | undefined)[], ReadonlyMap<string, LabelFeature>>} */
+const extractedBySvgId = new WeakMap();
+/** @param {readonly (LabelFeature | null | undefined)[]} extracted */
+const extractedIndexOf = (extracted) => {
+  const known = extractedBySvgId.get(extracted);
+  if (known) return known;
+  /** @type {Map<string, LabelFeature>} */
+  const index = new Map();
+  extracted.forEach((feature) => {
+    if (!feature) return;
+    const key = normalizeKeyToken(feature.svg_id);
+    if (key && !index.has(key)) index.set(key, feature);
+  });
+  extractedBySvgId.set(extracted, index);
+  return index;
+};
 
 // The feature a mounted label names by rendered ID: the Result's catalog binds
 // that ID to the feature's source identity (R3); without a catalog, the
@@ -88,8 +107,7 @@ const featureOfLabelId = (featureIdRaw, catalog, extracted = []) => {
   const featureId = String(featureIdRaw || '').trim();
   if (!featureId) return null;
   if (catalog) return catalog.get(featureId) || null;
-  const key = normalizeKeyToken(featureId);
-  return extracted.find((feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
+  return extractedIndexOf(extracted).get(normalizeKeyToken(featureId)) || null;
 };
 // The locator of a feature whose label binding failed: its rendered ID, type,
 // and one-based span, from the extracted feature of that rendered ID (R6).
@@ -927,18 +945,25 @@ export const createFeatureLabelActions = ({
     else if (autoLabelReflowEnabled.value) labelReflowRequestSeq.value += 1;
   };
 
-  /** @param {DrawingState} drawing @param {Element} svg */
+  // Each editable label shows its source text, its feature row's. Returns
+  // whether a label's source text is unknown here: a label with no feature
+  // identity has no row, so while bulk edits exist only Python knows the text
+  // it draws without them (the mounted root keeps no source text, OV-3848;
+  // OV-3880).
+  /** @param {DrawingState} drawing @param {Element} svg @returns {boolean} */
   const resetLabelsToSourceText = (drawing, svg) => {
-    let changed = false;
+    let sourceUnknown = false;
+    const bulkEdited = Object.keys(drawing.labelTextBulkOverrides).length > 0;
     const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
-      const sourceText = labelSourceTextOf(labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed), textEl);
+      const feature = labelFeature(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
+      sourceUnknown ||= bulkEdited && !featureIdentityKeyOf(feature);
+      const sourceText = labelSourceTextOf(rowOf(drawing, feature), textEl);
       if (getLabelText(textEl) === sourceText) return;
       setLabelText(textEl, sourceText);
       textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
-      changed = true;
     });
-    return changed;
+    return sourceUnknown;
   };
 
   // The label text intent on one SVG: each editable label shows its feature
@@ -1738,7 +1763,7 @@ export const createFeatureLabelActions = ({
       labelImportNotice = null;
     }
     const svg = svgContainer.value?.querySelector('svg');
-    if (svg) resetLabelsToSourceText(drawing, svg);
+    const sourceUnknown = svg ? resetLabelsToSourceText(drawing, svg) : false;
     clearOverrides(drawing);
     if (!svgContainer.value) {
       editableLabels.value = [];
@@ -1752,7 +1777,8 @@ export const createFeatureLabelActions = ({
     closeLabelTextScopeDialog();
     closeHiddenLabelTextDialog();
     commitLabelEdit();
-    queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
+    const projection = syncLabelEditor({ queueIncompleteVisibility: false });
+    queueLabelReflow(sourceUnknown || Boolean(projection?.rerender));
   };
 
   // The label edits a loaded Label TSV makes replace the drawing's label

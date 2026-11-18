@@ -12,17 +12,21 @@ export const PREVIEW_MATCH_BUTTON_ATTRIBUTE = 'data-gbdraw-preview-match';
 // The marks the label binder (app/feature-editor/label-actions.js bindLabels)
 // writes on each label of a mounted Result it binds for editing: that it is
 // editable, its key in the Features list, and the text it showed when bound.
-// Python writes none of them. An export strips them, so its bytes do not
-// depend on whether a label was clicked and a renamed label's old text does
-// not leave the page (OV-3848); the Result keeps them for the editor.
+// Python writes none of them, and they live only on the mounted root: a
+// Result's text and an export are written without them, so neither depends
+// on whether a label was clicked, and a renamed label's old text does not
+// leave the page (OV-3848). A label's source text is its feature row's
+// (`labelSourceText`); the binder rebinds a mounted root from the row.
 export const LABEL_EDITABLE_ATTRIBUTE = 'data-label-editable';
 export const LABEL_KEY_ATTRIBUTE = 'data-label-key';
 export const LABEL_SOURCE_TEXT_ATTRIBUTE = 'data-label-source-text';
 export const LABEL_BINDER_ATTRIBUTES = Object.freeze([
   LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
 ]);
+// The labels the binder made editable.
+export const EDITABLE_LABEL_SELECTOR = `text[${LABEL_EDITABLE_ATTRIBUTE}="true"]`;
 
-/** @param {Element} root An export's copy of the Result. */
+/** @param {Element} root A copy of the mounted Result that saving or an export writes. */
 export const stripLabelBinderAttributes = (root) => {
   root.querySelectorAll(LABEL_BINDER_ATTRIBUTES.map((name) => `[${name}]`).join(', ')).forEach((element) => {
     LABEL_BINDER_ATTRIBUTES.forEach((name) => element.removeAttribute(name));
