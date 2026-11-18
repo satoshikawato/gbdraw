@@ -67,6 +67,9 @@ DEFAULT_WEBP_QUALITY = 95
 DEFAULT_DEVICE_SCALE_FACTOR = 3
 DEFAULT_VIEWPORT = {"width": 1280, "height": 900}
 DEFAULT_GENERATE_TIMEOUT_MS = 1_800_000
+# How long a replayed action waits for the page: after a Session load or a search the page can stay
+# busy for minutes on a loaded machine, past Playwright's 30 s default.
+DEFAULT_ACTION_TIMEOUT_MS = 300_000
 CAPTURE_ACTION_TYPES = frozenset(
     {
         "click",
@@ -1088,7 +1091,8 @@ def drag_between_bases(page, action: dict[str, Any]) -> None:
 
 def generate_and_wait(page, timeout_ms: int) -> None:
     previous_run = page.evaluate("() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')")
-    page.get_by_role("button", name="Generate Diagram", exact=True).click()
+    # The page can hold the click while the work it starts runs (a busy machine): wait as long as the Generate.
+    page.get_by_role("button", name="Generate Diagram", exact=True).click(timeout=timeout_ms)
     page.wait_for_function(
         """
         (previous) => {
@@ -2678,6 +2682,7 @@ def capture_examples(
                 f"command with sandbox escalation. Underlying error: {exc}"
             ) from exc
         page = browser.new_page(device_scale_factor=device_scale_factor)
+        page.set_default_timeout(DEFAULT_ACTION_TIMEOUT_MS)
         captured_count = 0
         failures: list[str] = []
         try:

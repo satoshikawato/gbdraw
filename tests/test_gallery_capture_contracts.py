@@ -887,6 +887,30 @@ def test_click_waits_as_long_as_the_action_names() -> None:
     assert clicks == [("#a", {}), ("#b", {"timeout": 300000}), ("#c", {"force": True, "timeout": 5})]
 
 
+def test_generate_click_waits_as_long_as_the_generate() -> None:
+    """The page can hold the Generate click while the work it starts runs, so the click waits as long as the Generate."""
+
+    calls: list[tuple[str, object]] = []
+
+    class FakeButton:
+        def click(self, **options: object) -> None:
+            calls.append(("click", options))
+
+    class FakePage:
+        def evaluate(self, script: str) -> str:
+            return ""
+
+        def get_by_role(self, role: str, *, name: str, exact: bool) -> FakeButton:
+            return FakeButton()
+
+        def wait_for_function(self, script: str, *, arg: str, timeout: int) -> None:
+            calls.append(("wait", timeout))
+
+    capture_tool.apply_capture_action(FakePage(), {"type": "generate", "timeout": 900000})
+
+    assert calls == [("click", {"timeout": 900000}), ("wait", 900000)]
+
+
 def test_replay_resets_then_performs_steps_through_the_named_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
