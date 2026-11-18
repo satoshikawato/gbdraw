@@ -141,8 +141,15 @@ const readIdentityScale = (value) => (
     ? { value: [value[0], value[1]], lost: false }
     : { value: null, lost: !isUnsetValue(value) }
 );
-/** @type {FieldRow['read']} */
-const retiredField = (value) => ({ value: undefined, lost: !isUnsetValue(value) });
+/**
+ * The reader of a retired field: the field is no longer read. A stored value
+ * is lost unless it is `written`, the value every writer of the field wrote
+ * with no control to change it: such a value holds no choice of the user
+ * (OV-3925). A field without such a value has every stored value lost.
+ * @param {unknown} [written]
+ * @returns {FieldRow['read']}
+ */
+const retiredField = (written) => (value) => ({ value: undefined, lost: !isUnsetValue(value) && value !== written });
 
 /** An object, else empty. @type {FieldReader<Record<string, unknown>>} */
 export const readPlainObject = (value) => (isPlainObject(value) ? { value, lost: false } : { value: {}, lost: !isUnsetValue(value) });
@@ -728,10 +735,12 @@ const LOSAT_SEARCH_ROWS = Object.freeze([
   row('collinearAnchorMode', readCollinearAnchorMode),
   row('collinearMergeOrientation', readCollinearMergeOrientation),
   row('collinearSearchScope', readCollinearSearchScope),
-  { field: 'collinearBlockMergeGap', read: retiredField, retired: true },
-  { field: 'collinearSingletonMergeGap', read: retiredField, retired: true },
-  { field: 'orthogroupHitPolicy', read: retiredField, retired: true },
-  { field: 'orthogroupMaxHits', read: retiredField, retired: true }
+  // From #193 to #256 the Web app wrote the merge gaps 50 and 25 into each Session it saved
+  // (Sessions 18 to 27) and had no control for them; Session 28's Web writer (#257) never wrote them.
+  { field: 'collinearBlockMergeGap', read: retiredField(50), retired: true },
+  { field: 'collinearSingletonMergeGap', read: retiredField(25), retired: true },
+  { field: 'orthogroupHitPolicy', read: retiredField(), retired: true },
+  { field: 'orthogroupMaxHits', read: retiredField(), retired: true }
 ]);
 
 /**
@@ -1178,7 +1187,7 @@ const readRows = (container, rows, at, stored = container) => rows.flatMap(({ fi
   if (retired) {
     const storedValue = stored?.[field];
     delete container[field];
-    return retiredField(storedValue, container).lost ? [{ at: fieldAt, stored: storedValue, used: undefined }] : [];
+    return read(storedValue, container).lost ? [{ at: fieldAt, stored: storedValue, used: undefined }] : [];
   }
   const before = container[field];
   const reading = read(before, container);

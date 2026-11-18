@@ -309,6 +309,7 @@ import {
   savedComparisonSource,
   serializeImportedComparisonResolution
 } from './imported-comparison-intent.js';
+import { reconcileLinearRecordLayout } from './linear-record-layout.js';
 
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import {
@@ -5511,13 +5512,24 @@ const applyFiles = (filesData, {
   targetState.files.linearCanonicalComparisons = [];
   // The setting-table cards are cleared by Reset Settings, which every Session replace runs first.
   targetState.linearReorderNotice.value = '';
+  /**
+   * The rows of the cards Load gives: each card its saved row, else a row of its own, the one reconciliation of rows
+   * and cards, whether the file stores the cards or not (OV-3714). A settings-only Load resolves no record inputs:
+   * it keeps the saved rows of the cards a file stores, and a file with no inputs leaves no rows.
+   * @param {readonly { uid: string }[]} cards
+   */
+  const reconcileRows = (cards) => {
+    if (resolveRecordInputs) {
+      SETTINGS_SLICE.install(targetDrawing.slices.settings, { linearRecordRows: reconcileLinearRecordLayout(cards, targetDrawing.linearRecordRows) });
+    }
+  };
 
   if (!filesData) {
     const linearSeqs = normalizeLinearSeqList([]);
-    SETTINGS_SLICE.install(targetDrawing.slices.settings, {
-      linearRecordRows: [],
-      linearComparisonPlan: normalizeLinearComparisonPlan(reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs))
-    });
+    // The saved rows name cards this Load does not give.
+    if (resolveRecordInputs) reconcileRows(linearSeqs);
+    else SETTINGS_SLICE.install(targetDrawing.slices.settings, { linearRecordRows: [] });
+    installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs));
     return { collapsedLinearSeqs: false, linearSeqs, circularSources: [] };
   }
 
@@ -5587,26 +5599,7 @@ const applyFiles = (filesData, {
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
     const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
-    if (resolveRecordInputs) {
-      // A saved row, unvalidated (OV-568): the lines below test each field they keep.
-      const rowByUid = new Map(targetDrawing.linearRecordRows.map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => [String(entry?.uid || ''), entry]));
-      SETTINGS_SLICE.install(targetDrawing.slices.settings, {
-        linearRecordRows: collapsed.map((seq, /** @type {number} */ index) => {
-          const saved = rowByUid.get(seq.uid);
-          const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
-            ? Number(saved.row) : index + 1;
-          return {
-            uid: seq.uid, row,
-            ...(saved?.canonicalCardinality === 'exactly_one'
-              ? { canonicalCardinality: 'exactly_one' } : {}),
-            ...(Number(saved?.canonicalRow) === row
-              && Number.isInteger(saved?.canonicalColumn) && saved.canonicalColumn > 0
-              ? { canonicalRow: row, canonicalColumn: saved.canonicalColumn }
-              : {})
-          };
-        })
-      });
-    }
+    reconcileRows(collapsed);
     /** @type {readonly LoadedComparisonFileRow[]} */
     const comparisonRows = Array.isArray(read.linearComparisons) ? read.linearComparisons : [];
     const comparisonFiles = new Map(comparisonRows
@@ -5630,6 +5623,7 @@ const applyFiles = (filesData, {
   }
 
   const linearSeqs = normalizeLinearSeqList([]);
+  reconcileRows(linearSeqs);
   installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs));
   return { collapsedLinearSeqs: false, linearSeqs, circularSources };
 };
@@ -9210,15 +9204,19 @@ const importSessionDocument = async (e, options = {}) => {
       return /** @type {{ inputs: LiveFileState, bound: ReturnType<typeof bindLoadedInputs> }} */ (liveFileStates.get(loaded));
     };
     // Each drawing takes its own files, its card files among them (R16-4),
-    // then its comparisons, classified from its own request (a Session
-    // 27-50's one Linear part is its Linear drawing's), a Session 27-44's
-    // from the file's stored request, which Python's conversion leaves out
-    // of a Circular request's drawings (C-OD14), and fits its Depth tracks.
+    // then its comparisons, classified from its own request as Load read it
+    // (a Session 27-50's one Linear part is its Linear drawing's; a Session
+    // 27-44's request is Python's conversion, the request the drawing
+    // commits, so what Inherit copies is read as a Save of it reads again,
+    // OV-3715). A drawing without a request of its own takes the
+    // classification of a Session 27-44's stored request: the Linear
+    // comparisons of a Circular request, which Python's conversion leaves
+    // out of its drawings (C-OD14). Each then fits its Depth tracks.
     const fileComparisonClassification = legacyRead ? legacyRead.comparisonClassification : null;
     committed.forEach((drawing) => settleStoredDrawing(drawing, {
       ...boundFilesOf(filesOf(drawing.id)),
-      comparisonClassification: fileComparisonClassification ?? (projectedDrawingId === null || drawing.id === projectedDrawingId
-        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null),
+      comparisonClassification: (projectedDrawingId === null || drawing.id === projectedDrawingId
+        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null) ?? fileComparisonClassification,
       importedComparisonResolution: draftConfigOf(drawing.id)?.importedComparisonResolution,
       fitDepth: !settingsOnly
     }));

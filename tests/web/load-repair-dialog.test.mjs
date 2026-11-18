@@ -1548,6 +1548,23 @@ test('a stored label style outside its list reads as its mode\'s default and is 
   }
 });
 
+// A retired protein-search field that holds the value every writer of it
+// wrote (from #193 to #256 the Web app wrote the merge gaps 50 and 25 into each
+// Session it saved, Sessions 18 to 27, and had no control for them; Session 28's Web writer never wrote
+// them) loses no setting: it is not listed (OV-3925), as
+// Python's replay of such a Session warns of nothing. Another value is listed,
+// and so is any value of a retired field no writer wrote.
+test('a retired field that holds the value its writers always wrote is not listed; another value is', async () => {
+  const { configFieldRepairs, defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  // The protein search is a Linear drawing's.
+  const listed = (blastp) => configFieldRepairs(defaultSettingsContainers('linear'), { losat: { blastp } }, 'config', { mode: 'linear' })
+    .map(({ code, path }) => `${code} ${path}`);
+  assert.deepEqual(listed({ collinearBlockMergeGap: 50, collinearSingletonMergeGap: 25 }), []);
+  assert.deepEqual(listed({ collinearBlockMergeGap: 40, collinearSingletonMergeGap: 25, orthogroupMaxHits: 3 }), [
+    'setting-replaced config.losat.blastp.collinearBlockMergeGap', 'setting-replaced config.losat.blastp.orthogroupMaxHits'
+  ]);
+});
+
 // A similarity-group name that is no text (an object, a boolean) is
 // dropped and counted, not applied as its text; a number is its text. The
 // older `priorityRules` is read only when `qualifierPriorityRules` is
@@ -1839,80 +1856,6 @@ test('a flat override name in a draft is not read: Load drops it with a row and 
     }, JSON.stringify(overrides));
     delete modeDrawing(state, 'circular').unmanagedConfigOverrides[key];
   }
-});
-
-// G3: every Gallery Session and every Session fixture loads without a repair;
-// a repair there is a producer bug. Two fixtures are lossy on purpose. Node
-// supplies no diagram Worker: a Session older than 40 reads its features again
-// through it, so the fixtures below list that recovery here (and only because
-// the Worker is missing: each asks for it). The browser specs load them (OV-751):
-// gui-audit-20260930-inputs and live-generate-parity assert no dialog for
-// seven; session-loading-feedback answers the one table row of
-// whitelist-tab-keyword.v39 and loads the two mode-switch v30 fixtures without
-// a dialog: their recovery reads the inputs of the Result's mode (OV-677). Five
-// fixtures needed a Worker service to load at all until Python converted a
-// Session 27-44 (OV-1958, D-15-140); they load in node now, the cropped or
-// reversed ones asking the diagram Worker for their features. The browser
-// specs feature-identity-overrides and gui-audit-20260930-comparisons load them.
-const LOSSY_FIXTURES = {
-  'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
-  'whitelist-tab-keyword.v39.gbdraw-session.json.gz': ['table-row-joined']
-};
-const FEATURES_NEED_DIAGRAM_WORKER = new Set([
-  'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.v29.gbdraw-session.json.gz',
-  'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz', 'cli-linear-protein.v30.gbdraw-session.json.gz', 'conservation-fasta.v39.gbdraw-session.json.gz',
-  'lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz', 'scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz',
-  'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz',
-  'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz',
-  'legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz', 'legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz',
-  'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz', 'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz',
-  // gui-audit-20260930-comparisons loads it in the browser (OV-1181).
-  'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz'
-]);
-// G2b (E-OD02): the document Save writes after each of those Loads reads
-// again with no repair of the document reader (`readSessionDocument`); the
-// settings readers' rows are G3's, checked on the stored file above.
-test('every Gallery Session and Session fixture loads without a repair (G3), and the document its Save writes reads again without a document repair (G2b)', async () => {
-  const sessions = (dir, keep) => readdirSync(new URL(dir, import.meta.url)).filter(keep).map((name) => [name, new URL(`${dir}${name}`, import.meta.url)]);
-  const corpus = [
-    ...sessions('../fixtures/sessions/', (name) => /\.json(\.gz)?$/.test(name) && !/provenance|expected|evidence|vectors/.test(name)),
-    ...sessions('../../gbdraw/web/gallery/sessions/', (name) => /\.(json(\.gz)?|gbdraw)$/.test(name))
-  ];
-  assert.ok(corpus.length > 50, String(corpus.length));
-  const ImportWorker = globalThis.Worker;
-  let askedDiagramWorker = false;
-  globalThis.Worker = class extends ImportWorker {
-    /** @param {string | URL} url */
-    constructor(url) { askedDiagramWorker ||= !String(url).endsWith('/session-import-worker.js'); super(url); }
-  };
-  // The protein result conversion answers "nothing changed"; it is asked for
-  // exactly the Sessions 46-47 that stored protein results of a reversed
-  // record (Python's conversion of a Session 27-44 moves its own, OV-1969).
-  const askedProteinConversion = new Set();
-  let current = '';
-  setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
-  for (const [name, url] of corpus) {
-    const bytes = readFileSync(url);
-    const session = await readSavedSession(new Blob([bytes]));
-    askedDiagramWorker = false;
-    current = name;
-    const loaded = await importSession(await input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
-    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
-    const nodeOnly = FEATURES_NEED_DIAGRAM_WORKER.has(name) ? ['feature-recovery-failed'] : [];
-    assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly], name);
-    assert.equal(askedDiagramWorker, nodeOnly.length > 0, `${name}: the Features row comes from the missing diagram Worker`);
-    // A Session 27-39 with a Result is saved only after Generate.
-    const saved = await savedSession(`G2b ${name}`).catch((error) => {
-      if (error?.code !== 'SESSION_SAVE_REQUIRES_GENERATE' || session.version >= 40) throw error;
-      return null;
-    });
-    if (saved) assert.deepEqual(readSessionDocument(saved).repairs, [], `${name}: G2b`);
-  }
-  globalThis.Worker = ImportWorker;
-  setStoredProteinResultFrameConverter(null);
-  assert.deepEqual([...askedProteinConversion].sort(), [
-    'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
-  ]);
 });
 
 // OV-1181: a Session 39 stores the protein table of its reversed record in

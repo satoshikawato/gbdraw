@@ -3,7 +3,9 @@
 // hashes them in node), and the comparisons the random walk
 // (tests/web/helpers/live-random-walk.mjs) and the Gallery round-trip audit
 // (tools/audit/gallery-roundtrip.audit.spec.js) make of two such sets: the one
-// reader of a drawing's state by slice for both.
+// reader of a drawing's state by slice for both, and for the node round trip of
+// every Session fixture (tests/web/session-fixture-round-trip.test.mjs), which compares
+// the texts the hashes are made of (`drawingSliceTexts`).
 
 /**
  * The slice hashes of every drawing by drawing ID, and the shown drawing.
@@ -18,10 +20,10 @@
  * drawing by the Linear File cards' grouping, `groupLinearSourceRecords`)
  * renamed in order of appearance within the drawing, so it says which refs
  * share a source and not which file of the project the store named it after;
- * then the runtime identities renamed in order of appearance within the
- * capture: the file IDs (`file-<n>`) and the Linear record and Circular File
- * card UIDs (`linear-seq-…`, `circular-source-…`, services/drawing/inputs.js),
- * which a page makes anew when it reads a Session; and without the fields
+ * then the runtime identities (`renameRuntimeIdentities`) renamed in order of
+ * appearance within the drawing, its slices in the order `slices` lists them,
+ * so a slice that names an identity of another slice names it by the same
+ * name; and without the fields
  * left out (`leftOut`). Two states that differ only by those have equal
  * `renamed` hashes; a check within one page compares `drawings`.
  * `leftOut` names, per drawing and slice, the fields its `renamed` hash left
@@ -31,6 +33,24 @@
  *   leftOut: FieldsLeftOut }} SliceHashes
  */
 /** @typedef {Record<string, Record<string, string[][]>>} FieldsLeftOut */
+
+// The identities a page makes anew when it reads a Session: the file IDs
+// (`file-<n>`) and the Linear record and Circular File card UIDs
+// (`linear-seq-…`, `circular-source-…`, services/drawing/inputs.js).
+const RUNTIME_IDENTITY = /(?:linear-seq|circular-source)-[0-9a-f]+(?:-[0-9a-f]+)*|file-\d+/g;
+
+/**
+ * `text` with each runtime identity renamed in order of appearance. `names`
+ * holds the names given so far: a caller that renames several texts of one
+ * state with one map keeps an identity's name across them, so a text that
+ * names an identity no other text names reads as another name, not as the
+ * name of the identity at its place elsewhere.
+ * @param {string} text @param {Map<string, string>} [names]
+ */
+export const renameRuntimeIdentities = (text, names = new Map()) => text.replace(RUNTIME_IDENTITY, (identity) => {
+  if (!names.has(identity)) names.set(identity, `runtime-identity-${names.size + 1}`);
+  return /** @type {string} */ (names.get(identity));
+});
 /**
  * A drawing whose slices differ between two hash sets, in a phase of a check.
  * @typedef {{ phase: string, drawing: string, slices: string[] }} SliceChange
@@ -45,25 +65,27 @@
  */
 
 /**
- * The slice hashes of every drawing. `omit` names the fields to leave out
- * by what they hold here; `leftOut` (a `leftOut` an earlier call returned)
- * names the fields to leave out as that call did, so a check compares
- * two states without the fields where the first held a defect's value.
- * @param {import('@playwright/test').Page} page
- * @param {{ omit?: SliceFieldsOff, leftOut?: FieldsLeftOut }} [options]
- * @returns {Promise<SliceHashes>}
+ * The slice texts of every drawing, the one reader both hash sets come from:
+ * `drawings` each capture's JSON as it is, `renamed` its JSON as a check
+ * across a Session Load compares it (see SliceHashes), and the fields that
+ * left out. It reads `state` (gbdraw/web/js/state.js) through `slices`
+ * (`DRAWING_SLICES`), in the page or in node.
+ * @typedef {{ id: string, slices: Readonly<Record<string, unknown>> }} SlicedDrawing
+ * @param {{ drawingList: () => readonly SlicedDrawing[], activeDrawing: () => { id: string } }} state
+ * @param {Readonly<Record<string, { capture(handle: unknown): unknown }>>} slices
+ * @param {{ omit?: SliceFieldsOff, leftOut?: FieldsLeftOut | null }} [options]
+ * @returns {SliceHashes}
  */
-export const sliceHashes = (page, { omit = {}, leftOut = null } = {}) => page.evaluate(async ({ omit, leftOut }) => {
-  const { state } = await import('/gbdraw/web/js/state.js');
-  const { DRAWING_SLICES } = await import('/tests/web/helpers/drawing-state.mjs');
-  const hex = async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
-    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  const RUNTIME_IDENTITY = /(?:linear-seq|circular-source)-[0-9a-f]+(?:-[0-9a-f]+)*|file-\d+/g;
+export const drawingSliceTexts = (state, slices, { omit = {}, leftOut = null } = {}) => {
+  /** @param {unknown} value @returns {value is Record<string, any>} */
   const isObject = (value) => value !== null && typeof value === 'object';
+  /** @param {string | number} key */
   const masked = (key) => String(key).replace(RUNTIME_IDENTITY, 'runtime-identity');
+  /** @param {string} a @param {string} b */
   const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
   // Keys in order by key, then by value, each with its runtime identities
   // masked, so the order does not depend on the names a page gave.
+  /** @param {unknown} value @returns {unknown} */
   const canonical = (value) => {
     if (Array.isArray(value)) return value.map(canonical);
     if (!isObject(value)) return value;
@@ -73,9 +95,11 @@ export const sliceHashes = (page, { omit = {}, leftOut = null } = {}) => page.ev
     return Object.fromEntries(entries.map(({ key, field }) => [key, field]));
   };
   // The keys at a pattern's place (`*` each key or index), by masked key.
+  /** @param {Record<string, any>} value @param {string} segment */
   const keysAt = (value, segment) => (segment === '*' ? Object.keys(value) : Object.keys(value).filter((key) => masked(key) === segment));
   // The fields a pattern names where they hold one of `when` (or always),
   // each as its masked keys.
+  /** @param {unknown} value @param {string[]} path @param {FieldOff['when']} when @param {string[]} [at] @returns {string[][]} */
   const fieldsAt = (value, [head, ...rest], when, at = []) => {
     if (!isObject(value)) return [];
     const keys = keysAt(value, head);
@@ -83,6 +107,7 @@ export const sliceHashes = (page, { omit = {}, leftOut = null } = {}) => page.ev
     const present = keys.length ? keys : head === '*' ? [] : [head];
     return present.filter((key) => !when || when.includes(Object.hasOwn(value, key) ? value[key] : null)).map((key) => [...at, masked(key)]);
   };
+  /** @param {unknown} value @param {string[]} field @returns {unknown} */
   const withoutField = (value, [head, ...rest]) => {
     if (!isObject(value)) return value;
     const copy = Array.isArray(value) ? [...value] : { ...value };
@@ -93,39 +118,62 @@ export const sliceHashes = (page, { omit = {}, leftOut = null } = {}) => page.ev
     }
     return copy;
   };
-  const renamedText = (text) => {
-    const names = new Map();
-    return text.replace(RUNTIME_IDENTITY, (identity) => {
-      if (!names.has(identity)) names.set(identity, `runtime-identity-${names.size + 1}`);
-      return names.get(identity);
-    });
-  };
-  const drawings = {};
-  const renamed = {};
-  const fieldsLeftOut = {};
+  /** @type {SliceHashes} */
+  const texts = { active: state.activeDrawing().id, drawings: {}, renamed: {}, leftOut: {} };
   for (const drawing of state.drawingList()) {
-    drawings[drawing.id] = {};
-    renamed[drawing.id] = {};
-    fieldsLeftOut[drawing.id] = {};
+    texts.drawings[drawing.id] = {};
+    texts.renamed[drawing.id] = {};
+    texts.leftOut[drawing.id] = {};
     const sources = new Map();
+    // One name per runtime identity across the drawing's slices, so a row of
+    // the settings names the card of the inputs it names (OV-3714's channel).
+    /** @type {Map<string, string>} */
+    const names = new Map();
+    /** @param {string} id */
     const sourceName = (id) => {
       if (!sources.has(id)) sources.set(id, `source-${sources.size + 1}`);
       return sources.get(id);
     };
+    /** @param {unknown} value @returns {unknown} */
     const sourcesRenamed = (value) => (Array.isArray(value) ? value.map(sourcesRenamed)
       : isObject(value) ? Object.fromEntries(Object.entries(value)
         .map(([key, field]) => [key, key === 'sourceId' && typeof field === 'string' ? sourceName(field) : sourcesRenamed(field)])) : value);
-    for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
+    for (const [name, slice] of Object.entries(slices)) {
       const captured = slice.capture(drawing.slices[name]);
-      drawings[drawing.id][name] = await hex(JSON.stringify(captured));
+      texts.drawings[drawing.id][name] = JSON.stringify(captured);
       const fields = leftOut ? leftOut[drawing.id]?.[name] || []
         : (omit[name] || []).flatMap(({ path, when }) => fieldsAt(captured, path.split('.'), when));
-      fieldsLeftOut[drawing.id][name] = fields;
+      texts.leftOut[drawing.id][name] = fields;
       const kept = fields.reduce((value, field) => withoutField(value, field), captured);
-      renamed[drawing.id][name] = await hex(renamedText(JSON.stringify(sourcesRenamed(canonical(kept)))));
+      texts.renamed[drawing.id][name] = renameRuntimeIdentities(JSON.stringify(sourcesRenamed(canonical(kept))), names);
     }
   }
-  return { active: state.activeDrawing().id, drawings, renamed, leftOut: fieldsLeftOut };
+  return texts;
+};
+
+/**
+ * The slice hashes of every drawing: the sha256 of each of its slice texts
+ * (`drawingSliceTexts`). `omit` names the fields to leave out
+ * by what they hold here; `leftOut` (a `leftOut` an earlier call returned)
+ * names the fields to leave out as that call did, so a check compares
+ * two states without the fields where the first held a defect's value.
+ * @param {import('@playwright/test').Page} page
+ * @param {{ omit?: SliceFieldsOff, leftOut?: FieldsLeftOut | null }} [options]
+ * @returns {Promise<SliceHashes>}
+ */
+export const sliceHashes = (page, { omit = {}, leftOut = null } = {}) => page.evaluate(async ({ omit, leftOut }) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const { DRAWING_SLICES } = await import('/tests/web/helpers/drawing-state.mjs');
+  const { drawingSliceTexts } = await import('/tests/web/helpers/drawing-slice-hashes.mjs');
+  /** @param {string} text */
+  const hex = async (text) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
+    .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  /** @param {Record<string, Record<string, string>>} byDrawing */
+  const hashed = async (byDrawing) => Object.fromEntries(await Promise.all(Object.entries(byDrawing).map(async ([id, bySlice]) => [
+    id, Object.fromEntries(await Promise.all(Object.entries(bySlice).map(async ([name, text]) => [name, await hex(text)])))
+  ])));
+  const texts = drawingSliceTexts(state, DRAWING_SLICES, { omit, leftOut });
+  return { ...texts, drawings: await hashed(texts.drawings), renamed: await hashed(texts.renamed) };
 }, { omit, leftOut });
 
 /**

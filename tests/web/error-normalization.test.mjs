@@ -381,7 +381,7 @@ assert.equal((alignCause.summary.match(/Not a valid regular expression/g)||[]).l
 
 // Native boundary diagnostics retain corrections while discarding private IDs.
 for (const [message, code, context] of [
-  ['The preserved comparison is missing a required resource.', 'COMPARISON_INPUT', { field: 'comparison', reason: 'REQUIRED' }],
+  ['The saved comparison is missing a required resource.', 'COMPARISON_INPUT', { field: 'comparison', reason: 'REQUIRED' }],
   ['Canonical renderRequest records are required.', 'INPUT_INVALID', { field: 'schema', reason: 'RECORDS_REQUIRED' }],
   ['Custom Track Slots use an obsolete schema. Recreate the slots with schema version 2.', 'INPUT_INVALID', { field: 'schema', reason: 'TRACK_SCHEMA' }],
   ['Session contains unclassified top-level field(s): PRIVATE_FIELD', 'INPUT_INVALID', { field: 'schema', reason: 'SESSION_FIELDS' }]
@@ -401,6 +401,13 @@ for (const message of ['Unsupported Web file binding schema.', 'Web binding sche
   'A Web file binding requires a canonical resourceId.', 'Unknown Web binding inventory field.',
   'Session resource PRIVATE_RESOURCE has an invalid declared byte size.',
   'Session resource PRIVATE_RESOURCE has an unsupported encoded payload.']) {
+  assert.equal(roundtrip(new Error(message)).code, 'UNKNOWN', message);
+}
+// No code gives these texts any more, so none is classified: Inherit's missing resource is
+// COMPARISON_CHOICE_REQUIRED (03674707b), and the Imported comparison state classifies only a Linear
+// drawing's comparisons (OV-3713).
+for (const message of ['The preserved comparison is missing a required resource.',
+  'The saved Circular comparison is missing a required resource.']) {
   assert.equal(roundtrip(new Error(message)).code, 'UNKNOWN', message);
 }
 
