@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from copy import deepcopy
 from pathlib import Path
 
@@ -9,7 +10,8 @@ import pytest
 import gbdraw.labels.circular as circular_labels_module
 from gbdraw.api.config import apply_config_overrides, load_default_config
 from gbdraw.circular import _get_args, run_circular_from_namespace
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.labels.circular_leaders import leader_polyline
 from gbdraw.labels.circular_radial import place_radial_labels, radial_text_orientation
 
 
@@ -235,6 +237,48 @@ def test_candidate_extraction_runs_once_across_inner_radius_preflight(
     assert calls == 1
 
 
+def _rotated_tobacco_argv(tmp_path: Path, output: Path) -> list[str]:
+    """Docs recipe H-CLI-14: the tobacco plastome drawn from bp 5500, one feature placed outward, radial labels."""
+
+    repository = Path(__file__).parents[1]
+    placements = tmp_path / "placements.tsv"
+    placements.write_text(
+        "record\tfeature_selector\tplacement\tlevel\nNC_001879.2\tprotein_id=NP_054479.1\toutward\t1\n",
+        encoding="utf-8",
+    )
+    priority = tmp_path / "qualifier_priority.tsv"
+    priority.write_text("CDS\tgene,old_locus_tag\n", encoding="utf-8")
+    return [
+        "--gbk", str(repository / "tests/test_inputs/NC_001879.gbk"),
+        "-t", "builtin:plastid",
+        "-k", "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin",
+        "--track_type", "tuckin",
+        "--display_start_coordinate", "5500",
+        "--feature_placement_table", str(placements),
+        "--feature_overlap_tolerance_bp", "1",
+        "--resolve_overlaps",
+        "--gc",
+        "--no-skew",
+        "--labels", "both",
+        "--label_placement", "radial",
+        "--outer_label_x_radius_offset", "0.9",
+        "--outer_label_y_radius_offset", "0.9",
+        "--inner_label_x_radius_offset", "0.975",
+        "--inner_label_y_radius_offset", "0.975",
+        "--qualifier_priority", str(priority),
+        "--annotation_table", str(repository / "examples/nicotiana-tabacum-regions.tsv"),
+        "--circular_track_slot", "features:features@side=overlay,lane_direction=split",
+        "--circular_track_slot",
+        "plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,"
+        "outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress",
+        "--circular_track_slot",
+        "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content",
+        "--legend", "none",
+        "--format", "svg",
+        "--output", str(output),
+    ]
+
+
 # The ribosomal protein cluster under ycf2 in the rotated tobacco plastome (docs recipe H-CLI-14, OV-3648): rpoA,
 # rps11, rpl36, rps8, rpl14, rpl16, rps3, rpl22, rps19, rpl2, rpl23 and tRNA-Ile, by feature id (the inverted-repeat
 # copies of rpl2, rpl23, rps19 and tRNA-Ile carry other ids).
@@ -264,46 +308,7 @@ def test_rotated_tobacco_plastome_keeps_its_south_inner_labels_over_their_featur
         return result
 
     monkeypatch.setattr(circular_labels_module, "place_radial_labels", captured)
-    repository = Path(__file__).parents[1]
-    placements = tmp_path / "placements.tsv"
-    placements.write_text(
-        "record\tfeature_selector\tplacement\tlevel\nNC_001879.2\tprotein_id=NP_054479.1\toutward\t1\n",
-        encoding="utf-8",
-    )
-    priority = tmp_path / "qualifier_priority.tsv"
-    priority.write_text("CDS\tgene,old_locus_tag\n", encoding="utf-8")
-    args = _get_args(
-        [
-            "--gbk", str(repository / "tests/test_inputs/NC_001879.gbk"),
-            "-t", "builtin:plastid",
-            "-k", "CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin",
-            "--track_type", "tuckin",
-            "--display_start_coordinate", "5500",
-            "--feature_placement_table", str(placements),
-            "--feature_overlap_tolerance_bp", "1",
-            "--resolve_overlaps",
-            "--gc",
-            "--no-skew",
-            "--labels", "both",
-            "--label_placement", "radial",
-            "--outer_label_x_radius_offset", "0.9",
-            "--outer_label_y_radius_offset", "0.9",
-            "--inner_label_x_radius_offset", "0.975",
-            "--inner_label_y_radius_offset", "0.975",
-            "--qualifier_priority", str(priority),
-            "--annotation_table", str(repository / "examples/nicotiana-tabacum-regions.tsv"),
-            "--circular_track_slot", "features:features@side=overlay,lane_direction=split",
-            "--circular_track_slot",
-            "plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,"
-            "outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress",
-            "--circular_track_slot",
-            "gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content",
-            "--legend", "none",
-            "--format", "svg",
-            "--output", str(tmp_path / "rotated_placed_chloroplast"),
-        ]
-    )
-
+    args = _get_args(_rotated_tobacco_argv(tmp_path, tmp_path / "rotated_placed_chloroplast"))
     run_circular_from_namespace(args)
 
     cluster = [
@@ -318,3 +323,200 @@ def test_rotated_tobacco_plastome_keeps_its_south_inner_labels_over_their_featur
     # Before the fix: every offset 0 to +12 degrees, mean +5.6. Spread around the features: -6 to +6, mean 0.
     assert min(offsets) < -2.0 and max(offsets) < 8.0, offsets
     assert abs(sum(offsets) / len(offsets)) < 2.0, offsets
+
+
+def _block_outlines(svg_text: str) -> list[list[tuple[float, float]]]:
+    """The drawn feature blocks of a Circular SVG as polygons: its arcs (about the circle centre) in 0.25 degree steps."""
+
+    outlines = []
+    for element in re.findall(r'<path [^>]*data-gbdraw-feature-part="block"[^>]*/>', svg_text):
+        tokens = re.findall(r"[MLAz]|-?[0-9.]+(?:e-?[0-9]+)?", re.search(r' d="([^"]+)"', element).group(1))
+        points: list[tuple[float, float]] = []
+        index = 0
+        while index < len(tokens):
+            command = tokens[index]
+            if command in {"M", "L"}:
+                points.append((float(tokens[index + 1]), float(tokens[index + 2])))
+                index += 3
+            elif command == "A":
+                sweep = tokens[index + 5] == "1"
+                end = (float(tokens[index + 6]), float(tokens[index + 7]))
+                start_angle = math.atan2(points[-1][1], points[-1][0])
+                turn = (math.atan2(end[1], end[0]) - start_angle) % (2 * math.pi)
+                if not sweep:
+                    turn -= 2 * math.pi
+                radius = float(tokens[index + 1])
+                steps = max(1, int(abs(math.degrees(turn)) / 0.25))
+                points.extend(
+                    (radius * math.cos(start_angle + turn * step / steps), radius * math.sin(start_angle + turn * step / steps))
+                    for step in range(1, steps)
+                )
+                points.append(end)
+                index += 8
+            else:
+                index += 1
+        outlines.append(points)
+    return outlines
+
+
+def _inside(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    x, y = point
+    inside = False
+    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def _lambda_two_slot_argv(font_size: str, output: Path) -> list[str]:
+    return [
+        "--gbk", str(Path(__file__).parents[1] / "tests/test_inputs/NC_001416.gb"),
+        "--labels", "both",
+        "--label_placement", "radial",
+        "--label_font_size", font_size,
+        "--circular_track_slot", "outer:features@side=outside,lane_direction=outside",
+        "--circular_track_slot", "ticks:ticks",
+        "--circular_track_slot", "features:features",
+        "--format", "svg",
+        "--output", str(output),
+    ]
+
+
+@pytest.mark.parametrize("case", ["lambda-8.5pt", "lambda-8pt"])
+def test_radial_leaders_run_outside_the_feature_band(
+    case: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A radial leader enters no feature block before its end on its feature's outline (OV-3841).
+
+    Leaders are drawn below the features, so a leader that runs through a block is hidden there. In lambda with
+    labels on both sides, the inner leaders ran from an elbow on the band's inner edge, at the label's angle, to the
+    middle of the lane at the feature's angle, through up to 14 degrees of neighbouring features; with the elbow off
+    the band they ran side by side along it, and 8.5 pt no longer fit until growth widened the inner room.
+    """
+
+    results = []
+    original = circular_labels_module.place_radial_labels
+
+    def captured(*args, **kwargs):
+        result = original(*args, **kwargs)
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(circular_labels_module, "place_radial_labels", captured)
+    output = tmp_path / "radial"
+    run_circular_from_namespace(_get_args(_lambda_two_slot_argv(case.removeprefix("lambda-").removesuffix("pt"), output)))
+
+    outlines = _block_outlines(output.with_suffix(".svg").read_text(encoding="utf-8"))
+    labels = [label for label in results[-1].labels if label.get("placement") == "radial"]
+    assert outlines and len(labels) > 50
+    buried = {}
+    for label in labels:
+        anchor, elbow, contact = leader_polyline(label)
+        hidden = 0.0
+        for start, end in ((contact, elbow), (elbow, anchor)):
+            length = math.dist(start, end)
+            steps = max(1, int(length / 0.25))
+            for step in range(steps + 1):
+                share = step / steps
+                point = (start[0] + (end[0] - start[0]) * share, start[1] + (end[1] - start[1]) * share)
+                # The end on the feature's outline is the leader's last point.
+                if math.dist(point, anchor) > 0.5 and any(_inside(point, outline) for outline in outlines):
+                    hidden += length / steps
+        if hidden > 0.0:
+            buried[label["label_text"]] = round(hidden, 1)
+    assert not buried, buried
+
+
+def test_radial_growth_holds_only_the_tracks_inside_the_inner_label_lanes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Growth for radial inner labels keeps the tracks inside the inner labels' lanes and moves the rest (OV-3841).
+
+    In the lambda repro a scale stands between the two features slots. Held at its radius, it held the inner lanes
+    in place too, so growing the circle never widened the inner labels' room and the figure was refused.
+    """
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    calls = []
+    original = assemble_module._slots_held_for_radial_growth
+
+    def captured(slots, resolved_slots, radius_px):
+        held = original(slots, resolved_slots, radius_px)
+        calls.append((list(slots), list(resolved_slots), held))
+        return held
+
+    monkeypatch.setattr(assemble_module, "_slots_held_for_radial_growth", captured)
+    repository = Path(__file__).parents[1]
+    args = _get_args(
+        [
+            "--gbk", str(repository / "tests/test_inputs/NC_001416.gb"),
+            "--labels", "both",
+            "--label_placement", "radial",
+            "--label_font_size", "8.5",
+            "--circular_track_slot", "outer:features@side=outside,lane_direction=outside",
+            "--circular_track_slot", "ticks:ticks",
+            "--circular_track_slot", "features:features",
+            "--circular_track_slot", "gc_content:dinucleotide_content@side=inside,r=0.42,w=0.04",
+            "--legend", "none",
+            "--format", "svg",
+            "--output", str(tmp_path / "lambda_growth"),
+        ]
+    )
+    refused = None
+    try:
+        run_circular_from_namespace(args)
+    except LabelsDoNotFitError as error:
+        refused = error
+
+    assert calls
+    slots, resolved_slots, held = calls[0]
+    resolved = {slot.id: slot for slot in resolved_slots}
+    held_by_id = {
+        resolved_slot.id: held_slot
+        for resolved_slot in resolved_slots
+        for index, held_slot in enumerate(held)
+        if int(resolved_slot.slot_index) == index
+    }
+    inner_lanes = resolved["features"].reserved_band_px
+    assert resolved["ticks"].reserved_band_px.inner_px >= inner_lanes.outer_px - 1e-6
+    assert held_by_id["ticks"].radius is None  # outside the inner lanes: it moves with the radius
+    assert resolved["gc_content"].reserved_band_px.outer_px <= inner_lanes.inner_px + 1e-6
+    assert held_by_id["gc_content"].radius is not None
+    assert held_by_id["gc_content"].radius.unit == "px"  # inside the inner lanes: it keeps its radius
+    assert refused is None, refused  # growth widened the inner labels' room
+
+
+def test_radial_leader_ends_leave_out_positions_under_another_lane() -> None:
+    """A radial leader ends where no feature of another lane lies between its feature and the labels (OV-3841).
+
+    An outer leader that ended under the feature of the lane above ran under it; when such features cover the whole
+    labelled segment, no leader from the labels avoids them, and every point stays.
+    """
+
+    from gbdraw.features.objects import FeatureLocationPart, FeatureObject
+    from gbdraw.labels.circular import _radial_leader_edge_points
+
+    feature = FeatureObject(
+        "f", [FeatureLocationPart("block", "1", "positive", 1000, 2000, True)], False, "#000000", "", "", None, "CDS", {}
+    )
+    radii = (100.0, 110.0, 120.0)
+    own_lane = (1000.0, 2000.0, 100.0, 120.0)
+    upper_half = (1000.0, 1500.0, 125.0, 145.0)
+    lower_lane = (0.0, 10_000.0, 70.0, 90.0)
+
+    def angles(lanes, *, outer=True):
+        points = _radial_leader_edge_points(
+            feature, (1000.0, 2000.0), 10_000, 0.0, radii, 1.0, outer=outer, lanes=lanes
+        )
+        assert all(math.hypot(*point) == pytest.approx(120.0 if outer else 100.0) for point in points)
+        return [(math.degrees(math.atan2(y, x)) + 90.0) % 360.0 for x, y in points]
+
+    free = angles([own_lane, lower_lane])
+    assert len(free) == 33 and min(free) == pytest.approx(36.0) and max(free) == pytest.approx(72.0)
+    half = angles([own_lane, upper_half, lower_lane])
+    assert min(half) >= 54.0 - 1e-9 and max(half) == pytest.approx(72.0)  # 1500 bp is 54 degrees
+    assert angles([own_lane, (0.0, 10_000.0, 125.0, 145.0)]) == free  # covered throughout: nothing to choose from
+    # An inner label's leader comes from inside: the lane above never blocks it, a lane below over half does.
+    assert len(angles([own_lane, upper_half], outer=False)) == 33
+    assert min(angles([own_lane, (1000.0, 1500.0, 70.0, 90.0)], outer=False)) >= 54.0 - 1e-9

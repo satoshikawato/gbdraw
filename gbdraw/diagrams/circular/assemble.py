@@ -113,6 +113,7 @@ from ...render.track_slot_metadata import (
     circular_axis_geometry,
 )
 from ...layout.circular import (
+    LAYOUT_EPSILON,
     CircularAxisLayout,
     CircularFeatureLaneDirection,
     CircularFeatureLayout,
@@ -3402,6 +3403,49 @@ class CircularRadialGrowthInputs:
     center_reserved_radius_explicit: bool
 
 
+def _slots_held_for_radial_growth(
+    slots: Sequence[CircularTrackSlot],
+    resolved_slots: Sequence[CircularResolvedSlot],
+    radius_px: float,
+) -> list[CircularTrackSlot]:
+    """The slots of a radial label growth pass, before its radius grows: a track inside the inner labels' lanes keeps
+    its radius, and an automatic inside features slot moves outside the axis, so growth makes room for the inner
+    labels. A track outside those lanes moves with the radius: held, a scale between two features slots held the
+    inner lanes in place, and growth never made room (OV-3841)."""
+    inner_lanes = slots_label_lanes(resolved_slots, radius_px).inner
+    inner_lanes_px = float(inner_lanes.all_band_px.inner_px) if inner_lanes is not None else math.inf
+    held: list[CircularTrackSlot] = []
+    for slot_index, slot in enumerate(slots):
+        resolved_slot = next(
+            (candidate for candidate in resolved_slots if int(candidate.slot_index) == int(slot_index)),
+            None,
+        )
+        # Outside rows are not frozen: they stay beyond the enlarged
+        # axis and the feature slot moved outside, in stack order.
+        if (
+            str(slot.renderer) != "features"
+            and resolved_slot is not None
+            and resolved_slot.anchor_radius_px is not None
+            and resolved_slot.side != "outside"
+            and (
+                resolved_slot.reserved_band_px is None
+                or float(resolved_slot.reserved_band_px.outer_px) <= inner_lanes_px + LAYOUT_EPSILON
+            )
+        ):
+            held.append(replace(slot, radius=ScalarSpec(float(resolved_slot.anchor_radius_px), unit="px")))
+        elif str(slot.renderer) == "features" and slot.radius is None and slot.side == "inside":
+            # Radial inner labels need a real arena between features and
+            # the frozen inner tracks. Move the automatic tuck-in feature
+            # slot to the outside of the enlarged axis while preserving
+            # the remaining slot parameters.
+            feature_params = dict(slot.params)
+            feature_params["lane_direction"] = "outside"
+            held.append(replace(slot, side="outside", params=feature_params))
+        else:
+            held.append(slot)
+    return held
+
+
 def circular_labels(
     feature_layers: FeatureBuildResult,
     profile: CircularRenderProfile,
@@ -3495,46 +3539,7 @@ def circular_labels(
             previous_growth = required_growth
 
             if not preflight_tracks_frozen:
-                frozen_slots: list[CircularTrackSlot] = []
-                for slot_index, slot in enumerate(slots):
-                    resolved_slot = next(
-                        (
-                            candidate
-                            for candidate in resolved_slots
-                            if int(candidate.slot_index) == int(slot_index)
-                        ),
-                        None,
-                    )
-                    # Outside rows are not frozen: they stay beyond the enlarged
-                    # axis and the feature slot moved outside, in stack order.
-                    if (
-                        str(slot.renderer) != "features"
-                        and resolved_slot is not None
-                        and resolved_slot.anchor_radius_px is not None
-                        and resolved_slot.side != "outside"
-                    ):
-                        frozen_slots.append(
-                            replace(
-                                slot,
-                                radius=ScalarSpec(
-                                    float(resolved_slot.anchor_radius_px),
-                                    unit="px",
-                                ),
-                            )
-                        )
-                    elif str(slot.renderer) == "features" and slot.radius is None and slot.side == "inside":
-                        # Radial inner labels need a real arena between features and
-                        # the frozen inner tracks. Move the automatic tuck-in feature
-                        # slot to the outside of the enlarged axis while preserving
-                        # the remaining slot parameters.
-                        feature_params = dict(slot.params)
-                        feature_params["lane_direction"] = "outside"
-                        frozen_slots.append(
-                            replace(slot, side="outside", params=feature_params)
-                        )
-                    else:
-                        frozen_slots.append(slot)
-                slots = frozen_slots
+                slots = _slots_held_for_radial_growth(slots, resolved_slots, float(geometry.radius))
                 feature_slot = next(
                     (
                         slot

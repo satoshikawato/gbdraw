@@ -38,7 +38,9 @@ from ..core.text import drawn_text_box
 from ..diagrams.circular.presets import CircularTrackPreset, circular_feature_lane_direction_for_preset
 from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
+from ..features.objects import FeatureObject
 from ..layout.circular import (
+    LAYOUT_EPSILON,
     CircularFeatureLayout,
     CircularLabelLanes,
     CircularRadialLayout,
@@ -113,6 +115,8 @@ LEADER_LABEL_MAX_PASSES = 6
 # by up to twice its own height (enough to clear the elbow of a neighbour's leader one row up).
 LEADER_LABEL_RADIAL_STEP_PX = 1.0
 LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS = 2.0
+# OV-3841: points of a radial label's feature outline its leader may end on.
+_FEATURE_EDGE_SAMPLES = 32
 
 
 def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
@@ -5630,6 +5634,53 @@ def _is_label_embedded_in_segment(
     return (start_offset > eps) and (end_offset < (feature_span - eps))
 
 
+def _radial_leader_edge_points(
+    feature_object: FeatureObject,
+    segment_bp: tuple[float, float],
+    total_length: int,
+    head_length_bp: float,
+    radii_px: tuple[float, float, float],
+    shaft_width_ratio: float,
+    *,
+    outer: bool,
+    lanes: Sequence[tuple[float, float, float, float]],
+) -> tuple[tuple[float, float], ...]:
+    """Where a radial label's leader may end: points of its feature's drawn outline edge that faces the label (the
+    outer edge for an ``outer`` label), along the labelled segment ``segment_bp`` in its lane ``radii_px`` (inner,
+    centre, outer) (OV-3841).
+
+    Leaders are drawn below the features, so the points leave out the positions where a feature of another lane lies
+    between the edge and the labels (``lanes``: start, end, inner and outer radius of every feature block on the
+    label's side); a leader that ended there ran under that feature. When such features cover the whole segment, no
+    leader from the labels reaches the feature without crossing one, and every point stays.
+    """
+    start_bp, end_bp = segment_bp
+    span_bp = (end_bp - start_bp) % total_length
+    positions = [
+        (start_bp + span_bp * step / _FEATURE_EDGE_SAMPLES) % total_length for step in range(_FEATURE_EDGE_SAMPLES + 1)
+    ]
+
+    def covered(position_bp: float) -> bool:
+        return any(
+            lane_start <= position_bp < lane_end
+            and (
+                lane_inner >= radii_px[2] - LAYOUT_EPSILON if outer else lane_outer <= radii_px[0] + LAYOUT_EPSILON
+            )
+            for lane_start, lane_end, lane_inner, lane_outer in lanes
+        )
+
+    clear = [position_bp for position_bp in positions if not covered(position_bp)] or positions
+    return tuple(
+        circle_point(
+            circular_feature_edge_radii_at(
+                feature_object, position_bp, total_length, head_length_bp, radii_px, shaft_width_ratio
+            )[1 if outer else 0],
+            position_angle(position_bp, total_length),
+        )
+        for position_bp in clear
+    )
+
+
 def prepare_label_list(
     feature_dict,
     total_length,
@@ -5762,6 +5813,19 @@ def prepare_label_list(
         key: feature.feature_hash for key, feature in feature_dict.items()
     }
 
+    # The lanes of each side's features, for the leader ends of radial labels (outer, inner).
+    radial_lanes = (
+        tuple(
+            _build_feature_radius_intervals(
+                feature_dict, total_length, radius, track_ratio, profile,
+                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+                feature_layout=layout, track_preset=track_type,
+            )
+            for layout in (label_lanes.outer, label_lanes.inner)
+        )
+        if profile.label_placement == "radial"
+        else None
+    )
     for input_order, (stable_id, feature_object) in enumerate(feature_dict.items()):
         candidate = candidates_by_id.get(str(stable_id))
         if candidate is None:
@@ -5831,11 +5895,14 @@ def prepare_label_list(
                 (feature_inner_radius, feature_center_radius, feature_outer_radius),
                 arrow_shaft_width_ratio,
             )
+            # A leader ends on the outline edge that faces its label when the label keeps clear of its feature's
+            # lane, and always when it is radial: the slanted part of a radial leader runs outside the band, so
+            # from the lane centre it ran under the feature and its neighbours (OV-3841).
+            if profile.label_placement == "radial" or (outer_lane_clearance if is_outer_label else lane_clearance):
+                feature_anchor_x, feature_anchor_y = circle_point(
+                    ink_outer_radius if is_outer_label else ink_inner_radius, feature_angle_deg
+                )
             if is_outer_label:
-                if outer_lane_clearance:
-                    # Raised feature tracks look disconnected when leaders target the track center.
-                    # Anchor to the outer edge so feature-to-label distance reads more naturally.
-                    feature_anchor_x, feature_anchor_y = circle_point(ink_outer_radius, feature_angle_deg)
                 # With an arena, its inner edge is the "anchor" radius for leader lines.
                 middle_radius = (
                     float(outer_arena[0]) if outer_arena is not None else radius_factor * radius
@@ -5851,10 +5918,6 @@ def prepare_label_list(
                     )
                 middle_x, middle_y = circle_point(middle_radius, feature_angle_deg)
             else:
-                if lane_clearance:
-                    # For displaced inner features, anchor leaders on the inner edge so lines
-                    # do not cross over raised feature bodies.
-                    feature_anchor_x, feature_anchor_y = circle_point(ink_inner_radius, feature_angle_deg)
                 middle_x, middle_y = circle_point(inner_radius_factor * radius, feature_angle_deg)
             is_embedded = _is_label_embedded_in_segment(
                 label_start,
@@ -5920,6 +5983,17 @@ def prepare_label_list(
                     feature_inner_radius
                     - effective_anchor_clearance_px
                     - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
+                )
+            if radial_lanes is not None and not is_embedded:
+                label_entry["feature_edge_points"] = _radial_leader_edge_points(
+                    feature_object,
+                    (longest_segment_start, longest_segment_end),
+                    total_length,
+                    circular_arrow_length_bp,
+                    (feature_inner_radius, feature_center_radius, feature_outer_radius),
+                    arrow_shaft_width_ratio,
+                    outer=is_outer_label,
+                    lanes=radial_lanes[0 if is_outer_label else 1],
                 )
 
             if is_embedded:
