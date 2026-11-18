@@ -8,7 +8,7 @@ import { normalizeTrackIndex, parseDepthTrackIndexIdentity, syncDepthSlotLabels 
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
-import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
+import { canonicalAnnotationParams, clampTrackAxisIndex, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { noteReplacedLeaf } from '../utils/field-reading.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
@@ -258,19 +258,6 @@ export const linearFeatureDensitySlot = (track) => defaultSlot('feature_density'
 });
 
 /**
- * @param {unknown} value
- * @param {unknown} slotCount
- * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').
- */
-export const clampLinearTrackAxisIndex = (value, slotCount, losses = null) => {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  const read = Number.isInteger(numeric) ? Math.max(0, Math.min(Number(slotCount) || 0, numeric)) : null;
-  noteReplacedLeaf(losses, '', value, read);
-  return read;
-};
-
-/**
  * @param {(LinearTrackSlotInput | null | undefined)[] | null | undefined} slots
  * @param {string} [nt]
  * @param {unknown} [trackLayout]
@@ -387,7 +374,7 @@ export const inferLinearTrackAxisIndexFromSlots = (slots) => {
  */
 export const resolveLinearTrackAxisIndex = (slots, axisIndex = null) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
-  const clamped = clampLinearTrackAxisIndex(axisIndex, normalizedSlots.length);
+  const clamped = clampTrackAxisIndex(axisIndex, normalizedSlots.length);
   return clamped === null ? inferLinearTrackAxisIndexFromSlots(normalizedSlots) : clamped;
 };
 
@@ -442,7 +429,7 @@ export const enforceSingleLinearOnAxisSlot = (slots, axisIndex) => {
     return resolveLinearTrackAxisIndex(normalizedSlots, axisIndex);
   }
 
-  const clampedAxis = clampLinearTrackAxisIndex(axisIndex, normalizedSlots.length);
+  const clampedAxis = clampTrackAxisIndex(axisIndex, normalizedSlots.length);
   const keepIndex = clampedAxis !== null && onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
   onAxisIndices.forEach((index) => {
     if (index === keepIndex) return;
@@ -838,7 +825,7 @@ export const placeLinearStackForGenerate = ({ slots, nt, trackLayout, axisIndex,
     nextDepthIndex = trackIndex + 1;
   });
   syncDepthSlotLabels({ slots: normalized, depthTracks, activeCount: depthSeriesCount });
-  const resolvedAxis = resolveLinearTrackAxisIndex(normalized, clampLinearTrackAxisIndex(axisIndex, normalized.length));
+  const resolvedAxis = resolveLinearTrackAxisIndex(normalized, clampTrackAxisIndex(axisIndex, normalized.length));
   return {
     slots: applyLinearTrackOrderPlacements(normalized, resolvedAxis, /** @type {string} */ (nt), /** @type {string} */ (trackLayout)),
     axisIndex: resolvedAxis

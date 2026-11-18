@@ -844,19 +844,7 @@ const readDeferredCircularRecords = async (page) => {
 //   settled read of the same cards clears them, OV-3706; the read makes them,
 //   Product Contract PD-OI-044), so a Load that loses a value the read would
 //   rewrite (`adv.multi_record_positions`, `form.circular_record_selector`)
-//   fails; and after it. Off:
-//   - OV-3696, `settings`: Load places the track stacks it does not draw
-//     (`adv.*_track_slots_axis_index` null -> 0, `adv.circular_track_slots.*.side`
-//     unset -> 'inside' and `params.lane_direction` set where unset;
-//     services/config.js `applyConfigData` and
-//     `reconcileDepthTrackStateAfterSessionFiles`). When it is fixed these
-//     four fields are compared again: remove the entry.
-//   - OV-3702, `paint`: a Legend row or feature stroke edit stores the drawn
-//     stroke Python wrote, "none", as `originalStrokeColor`, which a Load
-//     reads as null (services/style-overrides.js `normalizeStrokeOverride`):
-//     one value in two forms. When the edit stores the normalized form,
-//     remove the entry.
-const UNSET = Object.freeze([null]);
+//   fails; and after it.
 const RESTORING_KINDS = Object.freeze({
   undoRedo: { phase: 'Undo then Redo', by: 'drawings', settle: async () => {}, unread: {}, off: {} },
   load: {
@@ -864,15 +852,7 @@ const RESTORING_KINDS = Object.freeze({
     by: 'renamed',
     settle: readDeferredCircularRecords,
     unread: { inputs: [{ path: 'circularRecordList' }, { path: 'circularRecordDiscovery' }, { path: 'files.c_depth_rows' }] },
-    off: {
-      settings: { id: 'OV-3696', fields: [
-        { path: 'adv.circular_track_slots_axis_index', when: UNSET }, { path: 'adv.linear_track_slots_axis_index', when: UNSET },
-        { path: 'adv.circular_track_slots.*.side', when: UNSET }, { path: 'adv.circular_track_slots.*.params.lane_direction', when: UNSET }
-      ] },
-      paint: { id: 'OV-3702', fields: [
-        { path: 'legendStrokeOverrides.*.originalStrokeColor', when: ['none'] }, { path: 'featureStrokeOverrides.*.originalStrokeColor', when: ['none'] }
-      ] }
-    }
+    off: {}
   }
 });
 /** @typedef {import('./drawing-slice-hashes.mjs').FieldOff} FieldOff */

@@ -6,7 +6,7 @@
 import { normalizeTrackIndex, parseDepthTrackIndexIdentity } from './depth-track-state.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
-import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
+import { canonicalAnnotationParams, clampTrackAxisIndex, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
@@ -498,20 +498,6 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
 };
 
 /**
- * @param {unknown} value
- * @param {unknown} slotCount
- * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').
- * @returns {number | null} null when value is no integer.
- */
-export const clampCircularTrackAxisIndex = (value, slotCount, losses = null) => {
-  const length = Math.max(0, Number(slotCount) || 0);
-  const numeric = Number(value);
-  const read = Number.isInteger(numeric) ? Math.min(Math.max(numeric, 0), length) : null;
-  noteReplacedLeaf(losses, '', value, read);
-  return read;
-};
-
-/**
  * The slots of a request with an Axis index as Python reads them: a features slot that names neither a side nor a
  * lane takes the lane of its place, outward before the index and inward past it, under every track type
  * (`_slot_with_axis_derived_side` in gbdraw/tracks/circular.py; OV-3186). The Web writes both, so only the requests of
@@ -538,7 +524,7 @@ export const circularRequestSlotsWithPlacedLanes = (slots, axisIndex) => slots.m
  * @returns {number} The Axis boundary used.
  */
 export const syncSlotsFromAxisIndex = (slots, axisIndex, preset = 'tuckin') => {
-  const axis = clampCircularTrackAxisIndex(axisIndex, slots.length);
+  const axis = clampTrackAxisIndex(axisIndex, slots.length);
   const resolvedAxis = axis === null ? inferLegacyAxisIndexFromFeature(slots, preset) : axis;
   slots.forEach((slot, index) => {
     if (!slot) return;
@@ -572,10 +558,10 @@ export const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => 
     ))
     .filter((index) => Number.isInteger(index)));
   if (onAxisIndices.length === 0) {
-    return clampCircularTrackAxisIndex(axisIndex, slots.length) ?? inferLegacyAxisIndexFromFeature(slots, preset);
+    return clampTrackAxisIndex(axisIndex, slots.length) ?? inferLegacyAxisIndexFromFeature(slots, preset);
   }
 
-  const clampedAxis = clampCircularTrackAxisIndex(axisIndex, slots.length);
+  const clampedAxis = clampTrackAxisIndex(axisIndex, slots.length);
   const keepIndex = clampedAxis !== null && onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
   onAxisIndices.forEach((index) => {
     if (index === keepIndex) return;
@@ -1269,7 +1255,7 @@ export const applyCircularSuppressControlsToSlots = (slots, form = {}, nt = 'GC'
 export const placeCircularStackForGenerate = ({ slots, nt, trackType, axisIndex, form }) => {
   const list = Array.isArray(slots) ? slots : [];
   const placed = placeCircularTrackStack(list, /** @type {string} */ (nt), /** @type {string} */ (trackType),
-    clampCircularTrackAxisIndex(axisIndex, list.length));
+    clampTrackAxisIndex(axisIndex, list.length));
   const placedSlots = /** @type {CircularTrackSlot[]} */ (applyCircularSuppressControlsToSlots(placed.slots, form, nt));
   let ordinal = 0;
   placedSlots.forEach((slot) => {

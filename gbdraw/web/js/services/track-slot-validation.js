@@ -1,6 +1,6 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
-import { noteReplacedLeaf } from '../utils/field-reading.js';
+import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t } from '../utils/i18n.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
@@ -1332,6 +1332,76 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
   Object.entries(params && typeof params === 'object' && !Array.isArray(params) ? params : {})
     .filter(([key]) => !TRACK_DESCRIPTION_PARAMS.has(key) && paramsAllowedForRenderer(renderer, normalizedString(key)))
 );
+
+/**
+ * The Axis index of a Circular or Linear custom stack as its rows read it: an integer, held within the stack, or null
+ * for an unset index (null, absent or empty), which the stack reads from its features row; a value no integer is
+ * replaced by null. One rule for both modes, as `placesTrackStack` reads the index.
+ * @param {unknown} value
+ * @param {unknown} slotCount
+ * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').
+ * @returns {number | null}
+ */
+export const clampTrackAxisIndex = (value, slotCount, losses = null) => {
+  if (isUnsetValue(value)) return null;
+  const numeric = Number(value);
+  const read = Number.isInteger(numeric) ? Math.max(0, Math.min(Number(slotCount) || 0, numeric)) : null;
+  noteReplacedLeaf(losses, '', value, read);
+  return read;
+};
+
+/**
+ * The Axis index of a Circular or Linear stack after rows leave it, so no row that stays crosses the Axis (R10): a placed
+ * index lowered by the rows before it that leave, or null for an unset one, which stays unset. The caller names the rows
+ * that leave by `leaves`, read on the rows before the change. The one rule of the stack editors' managed-row commits,
+ * their Remove of a row (`axisIndexAfterRowRemoval`), and a feature density track's removal.
+ * @template T
+ * @param {readonly T[]} rows The stack before the change.
+ * @param {number | null} axisIndex
+ * @param {(row: T) => boolean} leaves
+ * @returns {number | null}
+ */
+export const axisIndexAfterRowsLeave = (rows, axisIndex, leaves) => (
+  axisIndex === null ? null : axisIndex - rows.slice(0, axisIndex).filter(leaves).length
+);
+
+/**
+ * `axisIndexAfterRowsLeave` for the one row at `index` (a stack editor's Remove), read before the row leaves.
+ * @template T
+ * @param {readonly T[]} rows The stack before the change.
+ * @param {number | null} axisIndex
+ * @param {number} index
+ * @returns {number | null}
+ */
+export const axisIndexAfterRowRemoval = (rows, axisIndex, index) => (
+  axisIndexAfterRowsLeave(rows, axisIndex, (row) => row === rows[index])
+);
+
+/**
+ * Whether a drawing's custom track stack of `stack` is placed: the request draws it (its Use custom stack is on), or an
+ * edit of the stack placed it (its Axis index is set). A stack neither placed is the stack a new drawing holds, with
+ * its sides and lane directions unset; the Load and every change that is no edit of the stack keep it so, and the
+ * request builder places it when it draws it (OV-3696).
+ * @param {Readonly<Record<string, unknown>>} adv The drawing's settings.
+ * @param {'circular' | 'linear'} stack
+ * @returns {boolean}
+ */
+export const placesTrackStack = (adv, stack) => (
+  adv[`${stack}_track_slots_enabled`] === true || !isUnsetValue(adv[`${stack}_track_slots_axis_index`])
+);
+
+/**
+ * The Axis index of a placed Circular or Linear stack after a change that is no edit of the stack (a managed-row
+ * reconcile, Hide GC Content, a Depth or ring source, the reconciles that end a Load): the index it placed the rows
+ * about, except that an unset index stays unset while the rows read as that index from their features row, so Save and
+ * Load give it back unset and the request builder reads it as before (R11). Rows that join before the features row read
+ * as another index, so the index is set and no row crosses the Axis (R10).
+ * @param {unknown} stored The index before the change.
+ * @param {number | null} placed
+ * @param {number} readsAs The index the rows after the change read as.
+ * @returns {number | null}
+ */
+export const axisIndexAfterReconcile = (stored, placed, readsAs) => (isUnsetValue(stored) && placed === readsAs ? null : placed);
 
 /**
  * Whether a stored stack is one the Web holds when a Session saved none (`unsaved`, the mode's stacks for that case):

@@ -126,6 +126,7 @@ const applyRulePreviewFill = (featureId, color) => {
 };
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
+const { normalizeStrokeOverrideMap } = await import(pathToFileURL(join(tempDir, 'services', 'style-overrides.js')));
 const { createRulePreparation, ruleFeaturePayload, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
 const { ruleMatcher } = await import(pathToFileURL(join(tempDir, 'services', 'rule-matchers.js')));
 const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
@@ -767,9 +768,12 @@ for (const mode of ['linear', 'circular']) {
     assert.equal(await actions.updateClickedFeatureStroke('#222222', 3), true);
     assert.deepEqual(
       [featureStrokeOverrides[joinedKey].originalStrokeColor, featureStrokeOverrides[joinedKey].originalStrokeWidth],
-      ['gray', 2],
+      ['#808080', 2],
       `${mode}, ${shape}: the edit records the block stroke Python drew`
     );
+    // OV-3702: in the form Load reads it, so Save then Load gives the override back.
+    assert.deepEqual(normalizeStrokeOverrideMap({ [joinedKey]: featureStrokeOverrides[joinedKey] })[joinedKey],
+      featureStrokeOverrides[joinedKey], `${mode}, ${shape}: the edit stores the override Load reads back`);
     assert.equal(await actions.resetClickedFeatureStroke(), true);
     assert.deepEqual([clickedFeature.value.strokeColor, clickedFeature.value.strokeWidth], ['gray', 2],
       `${mode}, ${shape}: after Reset the popup shows the block stroke Python drew`);

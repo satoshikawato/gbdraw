@@ -936,6 +936,7 @@ under "Cited ids without a record".
   - `tests/web/error-normalization.test.mjs`
 
 - [PD-OI-126](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-126-feature-density-track-editor): Feature density track editor. ACCEPTED, concern `web.feature-density.track-editor`, scenario revision 1.
+  - `tests/web/drawing-member-paths.test.mjs`
   - `tests/web/feature-density-editor.test.mjs`
   - `tests/web/scale-visibility.playwright.spec.js`
   - `tests/web/settings-pane-rail.playwright.spec.js`

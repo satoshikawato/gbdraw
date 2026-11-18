@@ -37,6 +37,7 @@ import {
   featureOverrideKey,
   getFeatureOverride
 } from '../../services/feature-override-identity.js';
+import { normalizeStrokeWidth, storedOriginalStroke } from '../../services/style-overrides.js';
 import { msg } from '../../utils/i18n.js';
 
 // R13: the rule owner's lookups and commit of specific-color rules, each a
@@ -451,12 +452,8 @@ export const createFeatureColorActions = ({
    */
   const targetsSomeFeatureExactly = (features) => (rule) => features.some(hashRuleExactTarget(rule));
 
-  /** @param {unknown} value */
-  const normalizeStrokeWidthValue = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
-  };
+  // A stroke width as an override holds it, read as Load reads it.
+  const normalizeStrokeWidthValue = normalizeStrokeWidth;
 
   /** @param {Element | null | undefined} element @param {string | null} color */
   const strokeColorAttributeMatches = (element, color) => {
@@ -495,11 +492,13 @@ export const createFeatureColorActions = ({
 
     const existing = drawing.featureStrokeOverrides[key] || {};
     const next = { ...existing };
+    // The stroke Python drew, in the form Load reads it (OV-3702).
+    const drawn = storedOriginalStroke({ originalStrokeColor, originalStrokeWidth });
     if (!hasOwn(next, 'originalStrokeColor')) {
-      next.originalStrokeColor = originalStrokeColor;
+      next.originalStrokeColor = drawn.originalStrokeColor;
     }
     if (!hasOwn(next, 'originalStrokeWidth')) {
-      next.originalStrokeWidth = normalizeStrokeWidthValue(originalStrokeWidth);
+      next.originalStrokeWidth = drawn.originalStrokeWidth;
     }
     if (strokeColor !== null && strokeColor !== undefined && strokeColor !== '') {
       next.strokeColor = strokeColor;

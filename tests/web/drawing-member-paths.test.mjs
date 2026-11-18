@@ -517,12 +517,7 @@ test('an object member\'s sample changes every leaf but the ones it names, and i
 // loses there: the guard expects exactly these losses, and the fix of a
 // defect removes its entries.
 /** @type {Record<string, { defect: string, leaves: readonly string[] }>} */
-const KNOWN_LOSSES = {
-  // OV-3705: a History restore merges a stored null under an object and keeps
-  // the object (`mergeStoredSettings`, services/config-field-readers.js), so
-  // the Undo of the step that set `one_circle_left` keeps it.
-  ...Object.fromEntries(MODES.map((mode) => [`${mode} adv history: Undo`, { defect: 'OV-3705', leaves: ['one_circle_left'] }])),
-};
+const KNOWN_LOSSES = {};
 /** The leaves where two captures of a member differ (a leaf under another that differs is in it). */
 const differingLeaves = (member, expected, actual) => {
   const [left, right] = [JSON.parse(expected)[member], JSON.parse(actual)[member]];
@@ -571,23 +566,135 @@ test('the guard reports exactly the member that a broken Duplicate or a broken S
     ['linear annotationSets saveLoad: Save then Load']);
 }));
 
-// Known defects: each case asserts today's outcome, and fails once the
-// defect is fixed; the fix removes the case and the workaround it names.
-// OV-3705: the Undo of choosing one circle leaves what one circle left
-// (`adv.one_circle_left`): a History restore merges the step's null under the
-// object and keeps it (`mergeStoredSettings`, services/config-field-readers.js).
-test('known defect OV-3705: Undo of choosing one circle keeps what one circle left', () => withBootPalettes(state, async () => {
+// OV-3705: a History restore installs the captured settings as they are, so
+// the Undo of choosing one circle gives back the null `adv.one_circle_left` the
+// step's state held (the restore replaces the object with the captured null),
+// and its Redo gives back what one circle left.
+test('Undo of choosing one circle gives back no record of what one circle left, and Redo gives it back', () => withBootPalettes(state, async () => {
   await bootBases();
   assert.equal((await loadSession(bases.plain.blob)).asked, null);
   const { drawingId: id } = app.drawingList.newDrawing('circular');
   assert.equal(captureMember(state.drawingOf(id), 'adv').one_circle_left, null);
   await history.runUndoable('Change setting', () => chooseRecordLayout(state.drawingOf(id), 'one_circle'));
-  assert.equal(captureMember(state.drawingOf(id), 'adv').circular_record_layout, 'one_circle');
+  const chosen = captureMember(state.drawingOf(id), 'adv');
+  assert.equal(chosen.circular_record_layout, 'one_circle');
+  assert.notEqual(chosen.one_circle_left, null, 'choosing one circle keeps what it leaves');
   await app.undoHistory();
-  const adv = captureMember(state.drawingOf(id), 'adv');
-  assert.equal(adv.circular_record_layout, 'grid');
-  assert.notEqual(adv.one_circle_left, null, 'OV-3705 no longer reproduces. Remove this case and the OV-3705 entries of '
-    + 'KNOWN_LOSSES.');
+  const undone = captureMember(state.drawingOf(id), 'adv');
+  assert.deepEqual([undone.circular_record_layout, undone.one_circle_left], ['grid', null]);
+  await app.redoHistory();
+  const redone = captureMember(state.drawingOf(id), 'adv');
+  assert.deepEqual([redone.circular_record_layout, redone.one_circle_left], ['one_circle', chosen.one_circle_left]);
+}));
+
+// OV-3696: Load places a track stack only when the drawing draws it (its Use
+// custom stack is on), as Generate does, or an edit of the stack placed it. A
+// stack nobody placed keeps the unset sides, lane directions and Axis index a
+// new drawing holds,
+// so Track Preset, Add feature density track and Use custom stack act after a
+// Load as on a new drawing (PD-OI-126); a custom stack it draws, or one an edit
+// placed, comes back as saved. In a Circular and a Linear drawing.
+const STACK_FIELDS = ['circular_track_slots_enabled', 'circular_track_slots_axis_index', 'circular_track_slots',
+  'linear_track_slots_enabled', 'linear_track_slots_axis_index', 'linear_track_slots'];
+test('Save then Load gives back each track stack as saved, drawn or not', () => withBootPalettes(state, async () => {
+  await bootBases();
+  for (const mode of MODES) {
+    assert.equal((await loadSession(bases.plain.blob)).asked, null);
+    const { drawingId: id } = app.drawingList.newDrawing(mode);
+    state.drawingOf(id).form.plot_title = 'Stacks';
+    // A drawing with complete inputs, so its Session entry holds a request, whose projection the Load reads.
+    await bindRecords(state.drawingOf(id));
+    const stacks = () => {
+      const adv = captureMember(state.drawingOf(id), 'adv');
+      return Object.fromEntries(STACK_FIELDS.map((field) => [field, adv[field]]));
+    };
+    const saveThenLoadStacks = async () => {
+      if (state.activeDrawingId.value !== id) assert.deepEqual(app.selectDrawing(id), { status: 'ok' });
+      const { blob, refused } = await saveSession();
+      assert.equal(refused, null);
+      assert.equal((await loadSession(blob)).asked, null);
+      return stacks();
+    };
+    const fresh = stacks();
+    assert.equal(fresh[`${mode}_track_slots_axis_index`], null, `${mode}: a new drawing's stack is not placed`);
+    assert.deepEqual(await saveThenLoadStacks(), fresh, `${mode}: Load leaves the stacks the drawing does not draw as saved`);
+    // Hide GC Content is no edit of the stack: it leaves the stack unplaced, and the Load gives it back so.
+    if (mode === 'circular') {
+      await app.setCircularGcSuppressed(true);
+      const hidden = stacks();
+      assert.equal(hidden.circular_track_slots_axis_index, null, 'Hide GC Content places no stack');
+      assert.deepEqual(await saveThenLoadStacks(), hidden, 'Load gives back the stack Hide GC Content left unplaced');
+    }
+    const useCustomStack = (enabled) => (mode === 'circular' ? app.setCircularTrackSlotsEnabled(enabled) : app.setLinearTrackSlotsEnabled(enabled));
+    useCustomStack(true);
+    const drawn = stacks();
+    assert.equal(drawn[`${mode}_track_slots_enabled`], true);
+    assert.deepEqual(await saveThenLoadStacks(), drawn, `${mode}: Load gives back the custom stack the drawing draws`);
+    // A stack placed while it was drawn stays placed when it is turned off.
+    useCustomStack(false);
+    const placed = stacks();
+    assert.notEqual(placed[`${mode}_track_slots_axis_index`], null);
+    assert.deepEqual(await saveThenLoadStacks(), placed, `${mode}: Load gives back a placed stack the drawing does not draw`);
+    // A drawn stack whose Axis index is unset (an older Session, a page that set none) keeps it unset through the
+    // reconciles that end the Load: the request builder reads it from the features row, as before the Save.
+    useCustomStack(true);
+    state.drawingOf(id).adv[`${mode}_track_slots_axis_index`] = null;
+    const unsetAxis = stacks();
+    assert.deepEqual(await saveThenLoadStacks(), unsetAxis, `${mode}: Load keeps the unset Axis index of a drawn stack`);
+  }
+}));
+
+// OV-3696, OV-3712: a Depth file, the removal of its Depth series and Hide GC
+// Content are no edit of the stack, so they leave a stack nobody placed
+// unplaced, and Use custom stack afterwards places it from its features row:
+// in Circular Spreadout the features outside the Axis, where the Track layout
+// draws them. A fresh drawing for each change, in each mode; the test lists
+// every case that differs.
+const STACK_CHANGES = {
+  circular: { layout: ['track_type', 'spreadout'], changes: ['depth file', 'depth series removed', 'Hide GC Content'] },
+  linear: { layout: ['linear_track_layout', 'above'], changes: ['depth file', 'depth series removed'] }
+};
+test('a Depth file, Remove Depth series and Hide GC Content leave a stack nobody placed unplaced', () => withBootPalettes(state, async () => {
+  await bootBases();
+  const differences = [];
+  for (const mode of MODES) {
+    const { layout: [field, layout], changes } = STACK_CHANGES[mode];
+    for (const change of changes) {
+      const where = `${mode}, ${change}`;
+      assert.equal((await loadSession(bases.plain.blob)).asked, null);
+      const { drawingId: id } = app.drawingList.newDrawing(mode);
+      const drawing = state.drawingOf(id);
+      await bindRecords(drawing);
+      await app.featurePlacementActions.changeLayoutSetting({ target: { type: 'select', value: layout } }, field, layout);
+      assert.equal(drawing.form[field], layout);
+      const unplaced = structuredClone(drawing.adv[`${mode}_track_slots`]);
+      const depth = new File(['REC_A\t1\t5\n'], `${mode}.depth.tsv`, { lastModified: 1 });
+      const depthRows = () => drawing.adv[`${mode}_track_slots`].filter((slot) => slot.renderer === 'depth').length;
+      if (change === 'Hide GC Content') await app.setCircularGcSuppressed(true);
+      else if (mode === 'circular') await app.setCircularDepthFile(0, depth);
+      else await app.setLinearDepthFile(drawing.linearSeqs[0], 0, depth);
+      if (change !== 'Hide GC Content') assert.equal(depthRows(), 1, `${where}: the Depth file adds its row`);
+      if (change === 'depth series removed') {
+        await (mode === 'circular' ? app.removeCircularDepthTrack(0) : app.removeLinearDepthTrack(0));
+        assert.equal(depthRows(), 0, `${where}: the removal takes the row out`);
+      }
+      const axis = drawing.adv[`${mode}_track_slots_axis_index`];
+      if (axis !== null) differences.push(`${where}: the change placed the stack (Axis index ${axis})`);
+      const sides = (slots) => slots.filter(({ renderer }) => renderer !== 'depth').map(({ id: row, side, params }) => [row, side ?? null, params?.lane_direction ?? null]);
+      if (JSON.stringify(sides(drawing.adv[`${mode}_track_slots`])) !== JSON.stringify(sides(unplaced))) {
+        differences.push(`${where}: the change set sides ${JSON.stringify(sides(drawing.adv[`${mode}_track_slots`]))}`);
+      }
+      await (mode === 'circular' ? app.setCircularTrackSlotsEnabled(true) : app.setLinearTrackSlotsEnabled(true));
+      if (mode !== 'circular') continue;
+      const slots = drawing.adv.circular_track_slots;
+      const features = slots.findIndex((slot) => slot.renderer === 'features');
+      if (slots[features].params.lane_direction !== 'outside' || drawing.adv.circular_track_slots_axis_index !== features + 1) {
+        differences.push(`${where}: Use custom stack drew the features ${slots[features].params.lane_direction} (Axis index `
+          + `${drawing.adv.circular_track_slots_axis_index}), not outside as Spreadout does`);
+      }
+    }
+  }
+  assert.deepEqual(differences, []);
 }));
 
 // The 25 Session config domains (`CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`) are

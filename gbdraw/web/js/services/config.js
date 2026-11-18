@@ -25,13 +25,11 @@ import { conservationSourcesOfSeries, parseConservationLabelText, withoutConserv
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
 import {
-  applyCircularTrackOrderPlacements,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
 } from './circular-track-slot-model.js';
 import {
-  applyLinearTrackOrderPlacements,
   LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema
@@ -5700,26 +5698,12 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
     });
   }
   drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...fit.depthTracks);
-  drawing.adv.circular_track_slots.splice(
-    0,
-    drawing.adv.circular_track_slots.length,
-    ...applyCircularTrackOrderPlacements(
-      fit.circularSlots,
-      drawing.adv.nt,
-      drawing.form.track_type,
-      drawing.adv.circular_track_slots_axis_index
-    )
+  // The fitted stacks as the settings resolve them: a placed stack placed, one nobody placed left unplaced (OV-3696).
+  const stacks = resolvedTrackStacks(
+    { ...drawing.adv, circular_track_slots: fit.circularSlots, linear_track_slots: fit.linearSlots }, drawing.form
   );
-  drawing.adv.linear_track_slots.splice(
-    0,
-    drawing.adv.linear_track_slots.length,
-    ...applyLinearTrackOrderPlacements(
-      fit.linearSlots,
-      drawing.adv.linear_track_slots_axis_index,
-      drawing.adv.nt,
-      drawing.form.linear_track_layout
-    )
-  );
+  drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...stacks.circularSlots);
+  drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...stacks.linearSlots);
 };
 
 // The inputs a Load installs: each drawing's own (a Session 51 drawing's

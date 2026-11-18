@@ -71,6 +71,19 @@ export const normalizeLegendColorOverrides = (source, dropped = null) => {
 };
 
 /**
+ * The stroke Python drew, as a stroke override holds it: a hex color or null
+ * (Python's `none` included), a width or null. A stroke edit stores the drawn
+ * stroke through it and Load reads a stored one through it, so the edit and
+ * its Save then Load hold one form (OV-3702).
+ * @param {{ originalStrokeColor?: unknown, originalStrokeWidth?: unknown }} drawn
+ * @returns {{ originalStrokeColor: string | null, originalStrokeWidth: number | null }}
+ */
+export const storedOriginalStroke = ({ originalStrokeColor, originalStrokeWidth }) => ({
+  originalStrokeColor: normalizeOptionalHexColor(originalStrokeColor),
+  originalStrokeWidth: normalizeStrokeWidth(originalStrokeWidth)
+});
+
+/**
  * @param {unknown} source
  * @param {{ requireOverride?: boolean, leaves?: FieldLeaf[] | null }} [options] `leaves`: written, each field
  *   replaced (`at` is the field).
@@ -85,12 +98,9 @@ const normalizeStrokeOverride = (source, { requireOverride = false, leaves = nul
   const strokeWidth = normalizeStrokeWidth(fields.strokeWidth);
   if (strokeColor !== null) normalized.strokeColor = strokeColor;
   if (strokeWidth !== null) normalized.strokeWidth = strokeWidth;
-  if (Object.hasOwn(source, 'originalStrokeColor')) {
-    normalized.originalStrokeColor = normalizeOptionalHexColor(fields.originalStrokeColor);
-  }
-  if (Object.hasOwn(source, 'originalStrokeWidth')) {
-    normalized.originalStrokeWidth = normalizeStrokeWidth(fields.originalStrokeWidth);
-  }
+  const original = storedOriginalStroke(fields);
+  if (Object.hasOwn(source, 'originalStrokeColor')) normalized.originalStrokeColor = original.originalStrokeColor;
+  if (Object.hasOwn(source, 'originalStrokeWidth')) normalized.originalStrokeWidth = original.originalStrokeWidth;
   for (const field of /** @type {const} */ (['strokeColor', 'strokeWidth', 'originalStrokeColor', 'originalStrokeWidth'])) {
     const used = normalized[field] ?? undefined;
     // A color read as its hex value keeps its meaning (OV-160).

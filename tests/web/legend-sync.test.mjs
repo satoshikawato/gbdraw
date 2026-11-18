@@ -43,6 +43,7 @@ const NO_DISPLAYED_RESULT = { svgContent: { value: null }, originalLegendOrder: 
 const { draftLegendRows, legendEditConfigLeaves, legendRowIds } = await import(pathToFileURL(join(tempRoot, 'services', 'legend-draft-rows.js')));
 const { legendEntryKey } = await import(pathToFileURL(join(tempRoot, 'services', 'drawing', 'paint.js')));
 const { installShownSetLegend } = await import(pathToFileURL(join(tempRoot, 'services', 'artifact-slot.js')));
+const { normalizeStrokeOverrideMap } = await import(pathToFileURL(join(tempRoot, 'services', 'style-overrides.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
@@ -364,7 +365,7 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), true);
   assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), false);
   assert.deepEqual(state.legendStrokeOverrides.Beta, {
-    originalStrokeColor: 'gray', originalStrokeWidth: 2, strokeColor: '#222222', strokeWidth: 2
+    originalStrokeColor: '#808080', originalStrokeWidth: 2, strokeColor: '#222222', strokeWidth: 2
   });
   assert.equal(betaSwatch.getAttribute('stroke'), '#999999', 'the action leaves the Result to the executor');
   assert.equal(dirtyMarks, strokeDirtyMarks);
@@ -1260,10 +1261,12 @@ const mockLegendEntry = (caption, color, x) => {
 
 // OV-532: a first stroke edit reads the existing override by the row's caption.
 // An inherited member is no override, so the stored override gets the drawn
-// stroke like that of any other row.
+// stroke like that of any other row. OV-3702: it stores the drawn stroke in the
+// form Load reads it (`normalizeStrokeOverrideMap`), so Save then Load gives
+// the override back: Python's `none` as null, a color name as its hex value.
 {
   const ref = (value) => ({ value });
-  const strokeOverridesAfterFirstEdit = (caption, edit) => {
+  const strokeOverridesAfterFirstEdit = (caption, edit, drawnStroke = 'gray') => {
     const svg = new MockElement('svg');
     const featureLegend = new MockElement('g', { id: 'feature_legend' });
     const row = mockLegendEntry(caption, '#112233', 0);
@@ -1273,7 +1276,7 @@ const mockLegendEntry = (caption, color, x) => {
     svg.appendChild(legend);
     const swatch = row.querySelector('path');
     swatch.setAttribute('stroke', '#999999');
-    swatch.setAttribute('data-gbdraw-base-stroke', 'gray');
+    swatch.setAttribute('data-gbdraw-base-stroke', drawnStroke);
     swatch.setAttribute('stroke-width', '2');
     const state = {
       svgContainer: ref({ querySelector: () => svg }),
@@ -1292,10 +1295,15 @@ const mockLegendEntry = (caption, color, x) => {
     ['width', (actions) => actions.updateLegendEntryStrokeWidth(0, 3), { strokeWidth: 3 }]
   ]) {
     const ordinary = strokeOverridesAfterFirstEdit('Gamma', edit);
-    assert.deepEqual(ordinary, { originalStrokeColor: 'gray', originalStrokeWidth: 2, ...written });
+    assert.deepEqual(ordinary, { originalStrokeColor: '#808080', originalStrokeWidth: 2, ...written });
     for (const caption of ['constructor', 'toString']) {
       assert.deepEqual(strokeOverridesAfterFirstEdit(caption, edit), ordinary,
         `a first stroke ${name} edit of the row named ${caption} stores the drawn stroke like any other row`);
+    }
+    for (const drawnStroke of ['gray', 'none']) {
+      const stored = strokeOverridesAfterFirstEdit('Gamma', edit, drawnStroke);
+      assert.deepEqual(normalizeStrokeOverrideMap({ Gamma: stored }).Gamma, stored,
+        `a first stroke ${name} edit of a row drawn with stroke ${drawnStroke} stores the override Load reads back (OV-3702)`);
     }
   }
 }

@@ -73,10 +73,10 @@ const MAX_FUNCTION_STATEMENTS = 85;
 const FUNCTION_STATEMENTS = {
   'app/align-at-feature.js::createFeatureAnchorAction': 94,
   'app/annotations.js::createAnnotationEditor': 218,
-  'app/app-setup.js::createAppSetup': 1098,
+  'app/app-setup.js::createAppSetup': 1076,
   'app/candidate-render.js::compilePlanBundle': 227,
   'app/circular-record-controls.js::createCircularSourceEdits': 86,
-  'app/circular-track-slots.js::createCircularTrackSlotEditor': 857,
+  'app/circular-track-slots.js::createCircularTrackSlotEditor': 818,
   'app/drawing-list.js::createDrawingList': 107,
   'app/feature-editor/color-actions.js::createFeatureColorActions': 919,
   'app/feature-editor/label-actions.js::createFeatureLabelActions': 620,
@@ -99,7 +99,7 @@ const FUNCTION_STATEMENTS = {
   'app/linear-comparison-edits.js::createLinearComparisonGapEdits': 98,
   'app/linear-comparison-edits.js::createLinearComparisonPairEdits': 102,
   'app/linear-record-selector.js::createLinearRecordSelector': 154,
-  'app/linear-track-slots.js::createLinearTrackSlotEditor': 649,
+  'app/linear-track-slots.js::createLinearTrackSlotEditor': 628,
   'app/orthogroups.js::createOrthogroupEditor': 259,
   'app/preview-runtime.js::createPreviewRuntime': 381,
   'app/record-display-options.js::createRecordDisplayControls': 307,
@@ -154,7 +154,7 @@ const FUNCTION_STATEMENTS = {
 };
 
 const COMPOSITION_ROOT_LOGIC_STATEMENTS = {
-  'app/app-setup.js::createAppSetup': 625,
+  'app/app-setup.js::createAppSetup': 593,
   'app/feature-editor.js::createFeatureEditor': 0,
   'app/legend-layout.js::createLegendLayout': 56,
   'app/legend.js::createLegendManager': 21

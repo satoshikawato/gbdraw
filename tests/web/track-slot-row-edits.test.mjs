@@ -1375,3 +1375,98 @@ test('Use custom stack builds a new Linear drawing\'s stack from the simple cont
     assert.deepEqual(ids, ['features', 'density_genes', 'gc_content', 'gc_skew'], `normalized first: ${normalizeFirst}`);
   }
 });
+
+// OV-3696: only an edit of a custom stack places it (pins its Axis index and the sides that index gives). Hide GC
+// Content, a Depth file, the stack editor's reads and the normalizer the other sections call leave a stack nobody
+// placed as a new drawing holds it, so the Load, which places only a stack the drawing draws or an edit placed, gives
+// it back as the page held it. An edit in the stack editor, such as Duplicate, places it.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: what is no edit of the stack leaves a stack nobody placed unplaced (OV-3696)`, async () => {
+    const opened = MODES[mode](createDefaultAdv(mode)[`${mode}_track_slots`]);
+    const drawing = opened.state.activeDrawing();
+    drawing.adv[`${mode}_track_slots_enabled`] = false;
+    drawing.adv[`${mode}_track_slots_axis_index`] = null;
+    const placements = () => ({
+      axis: drawing.adv[`${mode}_track_slots_axis_index`],
+      rows: opened.slots().filter(({ renderer }) => renderer !== 'depth')
+        .map(({ id, side, params }) => [id, side ?? null, params?.lane_direction ?? null])
+    });
+    const unplaced = placements();
+    if (mode === 'circular') {
+      await opened.editor.setCircularGcSuppressed(true);
+      opened.editor.circularTrackStackEntries();
+      opened.editor.canMoveCircularTrackSlotOutside(0);
+      opened.editor.canMoveCircularTrackSlot(0, 1);
+      opened.editor.normalizeCircularTrackSlots(drawing);
+      opened.editor.changeCircularDepthSources(drawing, () => { drawing.files.c_depth = [depthFile]; });
+    } else {
+      opened.editor.linearTrackStackEntries();
+      opened.editor.canMoveLinearTrackSlotAbove(0);
+      opened.editor.canMoveLinearTrackSlot(0, 1);
+      opened.editor.normalizeLinearTrackSlots(drawing);
+      opened.editor.changeLinearDepthSources(drawing, () => { opened.state.linearSeqs[0].depth = [depthFile]; });
+    }
+    assert.equal(opened.slots().some(({ renderer }) => renderer === 'depth'), true, `${mode}: the Depth file adds its row`);
+    assert.deepEqual(placements(), unplaced, `${mode}: nothing placed the stack`);
+    opened.duplicate(0);
+    assert.notEqual(drawing.adv[`${mode}_track_slots_axis_index`], null, `${mode}: a Duplicate places the stack`);
+  });
+}
+
+// Remove Depth series in a placed stack: the Axis index is lowered by the rows that leave before it and by no other row,
+// so the rows that stay keep their sides (R10). A manual Depth row of the removed series (its own geometry, color or z)
+// stays, turned off and renamed `disabled_depth_N`; it still counts as staying, and the features row keeps the Axis. A
+// managed Depth row of the removed series leaves, and the Axis moves down by one. In both modes.
+const REMOVAL_ROWS = {
+  circular: { row: circularRow, offAxis: 'outside', features: () => circularRow('features', 'features', {}, 'inside'),
+    after: () => circularRow('gc_skew', 'dinucleotide_skew', { nt: 'GC' }, 'inside'), geometry: { width: '6' } },
+  linear: { row: linearRow, offAxis: 'above', features: () => linearRow('features', 'features', {}, 'overlay'),
+    after: () => linearRow('gc_skew', 'dinucleotide_skew', { nt: 'GC' }, 'below'), geometry: { spacing: '6' } }
+};
+for (const mode of ['circular', 'linear']) {
+  const { row, offAxis, features, after, geometry } = REMOVAL_ROWS[mode];
+  const manual = { geometry, color: { params: { color: '#123456' } }, z: { z: 1 } };
+  for (const [kind, extra] of Object.entries(manual)) {
+    test(`${mode}: Remove Depth series keeps a placed Axis where a manual row of the series stays (${kind})`, () => {
+      const second = { ...row('depth_2', 'depth', { track_index: 1, ...(extra.params ?? {}) }, offAxis), ...extra, params: { track_index: 1, ...(extra.params ?? {}) } };
+      assert.equal(isDefaultManagedDepthSlot(second), false, `${kind}: the row is manual`);
+      const opened = MODES[mode]([row('depth_1', 'depth', { track_index: 0 }, offAxis), second, features(), after()]);
+      const drawing = opened.state.activeDrawing();
+      drawing.adv[`${mode}_track_slots_axis_index`] = 2;
+      drawing.adv.depth_tracks = [{}, {}];
+      const remove = mode === 'circular' ? opened.editor.removeCircularDepthSeriesRows : opened.editor.removeLinearDepthSeriesRows;
+      remove(drawing, 1, 1);
+      if (mode === 'circular') opened.editor.normalizeCircularTrackSlots(drawing);
+      else opened.editor.normalizeLinearTrackSlots(drawing);
+      assert.deepEqual(opened.slots().map(({ id, enabled }) => [id, enabled]),
+        [['depth_1', true], ['disabled_depth_2', false], ['features', true], ['gc_skew', true]]);
+      assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], 2, `${kind}: the Axis stays below the rows that stay`);
+      assert.equal(opened.slots()[2].side, features().side, `${kind}: the features row keeps its side`);
+    });
+  }
+  test(`${mode}: Remove Depth series lowers a placed Axis by the managed row that leaves`, () => {
+    const opened = MODES[mode]([row('depth_1', 'depth', { track_index: 0 }, offAxis), row('depth_2', 'depth', { track_index: 1 }, offAxis),
+      features(), after()]);
+    const drawing = opened.state.activeDrawing();
+    drawing.adv[`${mode}_track_slots_axis_index`] = 2;
+    drawing.adv.depth_tracks = [{}, {}];
+    (mode === 'circular' ? opened.editor.removeCircularDepthSeriesRows : opened.editor.removeLinearDepthSeriesRows)(drawing, 1, 1);
+    assert.deepEqual(opened.slots().map(({ id }) => id), ['depth_1', 'features', 'gc_skew']);
+    assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], 1);
+  });
+  // A managed row of a series beyond the count that stays (a stale third row with two series) leaves with the removal
+  // too, so it lowers the Axis as well.
+  test(`${mode}: Remove Depth series lowers a placed Axis by a managed row of a series beyond the kept count`, () => {
+    const opened = MODES[mode]([row('depth_1', 'depth', { track_index: 0 }, offAxis), row('depth_2', 'depth', { track_index: 1 }, offAxis),
+      row('depth_3', 'depth', { track_index: 2 }, offAxis), features(), after()]);
+    const drawing = opened.state.activeDrawing();
+    drawing.adv[`${mode}_track_slots_axis_index`] = 3;
+    drawing.adv.depth_tracks = [{}, {}];
+    (mode === 'circular' ? opened.editor.removeCircularDepthSeriesRows : opened.editor.removeLinearDepthSeriesRows)(drawing, 0, 1);
+    const ids = opened.slots().map(({ id }) => id);
+    assert.equal(ids.filter((id) => id.startsWith('depth_')).length, 1, `${mode}: one Depth row stays`);
+    assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], 1);
+    assert.equal(ids.indexOf('features'), 1, `${mode}: the features row keeps the Axis`);
+    assert.equal(opened.slots()[1].side, features().side);
+  });
+}
