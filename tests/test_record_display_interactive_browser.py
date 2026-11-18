@@ -520,3 +520,30 @@ def test_circular_grid_match_actions_resolve_duplicate_record_instances(tmp_path
             assert fasta.count('>') == 2
         page.screenshot(path=str(tmp_path / 'grid.png'))
         browser.close()
+
+
+def test_cli_interactive_svg_opens_region_annotation_popups(tmp_path, sync_playwright):
+    """A region annotation in an Interactive SVG the CLI writes highlights on hover and opens its popup on a click,
+    in both modes, as in the Web app's export."""
+
+    from gbdraw.circular import circular_main
+    from gbdraw.linear import linear_main
+    inputs = ROOT / "tests" / "test_inputs"
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1200, "height": 900})
+        for mode, main in (("circular", circular_main), ("linear", linear_main)):
+            main(["--gbk", str(inputs / "NC_001416.gb"), "--annotation_table", str(inputs / "lambda_wrap_regions.tsv"),
+                  "-f", "interactive_svg", "-o", str(tmp_path / mode)])
+            page.goto((tmp_path / f"{mode}.interactive.svg").as_uri())
+            region = page.locator('[data-gbdraw-annotation-id="early"]')
+            region.hover(timeout=5000)
+            # The hover style eases in over 120 ms.
+            page.wait_for_function("element => getComputedStyle(element).opacity === '0.88'",
+                                   arg=region.element_handle(), timeout=5000)
+            region.click(timeout=5000)
+            title = page.locator("#gbdraw-feature-popup .gfi-title")
+            title.wait_for(timeout=5000)
+            assert "Early" in title.text_content(), mode
+            assert "25000..27000" in page.locator("#gbdraw-feature-popup").text_content(), mode
+        browser.close()
