@@ -23,7 +23,7 @@ import {
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 import {
-  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
+  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, labelTextOf
 } from '../../services/preview-affordances.js';
 
 /**
@@ -337,13 +337,6 @@ const getElementCenter = (svg, element) => {
     }
     return { x: 0, y: 0 };
   }
-};
-
-/** @param {Element} textEl */
-const getLabelText = (textEl) => {
-  const textPath = textEl.querySelector('textPath');
-  if (textPath) return textPath.textContent || '';
-  return textEl.textContent || '';
 };
 
 /** @param {Element} textEl @param {unknown} value */
@@ -696,7 +689,7 @@ const labelFeatureAssignments = (svg, labelElements, mode) => assignFeatureIdsTo
 // text the binder recorded on the label, else the text it shows.
 /** @param {{ labelSourceText?: string | null } | null | undefined} row @param {Element} element */
 const labelSourceTextOf = (row, element) => row?.labelSourceText
-  ?? element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? getLabelText(element);
+  ?? element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? labelTextOf(element);
 // A label's feature row: the drawing's row of the feature's identity (R2).
 /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
 const rowOf = (drawing, feature) => {
@@ -945,11 +938,11 @@ export const createFeatureLabelActions = ({
     else if (autoLabelReflowEnabled.value) labelReflowRequestSeq.value += 1;
   };
 
-  // Each editable label shows its source text, its feature row's. Returns
-  // whether a label's source text is unknown here: a label with no feature
-  // identity has no row, so while bulk edits exist only Python knows the text
-  // it draws without them (the mounted root keeps no source text, OV-3848;
-  // OV-3880).
+  // Each editable label shows its source text: its feature row's, else the
+  // Result's record. Returns whether a label's source text is unknown here: a
+  // label with no feature identity has no row, and after Python drew a bulk
+  // edit its record is the edited text, so while bulk edits exist only Python
+  // knows the text it draws without them (OV-3880).
   /** @param {DrawingState} drawing @param {Element} svg @returns {boolean} */
   const resetLabelsToSourceText = (drawing, svg) => {
     let sourceUnknown = false;
@@ -959,7 +952,7 @@ export const createFeatureLabelActions = ({
       const feature = labelFeature(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
       sourceUnknown ||= bulkEdited && !featureIdentityKeyOf(feature);
       const sourceText = labelSourceTextOf(rowOf(drawing, feature), textEl);
-      if (getLabelText(textEl) === sourceText) return;
+      if (labelTextOf(textEl) === sourceText) return;
       setLabelText(textEl, sourceText);
       textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
     });
@@ -981,7 +974,7 @@ export const createFeatureLabelActions = ({
       // The source text is free text, so the bulk table is read by own key.
       const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
       const desiredText = row?.labelText ?? bulkText ?? sourceText;
-      if (getLabelText(textEl) === desiredText) return;
+      if (labelTextOf(textEl) === desiredText) return;
       setLabelText(textEl, desiredText);
       changed = true;
     });
@@ -1073,7 +1066,7 @@ export const createFeatureLabelActions = ({
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl, index) => {
       const key = textEl.getAttribute(LABEL_KEY_ATTRIBUTE);
       if (!key) return;
-      const text = getLabelText(textEl);
+      const text = labelTextOf(textEl);
       const sourceText = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || text;
       const featureId = textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '';
       const kind = textEl.querySelector('textPath') ? 'embedded' : 'regular';
@@ -1215,7 +1208,7 @@ export const createFeatureLabelActions = ({
       textEl.style.cursor = 'text';
       textEl.setAttribute(LABEL_EDITABLE_ATTRIBUTE, 'true');
       textEl.setAttribute(LABEL_KEY_ATTRIBUTE, `label-${index + 1}`);
-      const currentText = getLabelText(textEl);
+      const currentText = labelTextOf(textEl);
       if (!textEl.hasAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE)) {
         textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, currentText);
       }
@@ -1382,7 +1375,7 @@ export const createFeatureLabelActions = ({
     if (!entry?.key) return { svg, changed: false };
     const targetEl = svg.querySelector(`text[${LABEL_KEY_ATTRIBUTE}="${CSS.escape(entry.key)}"]`);
     if (!targetEl) return { svg, changed: false };
-    const currentText = getLabelText(targetEl);
+    const currentText = labelTextOf(targetEl);
     if (currentText === nextText) return { svg, changed: false };
     setLabelText(targetEl, nextText);
     return { svg, changed: true };

@@ -11,7 +11,7 @@ import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
 import { wordedNotice } from './helpers/worded-notice.mjs';
 import { serializeCleanSvg, stripTransientPreviewState } from '../../gbdraw/web/js/services/svg-serialization.js';
-import { LABEL_BINDER_ATTRIBUTES } from '../../gbdraw/web/js/services/preview-affordances.js';
+import { LABEL_BINDER_ATTRIBUTES, stripLabelSourceRecords } from '../../gbdraw/web/js/services/preview-affordances.js';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -1397,24 +1397,32 @@ for (const [name, project] of [
   });
 }
 
-// OV-3848: the label binder's marks live only on the mounted root. The
-// serializer that writes a Result's text (Save, History) and the export copy
-// (stripTransientPreviewState) drop them; Python's binding stays.
-test('a Result written from the mounted root and an export copy hold no label binder marks', () => {
+// OV-3848: the serializer that writes a Result's text (Save, History) drops
+// the label binder's marks, and keeps a label's source text only where the
+// label shows another text (the record of what Python drew, which an Undo of
+// the edit returns to). The export copy drops the record too. Python's binding
+// stays on both.
+test('a Result written from the mounted root keeps only a renamed label\'s source text, and an export none of the marks', () => {
   const boundSvg = () => new DOMParser().parseFromString([
     '<svg><text data-label-editable="true" data-label-key="label-1" data-label-source-text="alpha protein" ',
     'data-label-feature-id="f-1" data-gbdraw-label-binding-schema="1">renamed</text>',
+    '<text data-label-editable="true" data-label-key="label-2" data-label-source-text="beta" data-label-feature-id="f-2">beta</text>',
     '<line data-label-feature-id="f-1" /></svg>'
   ].join(''), 'image/svg+xml').documentElement;
-  const marksOf = (svg) => svg.querySelectorAll('*').flatMap((element) => LABEL_BINDER_ATTRIBUTES
+  const marksOf = (svg) => svg.querySelectorAll('text').map((element) => LABEL_BINDER_ATTRIBUTES
     .filter((name) => element.hasAttribute(name)));
   // The fake root's deep clone is the root itself, so the written copy is read on it.
   const written = boundSvg();
   serializeCleanSvg(written);
+  assert.deepEqual(marksOf(written), [['data-label-source-text'], []]);
+  assert.equal(written.querySelector('text').getAttribute('data-label-source-text'), 'alpha protein');
   const exported = boundSvg();
   stripTransientPreviewState(exported);
+  assert.deepEqual(marksOf(exported), [['data-label-source-text'], []], 'the shared strip keeps the record');
+  // services/export.js getCurrentSvgClone: the shared strip, then the records.
+  stripLabelSourceRecords(exported);
+  assert.deepEqual(marksOf(exported), [[], []]);
   for (const svg of [written, exported]) {
-    assert.deepEqual(marksOf(svg), []);
     const label = svg.querySelector('text');
     assert.deepEqual([label.getAttribute('data-label-feature-id'), label.getAttribute('data-gbdraw-label-binding-schema')], ['f-1', '1']);
   }

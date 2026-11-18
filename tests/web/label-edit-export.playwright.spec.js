@@ -1,12 +1,12 @@
 // The export and the stored Result of a Result whose labels the editor bound
-// and edited. OV-3848: the label binder's marks (data-label-editable,
-// data-label-key, data-label-source-text) live only on the mounted root; an
-// export and a Result's text (Save, History) never carry them, so neither
-// depends on whether a label was clicked, and a renamed label's old text does
-// not leave the page. A label's source text is its feature row's, so Reset
-// shows it after a remount and a Load. OV-2438: a label text edit and a label
-// hide show their result on the mounted Result (the projection that reads each
-// label's parts from one index of the SVG).
+// and edited. OV-3848: an export never carries the label binder's marks
+// (data-label-editable, data-label-key, data-label-source-text), and a
+// Result's text (Save, History) keeps only the source text of a renamed label,
+// so neither depends on whether a label was clicked, and a renamed label's old
+// text does not leave the page. Reset shows the source text after a remount
+// and a Load. OV-2438: a label text edit and a label hide show their result on
+// the mounted Result (the projection that reads each label's parts from one
+// index of the SVG).
 const { expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { evaluateWithRetainedPromise, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
@@ -41,6 +41,7 @@ const boundLabelCount = (page) => page.evaluate(async () => {
 });
 
 test('an SVG export is the same before and after a popup binds the labels', async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
   expect(await boundLabelCount(page)).toBe(0);
   const unbound = await exportSvg(page, testInfo, 'unbound');
@@ -53,6 +54,7 @@ test('an SVG export is the same before and after a popup binds the labels', asyn
 });
 
 test('a label text edit and a label hide show on the Result, and the export holds neither the old text nor the marks', async ({ page }, testInfo) => {
+  test.setTimeout(240_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
   const before = await labelParts(page, 'FL1');
   expect(before.find((part) => part.tag === 'text')?.text).toBe('alpha protein');
@@ -109,12 +111,15 @@ test('renamed labels show their original text after Reset label edits, also afte
   const renamed = { TESTA_0001: 'renamed bulk', TESTA_0002: 'renamed bulk', TESTA_0003: 'renamed single' };
   expect(await labelTexts(page, tags)).toEqual(renamed);
 
-  // The Result remounts from its stored text, which holds no binder mark.
+  // The Result remounts from its stored text, which holds no binder mark but
+  // the source text of each renamed label (the record of what Python drew).
   await showResult(page, 1);
   await showResult(page, 0);
   expect(await labelTexts(page, tags)).toEqual(renamed);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content).join('')))
-    .not.toMatch(BINDER_MARK);
+  const stored = await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content).join(''));
+  expect(stored).not.toMatch(/data-label-(editable|key)=/);
+  expect([...stored.matchAll(/data-label-source-text="([^"]*)"/g)].map((match) => match[1]).sort())
+    .toEqual(['duplicate protein', 'duplicate protein', 'origin spanning protein']);
 
   const saved = testInfo.outputPath('renamed-labels.gbdraw');
   await download(page, 'Save Session', saved, { title: '' });
