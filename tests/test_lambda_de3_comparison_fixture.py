@@ -4,6 +4,7 @@ serial LOSAT file, without a browser (``tools/qualify_lambda_de3_comparison_fixt
 from __future__ import annotations
 
 import copy
+import dataclasses
 import importlib.util
 import json
 import sys
@@ -31,8 +32,8 @@ def test_writing_the_evidence_writes_every_frozen_value_of_its_entry() -> None:
     manifest = json.loads(qualifier.FIXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))
     build = json.loads(qualifier.BUILD_MANIFEST_PATH.read_text(encoding="utf-8"))
     for item in qualifier._evidence(manifest):
-        written = qualifier.Evidence(item.file_id, copy.deepcopy(item.entry))
-        summary = qualifier._summarize(item.output_path.read_bytes(), item.entry)
+        written = dataclasses.replace(item, entry=copy.deepcopy(item.entry))
+        summary = qualifier._summarize(item.output_path.read_bytes(), item)
         qualifier._record(written, summary, build, item.entry["derivation"]["arguments"]["runs"])
         assert written.entry == item.entry
         assert set(qualifier._frozen(item.entry)) <= set(summary)

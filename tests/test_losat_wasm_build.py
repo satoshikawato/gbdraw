@@ -74,7 +74,7 @@ def test_the_generated_module_records_each_shipped_file_digest() -> None:
 
 
 def test_the_copied_guard_is_the_one_the_manifest_records(tmp_path: Path) -> None:
-    # tests/web/losat-wasm-guard.test.mjs proves the threaded file with this copy of LOSAT's guard (OV-2441).
+    # check() proves the threaded file by running this copy of LOSAT's guard (its `verify` command, OV-2441).
     tool = json.loads(build_tool.MANIFEST_PATH.read_text(encoding="utf-8"))["files"]["losat-threaded.wasm"]["guardTool"]
     assert tool == {"path": build_tool.GUARD_TOOL, "sha256": hashlib.sha256(build_tool.GUARD_TOOL_COPY.read_bytes()).hexdigest()}
     changed = tmp_path / "wasi_shared_memory.js"

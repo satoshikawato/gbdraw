@@ -185,6 +185,33 @@ const jobFailure = (error, hostFailures) => {
   return losatThreadsFailure([...hostFailures, detail].filter(Boolean).join('\n'));
 };
 
+/**
+ * Wait until a thread worker has started LOSAT's thread `tid` (`controlView` 1). A thread that did not start is a host
+ * failure (-1); one whose worker is of another LOSAT build (-2) ends the job with the build change.
+ * @param {{ tid: number, worker: Worker, controlView: Int32Array, timeoutMs: number, hostFailures: string[],
+ *   workers: Set<Worker> }} wait
+ * @returns {number} `tid`, or -1 when the thread did not start
+ */
+const waitForThreadStart = ({ tid, worker, controlView, timeoutMs, hostFailures, workers }) => {
+  const wait = Atomics.wait(controlView, 0, 0, timeoutMs);
+  if (Atomics.load(controlView, 0) === -2) {
+    // A thread worker of another LOSAT build refused to start (OV-2440): the throw ends LOSAT's `_start`, and the
+    // job fails with it (`jobFailure`).
+    worker.terminate();
+    workers.delete(worker);
+    throw losatBuildChangedFailure(`LOSAT WASI thread ${tid} runs another LOSAT build than its job worker`);
+  }
+  if (wait === 'timed-out' || Atomics.load(controlView, 0) !== 1) {
+    hostFailures.push(wait === 'timed-out'
+      ? `timed out waiting for LOSAT WASI thread ${tid} to start after ${Math.round(timeoutMs / 1000)}s`
+      : `LOSAT WASI thread ${tid} did not start`);
+    worker.terminate();
+    workers.delete(worker);
+    return -1;
+  }
+  return tid;
+};
+
 const runThreadedLosat = async ({
   module,
   wasmUrl,
@@ -239,19 +266,6 @@ const runThreadedLosat = async ({
   let spawnCount = 0;
   let mainMemory = null;
 
-  const waitForThreadStart = ({ tid, worker, controlView, timeoutMs }) => {
-    const wait = Atomics.wait(controlView, 0, 0, timeoutMs);
-    if (wait === 'timed-out' || Atomics.load(controlView, 0) !== 1) {
-      hostFailures.push(wait === 'timed-out'
-        ? `timed out waiting for LOSAT WASI thread ${tid} to start after ${Math.round(timeoutMs / 1000)}s`
-        : `LOSAT WASI thread ${tid} did not start`);
-      worker.terminate();
-      workers.delete(worker);
-      return -1;
-    }
-    return tid;
-  };
-
   const acquirePreparedThreadSlot = (timeoutMs) => {
     if (threadSlots.length === 0) return null;
     const deadline = performance.now() + timeoutMs;
@@ -285,7 +299,9 @@ const runThreadedLosat = async ({
       startArg,
       control
     });
-    const startedTid = waitForThreadStart({ tid, worker: slot.worker, controlView, timeoutMs: WORKER_START_TIMEOUT_MS });
+    const startedTid = waitForThreadStart({
+      tid, worker: slot.worker, controlView, timeoutMs: WORKER_START_TIMEOUT_MS, hostFailures, workers
+    });
     if (startedTid === -1) {
       Atomics.store(slot.readyView, 0, -1);
       Atomics.notify(slot.readyView, 0, 1);
@@ -317,7 +333,7 @@ const runThreadedLosat = async ({
       wasiShimUrl,
       faultChannel
     });
-    return waitForThreadStart({ tid, worker, controlView, timeoutMs: WORKER_PREPARE_TIMEOUT_MS });
+    return waitForThreadStart({ tid, worker, controlView, timeoutMs: WORKER_PREPARE_TIMEOUT_MS, hostFailures, workers });
   };
 
   const spawnThread = (startArg) => {
