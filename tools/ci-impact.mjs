@@ -902,7 +902,8 @@ const checkDevState = async ({ env, fetchImpl, writeSummary }) => {
 };
 
 // SELECTIVE_CI.md "Job times against their limits": with CI_IMPACT_WORKFLOW_FILE, the gate first
-// reports the jobs of its run attempt near their limits, also when it then fails. Report only.
+// reports the jobs of its run attempt, and their steps with their own limits, near their limits,
+// also when it then fails. Report only.
 const reportJobTimes = async ({ env, cwd, stdout, writeSummary, fetchImpl }) => {
   if (!env.CI_IMPACT_WORKFLOW_FILE) return;
   let report;

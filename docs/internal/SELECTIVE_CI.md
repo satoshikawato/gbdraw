@@ -910,20 +910,24 @@ tens of MB; most pull requests add well under 1 MB.
 
 ### Job times against their limits
 
-`PR / gate` and `Dev staging / gate` report the jobs of their own run attempt
-that used 80% or more of their `timeout-minutes`. They report before they
-validate the results, so a job that ran out of time is reported too.
-`tools/ci-impact-job-times.mjs` reads each finished job's start and end through
-the Actions REST API (`actions: read`) and its limit from the run's own
-`test.yml`; a job without `timeout-minutes` has GitHub's 360 minutes.
-`PR / gate` checks out that one file of the tested merge commit and reads it as
-data. Each such job gets a warning annotation and a line in the step summary;
-when there is none, the summary names the job with the highest share. The
-report never fails a gate, and a failed read is a warning. A job near its limit
-is the time to shorten or split it, or to raise its limit with measurements,
-before it fails. Over the 12 green `dev` runs before the report, Core 3.12 took
-up to 19.4 of its 25 minutes (77%); run 42146106065 had Web change budget at
-7.7 of its 10 minutes (77%).
+`PR / gate` and `Dev staging / gate` report the jobs of their own run attempt,
+and the steps that set their own `timeout-minutes`, that used 80% or more of
+their limit. They report before they validate the results, so a job or step
+that ran out of time is reported too. `tools/ci-impact-job-times.mjs` reads
+each finished job's and step's start and end through the Actions REST API
+(`actions: read`) and the limits from the run's own `test.yml`; a job without
+`timeout-minutes` has GitHub's 360 minutes, and a step without one counts only
+against its job. `PR / gate` checks out that one file of the tested merge commit
+and reads it as data. Each such job or step gets a warning annotation and a line
+in the step summary, named `<job> / <step>` for a step; when there is none, the
+summary names the one with the highest share. The report never fails a gate,
+and a failed read is a warning. A job or step near its limit is the time to
+shorten or split it, or to raise its limit with measurements, before it fails.
+Over the 12 green `dev` runs before the report, Core 3.12 took up to 19.4 of its
+25 minutes (77%); run 42146106065 had Web change budget at 7.7 of its 10
+minutes (77%). Steps were added after run 44226978660, where `Run Web JavaScript
+tests` ran out of its 10 minutes while its job used 58% of its own limit; before
+it, that step had used 80% or more on 7 of 10 green `dev` runs.
 
 ## Verification and rollback
 
