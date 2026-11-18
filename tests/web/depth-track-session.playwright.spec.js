@@ -3628,6 +3628,70 @@ test('a signed bedGraph set as a line with a negative color, a baseline and no u
   expect(reloaded.groups).toEqual(web.groups);
 });
 
+// OV-3885 and the words of the series controls: at the desktop sidebar each
+// Depth setting shows its words whole and on one line, inside its box.
+test('the Depth settings show their words whole in both modes (OV-3885)', async ({ page }) => {
+  test.setTimeout(300000);
+  const genbank = readFileSync(sparseGenbankAPath, 'utf8');
+  const bedGraph = 'BGC0000708\t0\t20000\t-1.5\nBGC0000708\t20000\t40579\t2\n';
+  await openApp(page, { waitForPalette: false });
+  // The lines of an element's text (a flex item has one client rect however
+  // many lines its text takes, so count the line boxes of the text itself),
+  // whether an ellipsis cuts it, and whether it or the help tip after it ends
+  // past the bordered box that holds it.
+  const shownWhole = (locator) => locator.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const tops = new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top)));
+    const tip = element.closest('label')?.nextElementSibling;
+    const right = Math.max(element.getBoundingClientRect().right, tip ? tip.getBoundingClientRect().right : 0);
+    return {
+      text: element.textContent.trim(),
+      lines: tops.size,
+      cut: element.scrollWidth > element.clientWidth + 0.5,
+      outside: right > element.parentElement.closest('.rounded').getBoundingClientRect().right + 0.5
+    };
+  });
+  for (const mode of ['circular', 'linear']) {
+    if (mode === 'circular') {
+      await evaluateWithRetainedPromise(page, async ({ genbankText, signalText }) => {
+        const app = window.__GBDRAW_APP__;
+        app.selectDrawing('circular');
+        app.setCircularInputType('gb');
+        const inputs = await import('./js/services/drawing/inputs.js');
+        const { state: cardState } = await import('./js/state.js');
+        const slice = cardState.activeDrawing().slices.inputs;
+        const card = inputs.createCircularSource();
+        inputs.addCircularSource(slice, card);
+        inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
+        app.setCircularDepthFile(0, new File([signalText], 'signal.bedgraph', { type: 'text/plain', lastModified: 2 }));
+        await window.Vue.nextTick();
+      }, { genbankText: genbank, signalText: bedGraph });
+    } else {
+      await showDrawing(page, { kind: 'linear' });
+      await evaluateWithRetainedPromise(page, async ({ genbankText, signalText }) => {
+        const app = window.__GBDRAW_APP__;
+        app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
+        app.setLinearDepthFile(app.linearSeqs[0], 0, new File([signalText], 'signal.bedgraph', { type: 'text/plain', lastModified: 2 }));
+        await window.Vue.nextTick();
+      }, { genbankText: genbank, signalText: bedGraph });
+    }
+    const sharedAxis = await reveal(page.getByRole('checkbox', { name: 'Shared Y-axis', exact: true, includeHidden: true }));
+    await expect(sharedAxis).toBeVisible();
+    expect(await shownWhole(sharedAxis.locator('xpath=following-sibling::span[1]')), mode)
+      .toEqual({ text: 'Shared Y-axis', lines: 1, cut: false, outside: false });
+    const depthMin = page.getByRole('spinbutton', { name: 'Depth Min', exact: true });
+    expect(await shownWhole(depthMin.locator('xpath=preceding-sibling::span[contains(@class, "auto-value-placeholder")]')), mode)
+      .toEqual({ text: '0 or below (auto)', lines: 1, cut: false, outside: false });
+    const negativeColor = await reveal(page.getByLabel('Depth negative color', { exact: true }));
+    const negativeState = negativeColor.locator('xpath=following-sibling::span[1]');
+    expect(await shownWhole(negativeState), mode).toEqual({ text: 'Default', lines: 1, cut: false, outside: false });
+    await negativeColor.fill('#d62728');
+    await expect(negativeState).toHaveText('Custom');
+    expect(await shownWhole(negativeState), mode).toEqual({ text: 'Custom', lines: 1, cut: false, outside: false });
+  }
+});
+
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });

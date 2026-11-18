@@ -2914,7 +2914,8 @@
                             </div>
                             <div v-else class="space-y-2 pt-1">
                                 <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
-                                    <div class="grid grid-cols-2 gap-y-1 gap-x-1">
+                                    <!-- The first column is as wide as its labels need, at least half when they need more, and the second takes the rest: in two equal columns "Shared Y-axis" broke at its hyphen and a long first-column word ran under the second column (OV-3885). -->
+                                    <div class="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-y-1 gap-x-1">
                                         <div class="flex items-center text-xs">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                                 <input type="checkbox" v-model="adv.depth_normalize" aria-describedby="help-circular-log-scale" class="form-checkbox" :disabled="!semanticMutationAvailable">
@@ -3080,10 +3081,10 @@
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 items-start">
                                             <div class="min-w-0">
-                                                <span class="input-label text-[10px]">{{ t('Negative color') }} <help-tip :id="`help-circular-depth-negative-color-${track.index}`" :text="t('Color of the series below its baseline. Clear it to use the series color.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Negative color') }} <help-tip :id="`help-circular-depth-negative-color-${track.index}`" :text="t('Color of the series below its baseline. Default: the series color.')"></help-tip></span>
                                                 <div class="flex items-center gap-1">
                                                     <input type="color" v-committed-value="track.series.negative_color || getDepthTrackColor(track.index)" @input="setDepthSeriesSetting(track.index, 'negative_color', $event.target.value)" :aria-label="track.index === 0 ? t('Depth negative color') : t('Depth {n} negative color', { n: track.index + 1 })" :aria-describedby="`help-circular-depth-negative-color-${track.index}`" class="h-6 w-8 shrink-0 p-0 border rounded" :disabled="!semanticMutationAvailable">
-                                                    <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ track.series.negative_color ? t('Custom') : t('Series color') }}</span>
+                                                    <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ track.series.negative_color ? t('Custom') : t('Default') }}</span>
                                                     <button type="button" @click="setDepthSeriesSetting(track.index, 'negative_color', null)" :aria-label="track.index === 0 ? t('Use the series color below the Depth baseline') : t('Use the series color below the Depth {n} baseline', { n: track.index + 1 })" :title="t('Use the series color')" class="btn btn-secondary h-6 w-6 shrink-0 p-0 text-[10px]" :disabled="!semanticMutationAvailable || !track.series.negative_color"><i class="ph ph-x" aria-hidden="true"></i></button>
                                                 </div>
                                             </div>
@@ -3496,7 +3497,8 @@
                             <p class="ui-hint pt-1">{{ t('These settings are shared by the same numbered series across every File and record.') }}</p>
                             <div class="space-y-2 pt-2">
                                 <div class="rounded border border-slate-200 bg-white/80 p-2 space-y-2">
-                                    <div class="grid grid-cols-2 gap-y-1 gap-x-1">
+                                    <!-- The first column is as wide as its labels need, at least half when they need more, and the second takes the rest: in two equal columns "Shared Y-axis" broke at its hyphen and a long first-column word ran under the second column (OV-3885). -->
+                                    <div class="grid grid-cols-[fit-content(50%)_minmax(0,1fr)] gap-y-1 gap-x-1">
                                         <div class="flex items-center text-xs">
                                             <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                                 <input type="checkbox" v-model="adv.depth_normalize" aria-describedby="help-linear-log-scale" class="form-checkbox" :disabled="!semanticMutationAvailable">
@@ -3680,10 +3682,10 @@
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 items-start">
                                             <div class="min-w-0">
-                                                <span class="input-label text-[10px]">{{ t('Negative color') }} <help-tip :id="`help-linear-depth-negative-color-${track.index}`" :text="t('Color of the series below its baseline. Clear it to use the series color.')"></help-tip></span>
+                                                <span class="input-label text-[10px]">{{ t('Negative color') }} <help-tip :id="`help-linear-depth-negative-color-${track.index}`" :text="t('Color of the series below its baseline. Default: the series color.')"></help-tip></span>
                                                 <div class="flex items-center gap-1">
                                                     <input type="color" v-committed-value="track.series.negative_color || getDepthTrackColor(track.index)" @input="setDepthSeriesSetting(track.index, 'negative_color', $event.target.value)" :aria-label="track.index === 0 ? t('Depth negative color') : t('Depth {n} negative color', { n: track.index + 1 })" :aria-describedby="`help-linear-depth-negative-color-${track.index}`" class="h-6 w-8 shrink-0 p-0 border rounded" :disabled="!semanticMutationAvailable">
-                                                    <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ track.series.negative_color ? t('Custom') : t('Series color') }}</span>
+                                                    <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ track.series.negative_color ? t('Custom') : t('Default') }}</span>
                                                     <button type="button" @click="setDepthSeriesSetting(track.index, 'negative_color', null)" :aria-label="track.index === 0 ? t('Use the series color below the Depth baseline') : t('Use the series color below the Depth {n} baseline', { n: track.index + 1 })" :title="t('Use the series color')" class="btn btn-secondary h-6 w-6 shrink-0 p-0 text-[10px]" :disabled="!semanticMutationAvailable || !track.series.negative_color"><i class="ph ph-x" aria-hidden="true"></i></button>
                                                 </div>
                                             </div>
