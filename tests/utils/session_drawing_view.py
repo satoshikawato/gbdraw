@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from gbdraw.session_drawings import _drawing_view
+from gbdraw.session_drawings import _drawing_view, active_session_drawing, read_session_drawings
 from gbdraw.session_io import FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION, mode_slice_of_version
 
 
@@ -118,6 +118,12 @@ def drawings_document_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
 
 # fixround C2
 def session_view(document: Mapping[str, Any]) -> dict[str, Any]:
-    """The one-drawing view of a 49, or the 27-48 document itself (a fixture an older writer made)."""
+    """The view of the drawing a 49 opens with (``active_session_drawing``), the one a Gallery Session
+    shows beside the drawing its tutorial starts in, or the 27-48 document itself (a fixture an older
+    writer made)."""
 
-    return drawing_view(document) if "drawings" in document else dict(document)
+    if "drawings" not in document:
+        return dict(document)
+    shown = active_session_drawing(document, read_session_drawings(document))
+    assert shown is not None, [(d["id"], d["mode"]) for d in document["drawings"]]
+    return drawing_view(document, shown.id)

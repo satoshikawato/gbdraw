@@ -2,7 +2,7 @@
 
 # Gallery
 
-Finished figures made with gbdraw. The ten Web Gallery examples come first, in the order of the [interactive Gallery](https://gbdraw.app/gallery/), where you can zoom, open feature popups, download the Session, and follow a step-by-step web app guide. Five of them also have a Tutorial that builds the figure from downloaded inputs in the web app, on the command line, and in Python.
+Finished figures made with gbdraw. The fourteen Web Gallery examples come first, in the order of the [interactive Gallery](https://gbdraw.app/gallery/), where you can zoom, open feature popups, download the Session, and follow a step-by-step web app guide. Five of them also have a Tutorial that builds the figure from downloaded inputs in the web app, on the command line, and in Python.
 
 ## Web Gallery examples
 
@@ -101,6 +101,22 @@ Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neom
 Nine majanivirus genomes from penaeid shrimp, one per row, linked by LOSATP similarity groups at 20% identity or more. A color table marks WSSV-like proteins, BIRP, and tyrosine recombinase by product name. The Litopenaeus vannamei majanivirus genome is shown reverse-complemented, so its synteny with the other genomes reads left to right. The first five genomes share dense, high-identity links, while links further down are paler and sparser; the links show protein similarity, not orthology.
 
 [Open in the interactive Gallery](https://gbdraw.app/gallery/#majanivirus_orthogroup)
+
+### One locus found in three <i>Bacillus velezensis</i> genomes
+
+<a href="https://gbdraw.app/gallery/#bacillus_velezensis_fengycin"><img src="../gbdraw/web/gallery/thumbnails/bacillus_velezensis_fengycin.webp" alt="The fengycin locus of three Bacillus velezensis genomes in rows, the draft assembly's four contig windows numbered, joined by protein-similarity links" width="640"></a>
+
+A 77.7-kbp locus of <i>Bacillus velezensis</i> FZB42 with its five non-ribosomal peptide synthetase genes, selected on the whole chromosome and found with Find in other files in the complete genome of strain CBMB205 and in the 74-contig draft assembly of strain SK19.001. CBMB205 holds the locus in one window on the reverse strand; SK19.001 holds it in pieces on four contigs, which share its row as numbered windows listed under the row name. LOSATP similarity groups link the genes, and a color table marks non-ribosomal peptide synthetases, transporters, and transcriptional regulators by product name. Follow the red synthetase genes across the contig ends of the draft assembly.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#bacillus_velezensis_fengycin)
+
+### An AHPND plasmid found in two more <i>Vibrio parahaemolyticus</i> genomes
+
+<a href="https://gbdraw.app/gallery/#vibrio_parahaemolyticus_pva1"><img src="../gbdraw/web/gallery/thumbnails/vibrio_parahaemolyticus_pva1.webp" alt="The AHPND plasmid of three Vibrio parahaemolyticus genomes in rows, the draft assembly's contig windows numbered, joined by protein-similarity links" width="640"></a>
+
+The 68.8-kbp AHPND plasmid of <i>Vibrio parahaemolyticus</i> 19-021-D1, found with Find in other files in the plasmid of strain 20-082A3 and in the 97-contig draft assembly of strain CAVP11. The search window starts at 63,090 and runs across the origin to 63,089, in an intergenic gap, so no gene is cut. The 20-082A3 plasmid is one window across its own origin on the reverse strand; CAVP11 holds the plasmid on three contigs. Colors mark the <i>pirA</i> and <i>pirB</i> toxin genes by locus tag, and conjugative transfer, transposases and recombinases, and replication and mobilization genes by product name; 20-082A3 lacks <i>pirA</i>.
+
+[Open in the interactive Gallery](https://gbdraw.app/gallery/#vibrio_parahaemolyticus_pva1)
 
 ## More figures
 

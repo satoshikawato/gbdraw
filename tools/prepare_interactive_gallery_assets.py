@@ -20,6 +20,8 @@ from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import compute_feature_hash_from_parts
 from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
+from gbdraw.session import _resource_original_names
+from gbdraw.session_resources import canonical_resource_ids
 from gbdraw.web_support.feature_catalog import (
     ANCHOR_FEATURE_CATALOG_SCHEMA,
     FEATURE_CATALOG_SCHEMA,
@@ -51,7 +53,6 @@ INTERACTIVE_SVG_HARD_LIMIT = 41_943_040
 DECODED_METADATA_HARD_LIMIT = 200_000_000
 DECODED_METADATA_REGRESSION_CEILING = 220_000_000
 
-GENOME_SUFFIXES = (".gb", ".gbk", ".gbff")
 _RENDERED_RECORD_SUFFIX_RE = re.compile(r"_record_\d+$")
 _SVG_PART_SUFFIX_RE = re.compile(r"__part\d+$")
 _SVG_FEATURE_ID_RE = re.compile(r'data-gbdraw-feature-id=["\']([^"\']+)["\']')
@@ -68,7 +69,6 @@ class GallerySessionExample:
     display_order: int
     command_kind: str
     command_note: str
-    feature_sources: tuple[str, ...] = ()
     sync_result_svg: bool = True
     interactive_svg: bool = True
     compressed_metadata: bool = False
@@ -457,10 +457,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         ),
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         session_from_command=True,
-        feature_sources=(
-            "GCF_000196095.1_ASM19609v1_genomic.gbff",
-            "GCF_000354175.2_ASM35417v2_genomic.gbff",
-        ),
         compressed_metadata=True,
         source_note=(
             "The interactive SVG with gzip-compressed metadata, complete Session file, "
@@ -529,6 +525,50 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
         command=MAJANIVIRUS_COMMAND,
     ),
+    GallerySessionExample(
+        id="bacillus_velezensis_fengycin",
+        title="One locus found in three <i>Bacillus velezensis</i> genomes",
+        tags=("Linear", "Multi-record", "Similarity groups", "LOSAT", "Find in other files", "Interactive SVG"),
+        description=(
+            "A 77.7-kbp locus of <i>Bacillus velezensis</i> FZB42 with its five non-ribosomal peptide "
+            "synthetase genes, selected on the whole chromosome and found with Find in other files in the "
+            "complete genome of strain CBMB205 and in the 74-contig draft assembly of strain SK19.001. "
+            "CBMB205 holds the locus in one window on the reverse strand; SK19.001 holds it in pieces on four "
+            "contigs, which share its row as numbered windows listed under the row name. LOSATP similarity "
+            "groups link the genes, and a color table marks non-ribosomal peptide synthetases, transporters, "
+            "and transcriptional regulators by product name."
+        ),
+        workflow="Find a locus in other genomes",
+        input_summary="3 GenBank + 3 color/label TSV files",
+        display_order=100,
+        command_kind="runnable",
+        command_note=(
+            "Download the Session file with the Session button, then run this command in the same directory. "
+            "The Session holds the input files and the color and label tables."
+        ),
+    ),
+    GallerySessionExample(
+        id="vibrio_parahaemolyticus_pva1",
+        title="An AHPND plasmid found in two more <i>Vibrio parahaemolyticus</i> genomes",
+        tags=("Linear", "Multi-record", "Similarity groups", "LOSAT", "Find in other files", "Interactive SVG"),
+        description=(
+            "The 68.8-kbp AHPND plasmid of <i>Vibrio parahaemolyticus</i> 19-021-D1, found with Find in other "
+            "files in the plasmid of strain 20-082A3 and in the 97-contig draft assembly of strain CAVP11. The "
+            "search window starts at 63,090 and runs across the origin to 63,089, in an intergenic gap, so no "
+            "gene is cut. The 20-082A3 plasmid is one window across its own origin on the reverse strand; "
+            "CAVP11 holds the plasmid on three contigs. Colors mark the <i>pirA</i> and <i>pirB</i> toxin genes "
+            "by locus tag, and conjugative transfer, transposases and recombinases, and replication and "
+            "mobilization genes by product name; 20-082A3 lacks <i>pirA</i>."
+        ),
+        workflow="Find a plasmid in other genomes",
+        input_summary="3 GenBank + 3 color/label TSV files",
+        display_order=110,
+        command_kind="runnable",
+        command_note=(
+            "Download the Session file with the Session button, then run this command in the same directory. "
+            "The Session holds the input files and the color and label tables."
+        ),
+    ),
 )
 
 
@@ -538,13 +578,17 @@ def _format_size(num_bytes: int) -> str:
     return f"{num_bytes / 1024:.0f} KB"
 
 
-def _load_session(example: GallerySessionExample) -> dict[str, Any]:
+def _load_session(example: GallerySessionExample) -> tuple[dict[str, Any], str | None]:
+    """The view of the drawing the example's Session shows, and that drawing's ID when the Session
+    holds others, which a ``--session`` replay then names with ``--drawing``."""
+
     from tools.refresh_gallery_sessions import _gallery_view, _read_session_file
 
     session = _read_session_file(example.session_path)
     if not isinstance(session, dict):
         raise ValueError(f"{example.session_path} did not contain a JSON object.")
-    return _gallery_view(session)[0]
+    view, drawing_id = _gallery_view(session)
+    return view, drawing_id if len(session.get("drawings") or ()) > 1 else None
 
 
 def _session_cli_invocation(session: dict[str, Any]) -> dict[str, Any]:
@@ -579,7 +623,10 @@ def _session_cli_options(session: dict[str, Any]) -> dict[str, Any]:
     return cli_options if isinstance(cli_options, dict) else {}
 
 
-def _session_command(session: dict[str, Any]) -> str:
+def _session_command(session: dict[str, Any], session_name: str, drawing: str | None = None) -> str:
+    """The card command: the Session's own CLI arguments, or a replay of the Session file under the name
+    the Gallery downloads it as (``session_name``), naming ``drawing`` when the Session holds others."""
+
     cli = _session_cli_invocation(session)
     ui = session.get("ui") if isinstance(session.get("ui"), dict) else {}
     cli_options = _session_cli_options(session)
@@ -587,7 +634,7 @@ def _session_command(session: dict[str, Any]) -> str:
     raw_args = _session_raw_args(session)
     if raw_args:
         return shlex.join(["gbdraw", mode, *raw_args])
-    return shlex.join(["gbdraw", mode, "--session", "session.gbdraw"])
+    return shlex.join(["gbdraw", mode, "--session", session_name, *(["--drawing", drawing] if drawing else [])])
 
 
 # Settings a Web-saved Session stores as configuration overrides (key, with the Session's mode) and the CLI
@@ -641,59 +688,31 @@ def _with_session_values(command: str, session: dict[str, Any]) -> str:
     return " ".join(tokens)
 
 
-def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
-    command = example.command or _session_command(session)
+def _example_command(example: GallerySessionExample, session: dict[str, Any], drawing: str | None = None) -> str:
+    command = example.command or _session_command(session, example.session_path.name, drawing)
     if example.command and not example.session_from_command:
         command = _with_session_values(command, session)
     return command.replace("interactive-svg", "interactive_svg")
 
 
 def _session_feature_sources(session: dict[str, Any]) -> list[str]:
-    cli = _session_cli_invocation(session)
-    seen: set[str] = set()
+    """The input files of a card: the files the shown drawing's records read.
+
+    Each record names its files by resource ID (``renderRequest.records[].source``,
+    ``canonical_resource_ids``), and the Session names each resource by the
+    file the user chose (``webFiles.resourceOriginalNames``), whatever its
+    suffix or compression.
+    """
+
+    original_names = _resource_original_names(session)
     sources: list[str] = []
-
-    def add_name(value: object) -> None:
-        if not isinstance(value, str) or not value.lower().endswith(GENOME_SUFFIXES):
-            return
-        if value in seen:
-            return
-        seen.add(value)
-        sources.append(value)
-
-    bindings = cli.get("fileBindings")
-    if isinstance(bindings, list):
-        for binding in bindings:
-            if not isinstance(binding, dict):
-                continue
-            add_name(binding.get("name"))
-
-    # A Web-saved Session has no cliInvocation: name each record's source
-    # resources from webFiles.resourceOriginalNames, in record order.
-    web_files = session.get("webFiles")
-    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, dict) else None
-    render_request = session.get("renderRequest")
-    records = render_request.get("records") if isinstance(render_request, dict) else None
-    if isinstance(original_names, dict) and isinstance(records, list):
-        for record in records:
-            source = record.get("source") if isinstance(record, dict) else None
-            if not isinstance(source, dict):
-                continue
-            for key, resource_id in source.items():
-                if key.endswith("esourceId") and isinstance(resource_id, str):
-                    add_name(original_names.get(resource_id))
-
-    files = session.get("files")
-    if isinstance(files, dict):
-        linear_seqs = files.get("linearSeqs")
-        if isinstance(linear_seqs, list):
-            for entry in linear_seqs:
-                if not isinstance(entry, dict):
-                    continue
-                gb_entry = entry.get("gb")
-                if isinstance(gb_entry, dict):
-                    add_name(gb_entry.get("name"))
-                add_name(entry.get("name"))
+    for record in session["renderRequest"]["records"]:
+        for resource_id in sorted(canonical_resource_ids(record["source"])):
+            name = original_names.get(resource_id)
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"The Session names no file for its record resource {resource_id}.")
+            if name not in sources:
+                sources.append(name)
     return sources
 
 
@@ -1786,7 +1805,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
     for example in EXAMPLES:
         _validate_session_interactive_orthogroups(
             example,
-            _load_session(example),
+            _load_session(example)[0],
         )
 
     EXAMPLE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -1797,7 +1816,7 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
 
     payload: list[dict[str, object]] = []
     for example in EXAMPLES:
-        session = _load_session(example)
+        session, drawing = _load_session(example)
         source = _read_or_create_source_svg(
             example,
             session,
@@ -1821,9 +1840,9 @@ def prepare_gallery_assets(*, refresh_sources: bool = False) -> list[dict[str, o
             "sourceOutput": str(example.output_svg_path.relative_to(REPO_ROOT)),
             "sourceFigure": str(example.source_svg_path.relative_to(REPO_ROOT)),
             "sourceNote": example.source_note,
-            "featureSources": list(example.feature_sources) or _session_feature_sources(session),
+            "featureSources": _session_feature_sources(session),
             "fileSizeLabel": _format_size(example.gallery_svg_path.stat().st_size),
-            "command": _example_command(example, session),
+            "command": _example_command(example, session, drawing),
             "commandKind": example.command_kind,
             "commandNote": example.command_note,
             "description": example.description,

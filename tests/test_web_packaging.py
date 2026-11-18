@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_drawing_view import drawing_view, session_view
 from PIL import Image
 from tests.utils.web_markup import read_english_index
 
@@ -85,9 +85,13 @@ GALLERY_SESSION_FILES = [
     "hepatoplasmataceae_orthogroup.gbdraw",
     "majanivirus_orthogroup.gbdraw",
     "lambda_basic_linear.gbdraw",
+    "bacillus_velezensis_fengycin.gbdraw",
+    "vibrio_parahaemolyticus_pva1.gbdraw",
 ]
 GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw",
+    "bacillus_velezensis_fengycin.gbdraw",
+    "vibrio_parahaemolyticus_pva1.gbdraw",
     "hepatoplasmataceae_collinear.gbdraw",
     "hepatoplasmataceae_orthogroup.gbdraw",
     "majanivirus_orthogroup.gbdraw",
@@ -100,6 +104,8 @@ GALLERY_EDITOR_STATE_SESSION_FILES = {
 GALLERY_LOSAT_CACHE_SESSION_FILES = {
     "ecoli_o157_sakai_rings.gbdraw",
     "BGC0000708-BGC0000713.gbdraw",
+    "bacillus_velezensis_fengycin.gbdraw",
+    "vibrio_parahaemolyticus_pva1.gbdraw",
     "hepatoplasmataceae_collinear.gbdraw",
     "hepatoplasmataceae_orthogroup.gbdraw",
     "majanivirus_orthogroup.gbdraw",
@@ -715,6 +721,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "hepatoplasmataceae_orthogroup",
         "BGC0000708-BGC0000713",
         "majanivirus_orthogroup",
+        "bacillus_velezensis_fengycin",
+        "vibrio_parahaemolyticus_pva1",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
     expected_tags = {
@@ -762,6 +770,17 @@ def test_interactive_gallery_examples_are_wired() -> None:
             "LOSAT",
             "Interactive SVG",
         ],
+        **{
+            example_id: [
+                "Linear",
+                "Multi-record",
+                "Similarity groups",
+                "LOSAT",
+                "Find in other files",
+                "Interactive SVG",
+            ]
+            for example_id in ("bacillus_velezensis_fengycin", "vibrio_parahaemolyticus_pva1")
+        },
     }
 
     assert [entry["id"] for entry in examples] == expected_ids
@@ -783,6 +802,8 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "Protein similarity groups across five genomes (Hepatoplasmataceae)",
         "Protein similarity among aminoglycoside biosynthetic gene clusters (<i>Streptomyces</i> spp.)",
         "Protein similarity across nine majanivirus genomes",
+        "One locus found in three <i>Bacillus velezensis</i> genomes",
+        "An AHPND plasmid found in two more <i>Vibrio parahaemolyticus</i> genomes",
     ]
     for entry in examples:
         assert entry["title"]
@@ -954,6 +975,34 @@ def test_interactive_gallery_svg_embeds_the_current_viewer(entry: dict[str, obje
 
 
 @pytest.mark.gallery
+def test_gallery_session_commands_select_one_drawing(
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    # A card command that replays the Session selects the drawing the Gallery shows: a Find in other files
+    # Session also holds the reference drawing its tutorial starts in, and `--session` alone would refuse it.
+    from gbdraw.session import _select_drawing
+    from gbdraw.session_drawings import read_session_drawings
+
+    replayed = 0
+    for entry in json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8")):
+        args = entry["command"].split()
+        if "--session" not in args:
+            continue
+        replayed += 1
+        # The command names the Session file under the name the Gallery downloads it as (gallery.js takes
+        # the last part of `session`), and the note sends the reader to that file, not to the input files
+        # a Session replay does not read.
+        assert args[args.index("--session") + 1] == str(entry["session"]).split("/")[-1], entry["id"]
+        assert "Session" in entry["commandNote"] and "genomes" not in entry["commandNote"], entry["id"]
+        document = load_cached_gallery_session(GALLERY_ROOT / "sessions" / f"{entry['id']}.gbdraw")
+        drawings = read_session_drawings(document)
+        selector = args[args.index("--drawing") + 1] if "--drawing" in args else None
+        selected = _select_drawing(drawings, selector, mode=args[1])
+        assert selected.artifacts.fields.get("renderRequest") is not None, entry["id"]
+    assert replayed >= 2
+
+
+@pytest.mark.gallery
 def test_runnable_gallery_support_downloads_exist() -> None:
     expected_local_downloads = {
         "HmmtDNA_ATskew": {"./files/HmmtDNA_qualifier_priority.tsv"},
@@ -971,6 +1020,14 @@ def test_runnable_gallery_support_downloads_exist() -> None:
         "majanivirus_orthogroup": {
             "./files/modified_default_colors.tsv",
             "./files/majani_custom_color_table.tsv",
+        },
+        **{
+            example_id: {
+                "./files/cds_grey_default_colors.tsv",
+                f"./files/{example_id}_specific_colors.tsv",
+                "./files/cds_gene_priority.tsv",
+            }
+            for example_id in ("bacillus_velezensis_fengycin", "vibrio_parahaemolyticus_pva1")
         },
     }
 
@@ -1073,7 +1130,7 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
 
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
-        session = drawing_view(load_cached_gallery_session(session_path))
+        session = session_view(load_cached_gallery_session(session_path))
         results = session.get("results", [])
         editor_state = session.get("editorState", {})
         feature_catalog = editor_state.get("featureCatalog", {})

@@ -8051,7 +8051,8 @@ const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite'
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
 // A request key outside this table reads no default: a JSON value is never an inherited member.
 /** @type {Readonly<Record<string, JsonValue>>} */
-const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true, 'objects.definition.circular.show': true };
+// A diagram option at its default is read from the request contract (`publicationOptionDefault`), not from this table.
+const PUBLICATION_OPTION_DEFAULTS = { 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true, 'objects.definition.circular.show': true };
 /**
  * A resource of a request under comparison: the descriptor a Session stores or
  * the writer built (no reader has checked it), or a backing that reads its bytes.
@@ -8064,6 +8065,7 @@ const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWith
  * @property {{ path: string, kind: string, decodedPayloadSha256: string }[]} bindings
  * @property {Map<unknown, Promise<string>>} resourceIdentities Digests by a resource's base64 text.
  * @property {boolean} ignoreComparisonFilters
+ * @property {StoredRequestPlaces | null} places The places of the request's mode, or null for an unknown mode.
  */
 /**
  * @param {PublicationResource | undefined} resource
@@ -8129,6 +8131,19 @@ const publicationResourceIdentity = async (resources, id, path, cache) => {
   return { kind, decodedPayloadSha256: await digest };
 };
 /**
+ * A diagram option a request states at its type's default, or at the one value
+ * the other diagram type's option allows: the CLI encoder omits it, a Web
+ * request states it, and both draw the same (generated request contract).
+ * @param {StoredRequestPlaces | null} places
+ * @param {string} key
+ * @param {JsonValue} value
+ */
+const publicationOptionDefault = (places, key, value) => {
+  const place = `diagramOptions.${key}`;
+  return !!places && [places.defaulted, places.otherType].some((table) =>
+    table.has(place) && JSON.stringify(table.get(place)) === JSON.stringify(value));
+};
+/**
  * @param {JsonValue} value
  * @param {PublicationResources} resources
  * @param {PublicationContext} context
@@ -8155,6 +8170,7 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
       || (path === '$.diagramOptions' && key === 'featureShapes' && value[key] && typeof value[key] === 'object'
         && Object.entries(value[key]).every(([type, rendering]) => rendering === defaultFeatureRendering(type)))
       || (path === '$.diagramOptions.config.canvas' && key === 'feature_overlap_tolerance_bp' && value[key] === 0)
+      || (path === '$.diagramOptions' && publicationOptionDefault(context.places, key, value[key]))
       || (context.ignoreComparisonFilters && path === '$.diagramOptions' && PUBLICATION_COMPARISON_FILTER_FIELDS.has(key))
       || (/^\$\.output(?:\[\d+\])?$/.test(path) && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;
     if (resourceReference && ['encoding', 'representation'].includes(key)) continue;
@@ -8554,8 +8570,9 @@ const STORED_REQUEST_ROOTS = /** @type {const} */ ({ circular: 'CanonicalCircula
  * Per mode, from the description: the places a value of the other diagram
  * type is read as this one's (a placeholder that holds only null or no item,
  * and an option of the other type that this one holds at its default), the
- * unions picked by their `kind`, and the places that have a default (a repair
- * puts it there in place of a value it cannot read, so each is a part).
+ * unions picked by their `kind`, and the places that have a default, with it (a
+ * repair puts it there in place of a value it cannot read, so each is a part;
+ * Gallery publication reads a stated default as an omitted one).
  * @param {string} rootType
  * @param {string} otherOptionsType
  */
@@ -8565,8 +8582,8 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
   const otherType = new Map();
   /** @type {Set<string>} */
   const tagged = new Set();
-  /** @type {Set<string>} */
-  const defaulted = new Set();
+  /** @type {Map<string, unknown>} */
+  const defaulted = new Map();
   const otherOptions = /** @type {import('../utils/contract-shape.js').ObjectShape} */ (types[otherOptionsType]);
   /** @param {ContractShape} shape @returns {ContractShape} */
   const resolve = (shape) => (shape.kind === 'ref' ? resolve(types[shape.name]) : shape);
@@ -8594,7 +8611,7 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
     else if (resolved.kind === 'object') {
       Object.entries(resolved.fields).forEach(([key, field]) => {
         const place = pattern ? `${pattern}.${key}` : key;
-        if (resolved.defaults && Object.hasOwn(resolved.defaults, key)) defaulted.add(place);
+        if (resolved.defaults && Object.hasOwn(resolved.defaults, key)) defaulted.set(place, resolved.defaults[key]);
         walk(field, place, depth + 1);
       });
     }
@@ -8602,6 +8619,7 @@ const storedRequestPlaces = (rootType, otherOptionsType) => {
   walk(types[rootType], '', 0);
   return { otherType, tagged, defaulted, otherOptionKeys: new Set(Object.keys(otherOptions.fields)) };
 };
+/** @typedef {ReturnType<typeof storedRequestPlaces>} StoredRequestPlaces */
 const STORED_REQUEST_PLACES = {
   circular: storedRequestPlaces(STORED_REQUEST_ROOTS.circular, 'CanonicalLinearDiagramOptions'),
   linear: storedRequestPlaces(STORED_REQUEST_ROOTS.linear, 'CanonicalCircularDiagramOptions')
@@ -9426,8 +9444,11 @@ const publicationRequestIdentity = async (request, resources, resourceIdentities
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
   const normalizedRequest = normalizePublicationRequestAliases(request, resources);
   const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
+  /** @type {unknown} */
+  const mode = normalizedRequest.mode;
   /** @type {PublicationContext} */
   const context = { bindings: [], resourceIdentities,
+    places: mode === 'circular' || mode === 'linear' ? STORED_REQUEST_PLACES[mode] : null,
     ignoreComparisonFilters: !(normalizedRequest.comparisons?.length || (Array.isArray(conservation) ? conservation.length : conservation)) };
   const canonical = await canonicalizePublicationValue(normalizedRequest, resources, context);
   return { canonical, digest: await sha256Hex(textToBytes(JSON.stringify(canonical))),

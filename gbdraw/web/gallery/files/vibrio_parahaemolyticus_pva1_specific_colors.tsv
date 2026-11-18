@@ -1,0 +1,4 @@
+CDS	locus_tag	^(GNY17_RS27500|GNY17_RS27505|I5M77_RS26085|HPQ58_RS01340|HPQ58_RS01345)$	#d03535	pirA and pirB toxin genes
+CDS	product	conjugal|conjugative|type IV secret|VirB|TraB	#577edb	Conjugative transfer
+CDS	product	transposase|integrase|recombinase|recombination-promoting	#e8a33d	Transposases and recombinases
+CDS	product	MobC|replication|topoisomerase	#57b767	Replication and mobilization
