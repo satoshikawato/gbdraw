@@ -1,8 +1,9 @@
 """Values that older Sessions and schema 1-2 requests wrote, and what they read as now.
 
-The canonical-request decoder (:mod:`gbdraw.session_request_codec`) and the
-Session migrations of a draft or a recorded command line
-(:mod:`gbdraw.session_io`) read the same renames from here.
+The canonical-request decoder (:mod:`gbdraw.session_request_codec`), the
+Session migration of a draft (:mod:`gbdraw.session_io`) and the replay of a
+recorded command line (:mod:`gbdraw.cli_utils.legacy_session_args`) read the
+same renames from here.
 """
 
 from __future__ import annotations

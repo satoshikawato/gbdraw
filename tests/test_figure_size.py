@@ -1353,7 +1353,7 @@ def test_the_web_reads_figure_size_lengths_only_from_a_figure_size_refusal() -> 
     ],
 )
 def test_a_drawing_form_size_replays_as_its_cli_options(form: dict, expected: list[str]) -> None:
-    from gbdraw.session_io import _append_common_gui_args
+    from gbdraw.cli_utils.legacy_session_args import _append_common_gui_args
 
     run_args: list[str] = []
     _append_common_gui_args(run_args, [], form=form, adv={})

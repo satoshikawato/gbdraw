@@ -12,6 +12,8 @@ import numpy as np
 import pytest
 
 from gbdraw import cli, read_genbank, session_io
+from gbdraw.cli_utils import legacy_session_args
+from gbdraw.tracks.circular import _LEGACY_SPACING_PARAM
 from gbdraw.analysis.depth import parse_depth_tsv
 from gbdraw.exceptions import InputFileError, ParseError
 from gbdraw.io import input_text
@@ -310,18 +312,18 @@ def test_restored_cli_tables_read_through_the_gzip_reader(small_cap: int, tmp_pa
     """A restored CLI table of an older Session may be gzip; it reads as the plain one, under the cap."""
 
     track_table = _gzip_of(tmp_path / "tracks.tsv.gz", b"kind\tspacing\nfeatures\t5\n")
-    session_io._migrate_legacy_circular_track_table(track_table)
+    legacy_session_args._migrate_legacy_circular_track_table(track_table)
     assert track_table.read_text(encoding="utf-8") == "kind\tparams\nfeatures\tlegacy_spacing=5\n".replace(
-        "legacy_spacing", session_io._LEGACY_SPACING_PARAM
+        "legacy_spacing", _LEGACY_SPACING_PARAM
     )
     records_table = _gzip_of(tmp_path / "records.tsv.gz", b"gbk\trecord_label\nold.gb\tA\n")
-    session_io._rewrite_tsv_path_cells(records_table, {(0, "gbk"): ["restored/new.gb"]})
+    legacy_session_args._rewrite_tsv_path_cells(records_table, {(0, "gbk"): ["restored/new.gb"]})
     assert records_table.read_text(encoding="utf-8") == "gbk\trecord_label\nrestored/new.gb\tA\n"
 
     too_large = _gzip_of(tmp_path / "PRIVATE-tracks.tsv.gz", b"kind\tspacing\n" + b"x" * (small_cap + 1))
     for rewrite in (
-        lambda: session_io._migrate_legacy_circular_track_table(too_large),
-        lambda: session_io._rewrite_tsv_path_cells(too_large, {(0, "kind"): "y"}),
+        lambda: legacy_session_args._migrate_legacy_circular_track_table(too_large),
+        lambda: legacy_session_args._rewrite_tsv_path_cells(too_large, {(0, "kind"): "y"}),
     ):
         with pytest.raises(InputFileError) as caught:
             rewrite()

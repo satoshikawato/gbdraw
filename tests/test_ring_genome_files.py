@@ -450,7 +450,7 @@ def test_a_restored_cli_table_cell_keeps_every_file_of_its_ring(tmp_path: Path) 
 
     import base64
 
-    from gbdraw.session_io import _restore_cli_table_paths
+    from gbdraw.cli_utils.legacy_session_args import _restore_cli_table_paths
 
     def embedded(name: str, data: bytes) -> dict[str, str]:
         return {"name": name, "encoding": "base64", "data": base64.b64encode(data).decode("ascii")}

@@ -36,7 +36,7 @@ from gbdraw.core.text import (
     measurement_font_file,
 )
 from gbdraw.render.font_embedding import remove_embedded_font_css
-from gbdraw.session_io import session_to_cli_args
+from gbdraw.cli_utils.legacy_session_args import session_to_cli_args
 from tests.utils.session_drawing_view import session_view
 from tests.utils.session_files import read_session_payload
 

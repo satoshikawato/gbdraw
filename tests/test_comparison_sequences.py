@@ -12,7 +12,7 @@ from gbdraw.api import CircularDiagramOptions, read_conservation_table
 from gbdraw.circular import circular_main
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparison_sequences import read_comparison_sequence_file
-from gbdraw.session_io import canonicalize_cli_invocation
+from gbdraw.cli_utils.legacy_session_args import canonicalize_cli_invocation
 from tests.utils.session_drawing_view import session_view
 from tests.utils.session_files import read_session_payload
 

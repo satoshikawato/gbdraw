@@ -735,7 +735,7 @@ def test_the_field_the_planner_consumes_is_refused_in_a_stored_request(tmp_path:
 
 
 def test_session_form_key_reads_in_the_linear_slice_and_replays() -> None:
-    from gbdraw.session_io import _append_linear_gui_args
+    from gbdraw.cli_utils.legacy_session_args import _append_linear_gui_args
 
     assert "linear_wrap_length" in SLICE_CONTAINERS["config.form"]
     assert CURRENT_SESSION_VERSION == 51

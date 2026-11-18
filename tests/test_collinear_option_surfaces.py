@@ -25,6 +25,7 @@ from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.exceptions import ValidationError
 from gbdraw import linear as linear_cli_module
 from gbdraw import session_io
+from gbdraw.cli_utils import legacy_session_args
 from gbdraw import session_request_codec as codec
 from tests.utils.session_files import embedded_session, load_session_mapping, read_session_payload
 from gbdraw.interface import _linear_options
@@ -198,7 +199,7 @@ def test_legacy_gui_session_replay_keeps_its_collinear_settings(
 ) -> None:
     session = _gui_collinear_session(blastp)
     run_args: list[str] = []
-    session_io._append_linear_gui_blastp_args(
+    legacy_session_args._append_linear_gui_blastp_args(
         run_args, [], session=session, config=session["config"], adv={},  # type: ignore[arg-type]
     )
     start = run_args.index("--collinear_infer_orthogroups")
@@ -207,11 +208,11 @@ def test_legacy_gui_session_replay_keeps_its_collinear_settings(
 
 def test_recorded_collinear_command_without_the_flag_replays_with_inference() -> None:
     args = ["linear", "--gbk", "a.gb", "--losat", "losatp", "--losatp_mode", "collinear"]
-    assert session_io._keep_recorded_collinear_inference(args)[-2:] == ["--collinear_infer_orthogroups", "on"]
+    assert legacy_session_args._keep_recorded_collinear_inference(args)[-2:] == ["--collinear_infer_orthogroups", "on"]
     explicit = [*args, "--collinear_infer_orthogroups", "off"]
-    assert session_io._keep_recorded_collinear_inference(explicit) == explicit
+    assert legacy_session_args._keep_recorded_collinear_inference(explicit) == explicit
     pairwise = ["linear", "--losat", "losatp", "--losatp_mode", "pairwise"]
-    assert session_io._keep_recorded_collinear_inference(pairwise) == pairwise
+    assert legacy_session_args._keep_recorded_collinear_inference(pairwise) == pairwise
 
 
 def _bash_blocks(path: Path) -> list[str]:
@@ -282,7 +283,7 @@ def test_a_released_session_with_the_removed_anchor_mode_loads_as_rbh(
 def test_the_fixture_draft_with_the_removed_anchor_mode_replays_as_rbh(tmp_path: Path) -> None:
     """The draft key the 0.14.3 select binds (``modes.linear.config.losat.blastp``) reads as rbh.
 
-    Python reads that key only on the settings-only replay (``session_io._append_linear_gui_blastp_args``);
+    Python reads that key only on the settings-only replay (``legacy_session_args._append_linear_gui_blastp_args``);
     ``session_to_cli_args`` refuses a canonical request, so the draft of the fixture is fed to it as a
     settings-only Session (with the LOSAT source the replay needs).
     """
@@ -291,7 +292,7 @@ def test_the_fixture_draft_with_the_removed_anchor_mode_replays_as_rbh(tmp_path:
     import gzip
     import json
 
-    from gbdraw.session_io import session_to_cli_args
+    from gbdraw.cli_utils.legacy_session_args import session_to_cli_args
 
     draft = json.loads(gzip.decompress(ONE_TO_ONE_FIXTURE.read_bytes()))["modes"]["linear"]["config"]
     assert draft["losat"]["blastp"]["collinearAnchorMode"] == "one_to_one"

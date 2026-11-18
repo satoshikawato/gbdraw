@@ -14,7 +14,7 @@ from svgwrite import Drawing
 import gbdraw.api.request_render as request_render_module
 from gbdraw.api.input_summary import InputSummary
 import gbdraw.linear as linear_cli_module
-import gbdraw.session_io as session_io
+from gbdraw.cli_utils import legacy_session_args
 from gbdraw.api.options import LinearDiagramOptions
 from gbdraw.api.requests import (
     GffFastaInputSource,
@@ -298,7 +298,7 @@ def test_session_io_definition_line_styles_emit_gui_args() -> None:
     run_args: list[str] = []
     invocation_args: list[str] = []
 
-    session_io._append_linear_definition_line_style_args(
+    legacy_session_args._append_linear_definition_line_style_args(
         run_args,
         invocation_args,
         {

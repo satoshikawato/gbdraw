@@ -87,13 +87,15 @@ from gbdraw.session_io import (
     load_session,
     session_legend_edits_by_row_key,
     materialize_embedded_file,
-    migrate_legacy_repeat_feature_shape_args,
     normalize_current_session_artifacts,
     migrate_persisted_web_state_field_names,
-    session_to_cli_args,
     validate_current_web_state_field_names,
     SessionResources,
     validate_session,
+)
+from gbdraw.cli_utils.legacy_session_args import (
+    migrate_legacy_repeat_feature_shape_args,
+    session_to_cli_args,
 )
 from tests.utils.session_drawing_view import build_mode_scoped_session_json, drawing_view, view_at
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA

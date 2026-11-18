@@ -161,7 +161,7 @@ def test_retired_linear_flag_exits_2_and_names_replacement(argv, replacement, ca
 
 @pytest.mark.parametrize(("legacy", "expected"), LEGACY_REWRITES)
 def test_legacy_session_argv_rewrites_retired_flags(legacy, expected):
-    from gbdraw.session_io import _canonicalize_legacy_session_cli_args
+    from gbdraw.cli_utils.legacy_session_args import _canonicalize_legacy_session_cli_args
 
     args, index_map = _canonicalize_legacy_session_cli_args(
         ["--gbk", "a.gb", *legacy, "-o", "out"],
@@ -175,7 +175,7 @@ def test_legacy_session_argv_rewrites_retired_flags(legacy, expected):
 
 
 def test_release_0_13_0_bgc_session_argv_replays_with_new_flags(tmp_path):
-    from gbdraw.session_io import session_to_cli_args
+    from gbdraw.cli_utils.legacy_session_args import session_to_cli_args
 
     session = _read_session(FIXTURES / "BGC0000708-BGC0000713.v30.gbdraw-session.json.gz")
     assert session["version"] == 30
@@ -227,7 +227,7 @@ def test_release_0_13_0_protein_session_replays_unchanged_svg(tmp_path, monkeypa
 def test_new_flags_map_to_the_typed_options_of_the_old_flags(
     old_argv, new_argv, monkeypatch, tmp_path
 ):
-    from gbdraw.session_io import _canonicalize_legacy_session_cli_args
+    from gbdraw.cli_utils.legacy_session_args import _canonicalize_legacy_session_cli_args
 
     rewritten, _ = _canonicalize_legacy_session_cli_args(old_argv, mode="linear")
     assert rewritten == new_argv
