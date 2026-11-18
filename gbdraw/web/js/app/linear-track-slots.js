@@ -27,7 +27,7 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
-import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterRowsLeave, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterRowRemoval, axisIndexAfterRowsLeave, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -671,11 +671,9 @@ export const createLinearTrackSlotEditor = ({
     normalizeCurrentSlots(drawing);
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.linear_track_slots.length) return;
-    const axis = axisIndexForCurrentLinearSlots(drawing, drawing.adv.linear_track_slots);
+    const axis = /** @type {number} */ (axisIndexAfterRowRemoval(drawing.adv.linear_track_slots, axisIndexForCurrentLinearSlots(drawing, drawing.adv.linear_track_slots), idx));
     drawing.adv.linear_track_slots.splice(idx, 1);
-    drawing.adv.linear_track_slots_axis_index = idx < axis
-      ? Math.max(0, axis - 1)
-      : Math.min(axis, drawing.adv.linear_track_slots.length);
+    drawing.adv.linear_track_slots_axis_index = Math.min(axis, drawing.adv.linear_track_slots.length);
     if (typeof turnOffReaching === 'function') turnOffReaching();
     normalizeCurrentSlots(drawing);
   };

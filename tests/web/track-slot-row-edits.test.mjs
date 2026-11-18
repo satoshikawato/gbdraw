@@ -1454,4 +1454,19 @@ for (const mode of ['circular', 'linear']) {
     assert.deepEqual(opened.slots().map(({ id }) => id), ['depth_1', 'features', 'gc_skew']);
     assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], 1);
   });
+  // A managed row of a series beyond the count that stays (a stale third row with two series) leaves with the removal
+  // too, so it lowers the Axis as well.
+  test(`${mode}: Remove Depth series lowers a placed Axis by a managed row of a series beyond the kept count`, () => {
+    const opened = MODES[mode]([row('depth_1', 'depth', { track_index: 0 }, offAxis), row('depth_2', 'depth', { track_index: 1 }, offAxis),
+      row('depth_3', 'depth', { track_index: 2 }, offAxis), features(), after()]);
+    const drawing = opened.state.activeDrawing();
+    drawing.adv[`${mode}_track_slots_axis_index`] = 3;
+    drawing.adv.depth_tracks = [{}, {}];
+    (mode === 'circular' ? opened.editor.removeCircularDepthSeriesRows : opened.editor.removeLinearDepthSeriesRows)(drawing, 0, 1);
+    const ids = opened.slots().map(({ id }) => id);
+    assert.equal(ids.filter((id) => id.startsWith('depth_')).length, 1, `${mode}: one Depth row stays`);
+    assert.equal(drawing.adv[`${mode}_track_slots_axis_index`], 1);
+    assert.equal(ids.indexOf('features'), 1, `${mode}: the features row keeps the Axis`);
+    assert.equal(opened.slots()[1].side, features().side);
+  });
 }

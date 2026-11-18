@@ -60,6 +60,7 @@ import {
   annotationSetForNewRow,
   annotationSetIdsOf,
   automaticAnnotationTrackSlots,
+  axisIndexAfterRowRemoval,
   axisIndexAfterRowsLeave,
   clampTrackAxisIndex,
   nextCopyId,
@@ -1278,9 +1279,9 @@ export const createCircularTrackSlotEditor = ({
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.circular_track_slots.length) return;
-    const axis = axisIndexForCurrentSlots(drawing, drawing.adv.circular_track_slots);
+    const axis = /** @type {number} */ (axisIndexAfterRowRemoval(drawing.adv.circular_track_slots, axisIndexForCurrentSlots(drawing, drawing.adv.circular_track_slots), idx));
     drawing.adv.circular_track_slots.splice(idx, 1);
-    drawing.adv.circular_track_slots_axis_index = idx < axis ? Math.max(0, axis - 1) : Math.min(axis, drawing.adv.circular_track_slots.length);
+    drawing.adv.circular_track_slots_axis_index = Math.min(axis, drawing.adv.circular_track_slots.length);
     if (typeof turnOffReaching === 'function') turnOffReaching();
     normalizeSlots(drawing);
   };
