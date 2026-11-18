@@ -38,6 +38,7 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw.circular as circular_cli
+import gbdraw.labels.circular_fit as circular_fit
 import gbdraw.linear as linear_cli
 from gbdraw.api import render_request
 from gbdraw.api.prepared import PreparedBiologicalInputCache, PreparedResourceIdentity
@@ -269,13 +270,16 @@ def _reply(
 ) -> JsonValue:
     # No label-fit warning search (as the Web): it is bounded by wall-clock
     # time, so the number of verify renders, and the stages they build, would
-    # depend on machine load (OV-705).
-    rendered = render_request(
-        captured.request,
-        artifacts=captured.artifacts,
-        include_feature_catalog=True,
-        label_fit_warn_search_seconds=0.0,
-    )
+    # depend on machine load (OV-705). A Circular refusal's row search has a
+    # wall-clock bound too; unbounded, a warm and a cold render list the same
+    # rows in their error however loaded the host is (OV-3483).
+    with mock.patch.object(circular_fit, "SWITCH_SEARCH_SECONDS", None):
+        rendered = render_request(
+            captured.request,
+            artifacts=captured.artifacts,
+            include_feature_catalog=True,
+            label_fit_warn_search_seconds=0.0,
+        )
     items: tuple[RequestRenderResult, ...] = (
         rendered.items if isinstance(rendered, CircularBatchRenderResult) else (rendered,)
     )
