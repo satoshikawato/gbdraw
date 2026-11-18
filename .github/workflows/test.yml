@@ -29,7 +29,7 @@ concurrency:
 jobs:
   ci-impact:
     name: CI impact plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # A full-history checkout with blobs took up to 5.7 minutes; history without
     # blobs costs about as much as a depth-1 checkout.
     timeout-minutes: 10
@@ -161,7 +161,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -226,7 +226,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -294,7 +294,7 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -336,7 +336,7 @@ jobs:
     name: Fail fast (Core PR)
     needs: core-pr
     if: failure() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
@@ -394,7 +394,7 @@ jobs:
     name: Fail fast (Recipes standard)
     needs: recipes-standard
     if: failure() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
@@ -416,7 +416,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 25
     env:
@@ -524,7 +524,7 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'examples')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -571,7 +571,7 @@ jobs:
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'browser') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
     steps:
@@ -685,7 +685,7 @@ jobs:
       needs.ci-impact.result == 'success' &&
       (contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-contracts-pr') ||
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
     steps:
@@ -775,7 +775,7 @@ jobs:
     name: Fail fast (Web contracts)
     needs: web-contracts-pr
     if: failure() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read
@@ -794,7 +794,7 @@ jobs:
       github.event_name == 'pull_request' && github.base_ref == 'dev' &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 20
     steps:
@@ -880,7 +880,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -1009,7 +1009,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
     timeout-minutes: 25
     steps:
@@ -1183,7 +1183,7 @@ jobs:
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'slow-main') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -1239,7 +1239,7 @@ jobs:
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'vibrio-generate-release') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # tests/web/playwright/vibrio.config.js allows the one long test 20 minutes.
     timeout-minutes: 35
     steps:
@@ -1314,7 +1314,7 @@ jobs:
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'render-stage-universe-release') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Every option state of the six universe cases, warm against cold (tests/utils/render_stage_equivalence.py).
     timeout-minutes: 120
     steps:
@@ -1360,7 +1360,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1390,7 +1390,7 @@ jobs:
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'losat-cache-browser-acceptance') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -1554,7 +1554,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/dev' && inputs.tier == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -1663,7 +1663,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/dev' && inputs.tier == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -1758,7 +1758,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/dev' && inputs.tier == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       # A new seed for each promotion without a new input: the run ID. A rerun of
@@ -1855,7 +1855,7 @@ jobs:
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/dev' && inputs.tier == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout audit tools
@@ -1920,7 +1920,7 @@ jobs:
       always() &&
       github.event_name == 'pull_request' &&
       github.base_ref == 'dev'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Report repository growth (report only)
@@ -2048,7 +2048,7 @@ jobs:
       always() && inputs.tier != 'release' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy
@@ -2094,7 +2094,7 @@ jobs:
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/dev' && inputs.tier == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy

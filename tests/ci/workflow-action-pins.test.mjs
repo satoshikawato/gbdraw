@@ -29,3 +29,14 @@ test('every workflow and local action pins each action to a commit with a full v
     });
   }
 });
+
+// A floating runner label (ubuntu-latest and the like) moves to a new image
+// without a change here; a literal label names the image each job ran on.
+test('every workflow job names a pinned runner image, never a -latest label', () => {
+  for (const name of readdirSync(dir).filter(file => /\.ya?ml$/.test(file))) {
+    readFileSync(new URL(name, dir), 'utf8').split('\n').forEach((line, index) => {
+      if (!/^\s*runs-on:/.test(line)) return;
+      assert.doesNotMatch(line, /-latest\b/, `${name}:${index + 1}`);
+    });
+  }
+});
