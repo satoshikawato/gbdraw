@@ -2405,6 +2405,51 @@ def test_canonical_depth_tracks_round_trip_mixed_sources(tmp_path: Path) -> None
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
+def test_canonical_depth_track_series_settings_round_trip_in_both_modes(tmp_path: Path) -> None:
+    """Each series setting is written only when set and reads back as given; a track of defaults writes none."""
+
+    gbk = _source_file(tmp_path / "record.gbk")
+    depth = _source_file(tmp_path / "record.bedgraph", "record\t0\t5\t-1.5\n")
+    tracks = (
+        DepthTrackInput(source=depth, label="Plain"),
+        DepthTrackInput(
+            source=depth, label="Ratio", format="bedgraph", agg="max", style="line", negative_color="#c53030",
+            baseline=0.5, min_value=-3.0, max_value="auto", unit="",
+        ),
+        DepthTrackInput(source=depth, label="Mean", baseline="mean", min_value="auto", max_value=4.0, unit="%"),
+    )
+    records = (RecordInput(source=GenBankInputSource(gbk)),)
+    for request in (
+        CircularDiagramRequest(records=records, options=CircularDiagramOptions(depth_tracks=tracks)),
+        LinearDiagramRequest(records=records, options=LinearDiagramOptions(depth_tracks=tracks)),
+    ):
+        encoded = encode_canonical_request(request)
+        stored = encoded.payload["diagramOptions"]["depthTracks"]
+        settings = ("format", "agg", "style", "negativeColor", "baseline", "minValue", "maxValue", "unit")
+        assert [{key: track[key] for key in settings if key in track} for track in stored] == [
+            {},
+            {"format": "bedgraph", "agg": "max", "style": "line", "negativeColor": "#c53030", "baseline": 0.5,
+             "minValue": -3.0, "maxValue": "auto", "unit": ""},
+            {"baseline": "mean", "minValue": "auto", "maxValue": 4.0, "unit": "%"},
+        ]
+        decoded = decode_canonical_request(
+            encoded.payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / f"series-{type(request).__name__}"),
+            output_directory=tmp_path / "output",
+        )
+        assert decoded.options.depth_tracks is not None
+        assert [
+            (track.format, track.agg, track.style, track.negative_color, track.baseline, track.min_value,
+             track.max_value, track.unit)
+            for track in decoded.options.depth_tracks
+        ] == [
+            ("auto", "mean", "area", None, "auto", None, None, "x"),
+            ("bedgraph", "max", "line", "#c53030", 0.5, -3.0, "auto", ""),
+            ("auto", "mean", "area", None, "mean", "auto", 4.0, "%"),
+        ]
+        assert encode_canonical_request(decoded).payload == encoded.payload
+
+
 def test_canonical_depth_track_shape_and_text_are_strict(tmp_path: Path) -> None:
     gbk = _source_file(tmp_path / "record.gbk")
     depth = _source_file(tmp_path / "record.depth.tsv", "record\t1\t5\n")

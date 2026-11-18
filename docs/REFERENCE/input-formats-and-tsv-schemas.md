@@ -163,9 +163,9 @@ columns in the first row, not by the file name:
 
 | Format | `auto` reads it at | Fields |
 |---|---|---|
-| `position_value` | 2 columns | a 1-based positive `position` and a value |
-| `samtools` | 3 columns | `reference_name`, a 1-based positive `position`, and a value; further value columns (more samples) are ignored |
-| `bedgraph` | 4 or more columns | `reference_name`, a 0-based `start`, an `end` after it, and a value; later columns are ignored |
+| `position_value` | 2 columns | a 1-based positive `position` and a value (`depth`) |
+| `samtools` | 3 columns | `reference_name`, a 1-based positive `position`, and a value (`depth`); further value columns (more samples) are ignored |
+| `bedgraph` | 4 or more columns | `reference_name`, a 0-based `start`, an `end` after it, and a value (`depth`); later columns are ignored |
 | `bed` | never: name it | `reference_name`, a 0-based `start`, an `end` after it, then an optional `name` and `score`; later columns are ignored |
 
 A bedGraph row gives its value to the positions `start + 1` to `end`, as
