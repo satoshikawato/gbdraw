@@ -1041,7 +1041,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   };
   const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
     legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {}, featureColorOverrides = {}, dormant = [],
-    productionRules = false }) => {
+    productionRules = false, appliedPaletteColors = { tRNA: '#e8b441' } }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -1090,7 +1090,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     const renameActions = createFeatureColorActions({ readDrawnTracks: () => [],
       runUndoableCheckpoint: (label, fn) => { checkpoints.push(label); return fn(); }, writeLegendRowColor: recordLegendRowColor, legendRowIsNamed, legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf,
       state: withDrawings({
-        results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
+        results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref(appliedPaletteColors),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         displayedResultMetadata: () => null,
@@ -1406,6 +1406,40 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual([renamed.color, renamed.cap], [written, 'Renamed'], `${color}: the feature split off keeps the rule's color`);
     assert.deepEqual(kept, highlighted, `${color}: the row's rule stays as written`);
   }
+  // OV-3806 (review R5 findings 1 and 5): a rename writes, for each feature it writes a rule for, the color that
+  // feature follows now, read from the rule that colors it, not from every rule of its row. A D-28 row (HmmtDNA,
+  // `CDS product ^COX1$ palette "Highlighted"` and `CDS product ^COX2$ #54bcf8 "Highlighted"` draw one row):
+  // "This feature only" on COX1 keeps the type color value, on COX2 the hex; a feature of a type's default row (no
+  // rule) takes the type color value, so it follows a palette switch.
+  const { ruleFill } = await import(pathToFileURL(join(tempDir, 'utils', 'color-utils.js')));
+  const paletteRule = { feat: 'CDS', qual: 'product', val: '^COX1$', color: 'palette', cap: 'Highlighted' };
+  const literalRule = { feat: 'CDS', qual: 'product', val: '^COX2$', color: '#54bcf8', cap: 'Highlighted' };
+  const onlyThisFeature = async ({ rules, row, product, appliedPaletteColors }) => {
+    const features = [cds('h1', 'COX1', row), cds('h2', 'COX2', row)];
+    const clickedFeature = features.find((feature) => feature.product === product);
+    const fixture = build({
+      entries: [{ caption: row, color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: [row, 'GC content'],
+      rules, features, productionRules: true, appliedPaletteColors,
+      clicked: { svg_id: clickedFeature.svg_id, feat: clickedFeature, color: '#54bcf8', legendName: 'Renamed', appliedLegendName: row },
+      ruleOverrides: { getLegendRowRules: (_drawing, key) => (key === row ? rules : []) }
+    });
+    await fixture.renameActions.handleLegendNameCommit();
+    assert.deepEqual([fixture.legendRenameDialog.show, fixture.legendRenameDialog.mode], [true, 'scope'], `${row} ${product}: the scope`);
+    await fixture.renameActions.handleLegendRenameChoice('single');
+    assert.equal(fixture.committed.length, 1, `${row} ${product}: "This feature only" writes rules`);
+    return fixture.committed[0];
+  };
+  for (const [product, written] of [['COX1', 'palette'], ['COX2', '#54bcf8']]) {
+    const rules = await onlyThisFeature({ rules: [paletteRule, literalRule], row: 'Highlighted', product });
+    const renamed = rules.find((rule) => rule.cap === 'Renamed');
+    assert.deepEqual([renamed?.val, renamed?.color], [`^${product}$`, written], `a D-28 row: ${product} keeps the color its rule gives it`);
+    assert.deepEqual(rules.filter((rule) => rule.cap === 'Highlighted').map(({ val, color }) => [val, color]),
+      [[product === 'COX1' ? '^COX2$' : '^COX1$', product === 'COX1' ? '#54bcf8' : 'palette']], `a D-28 row: the other rule stays (${product})`);
+  }
+  const typeRowRules = await onlyThisFeature({ rules: [], row: 'CDS', product: 'COX1', appliedPaletteColors: { CDS: '#54bcf8' } });
+  assert.deepEqual(typeRowRules.map(({ feat, val, color, cap }) => [feat, val, color, cap]), [['CDS', '^COX1$', 'palette', 'Renamed']],
+    'a feature of a type\'s default row keeps its type color');
+  assert.equal(ruleFill(typeRowRules[0].color, 'CDS', { CDS: '#e63946' }), '#e63946', 'and follows a palette switch');
   // V-OD27 (review R2 findings 1 and 2): a type's default row has one name, on the type's key. In S2 (CDS renamed
   // Coding, then a captioned rule "Marker" for COX1) the figure draws CDS's default row as its "other" row, named
   // "Coding" from the dormant [CDS, Coding]. A rename of that row from the Legend tab or the popup writes the name on
@@ -1591,7 +1625,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const keepBoth = collide();
   await keepBoth.renameActions.renameLegendEntry(0, 'Leu B');
   await keepBoth.renameActions.handleLegendRenameChoice('keep-both');
-  assert.deepEqual(keepBoth.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B', '#e8b441']]);
+  // Keep both keeps the row's color: its features, which no rule colors and which draw tRNA's color, keep the type
+  // color value (OV-3806).
+  assert.deepEqual(keepBoth.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B', 'palette']]);
   const cancel = collide();
   await cancel.renameActions.renameLegendEntry(0, 'Leu B');
   await cancel.renameActions.handleLegendRenameChoice('cancel');
@@ -2077,7 +2113,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   const keptOntoDeleted = ontoDeleted('#71ee7d');
   await keptOntoDeleted.renameActions.renameLegendEntry(0, 'Leu B');
   await keptOntoDeleted.renameActions.handleLegendRenameChoice('keep-both');
-  assert.deepEqual(keptOntoDeleted.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B', '#e8b441']]);
+  // Its features draw tRNA's color without a rule: they keep the type color value (OV-3806).
+  assert.deepEqual(keptOntoDeleted.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B', 'palette']]);
   const cancelledOntoDeleted = ontoDeleted('#71ee7d');
   await cancelledOntoDeleted.renameActions.renameLegendEntry(0, 'Leu B');
   await cancelledOntoDeleted.renameActions.handleLegendRenameChoice('cancel');

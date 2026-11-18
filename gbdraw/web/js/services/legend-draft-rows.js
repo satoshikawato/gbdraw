@@ -180,7 +180,9 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
  * which a row is Python's and not the editor's; `originalLegendOrder` stays the shown Result's inventory, by which an
  * order is edited. `results`: what the drawing holds of its Results, in which their rule rows are keyed
  * (`DrawingResults`: each Result's features, its type colors, and Python's rows of it, `pythonRowsOfResults`); the
- * rule rows are those of any Result (`resultsRuleRowKeys`), so the leaves do not change with the shown Result.
+ * rule rows are those of any Result (`resultsRuleRowKeys`). With a catalog they do not change with the shown Result.
+ * Without one (`drawingDrawnResults`: a Session older than 40 until its first Generate) `results` holds the shown
+ * Result alone, so the rule rows, and the leaves, are the shown Result's keys (OV-3807).
  * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], results: DrawingResults,
  *   canvasPadding: Readonly<CanvasPadding>, pythonRowKeys: readonly string[] }} LegendEditDraft
  */

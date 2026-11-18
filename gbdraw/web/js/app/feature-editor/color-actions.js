@@ -300,19 +300,28 @@ const typeDefaultRowRename = ({ listed, dormant }, row, type, name, keepDormant)
 
 // The colors of a Legend rename: `color`, the row's color after it (its live row's and the Legend's); whether it
 // keeps the row's color; and `written`, the color the rules it writes take. A rename that keeps the row's color keeps
-// each rule's own color (OV-3806), in every branch of the rename: the row's rules take the new name only
+// each feature's own color (OV-3806), in every branch of the rename: the row's rules take the new name only
 // (`keepsColor`), and rules written for its features (a feature alone in its row, "This feature only", a split) take
-// the type color value where every rule of the row is of it, so they still follow the palette; a row of literal
-// colors gives them the hex it shows. A Merge into a row of another color recolors.
+// the type color value where each of those features follows it now: the rule that colors it is of that value, or no
+// rule and no fill record colors it and it draws its type's color (a type's default row). Otherwise they take the
+// hex the row shows. A rename without features reads its row's rules. A Merge into a row of another color recolors.
+// Reads prepared rule matches (the rename runs once they are).
 /**
  * @param {Pick<LegendRenameRequest, 'finalColor' | 'currentColor'>} request
- * @param {readonly Partial<SpecificColorRule>[]} sourceRules The rules that draw the renamed row.
+ * @param {{ drawing: Pick<DrawingState, 'manualSpecificRules' | 'featureColorOverrides'>, features: readonly ColorFeature[],
+ *   sourceRules: readonly Partial<SpecificColorRule>[], typeColorOf: (type: string | undefined) => string | undefined }} written
+ *   The features the rename writes rules for, the rules that draw the renamed row, and the applied type colors.
  * @returns {{ color: string, keepsColor: boolean, written: string }}
  */
-const legendRenameColors = (request, sourceRules) => {
+const legendRenameColors = (request, { drawing, features, sourceRules, typeColorOf }) => {
   const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
   const keepsColor = color.toLowerCase() === (resolveColorToHex(request.currentColor) || '#cccccc').toLowerCase();
-  const followsType = keepsColor && sourceRules.length > 0 && sourceRules.every((rule) => isTypeColorValue(rule.color));
+  const matches = ruleMatcher(drawing.manualSpecificRules);
+  const followed = features.length === 0 ? sourceRules.map((rule) => rule.color)
+    : features.map((feature) => matches.first(feature)?.color
+      ?? fillRecordOf(getFeatureOverride(drawing.featureColorOverrides, feature))?.color
+      ?? (resolveColorToHex(typeColorOf(feature.type) ?? '')?.toLowerCase() === color.toLowerCase() ? TYPE_COLOR_VALUE : color));
+  const followsType = keepsColor && followed.length > 0 && followed.every(isTypeColorValue);
   return { color, keepsColor, written: followsType ? TYPE_COLOR_VALUE : color };
 };
 
@@ -933,7 +942,7 @@ export const createFeatureColorActions = ({
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
     const sourceRules = getLegendRowRules(drawing, request.sourceKey);
-    const { color, keepsColor, written } = legendRenameColors(request, sourceRules);
+    const { color, keepsColor, written } = legendRenameColors(request, { drawing, features, sourceRules, typeColorOf: (type) => appliedFeatureColorOf(state, type) });
     // OV-244 (c): a type's palette row renamed whole keeps its features and
     // its color and takes the new name, which Python's row names draw. The
     // test the row's color edit takes (D-15, `paletteRowType`) decides it, so

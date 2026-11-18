@@ -2,7 +2,7 @@
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
-/** @import { DrawnLegendState, FeatureTypeColors, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { FeatureTypeColors, ResultRenderedFeatures, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { SvgSanitizer } from './svg-sanitization.js' */
 /** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
@@ -40,7 +40,7 @@ import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
-import { captionedRuleRows, otherFeatureRowKey } from './specific-color-rules.js';
+import { captionedRuleRows, otherFeatureRowKey, resultLegendRowContexts } from './specific-color-rules.js';
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1674,15 +1674,20 @@ const rekeySavedRuleRows = (svg, rekeyed) => {
 // a loaded rule takes that rule's caption as its name, and the naming pass
 // draws the names. The key stays, so the edits saved under it stay on the row.
 // A row that has a name, or shows a rename, keeps it. The rows are keyed in
-// what the Result draws (`drawn`: its features and the drawing's type
-// colors). Returns whether it named a row.
+// what the Result draws: its Legend state (`resultLegendRowContexts`) of its
+// rendered features, the saved type colors, and its own rows. Returns whether
+// it named a row.
 const SAVED_COLOR_ID = / \[(?:#[0-9a-f]{6}|none)\]/;
-/** @param {SvgResultRoot} svg @param {SavedResultEdits} edits @param {DrawnLegendState} drawn @returns {boolean} */
-const nameSavedRuleRows = (svg, edits, drawn) => {
+/**
+ * @param {SvgResultRoot} svg @param {SavedResultEdits} edits
+ * @param {ResultRenderedFeatures | undefined} rendered The Result's rendered features (none without a catalog).
+ * @returns {boolean}
+ */
+const nameSavedRuleRows = (svg, edits, rendered) => {
+  const [context] = resultLegendRowContexts({ rules: edits.rules, originalLegendOrder: edits.originalLegendOrder },
+    { renderedFeaturesByResult: [rendered], palette: edits.palette, pythonRowsByResult: [pythonLegendRows(svg)] });
   /** @type {Map<string, string>} */
-  const names = new Map(captionedRuleRows({
-    rules: edits.rules, pythonRows: pythonLegendRows(svg), ...drawn, originalLegendOrder: edits.originalLegendOrder
-  }).map((row) => [row.key, row.name]));
+  const names = new Map(captionedRuleRows(context).map((row) => [row.key, row.name]));
   const keyRecord = resultBaseAttribute('data-legend-key');
   let named = false;
   namedLegends(svg).flatMap((legend) => Array.from(legend.querySelectorAll('g[data-legend-key]'))).forEach((row) => {
@@ -1749,9 +1754,9 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
           ? [(/** @type {SvgResultRoot} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),
         ...(renames.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => recordSavedLegendKeys(svg, renames)] : []),
-        ...(namesRuleRows(result) ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits, {
-          features: [...(catalogAdmission.renderedFeaturesByResult[resultIndex]?.values() ?? [])], palette: savedEdits.palette
-        })] : [])
+        ...(namesRuleRows(result)
+          ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits, catalogAdmission.renderedFeaturesByResult[resultIndex])]
+          : [])
       ];
       return transforms.length > 0
         ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })
