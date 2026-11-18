@@ -23,6 +23,7 @@ from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
     MODE_SCOPED_SESSION_MIN_VERSION,
+    RECORD_SOURCE_SLOT_FIELDS,
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SessionDraftMigration,
@@ -177,12 +178,6 @@ def _project_web_file_inventory(
     return files
 
 
-# The source fields of a record that a CLI file binding's slot names, by the record's source kind.
-_RECORD_SOURCE_SLOT_FIELDS: Mapping[str, Mapping[str, str]] = {
-    "genbank": {"gb": "resourceId"},
-    "gffFasta": {"gff": "gffResourceId", "fasta": "fastaResourceId"},
-    "fasta": {"fasta": "fastaResourceId"},
-}
 # The slots of a CLI file binding (``cliInvocation.fileBindings``) of Sessions 31-44: a Linear record's file, the
 # Circular record's file, and the file of the i-th record of a Circular composite (``c_gb.components[i]``).
 _LINEAR_FILE_BINDING_SLOT = re.compile(r"(?:files\.)?linearSeqs\[(\d+)\]\.(gb|gff|fasta)")
@@ -230,7 +225,7 @@ def _cli_binding_names(session: Mapping[str, object]) -> dict[str, str]:
         source = record.get("source") if isinstance(record, Mapping) else None
         if not isinstance(source, Mapping):
             continue
-        source_field = _RECORD_SOURCE_SLOT_FIELDS.get(str(source.get("kind")), {}).get(field_name)
+        source_field = RECORD_SOURCE_SLOT_FIELDS.get(str(source.get("kind")), {}).get(field_name)
         resource_id = source.get(source_field) if source_field else None
         if isinstance(resource_id, str) and resource_id:
             names.setdefault(resource_id, binding["name"])

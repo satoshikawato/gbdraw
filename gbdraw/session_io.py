@@ -6018,6 +6018,43 @@ class WebLinearRowBinding(_WebLinearRowFields, total=False):
     fileUid: str
 
 
+# The source field of a request record that names the file of each Linear row slot, by the record's source kind.
+RECORD_SOURCE_SLOT_FIELDS: Mapping[str, Mapping[str, str]] = {
+    "genbank": {"gb": "resourceId"},
+    "gffFasta": {"gff": "gffResourceId", "fasta": "fastaResourceId"},
+    "fasta": {"fasta": "fastaResourceId"},
+}
+
+
+def _row_with_record_resources(sequence: Mapping[str, object], records: object) -> Mapping[str, object]:
+    """A CLI row (one with a ``recordKey``) whose files prefer the resources its records read.
+
+    The request keeps a resource per input, so two inputs of equal bytes have two; the row's binding names its
+    own records' resource, which Load matches its File card by (OV-3708). A file already bound keeps its id.
+    """
+
+    from .api.requests import EXPANDED_RECORD_KEY_SEPARATOR
+
+    key = sequence.get("recordKey")
+    if not isinstance(key, str) or not key:
+        return sequence
+    preferred: dict[str, str] = {}
+    for record in _mapping_list(records):
+        if str(record.get("recordKey") or "").split(EXPANDED_RECORD_KEY_SEPARATOR)[0] != key:
+            continue
+        source = record.get("source")
+        source = source if isinstance(source, Mapping) else {}
+        for slot, field in RECORD_SOURCE_SLOT_FIELDS.get(str(source.get("kind")), {}).items():
+            if isinstance(source.get(field), str):
+                preferred.setdefault(slot, str(source[field]))
+    row = dict(sequence)
+    for slot, resource_id in preferred.items():
+        file = row.get(slot)
+        if isinstance(file, Mapping) and "descriptor" in file and file.get("resourceId") == "":
+            row[slot] = {**file, "resourceId": resource_id}
+    return row
+
+
 def _web_card_binding(
     sequence: Mapping[str, object],
     add_file: Callable[[object], object],
@@ -6162,8 +6199,10 @@ def _attach_current_web_file_bindings(
     linear_sequences = (
         linear_sequences_value if isinstance(linear_sequences_value, list) else []
     )
+    request = payload.get("renderRequest")
+    records = request.get("records") if isinstance(request, Mapping) else None
     sequence_bindings = [
-        _web_card_binding(sequence, add_file, add_value)
+        _web_card_binding(_row_with_record_resources(sequence, records), add_file, add_value)
         for sequence in linear_sequences
         if isinstance(sequence, Mapping)
     ]

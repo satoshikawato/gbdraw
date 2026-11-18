@@ -22,6 +22,7 @@ import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { losatRecordGencode, ringGenomeIdLists } from './drawing/inputs.js';
 import { linearSourceUidOf } from './linear-sources.js';
+import { INPUT_TYPES, inputSourceSlotFiles } from './input-types.js';
 import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
@@ -282,6 +283,34 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * }} SessionResourceDrawing
  */
 /**
+ * A committed request's resources as Save reads them for the bindings: by the request's own ids, and the id the
+ * Session writes for each (`aliasOf`).
+ * @typedef {{ resources: Readonly<Record<string, unknown>>, aliasOf: ReadonlyMap<string, string> }} CommittedRecordFiles
+ */
+/**
+ * The resource of a committed request's `resources` of this kind that `file` was described from or reads, or null:
+ * `resourceIdOwnedBy` (services/resource-payload-owner.js), which the Session writer passes (R13).
+ * @typedef {(resources: Readonly<Record<string, unknown>>, file: object, kind: string) => string | null} CommittedResourceOf
+ */
+/** The resource kind each Linear record file slot is read as (`inputSourceSlotFiles` of every input type). */
+const RECORD_SLOT_RESOURCE_KINDS = new Map(Object.keys(INPUT_TYPES)
+  .flatMap((inputType) => inputSourceSlotFiles(inputType).map(({ slot, resource }) => /** @type {const} */ ([slot, resource]))));
+/**
+ * The id the Session writes for the committed resource a Linear row's record file (`slot`) was described from or
+ * reads, or undefined when `committed` holds none: each File card then names the resource its drawn record reads,
+ * also where two cards' files have equal bytes (OV-3708).
+ * @param {object | null | undefined} file
+ * @param {'gb' | 'gff' | 'fasta'} slot
+ * @param {CommittedRecordFiles | null} committed
+ * @param {CommittedResourceOf} committedResourceOf
+ * @returns {string | undefined}
+ */
+const committedRecordFileId = (file, slot, committed, committedResourceOf) => {
+  const kind = RECORD_SLOT_RESOURCE_KINDS.get(slot);
+  const committedId = file && committed && kind ? committedResourceOf(committed.resources, file, kind) : null;
+  return committedId === null ? undefined : committed?.aliasOf.get(committedId);
+};
+/**
  * The source of one input file's bytes.
  * @param {FileLike} file
  * @param {Map<object, Promise<ResourceSource>>} storedFileSources The sources a Save read from stored files, by file.
@@ -336,9 +365,10 @@ const adoptedComparisons = async (comparisons, renderRequest, writtenIdOf, bindF
  * writer streams them into the Session file (`writeSessionDocumentFile` in config.js).
  * @param {Record<string, any>} state
  * @param {readonly SessionResourceSet[]} sets
+ * @param {CommittedResourceOf} committedResourceOf The committed resource a Linear row's record file binds to.
  * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
  */
-export const buildSessionDrawingResources = async (state, sets) => {
+export const buildSessionDrawingResources = async (state, sets, committedResourceOf) => {
   const primary = sets.find((set) => set.committed !== null) ?? null;
   const committedRequest = primary?.committed ?? null;
   for (const { committed } of sets) {
@@ -593,6 +623,17 @@ export const buildSessionDrawingResources = async (state, sets) => {
     return file ? bindSource(await sourceOfFile(file, storedFileSources), file) : null;
   };
   /**
+   * The binding of a Linear row's record file (`slot`): the committed resource it was described from or reads
+   * (`committedRecordFileId`), else the file's own allocation (`bindFile`), equal bytes once.
+   * @param {InputFileRef | null | undefined} ref
+   * @param {'gb' | 'gff' | 'fasta'} slot
+   * @param {CommittedRecordFiles | null} committed
+   */
+  const bindRecordFile = async (ref, slot, committed) => {
+    const id = committedRecordFileId(inputFiles.fileOf(ref), slot, committed, committedResourceOf);
+    return id === undefined ? bindFile(ref) : bindingForFile(inputFiles.fileOf(ref), use(id));
+  };
+  /**
    * The resource that already holds one input file's bytes in this Session, or null; it allocates nothing.
    * @param {InputFileRef | null | undefined} ref
    * @returns {Promise<string | null>}
@@ -654,17 +695,18 @@ export const buildSessionDrawingResources = async (state, sets) => {
   /**
    * @param {SessionBindingDrawing} drawing Its rows, one `WrittenLinearRowBinding` each.
    * @param {unknown} renderRequest The request this drawing's Session entry writes.
+   * @param {CommittedRecordFiles | null} committed The resources of the drawing's committed request.
    * @param {(sequence: Readonly<LinearSeq>) => string} [fileUidOf] The File card uid of each row.
    */
   const linearBindings = async (
-    { files, linearSeqs, linearComparisonPlan }, renderRequest, fileUidOf = linearSourceUidOf(linearSeqs)
+    { files, linearSeqs, linearComparisonPlan }, renderRequest, committed, fileUidOf = linearSourceUidOf(linearSeqs)
   ) => ({
     linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => /** @satisfies {WrittenLinearRowBinding} */ ({
       uid: String(sequence?.uid || ''),
       fileUid: fileUidOf(sequence),
-      gb: await bindFile(sequence?.gb),
-      gff: await bindFile(sequence?.gff),
-      fasta: await bindFile(sequence?.fasta),
+      gb: await bindRecordFile(sequence?.gb, 'gb', committed),
+      gff: await bindRecordFile(sequence?.gff, 'gff', committed),
+      fasta: await bindRecordFile(sequence?.fasta, 'fasta', committed),
       depth: await bindFileValue(sequence?.depth),
       losat_gencode: losatRecordGencode(sequence),
       definition: String(sequence?.definition || ''),
@@ -690,13 +732,14 @@ export const buildSessionDrawingResources = async (state, sets) => {
   /**
    * @param {SessionBindingDrawing} drawing
    * @param {unknown} renderRequest The request this drawing's Session entry writes.
+   * @param {CommittedRecordFiles | null} committed The resources of the drawing's committed request.
    */
-  const bindingsOf = async (drawing, renderRequest) => {
+  const bindingsOf = async (drawing, renderRequest, committed) => {
     // The cards first: a drawing's files are allocated in the order 48 wrote them.
     const cards = await cardBindings(drawing);
     return {
       schema: 2,
-      ...(drawing.mode === 'linear' ? await linearBindings(drawing, renderRequest) : await circularBindings(drawing)),
+      ...(drawing.mode === 'linear' ? await linearBindings(drawing, renderRequest, committed) : await circularBindings(drawing)),
       ...cards
     };
   };
@@ -710,7 +753,8 @@ export const buildSessionDrawingResources = async (state, sets) => {
       ? (identity ? set.committed.renderRequest : rewriteResourceRefs(set.committed.renderRequest, setAlias))
       : null;
     const webFiles = rewriteOriginalNameHints(set.committed?.webFiles, setAlias);
-    written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing, renderRequest) } : webFiles });
+    written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing, renderRequest,
+      set.committed && { resources: set.committed.resources, aliasOf: setAlias }) } : webFiles });
   }
   return { resources, written };
 };
@@ -733,7 +777,8 @@ export const buildSessionResources = async (state, committedRequest, drawings = 
       { mode: 'circular', files: {}, linearSeqs: [], circularSources: [] },
       { mode: 'linear', files: {}, linearSeqs: [], circularSources: [] }
     ])).map((drawing) => ({ drawing, committed: null }))
-  ]);
+  // No set binds a drawing with a committed request, so no row binds to one.
+  ], () => null);
   const [top, other] = built.written;
   // One set of bindings: each mode's own fields, and the card files of the
   // first drawing (a test's fixture binds them in one drawing).

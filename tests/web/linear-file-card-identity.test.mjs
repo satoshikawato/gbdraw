@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,6 +49,11 @@ const { groupLinearSourceRecords, planLinearSourceRemoval, planLosatSourceJobs }
 const { createLinearSourceFileReplacement } = await import('../../gbdraw/web/js/app/linear-source-edits.js');
 const { planLinearSourceRowMove } = await import('../../gbdraw/web/js/services/linear-record-layout.js');
 const { webFileBindingFaults } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+const { buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
+const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
+const { adoptRuntimeCanonicalSession } = await import('../../gbdraw/web/js/services/session-authority.js');
+const { buildSessionDrawingResources } = await import('../../gbdraw/web/js/services/session-resources.js');
+const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { readOfDrawing } = (await import('../../gbdraw/web/js/services/artifact-slot.js')).createArtifactSlotStore();
 
@@ -155,6 +160,28 @@ test('the request after Load reads each File card from a resource of its own, as
   assert.deepEqual(after.names, ['a.gb', 'b.gb']);
 });
 
+test('Save after a Generate of two loaded cards of equal bytes binds each row to its own record\'s resource', async () => {
+  // The loaded cards read one stored resource; Generate gives each card a resource of its own (OV-3710), and Save
+  // binds each row to the resource its record reads, so Load matches each File card to its record (OV-3708).
+  const fixture = readFileSync(new URL('../fixtures/sessions/web-linear-equal-file-cards.v51.gbdraw', import.meta.url));
+  const loaded = await importSession(await sessionLoadEventOfBytes(fixture), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.ok(['ok', 'legacy'].includes(loaded.status), JSON.stringify(loaded.error));
+  const drawing = linear();
+  // The request a Linear Generate builds and adopts (run-analysis.js), without a comparison.
+  const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+    plan: { mode: 'none', defaultSource: 'losat', edges: [] }, sequences: drawing.linearSeqs,
+    recordsOff: drawing.recordsOff, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup'
+  });
+  const filesData = await sessionConfig.serializeActiveRenderFiles(state, drawing);
+  const committed = adoptRuntimeCanonicalSession(buildCanonicalRenderRequest({ state, drawing, filesData, comparisonPlanSnapshot }));
+  // Save Session's allocator, with the committed resource lookup Save passes it (config.js).
+  const { written: [saved] } = await buildSessionDrawingResources(state, [{ drawing, committed }], resourceIdOwnedBy);
+  const read = Object.fromEntries(saved.renderRequest.records.map(({ recordKey, source }) => [recordKey, source.resourceId]));
+  const bound = Object.fromEntries(saved.webFiles.bindings.linearSeqs.map(({ uid, gb }) => [uid, gb.resourceId]));
+  assert.deepEqual(bound, read);
+  assert.equal(new Set(Object.values(bound)).size, 2, JSON.stringify(bound));
+});
+
 test('the positive fixture, a Web Save of two cards of equal bytes, loads as two File cards', async () => {
   const fixture = readFileSync(new URL('../fixtures/sessions/web-linear-equal-file-cards.v51.gbdraw', import.meta.url));
   const loaded = await importSession(await sessionLoadEventOfBytes(fixture), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
@@ -216,6 +243,28 @@ test('a CLI Session loads with its Result matched to its File cards, also after 
     await load(await save());
     assert.equal(cards().length, cardCount);
     assert.deepEqual(resultMatchesCards(), { records: cardCount, recordEditsApply: true }, JSON.stringify(files));
+  }
+});
+
+test('two CLI files of equal bytes keep their Result matched to their two File cards, also after a Web Save and Load', async () => {
+  // Two files with one name and equal bytes: the request reads one resource for each, and each row binding names
+  // its own file's (OV-3708).
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-equal-file-cards-'));
+  try {
+    const bytes = await readFile(FORCED_LABEL);
+    const files = ['a', 'b'].map((folder) => path.join(directory, folder, 'x.gb'));
+    for (const file of files) {
+      await mkdir(path.dirname(file));
+      await writeFile(file, bytes);
+    }
+    await loadBytes(await cliLinearSession(files));
+    assert.equal(cards().length, 2);
+    assert.deepEqual(resultMatchesCards(), { records: 2, recordEditsApply: true });
+    await load(await save());
+    assert.equal(cards().length, 2);
+    assert.deepEqual(resultMatchesCards(), { records: 2, recordEditsApply: true });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

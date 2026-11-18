@@ -288,7 +288,9 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
-import { getResourcePayloadIdentity, getResourcePayloadOwner, setResourcePayloadOwner, storedPayloadIdentity } from './resource-payload-owner.js';
+import {
+  getResourcePayloadIdentity, getResourcePayloadOwner, resourceIdOwnedBy, setResourcePayloadOwner, storedPayloadIdentity
+} from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
   readStoredSimilarityAlignmentResetReceipt,
@@ -7030,7 +7032,7 @@ const exportSessionDocument = async (
     const conservationPairs = artifact?.committedCanonicalSession ? artifact.conservationPairs : NO_CONSERVATION_PAIRS;
     parts.push({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs });
   }
-  const built = await buildSessionDrawingResources(state, parts.map(({ saved, committed }) => ({ drawing: saved, committed })));
+  const built = await buildSessionDrawingResources(state, parts.map(({ saved, committed }) => ({ drawing: saved, committed })), resourceIdOwnedBy);
   for (const [index, { editorState }] of parts.entries()) {
     if (!editorState) continue;
     await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, {

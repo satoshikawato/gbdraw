@@ -34,15 +34,23 @@ def _linear_rows(document: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def test_the_cli_writes_one_file_card_per_gbk_file(tmp_path: Path) -> None:
-    first = tmp_path / "a.gb"
-    second = tmp_path / "b.gb"
-    shutil.copyfile(FIXTURES / "forced_label_underlay.gb", first)
-    shutil.copyfile(first, second)
-    linear_main(["--gbk", str(first), str(second), "-o", str(tmp_path / "cli"), "-f", "svg", "--save_session"])
-    rows = _linear_rows(read_session_payload(tmp_path / "cli.gbdraw"))
+@pytest.mark.parametrize("names", [("a.gb", "b.gb"), ("a/x.gb", "b/x.gb")], ids=["two names", "one name"])
+def test_the_cli_writes_one_file_card_per_gbk_file(tmp_path: Path, names: tuple[str, str]) -> None:
+    """Each row binding names the resource its own file's records read, also for two files of equal bytes
+    (OV-3708): Load matches a File card to the records of the resource its file reads."""
+
+    paths = [tmp_path / name for name in names]
+    for path in paths:
+        path.parent.mkdir(exist_ok=True)
+        shutil.copyfile(FIXTURES / "forced_label_underlay.gb", path)
+    linear_main(["--gbk", *map(str, paths), "-o", str(tmp_path / "cli"), "-f", "svg",
+                 "--session_output", str(tmp_path / "cli.gbdraw")])
+    document = read_session_payload(tmp_path / "cli.gbdraw")
+    rows = _linear_rows(document)
     assert [row["fileUid"] for row in rows] == [row["uid"] for row in rows] == ["cli-seq-1", "cli-seq-2"]
-    assert rows[0]["gb"]["resourceId"] == rows[1]["gb"]["resourceId"], "equal bytes are stored once"
+    (drawing,) = [drawing for drawing in document["drawings"] if drawing["mode"] == "linear"]
+    read = [record["source"]["resourceId"] for record in drawing["renderRequest"]["records"]]
+    assert [row["gb"]["resourceId"] for row in rows] == read == ["record-1-genbank", "record-2-genbank"]
 
 
 def test_a_resave_keeps_the_file_cards_of_a_web_session(tmp_path: Path) -> None:

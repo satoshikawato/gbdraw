@@ -1019,6 +1019,9 @@ class CliLinearSeqFiles(TypedDict):
     uid: str
     # The File card of the row: each --gbk value, or --gff/--fasta pair, is a card of its own (OV-3703).
     fileUid: str
+    # The key of the request records this row's input draws (the planner's ``record-<n>`` of a CLI input): the row's
+    # files bind to the resources those records read (OV-3708). The Session does not store it.
+    recordKey: str
     gb: SessionResourceFile | None
     gff: SessionResourceFile | None
     fasta: SessionResourceFile | None
@@ -1409,6 +1412,7 @@ def _ensure_linear_seq(files: CliSessionFiles, index: int) -> None:
             {
                 "uid": f"cli-seq-{ordinal}",
                 "fileUid": f"cli-seq-{ordinal}",
+                "recordKey": f"{CLI_RECORD_KEY_PREFIX}{ordinal}",
                 "gb": None,
                 "gff": None,
                 "fasta": None,
