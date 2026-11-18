@@ -1075,3 +1075,77 @@ def test_features_after_one_left_out_keep_their_source_identity(tmp_path: Path) 
         source.features[2], source
     )
     assert [item.location for item in resolved.provenance[0].features_outside_record] == ["121..240"]
+
+
+def _path_data(svg: Path) -> list[str]:
+    """Every path's ``d`` attribute in drawing order (not the IDs, which carry a feature's hash)."""
+    import re
+
+    return re.findall(r' d="([^"]*)"', svg.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("strand", ["", "complement"])
+def test_a_part_past_the_end_of_a_circular_record_draws_as_the_join_over_its_origin(
+    tmp_path: Path, mode: str, strand: str
+) -> None:
+    """``81..110`` on a 100 bp circular record is the GFF3 way to write ``join(81..100,1..10)``: both modes draw it
+    with exactly the join's paths, and nothing warns (OV-3724: Linear drew it past the axis end)."""
+    def location(text: str) -> str:
+        return f"complement({text})" if strand else text
+
+    (tmp_path / "past.gb").write_text(
+        _genbank_text("rec", "circular", (("21..40", 'locus_tag="in"'), (location("81..110"), 'locus_tag="x"'))),
+        encoding="utf-8")
+    (tmp_path / "join.gb").write_text(
+        _genbank_text("rec", "circular", (("21..40", 'locus_tag="in"'), (location("join(81..100,1..10)"), 'locus_tag="x"'))),
+        encoding="utf-8")
+
+    runs = [_gbdraw(mode, "--gbk", f"{name}.gb", "-o", name, "-f", "svg", cwd=tmp_path) for name in ("past", "join")]
+
+    for run in runs:
+        assert run.returncode == 0, run.stderr
+        assert not [line for line in _lines(run) if line.startswith("WARNING")]
+    assert _path_data(tmp_path / "past.svg") == _path_data(tmp_path / "join.svg")
+
+
+@pytest.mark.parametrize("source", ["genbank", "gff3"])
+def test_a_part_past_the_end_of_a_record_not_drawn_circular_is_left_out_in_linear(tmp_path: Path, source: str) -> None:
+    """A linear record, or a GFF3 record whose topology is not set (GFF3 states none, so it is not drawn circular),
+    has no origin to cross: Linear leaves the feature out with the warning (OV-3724). Circular draws every record as
+    a circle and keeps it over the origin, as before."""
+    if source == "genbank":
+        (tmp_path / "rec.gb").write_text(
+            _genbank_text("rec", "linear", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+            encoding="utf-8")
+        inputs, name = ("--gbk", "rec.gb"), "rec.gb"
+    else:
+        (tmp_path / "rec.gff").write_text(
+            "##gff-version 3\nrec\t.\tCDS\t21\t40\t.\t+\t0\tID=in;locus_tag=in\n"
+            "rec\t.\tCDS\t81\t110\t.\t+\t0\tID=past;locus_tag=past\n", encoding="utf-8")
+        (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+        inputs, name = ("--gff", "rec.gff", "--fasta", "rec.fa"), "rec.gff"
+
+    linear = _gbdraw("linear", *inputs, "-o", "linear", "-f", "svg", cwd=tmp_path)
+    circular = _gbdraw("circular", *inputs, "-o", "circular", "-f", "svg", cwd=tmp_path)
+
+    assert linear.returncode == 0, linear.stderr
+    assert (
+        f"WARNING: Record rec ({name}): left out 1 feature that does not fit in the record's 100 bp: CDS 81..110 (past)."
+    ) in _lines(linear)
+    assert circular.returncode == 0, circular.stderr
+    assert not [line for line in _lines(circular) if line.startswith("WARNING: Record rec")]
+    assert any("drew 2 features (2 CDS)" in line for line in _lines(circular))
+
+
+def test_setting_a_gff3_record_circular_draws_a_part_past_its_end_over_the_origin(tmp_path: Path) -> None:
+    (tmp_path / "rec.gff").write_text(
+        "##gff-version 3\nrec\t.\tCDS\t81\t110\t.\t+\t0\tID=past;locus_tag=past\n", encoding="utf-8")
+    (tmp_path / "rec.fa").write_text(">rec\n" + "acgtgcatgc" * 10 + "\n", encoding="utf-8")
+
+    run = _gbdraw("linear", "--gff", "rec.gff", "--fasta", "rec.fa", "--record_topology", "circular",
+                  "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert not [line for line in _lines(run) if line.startswith("WARNING: Record rec")]
+    assert any("drew 1 feature (1 CDS)" in line for line in _lines(run))

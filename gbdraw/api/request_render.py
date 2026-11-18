@@ -1509,8 +1509,10 @@ def _normalize_request_records(
             gff_loader=gff_loader,
             fasta_loader=fasta_loader,
             parsed_sources=inputs.parsed_sources,
+            circle_diagram=circle_diagram,
         )
 
+    circle_diagram = not isinstance(request, LinearDiagramRequest)
     if not prepared_input_cache_active():
         return resolve()
     source_specs = tuple(
@@ -1546,12 +1548,15 @@ def _normalize_request_records(
     gff_type_key = None if gff_types is None else tuple(sorted(gff_types))
     input_keys = tuple(_record_input_preparation_key(item) for item in request.records)
     collection_key = _record_collection_preparation_key(request.record_options)
+    # Whether a record is drawn as a circle decides how a feature past its end reads (``fit_features_to_record``).
+    circle_key = (circle_diagram, tuple(item.display.is_circular for item in request.records))
     key = (
         "resolved-records-v1",
         tuple(source_key for source_key, _identities in typed_source_specs),
         input_keys,
         collection_key,
         gff_type_key,
+        circle_key,
     )
     collection = get_or_build_resolved_records(key, resource_identities, resolve)
     # Per-record identity (design 2.1, M1): the elements of the key above that
@@ -1573,6 +1578,11 @@ def _normalize_request_records(
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
                 # Each window of a record is its own drawn record (D-01).
                 *(() if provenance.window is None else (provenance.window.index,)),
+                # The features fitting the record left out or wrote over the origin, which the circle key decides.
+                *(
+                    () if not provenance.features_outside_record and not provenance.feature_spans_over_origin
+                    else (provenance.features_outside_record, provenance.feature_spans_over_origin)
+                ),
             )
             if default_collection
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)

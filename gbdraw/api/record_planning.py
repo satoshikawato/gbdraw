@@ -55,8 +55,8 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.io.comparisons import read_comparison_resource
 from gbdraw.io.genome import (
-    FeatureOutsideRecord, feature_types_left_out, filter_features_by_type, leave_out_features_outside_record, load_fasta,
-    load_gbks, parse_gff_fasta, require_record_sequence,
+    FeatureOutsideRecord, feature_types_left_out, filter_features_by_type, fit_features_to_record, load_fasta, load_gbks,
+    parse_gff_fasta, require_record_sequence,
 )
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -298,8 +298,10 @@ class ResolvedRecordProvenance:
     # was planned, by type (the GFF3 type filter); the input summary counts them.
     feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
     # The features left out when the record was planned because they do not fit in it
-    # (``leave_out_features_outside_record``); the input summary names them.
+    # (``fit_features_to_record``); the input summary names them.
     features_outside_record: tuple[FeatureOutsideRecord, ...] = field(default=(), kw_only=True)
+    # How many features had a part past the record's end that planning wrote as a span over the origin.
+    feature_spans_over_origin: int = field(default=0, kw_only=True)
     # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
     window: ResolvedWindow | None = field(default=None, kw_only=True)
     # The record whose window an earlier plan drew this record as, when this plan draws it whole (``RecordOrigin``).
@@ -2129,8 +2131,12 @@ def resolve_record_inputs(
     gff_loader: GffFastaLoader = parse_gff_fasta,
     fasta_loader: FastaLoader = load_fasta,
     parsed_sources: MutableMapping[tuple[object, ...], ParsedRecordInputs] | None = None,
+    circle_diagram: bool = False,
 ) -> ResolvedRecordCollection:
     """Load each unique source once, then apply typed selection and transforms.
+
+    ``circle_diagram`` is true for a Circular diagram, which draws every record as a circle: a feature part that
+    runs past its record's end then reads as a span over the origin (``fit_features_to_record``).
 
     ``parsed_sources`` keeps the parses across calls: a caller that resolves the
     same sources again with other GFF3 candidate types does not parse them again.
@@ -2183,7 +2189,12 @@ def resolve_record_inputs(
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
-            source_record, outside_record = leave_out_features_outside_record(source_record)
+            # A Circular diagram draws every record as a circle; a Linear one draws a record over its origin when
+            # it is drawn circular (its topology, or the one its display sets).
+            fitted = fit_features_to_record(source_record, over_origin=circle_diagram or drawn_circular(
+                record_input.display.is_circular, detected_topology(source_record, source_kind),
+            ))
+            source_record = fitted.record
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = _detached_record(source_record)
             reverse = record_input.presentation.reverse_complement
@@ -2230,7 +2241,8 @@ def resolve_record_inputs(
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,
-                features_outside_record=outside_record,
+                features_outside_record=fitted.outside,
+                feature_spans_over_origin=fitted.spans_over_origin,
             )
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)

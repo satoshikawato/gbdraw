@@ -35,7 +35,7 @@ from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationErro
 from gbdraw.core.record_metadata import (
     _copy_source_feature_identity, _feature_source_index_map, _read_coord_map, _source_period,
 )
-from gbdraw.features.coordinates import location_fits_record, location_parts_text
+from gbdraw.features.coordinates import location_fits_record, location_over_origin, location_parts_text
 from gbdraw.features.source import SourceFeatureCatalog, capture_source_features
 
 logger = logging.getLogger(__name__)
@@ -591,29 +591,51 @@ def _feature_outside_record(feature: SeqFeature) -> FeatureOutsideRecord:
     return FeatureOutsideRecord(str(feature.type), next(names, None), location_parts_text(parts))
 
 
-def leave_out_features_outside_record(record: SeqRecord) -> tuple[SeqRecord, tuple[FeatureOutsideRecord, ...]]:
-    """``record`` without the features that do not fit in it, and those features (OV-3678).
+@dataclass(frozen=True)
+class FittedRecord:
+    """A record with only the features that fit in it (``fit_features_to_record``)."""
 
-    The one owner of that decision: a record is planned through it before any crop, so no drawing, label, legend or
-    analysis reads a feature that starts outside its record or is longer than it. A record whose features all fit is
-    returned as it is. Otherwise the kept features are copies that carry their source identity, as the GFF3 type
-    filter's do, so each keeps its source feature index and hash.
+    record: SeqRecord
+    # The features left out, in source order.
+    outside: tuple[FeatureOutsideRecord, ...]
+    # How many kept features had a part past the record's end, now written as a span over the origin.
+    spans_over_origin: int
+
+
+def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRecord:
+    """``record`` with only the features that fit in it, and the features left out (OV-3678, OV-3724).
+
+    The one owner of whether a feature fits its record (``location_fits_record``): a record is planned through it
+    before any crop, so no drawing, label, legend or analysis reads a feature outside its record. ``over_origin`` is
+    true for a record drawn as a circle: there a part that starts in the record and runs past its end is a span over
+    the origin, written as the join it is (``location_over_origin``), so every drawer reads it as it reads
+    ``join(81..100,1..10)``; on any other record it does not fit. A record whose features all fit as written is
+    returned as it is. Otherwise every kept feature is a copy that carries its source identity (index, location
+    facts and hash), as the GFF3 type filter's copies do, so edits and colors still find each one.
     """
 
     length = len(record.seq)
     outside = [
         feature for feature in record.features
-        if feature.location is not None and not location_fits_record(feature.location.parts, length)
+        if feature.location is not None
+        and not location_fits_record(feature.location.parts, length, over_origin=over_origin)
     ]
-    if not outside:
-        return record, ()
     left_out = {id(feature) for feature in outside}
+    rewritten = {
+        id(feature): location
+        for feature in record.features
+        if feature.location is not None and id(feature) not in left_out
+        and (location := location_over_origin(feature.location, length)) is not feature.location
+    }
+    if not outside and not rewritten:
+        return FittedRecord(record, (), 0)
     indexes = _feature_source_index_map(record.features)
     base, step = _read_coord_map(record)
     period = _source_period(record)
 
     def carried(feature: SeqFeature) -> SeqFeature:
         kept = copy.copy(feature)
+        kept.location = rewritten.get(id(feature), feature.location)
         _copy_source_feature_identity(
             feature, kept, index=indexes[id(feature)], coord_base=base, coord_step=step, period=period,
         )
@@ -621,9 +643,9 @@ def leave_out_features_outside_record(record: SeqRecord) -> tuple[SeqRecord, tup
             kept.sub_features = [carried(sub_feature) for sub_feature in feature.sub_features]
         return kept
 
-    trimmed = copy.copy(record)
-    trimmed.features = [carried(feature) for feature in record.features if id(feature) not in left_out]
-    return trimmed, tuple(_feature_outside_record(feature) for feature in outside)
+    fitted = copy.copy(record)
+    fitted.features = [carried(feature) for feature in record.features if id(feature) not in left_out]
+    return FittedRecord(fitted, tuple(_feature_outside_record(feature) for feature in outside), len(rewritten))
 
 
 @contextmanager
@@ -836,7 +858,8 @@ __all__ = [
     "scan_features_recursive",
     "feature_types_left_out",
     "FeatureOutsideRecord",
-    "leave_out_features_outside_record",
+    "FittedRecord",
+    "fit_features_to_record",
     "filter_features_by_type",
 ]
 

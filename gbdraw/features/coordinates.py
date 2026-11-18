@@ -4,7 +4,7 @@
 import logging
 from typing import List, NamedTuple, Protocol, Sequence, Tuple, cast
 
-from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
+from Bio.SeqFeature import AfterPosition, BeforePosition, CompoundLocation, ExactPosition, SimpleLocation
 
 from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
 from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval, strand_ordered
@@ -63,12 +63,44 @@ def location_parts_text(parts: Sequence[tuple[int, int, int | None]]) -> str:
     return f"complement({text})" if parts and parts[0][2] == -1 else text
 
 
-def location_fits_record(parts: Sequence[_Span], length: int) -> bool:
-    """Whether a location fits in a record of ``length`` bases: each part starts in the record and covers at most
-    all of it. A part that starts in the record may end past its end, the GFF3 way to write a span over a circular
-    record's origin; a part that starts outside the record, or is longer than it, cannot be drawn on it (OV-3678)."""
+def location_fits_record(parts: Sequence[_Span], length: int, *, over_origin: bool) -> bool:
+    """Whether a location fits in a record of ``length`` bases (OV-3678, OV-3724).
 
-    return all(0 <= int(part.start) < length and int(part.end) - int(part.start) <= length for part in parts)
+    Each part lies in the record. On a record drawn as a circle (``over_origin``) a part may also start in the
+    record and run past its end, covering at most all of it: the GFF3 way to write a span over the origin, which
+    ``location_over_origin`` writes as the join it is. A part that starts outside the record, is longer than it, or
+    runs past the end of a record not drawn as a circle cannot be drawn on it.
+    """
+
+    def fits(start: int, end: int) -> bool:
+        return 0 <= start and (end <= length or over_origin and start < length and end - start <= length)
+
+    return all(fits(int(part.start), int(part.end)) for part in parts)
+
+
+def location_over_origin(
+    location: SimpleLocation | CompoundLocation, length: int
+) -> SimpleLocation | CompoundLocation:
+    """``location`` with each part that runs past the end of a record of ``length`` bases written as the span over
+    the origin it is: the part up to the end, then the part from the start, in the order of the part's strand, as a
+    GenBank file writes ``join(81..100,1..10)`` for GFF3's ``81..110`` on 100 bp. ``location`` itself when no part
+    runs past the end. The location must fit (``location_fits_record`` with ``over_origin``)."""
+
+    if all(int(part.end) <= length for part in location.parts):
+        return location
+    parts: list[SimpleLocation] = []
+    for part in location.parts:
+        if int(part.end) <= length:
+            parts.append(part)
+            continue
+        end = type(part.end)(int(part.end) - length)
+        pieces = [
+            SimpleLocation(part.start, ExactPosition(length), part.strand),
+            SimpleLocation(ExactPosition(0), end, part.strand),
+        ]
+        parts.extend(pieces[::-1] if part.strand == -1 else pieces)
+    operator = location.operator if isinstance(location, CompoundLocation) else "join"
+    return CompoundLocation(parts, operator=operator)
 
 
 class OriginCrossing(NamedTuple):
