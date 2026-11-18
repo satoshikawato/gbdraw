@@ -96,9 +96,15 @@ test('the read error names the failed card by its files when the list holds seve
   assert.equal(makeCards({ sources: SAKAI(), records: SAKAI_RECORDS }).cards.readError.value, '');
 });
 
-test('records not read yet give no records line', () => {
+// OV-3704: a Load that shows no Result reads no records (discovery deferred); each card with its files says
+// its records are not inspected, as the Record select and the Linear cards do. A card still waiting for a
+// file says nothing of records.
+test('records not read yet: a card with its files says Not inspected', () => {
   const { cards } = makeCards({ sources: SAKAI(), records: SAKAI_RECORDS, status: 'deferred' });
-  assert.deepEqual(cards.cards.value.map((card) => card.recordsLine), ['', '', '']);
+  assert.deepEqual(cards.cards.value.map((card) => card.recordsLine), ['Not inspected', 'Not inspected', 'Not inspected']);
+  // Discovery waits only for a list whose every card holds its files; while one waits for a file it is idle.
+  const waiting = makeCards({ inputType: 'gff', sources: [{ uid: 'record-1', gb: null, gff: file('a.gff3'), fasta: null }], status: 'idle' });
+  assert.deepEqual(waiting.cards.cards.value.map((card) => [card.ready, card.recordsLine]), [[false, '']]);
 });
 
 test('a file of several records: the records line counts them and a Topology card names its #k', () => {

@@ -839,9 +839,12 @@ const readDeferredCircularRecords = async (page) => {
 // - Save then Load, by the renamed hashes (a Load names files, records and
 //   file sources anew and builds maps in another order); before the record
 //   read the Load leaves to the user, without the record list and its status
-//   (the read makes them, Product Contract PD-OI-044), so a Load that loses a
-//   value the read would rewrite (`adv.multi_record_positions`,
-//   `form.circular_record_selector`) fails; and after it. Off:
+//   and the marks of the cards a record-major Depth matrix stands for
+//   (`files.c_depth_rows`: a Load marks the cards as loaded, OV-2868, and the
+//   settled read of the same cards clears them, OV-3706; the read makes them,
+//   Product Contract PD-OI-044), so a Load that loses a value the read would
+//   rewrite (`adv.multi_record_positions`, `form.circular_record_selector`)
+//   fails; and after it. Off:
 //   - OV-3696, `settings`: Load places the track stacks it does not draw
 //     (`adv.*_track_slots_axis_index` null -> 0, `adv.circular_track_slots.*.side`
 //     unset -> 'inside' and `params.lane_direction` set where unset;
@@ -853,12 +856,6 @@ const readDeferredCircularRecords = async (page) => {
 //     reads as null (services/style-overrides.js `normalizeStrokeOverride`):
 //     one value in two forms. When the edit stores the normalized form,
 //     remove the entry.
-//   - OV-3706, `inputs`: a Load marks the
-//     cards a record-major Depth matrix stands for (`files.c_depth_rows`,
-//     services/config.js, OV-2868) where the page before held null, and a
-//     record read of the same cards leaves the marks (record-discovery.js
-//     `circularDepthRowsAfterRead` returns null when the cards did not
-//     change). When the two states agree, remove the entry.
 const UNSET = Object.freeze([null]);
 const RESTORING_KINDS = Object.freeze({
   undoRedo: { phase: 'Undo then Redo', by: 'drawings', settle: async () => {}, unread: {}, off: {} },
@@ -866,7 +863,7 @@ const RESTORING_KINDS = Object.freeze({
     phase: 'Save then Load',
     by: 'renamed',
     settle: readDeferredCircularRecords,
-    unread: { inputs: [{ path: 'circularRecordList' }, { path: 'circularRecordDiscovery' }] },
+    unread: { inputs: [{ path: 'circularRecordList' }, { path: 'circularRecordDiscovery' }, { path: 'files.c_depth_rows' }] },
     off: {
       settings: { id: 'OV-3696', fields: [
         { path: 'adv.circular_track_slots_axis_index', when: UNSET }, { path: 'adv.linear_track_slots_axis_index', when: UNSET },
@@ -874,8 +871,7 @@ const RESTORING_KINDS = Object.freeze({
       ] },
       paint: { id: 'OV-3702', fields: [
         { path: 'legendStrokeOverrides.*.originalStrokeColor', when: ['none'] }, { path: 'featureStrokeOverrides.*.originalStrokeColor', when: ['none'] }
-      ] },
-      inputs: { id: 'OV-3706', fields: [{ path: 'files.c_depth_rows', when: UNSET }] }
+      ] }
     }
   }
 });

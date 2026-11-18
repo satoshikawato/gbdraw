@@ -171,26 +171,79 @@ const createHiddenPreview = ({ hidden, canvas, fitAtOnce, centerAtOnce, setPrevi
  * it follows at once, as a promoted layer. A change of the view shows at Vue's next flush, before the frame is
  * drawn, once however many members changed (a pan frame changes both coordinates); a held transition shows at
  * once, so the Fit measures, and the Fit shown at once reads, the style its write set. No app template reads
- * the view (OV-912).
+ * the view (OV-912). It also reads the surface's layout for the placement (`readSurfaceLayout`).
  * @param {HTMLElement} element The Preview surface.
  * @param {PreviewSurfaceView} view
  * @returns {() => void} Stops the projection.
  */
 export const projectPreviewSurface = (element, view) => {
+  // A layout read shows the identity transform, and holds the transition until the view is shown again.
+  let readingLayout = false;
+  let untransformed = false;
   const show = () => {
-    const immediate = view.isPanning.value || view.previewTransitionHeld.value;
-    element.style.transform = `translate(${view.canvasPan.x}px, ${view.canvasPan.y}px) scale(${view.zoom.value})`;
+    const immediate = readingLayout || view.isPanning.value || view.previewTransitionHeld.value;
+    element.style.transform = untransformed ? 'translate(0px, 0px) scale(1)'
+      : `translate(${view.canvasPan.x}px, ${view.canvasPan.y}px) scale(${view.zoom.value})`;
     element.style.transformOrigin = 'top center';
     element.style.transition = immediate ? 'none' : 'transform 0.2s';
     element.style.willChange = immediate ? 'transform' : '';
     element.style.visibility = view.previewHiddenUntilShown.value ? 'hidden' : '';
   };
+  surfaceLayoutReads.set(element, (read) => {
+    readingLayout = true;
+    untransformed = true;
+    show();
+    const layout = read();
+    untransformed = false;
+    show();
+    // The browser takes the view as shown again while the transition is held, so no transition runs
+    // from the identity transform and a running one ends at its end value.
+    void getComputedStyle(element).transform;
+    readingLayout = false;
+    show();
+    return layout;
+  });
   const stops = [
     watch(() => [view.canvasPan.x, view.canvasPan.y, view.zoom.value, view.isPanning.value,
       view.previewHiddenUntilShown.value], show, { immediate: true }),
     watch(() => view.previewTransitionHeld.value, show, { flush: 'sync' })
   ];
-  return () => stops.forEach((stop) => stop());
+  return () => {
+    surfaceLayoutReads.delete(element);
+    stops.forEach((stop) => stop());
+  };
+};
+
+/**
+ * The layout boxes of the Preview surface and of its SVG, and the figure's free room, under the identity
+ * transform: the same for the same figure and canvas whatever pan and zoom are shown. A box measured under the
+ * pan and zoom carries the browser's single-precision rounding, which depends on that pan, and a view that
+ * overflows the canvas narrows the canvas's client size by its scrollbars (OV-3697).
+ * @typedef {object} SurfaceLayout
+ * @property {PreviewFreeRoom} room
+ * @property {DOMRect} surfaceBox The surface, whose top centre is the transform origin.
+ * @property {DOMRect} svgBox The figure.
+ */
+
+/** @type {WeakMap<HTMLElement, (read: () => SurfaceLayout) => SurfaceLayout>} The projection's layout read, per surface. */
+const surfaceLayoutReads = new WeakMap();
+
+/**
+ * @param {HTMLElement} container The preview canvas.
+ * @param {HTMLElement} surface The Preview surface.
+ * @param {Element} svg The figure in it.
+ * @returns {SurfaceLayout}
+ */
+const readSurfaceLayout = (container, surface, svg) => {
+  /** @returns {SurfaceLayout} */
+  const read = () => ({
+    room: measureFreeRoom(container),
+    surfaceBox: surface.getBoundingClientRect(),
+    svgBox: svg.getBoundingClientRect()
+  });
+  // A surface no projection shows has no transform to take off.
+  const readUntransformed = surfaceLayoutReads.get(surface);
+  return readUntransformed ? readUntransformed(read) : read();
 };
 
 /**
@@ -472,8 +525,8 @@ const createPanGesture = (state, { beginInteraction, endInteraction }) => {
  */
 
 /**
- * The shown figure without the current transform: its size at zoom 1, the transform origin (the surface's top
- * centre) without the pan, and the figure centre's unscaled offset from that origin.
+ * The shown figure under the identity transform: its size at zoom 1, the transform origin (the surface's top
+ * centre), and the figure centre's offset from that origin.
  * @typedef {object} PreviewFigure
  * @property {number} width
  * @property {number} height
@@ -531,19 +584,21 @@ const centeringPanX = (room, frameWidth, figure, zoomLevel) =>
  * left of that control instead (OV-3588); any other Fit stays as it is. It keeps the room it measured, which
  * the held view reads. The centring at a given zoom is one computation that a drawing switch shares
  * (`centerPreviewAtZoom`, D-57): the switch keeps the zoom and the top where pan y 0 puts it.
- * @param {Pick<WebState, 'zoom' | 'canvasPan' | 'canvasContainerRef' | 'svgContainer' | 'previewTransitionHeld'>
- *   & { setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The view, the
- *   canvas and surface, and the whole-view setter.
+ * Both measure the layout, not the pan and zoom shown, so the same figure and canvas give the same view each time.
+ * @param {Pick<WebState, 'zoom' | 'canvasContainerRef' | 'svgContainer'>
+ *   & { setPreviewViewport: (pan: { x: number, y: number }, zoomLevel: number) => void }} owner The zoom a switch
+ *   keeps, the canvas and surface, and the whole-view setter.
  * @returns {{ fitPreviewToViewport: () => void, centerPreviewAtZoom: () => void,
  *   inFittedRoom: (container: HTMLElement) => boolean, forgetFittedRoom: () => void }}
  */
-const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, previewTransitionHeld, setPreviewViewport }) => {
+const createPreviewFit = ({ zoom, canvasContainerRef, svgContainer, setPreviewViewport }) => {
   // The room the last Fit measured.
   let fittedRoom = '';
 
   /**
-   * Measures the shown figure and its room, and places it with `place`. The transition is held meanwhile, so
-   * the measure reads the current transform itself, not a frame of its transition.
+   * Measures the shown figure and its room, and places it with `place`. It reads the layout under the identity
+   * transform (`readSurfaceLayout`), not the pan and zoom shown, so the same figure and canvas always give the
+   * same placement (OV-3697).
    * @param {(shown: { container: HTMLElement, room: PreviewFreeRoom, figure: PreviewFigure }) => void} place
    */
   const placeShown = (place) => {
@@ -551,27 +606,20 @@ const createPreviewFit = ({ zoom, canvasPan, canvasContainerRef, svgContainer, p
     const surface = svgContainer.value;
     const svg = surface?.querySelector?.('svg');
     if (!container || !surface || !svg) return;
-    previewTransitionHeld.value = true;
-    try {
-      const surfaceBox = surface.getBoundingClientRect();
-      const svgBox = svg.getBoundingClientRect();
-      const width = svgBox.width / zoom.value;
-      const height = svgBox.height / zoom.value;
-      if (!(width > 0 && height > 0)) return;
-      place({
-        container,
-        room: measureFreeRoom(container),
-        figure: {
-          width, height,
-          originX: surfaceBox.left + surfaceBox.width / 2 - canvasPan.x,
-          originY: surfaceBox.top - canvasPan.y,
-          centerX: (svgBox.left + svgBox.width / 2 - surfaceBox.left - surfaceBox.width / 2) / zoom.value,
-          centerY: (svgBox.top + svgBox.height / 2 - surfaceBox.top) / zoom.value
-        }
-      });
-    } finally {
-      previewTransitionHeld.value = false;
-    }
+    const { room, surfaceBox, svgBox } = readSurfaceLayout(container, surface, svg);
+    const { width, height } = svgBox;
+    if (!(width > 0 && height > 0)) return;
+    const originX = surfaceBox.left + surfaceBox.width / 2;
+    const originY = surfaceBox.top;
+    place({
+      container,
+      room,
+      figure: {
+        width, height, originX, originY,
+        centerX: svgBox.left + width / 2 - originX,
+        centerY: svgBox.top + height / 2 - originY
+      }
+    });
   };
 
   const fitPreviewToViewport = () => placeShown(({ container, room, figure }) => {
@@ -712,7 +760,7 @@ export const createPanZoom = (state, { showCanvas = () => {} } = {}) => {
   };
 
   const { fitPreviewToViewport, centerPreviewAtZoom, inFittedRoom, forgetFittedRoom } = createPreviewFit({
-    zoom, canvasPan, canvasContainerRef, svgContainer, previewTransitionHeld, setPreviewViewport
+    zoom, canvasContainerRef, svgContainer, setPreviewViewport
   });
   const { holdPreviewViewport, releasePreviewViewport, heldPreviewViewport, disposeHeldPreviewView } = createHeldPreviewView({
     zoom, canvasPan, canvasContainerRef, fit: fitPreviewToViewport, inFittedRoom, forgetFittedRoom, setPreviewViewport

@@ -11,8 +11,9 @@ import { circularSlotFileKind } from '../services/drawing/inputs.js';
 import { circularSourceInputs, inputTypeSpec } from '../services/input-types.js';
 import { formatRecordLength } from '../services/record-options.js';
 import { errorText } from '../utils/error-text.js';
-import { t, tn } from '../utils/i18n.js';
+import { t, tm, tn } from '../utils/i18n.js';
 import { fileCardLine } from './file-card.js';
+import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 /** @import { DiagramMode, DrawingState, SessionBusy } from '../state.js' */
 /** @import { CircularSource } from '../services/drawing/inputs.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
@@ -45,7 +46,8 @@ const { computed, reactive } = window.Vue;
  * @property {boolean} ready Every slot the input type reads holds a file.
  * @property {boolean} failed Its read failed.
  * @property {CircularListRecord[]} records Its records, once read.
- * @property {string} recordsLine "1 record · 92,721 bp" once its records are read, else ''.
+ * @property {string} recordsLine "1 record · 92,721 bp" once its records are read, "Not inspected" while their read
+ *   waits (a Load that shows no Result reads none; discovery waits only when every card holds its files), else ''.
  */
 
 /**
@@ -109,7 +111,8 @@ export const createCircularFileCards = ({
       const records = failed ? [] : listed.filter((record) => record.uid === source.uid);
       return {
         uid: source.uid, index, source, line: fileCardLine(inputType, source), ready: inputs[index].complete, failed,
-        records, recordsLine: recordsLineOf(records)
+        records,
+        recordsLine: discovery.status === 'deferred' ? tm(RECORDS_NOT_INSPECTED_LABEL) : recordsLineOf(records)
       };
     });
   });

@@ -2698,7 +2698,7 @@ export const createRunAnalysis = ({
     drawing.circularRecordDiscovery.status = failed ? 'error' : 'ready';
     drawing.circularRecordDiscovery.error = failed ? failed.error : '';
     if (depthRows?.rows) bindDrawingInputFileTree(inputFiles, drawing.slices.inputs, 'c_depth', depthRows.rows);
-    if (depthRows) markCircularDepthRows(drawing.slices.inputs, depthRows.marks);
+    if (depthRows) markCircularDepthRows(drawing.slices.inputs, null);
     unappliedCircularRecordReads.set(drawing, refreshGeneration);
     if (failed || nextRecords.length > 0) releaseSourceInputFailure(drawing);
     onCircularRecordsDiscovered?.({ drawingId: drawing.id, sources: inputs.map(({ uid, primaryFile, pairedFile }, index) => ({

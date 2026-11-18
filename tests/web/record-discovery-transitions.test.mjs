@@ -213,6 +213,8 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   await settle();
   assert.deepEqual(recordIds(circular), ['A1', 'A2', 'B1']);
   assert.deepEqual(rows(), [['a.tsv'], [], ['b.tsv']], 'B keeps its row; A\'s first record keeps A\'s');
+  // OV-3706: rows that followed their records stand for the cards as read: no marks, as before any edit.
+  assert.equal(circular.files.c_depth_rows, null);
   // Three Moves, each made while the read of the one before still runs.
   await app.moveCircularSourceCard(1, -1);
   await app.moveCircularSourceCard(0, 1);
@@ -220,6 +222,25 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   await settle();
   assert.deepEqual(circular.circularSources.map((card) => card.uid), [cardB, cardA]);
   assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
+  assert.equal(circular.files.c_depth_rows, null);
+  // OV-3706: a Load marks the cards as loaded (their record counts unread); the settled read of the same cards
+  // leaves the rows and gives the one form of a page that never saved: no marks.
+  const { markCircularDepthRows } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
+  markCircularDepthRows(circular.slices.inputs, circularSourceInputs('gb', circular.circularSources)
+    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null })));
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
+  assert.equal(circular.files.c_depth_rows, null);
+  // Marks whose records are not the matrix's rows (B marked with 5 records, 7 against 3 rows): the rows cannot be
+  // placed and stay for Generate to report; the read still ends the marks, as a second read of the same cards would.
+  markCircularDepthRows(circular.slices.inputs, circularSourceInputs('gb', circular.circularSources)
+    .map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: index === 0 ? 5 : 2 })));
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
+  assert.equal(circular.files.c_depth_rows, null);
   // Undo gives each Move's matrix back with the records it stood for (the
   // test's Replace is no History step of its own: the file input makes it one).
   for (let step = 0; step < 3; step += 1) await app.undoHistory();
