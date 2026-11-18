@@ -1493,6 +1493,22 @@
       "source": "found while registering the match span read (#2019 review)"
     },
     {
+      "id": "concern:interactive-svg-marks",
+      "concern": "Which drawn features, matches and region annotations an Interactive SVG marks as interactive (data-gbdraw-interactive-* attributes)",
+      "pythonOwner": [
+        "gbdraw/render/interactive_svg.py:_mark_interactive_features",
+        "gbdraw/render/interactive_svg.py:_mark_interactive_matches",
+        "gbdraw/render/interactive_svg.py:_mark_interactive_annotations"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/standalone-interactivity.js:enrichSvgWithStandaloneInteractivity"
+      ],
+      "vector": null,
+      "reason": "The Web export enriches the SVG in the browser after its own edits; the CLI, Python API and Gallery enrich it in Python. Both mark the same three kinds by the feature catalog's identities. No shared vector: tests/test_interactive_svg_cli_format.py and tests/test_record_display_interactive_browser.py pin the Python side, and tests/web/interactive-svg-export.test.mjs (with tests/web/interactive-svg-v3.playwright.spec.js) pins the Web side.",
+      "retireWhen": "the viewer decides interactivity from the embedded catalog and both enrichers stop marking",
+      "source": "PR #2148 (CLI interactive SVG marked no region annotations)"
+    },
+    {
       "id": "vector:tests/fixtures/given-comparison-table-vectors.json",
       "concern": "A comparison table that a request of schema 2 or 5 to 9 stored as a precomputedProteinComparison under the resource ID a CLI or Python render gave a table it was given (comparison-explicit-<n>): whether it holds protein matches (no protein column), and the BLAST rows of a table of the BLAST columns alone, in any order (OV-3573, OV-3574)",
       "pythonOwner": [
