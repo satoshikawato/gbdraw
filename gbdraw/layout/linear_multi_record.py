@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import math
-from typing import Mapping, NewType, Sequence
+from typing import Literal, Mapping, NewType, Sequence
 
 from Bio.SeqRecord import SeqRecord
 
@@ -239,19 +239,39 @@ def stable_record_keys(records: Sequence[SeqRecord]) -> tuple[RecordKey, ...]:
     return keys
 
 
+AdjacentPairOrder = Literal["records", "rows"]
+"""How :func:`record_pairs_between_adjacent_rows` reads each pair and orders them."""
+
+
 def record_pairs_between_adjacent_rows(
     rows_by_record: Sequence[int],
+    *,
+    order: AdjacentPairOrder = "records",
 ) -> tuple[tuple[int, int], ...]:
-    """Return every cross-row pair whose normalized rows are adjacent."""
+    """Return every pair of records whose normalized rows are adjacent (differ by one), the one rule for "every record
+    of a row against every record of the next row".
+
+    ``order="records"`` reads each pair as (lower record index, higher record index), in record order: the pairs a
+    drawing displays (``grid_display_pairs``) and a protein search compares. ``order="rows"`` reads the same pairs
+    from the record of the upper row, by upper row and then by record within each row: the (query, subject) pairs a
+    nucleotide search compares, as the Web's adjacent edges read. The two differ only when a later record stands
+    in an upper row."""
 
     if any(not isinstance(row, int) or isinstance(row, bool) or row < 0 for row in rows_by_record):
         raise ValidationError("Linear rows must be non-negative integers.")
-    return tuple(
-        (query_index, subject_index)
-        for query_index in range(len(rows_by_record))
-        for subject_index in range(query_index + 1, len(rows_by_record))
-        if abs(rows_by_record[query_index] - rows_by_record[subject_index]) == 1
+    pairs = tuple(
+        (first, second)
+        for first in range(len(rows_by_record))
+        for second in range(first + 1, len(rows_by_record))
+        if abs(rows_by_record[first] - rows_by_record[second]) == 1
     )
+    if order == "records":
+        return pairs
+    from_upper_row = (
+        (first, second) if rows_by_record[first] < rows_by_record[second] else (second, first)
+        for first, second in pairs
+    )
+    return tuple(sorted(from_upper_row, key=lambda pair: (rows_by_record[pair[0]], *pair)))
 
 
 def grid_display_pairs(rows_by_record: Sequence[int]) -> tuple[tuple[int, int], ...] | None:
