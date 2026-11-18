@@ -5,6 +5,10 @@
 // condition under which one side is deleted. The registry only shrinks: a new
 // row is an authority change, made before its twin exists with `pending`
 // (gbdraw/web/CLAUDE.md R9); the change that adds the twin removes `pending`.
+// A row the trusted base does not have is admitted only with the fields of
+// `checkTwinAdditions`, and only when retired rows pay for it or it carries a
+// waiver (WEB_CHANGE_POLICY.md "Design-rule co-change"); the Gate
+// (tools/check-web-change-budget.mjs) runs that check against the base.
 //
 // `twin.unregistered.v1` observes two kinds of twin in source text; nothing is
 // executed:
@@ -53,6 +57,10 @@ export const TWIN_REGISTRY_PATH = 'tools/twins.json';
  * @property {string} retireWhen
  * @property {string} source
  * @property {true} [pending] A `vector:` or `function:` row added before its twin.
+ * @property {string} [whyNotAskPython] Why the Web does not ask the Python owner (in the Worker) instead.
+ * @property {string} [whyNotGenerate] Why the Web copy is not generated from the Python owner.
+ * @property {string} [retireBy] The date (YYYY-MM-DD) by which the twin retires.
+ * @property {string} [waiver] Why no row could be retired first; the Owner grants it by approving the adding pull request.
  */
 /**
  * @typedef {object} TwinRegistryCheck
@@ -175,6 +183,10 @@ const DETECTED_ROW_ID = /^(?:vector|function):/;
 const isText = (value) => typeof value === 'string' && /\S/.test(value);
 /** @param {unknown} value */
 const isPathList = (value) => Array.isArray(value) && value.length > 0 && value.every(isText);
+/** @param {unknown} value a calendar date written YYYY-MM-DD */
+const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().startsWith(value);
+const ADMISSION_TEXT_FIELDS = /** @type {const} */ (['whyNotAskPython', 'whyNotGenerate']);
 
 /**
  * Compares the registry with the detected twins: every detected twin has a
@@ -214,6 +226,10 @@ export const checkTwinRegistry = (registry, detected) => {
     if (row.vector !== null && !(typeof row.vector === 'string' && /^tests\/fixtures\/(?:[^/]+\/)*[^/]+\.json$/.test(row.vector))) {
       errors.push(`${location}.vector: expected tests/fixtures/<path>.json or null`);
     }
+    for (const field of /** @type {const} */ ([...ADMISSION_TEXT_FIELDS, 'waiver'])) {
+      if (row[field] !== undefined && !isText(row[field])) errors.push(`${location}.${field}: expected text`);
+    }
+    if (row.retireBy !== undefined && !isDate(row.retireBy)) errors.push(`${location}.retireBy: expected a date YYYY-MM-DD`);
     if (row.pending === undefined) return;
     if (row.pending === true && typeof row.id === 'string' && DETECTED_ROW_ID.test(row.id)) pendingIds.add(row.id);
     else errors.push(`${location}.pending: expected true on a vector: or function: row, or no pending`);
@@ -226,4 +242,142 @@ export const checkTwinRegistry = (registry, detected) => {
     unregistered: [...detectedIds].filter((id) => !ids.has(id)).sort(),
     stale: [...ids].filter((id) => DETECTED_ROW_ID.test(id) && !detectedIds.has(id) && !pendingIds.has(id)).sort()
   };
+};
+
+// Rows retired from this time on pay for rows added from this time on: the merge of the admission
+// rule into WEB_CHANGE_POLICY.md "Design-rule co-change" (#2089).
+export const TWIN_EXCHANGE_SINCE = '2026-11-17T06:32:55+09:00';
+
+/**
+ * @param {unknown} registry a parsed tools/twins.json, or null
+ * @returns {Map<string, Partial<Record<keyof TwinRow, unknown>>>} rows by id
+ */
+const rowsById = (registry) => {
+  const twins = registry && typeof registry === 'object' && !Array.isArray(registry)
+    ? /** @type {{ twins?: unknown }} */ (registry).twins
+    : null;
+  /** @type {Map<string, Partial<Record<keyof TwinRow, unknown>>>} */
+  const rows = new Map();
+  for (const entry of Array.isArray(twins) ? twins : []) {
+    const row = /** @type {Partial<Record<keyof TwinRow, unknown>>} */ (entry && typeof entry === 'object' ? entry : {});
+    if (typeof row.id === 'string') rows.set(row.id, row);
+  }
+  return rows;
+};
+
+/**
+ * Checks the rows the head adds: ids that none of `baseRegistries` has (the
+ * merge base, so a row the base branch retired after the fork is not new, and
+ * the trusted base, so a row it already has is not new). Each says why the Web
+ * neither asks the Python owner nor generates the value, and gives a
+ * `retireBy` date after the day of the check (UTC). The rows without a waiver
+ * must not exceed the balance of retired rows (`readTwinExchangeBalance`).
+ * @param {unknown[]} baseRegistries the parsed registries of the merge base and the trusted base; null where absent
+ * @param {unknown} headRegistry the parsed registry of the head
+ * @param {{ now: Date, balance: () => number }} options `balance` is called only when an added row has no waiver
+ * @returns {string[]}
+ */
+export const checkTwinAdditions = (baseRegistries, headRegistry, { now, balance }) => {
+  const before = new Set(baseRegistries.flatMap((registry) => [...rowsById(registry).keys()]));
+  const today = now.toISOString().slice(0, 10);
+  const added = [...rowsById(headRegistry)].filter(([id]) => !before.has(id));
+  const errors = added.flatMap(([id, row]) => {
+    const missing = [
+      ...ADMISSION_TEXT_FIELDS.filter((field) => !isText(row[field])),
+      ...(isDate(row.retireBy) && /** @type {string} */ (row.retireBy) > today ? [] : [`retireBy (a date after ${today}, UTC)`])
+    ];
+    return missing.length ? [`${TWIN_REGISTRY_PATH}: ${id}: an added row needs ${missing.join(', ')}`] : [];
+  });
+  const unpaid = added.filter(([, row]) => !isText(row.waiver)).length;
+  const available = unpaid ? balance() : 0;
+  if (unpaid > available) {
+    errors.push(`${TWIN_REGISTRY_PATH}: ${unpaid} added row(s) without a waiver, but the rows that pull requests changing `
+      + `production code retired since ${TWIN_EXCHANGE_SINCE.slice(0, 10)} leave ${available} to pay for additions: retire `
+      + 'rows first, or give each added row a "waiver" that says why none could be retired (the Owner grants it by '
+      + 'approving this pull request)');
+  }
+  return errors;
+};
+
+const NO_OBJECT = /^0+$/;
+
+/**
+ * Reads blobs with one `git cat-file --batch`. A blob that cannot be read
+ * throws: a failed read must not look like an absent registry.
+ * @param {(args: string[], input?: string) => string} git
+ * @param {string[]} oids
+ * @returns {Map<string, string>} source by blob id
+ */
+const readBlobs = (git, oids) => {
+  /** @type {Map<string, string>} */
+  const sources = new Map();
+  if (!oids.length) return sources;
+  // A partial clone (the trusted-base Gate fetches no blobs) would fetch each missing blob on its first
+  // read, one request each; fetch them in one request first. Blobs already present are not fetched again.
+  // Its remote is marked `remote.<name>.promisor` (older clones name it in `extensions.partialClone`).
+  const promisor = git(['config', '--list']).split('\n').map((line) => (
+    /^remote\.(.+)\.promisor=(?:true|yes|on|1)$/i.exec(line)?.[1] ?? /^extensions\.partialclone=(.+)$/i.exec(line)?.[1]
+  )).find(Boolean);
+  if (promisor) {
+    git([
+      '-c', 'fetch.negotiationAlgorithm=noop', 'fetch', '--quiet', '--no-tags', '--no-write-fetch-head',
+      '--recurse-submodules=no', '--filter=blob:none', '--stdin', promisor
+    ], `${oids.join('\n')}\n`);
+  }
+  // The registry is UTF-8 text, so the bytes come back unchanged and the sizes in the headers hold.
+  const output = Buffer.from(git(['cat-file', '--batch'], `${oids.join('\n')}\n`), 'utf8');
+  let offset = 0;
+  for (const oid of oids) {
+    const headerEnd = output.indexOf(10, offset);
+    const header = output.subarray(offset, headerEnd).toString('utf8');
+    const size = Number(header.split(' ')[2]);
+    if (!header.startsWith(`${oid} blob `) || !Number.isInteger(size)) throw new Error(`Cannot read blob ${oid}: ${header}`);
+    sources.set(oid, output.subarray(headerEnd + 1, headerEnd + 1 + size).toString('utf8'));
+    offset = headerEnd + 1 + size + 1;
+  }
+  return sources;
+};
+
+/**
+ * The balance of retired rows on the first-parent history of `revision` since
+ * TWIN_EXCHANGE_SINCE: each row that a change to production code removed
+ * counts one, and each row added without a waiver takes one. A row removed by
+ * a change without production code (an abandoned pending row) pays for
+ * nothing.
+ * @param {(args: string[], input?: string) => string} git runs git in the repository with `input` on its
+ *   standard input and returns its output; throws on failure
+ * @param {string} revision
+ * @param {(path: string) => boolean} isProduction
+ * @returns {number}
+ */
+export const readTwinExchangeBalance = (git, revision, isProduction) => {
+  // Each first-parent commit that changed the registry, with the registry blobs before and after it as
+  // the trees name them. Each commit is kept or dropped by its own date: a date limit on the walk would
+  // also drop the commits behind one dated out of order.
+  const since = Date.parse(TWIN_EXCHANGE_SINCE);
+  const changes = git([
+    'log', '--first-parent', '--diff-merges=first-parent', '--no-renames', '--raw', '--no-abbrev',
+    '--format=%x00%H %cI', revision, '--', TWIN_REGISTRY_PATH
+  ]).split('\0').slice(1).flatMap((entry) => {
+    const [header, ...lines] = entry.split('\n');
+    const [commit, date] = header.split(' ');
+    const raw = lines.find((line) => line.startsWith(':'));
+    if (!raw) throw new Error(`git log listed ${commit} without a change of ${TWIN_REGISTRY_PATH}`);
+    const [, , before, after] = raw.slice(1).split(/\s+/);
+    return Date.parse(date) >= since ? [{ commit, before, after }] : [];
+  });
+  const sources = readBlobs(git, [...new Set(changes.flatMap(({ before, after }) => [before, after]))]
+    .filter((oid) => !NO_OBJECT.test(oid)));
+  /** @param {string} oid */
+  const registry = (oid) => (NO_OBJECT.test(oid) ? new Map() : rowsById(JSON.parse(/** @type {string} */ (sources.get(oid)))));
+  return changes.reduce((balance, { commit, before: beforeOid, after: afterOid }) => {
+    const before = registry(beforeOid);
+    const after = registry(afterOid);
+    const unpaid = [...after].filter(([id, row]) => !before.has(id) && !isText(row.waiver)).length;
+    const retired = [...before.keys()].filter((id) => !after.has(id)).length;
+    const paid = retired && git(['diff', '--name-only', '--no-renames', `${commit}^1`, commit]).split('\n').some(isProduction)
+      ? retired
+      : 0;
+    return balance + paid - unpaid;
+  }, 0);
 };
