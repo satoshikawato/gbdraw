@@ -235,6 +235,7 @@ from gbdraw.layout.figure_size import (
     fit_base_length,
     larger_figure,
 )
+from gbdraw.layout.linear import RecordCaptionsLeftOut
 from gbdraw.layout.linear_multi_record import (
     grid_display_pairs,
     record_key_at,
@@ -357,6 +358,8 @@ class LinearDiagramMetadata:
     comparison_warnings: tuple[ComparisonRecordIdWarning, ...] = ()
     # The rows each comparison table had and kept by the thresholds (input summary).
     comparison_tallies: tuple[ComparisonTableTally, ...] = ()
+    # The rows of whole records that left out record captions which would overlap (input summary).
+    record_captions_left_out: tuple[RecordCaptionsLeftOut, ...] = ()
     # Each record's search-frame binding, set by the plan's build when the
     # values above hold source-bound results: a Session stores them in F (R5).
     search_frame_bindings: tuple[ComparisonRecordBinding, ...] = ()
@@ -2913,6 +2916,7 @@ def _linear_build_result(
             collinearity_result=comparisons.collinearity_result,
             comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
             comparison_tallies=getattr(canvas, "_gbdraw_comparison_tallies", ()),
+            record_captions_left_out=getattr(canvas, "_gbdraw_record_captions_left_out", ()),
             wrap=wrap_summary,
             record_translations=tuple(
                 LinearRecordTranslation(record_key=key, x=x, y=y)

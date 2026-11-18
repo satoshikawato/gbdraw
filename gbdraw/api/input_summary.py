@@ -34,6 +34,7 @@ from gbdraw.features.selector_values import get_feature_type
 from gbdraw.features.visibility import should_render_feature
 from gbdraw.io.comparison_sequences import RepeatedRecordIds
 from gbdraw.io.comparisons import ComparisonThresholdName, ComparisonThresholdTally
+from gbdraw.layout.linear import RecordCaptionsLeftOut
 from gbdraw.layout.linear_wrap import LinearWrapSummary
 from gbdraw.linear_comparison import ComparisonTableTally
 
@@ -47,12 +48,14 @@ InputWarningCode = Literal[
     "comparison_table_empty",
     "annotation_set_not_drawn",
     "comparison_record_id_repeated",
+    "record_captions_overlap",
 ]
 NO_DRAWABLE_FEATURES: InputWarningCode = "no_drawable_features"
 COMPARISON_ROWS_FILTERED_OUT: InputWarningCode = "comparison_rows_filtered_out"
 COMPARISON_TABLE_EMPTY: InputWarningCode = "comparison_table_empty"
 ANNOTATION_SET_NOT_DRAWN: InputWarningCode = "annotation_set_not_drawn"
 COMPARISON_RECORD_ID_REPEATED: InputWarningCode = "comparison_record_id_repeated"
+RECORD_CAPTIONS_OVERLAP: InputWarningCode = "record_captions_overlap"
 # Warnings of inputs drawn in full: the Web does not head them "Part of the input was not drawn".
 INPUT_WARNINGS_OF_DRAWN_INPUT: frozenset[InputWarningCode] = frozenset({COMPARISON_RECORD_ID_REPEATED})
 
@@ -140,6 +143,8 @@ class InputSummary:
     annotation_sets_left_out: tuple[str, ...] = ()
     # The comparison genome files the render read whose record IDs repeat (OV-2954).
     repeated_comparison_ids: tuple[RepeatedRecordIds, ...] = ()
+    # The Linear rows of whole records that left out record captions which would overlap (OV-3521).
+    record_captions_left_out: tuple[RecordCaptionsLeftOut, ...] = ()
 
 
 class InputWarningPayload(TypedDict):
@@ -471,6 +476,16 @@ def input_warnings(summary: InputSummary) -> tuple[InputWarning, ...]:
         InputWarning(COMPARISON_RECORD_ID_REPEATED, item.message, (item.source_path,))
         for item in summary.repeated_comparison_ids
     )
+    # The row is counted among the drawn rows, from 1 at the top.
+    warnings.extend(
+        InputWarning(
+            RECORD_CAPTIONS_OVERLAP,
+            f"{row.left_out:,} of {row.captions:,} record captions in row {row.row + 1:,} were left out because they "
+            "overlap; to name the row once instead, give it a name (record_label) and hide Accession and Length.",
+            ("record captions of row", str(row.row)),
+        )
+        for row in summary.record_captions_left_out
+    )
     return tuple(_first_per_input(warnings, set()))
 
 
@@ -593,6 +608,7 @@ __all__ = [
     "InputWarningPayload",
     "LinearWrapPayload",
     "NO_DRAWABLE_FEATURES",
+    "RECORD_CAPTIONS_OVERLAP",
     "RecordInputSummary",
     "RecordPayload",
     "RegionPayload",

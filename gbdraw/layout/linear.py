@@ -251,6 +251,56 @@ class AxisGapResolution:
     next_band: CollisionBand | None = None
 
 
+@dataclass(frozen=True)
+class RecordCaption:
+    """The caption (record-local definition text) of a record in a row of whole records, where it is drawn."""
+
+    record_index: int
+    row: int
+    # The record's drawn length in bp: a longer record keeps its caption first.
+    length: int
+    left: float
+    right: float
+
+
+@dataclass(frozen=True)
+class RecordCaptionsLeftOut:
+    """A Linear row whose record captions would overlap: how many of its captions the row left out (OV-3521)."""
+
+    # The row, from 0 at the top.
+    row: int
+    left_out: int
+    captions: int
+
+
+def keep_record_captions_apart(
+    captions: Sequence[RecordCaption],
+    *,
+    clearance: float,
+) -> tuple[frozenset[int], tuple[RecordCaptionsLeftOut, ...]]:
+    """The records whose captions a row leaves out because they would overlap a kept one, and each such row's count.
+
+    Each row keeps the caption of its longest record first, then of shorter ones (equal lengths from the left), each
+    when it stays ``clearance`` apart from every caption the row kept: two captions closer than that read as one.
+    """
+
+    kept_by_row: dict[int, list[RecordCaption]] = {}
+    left_out: set[int] = set()
+    left_out_by_row: dict[int, int] = {}
+    totals: dict[int, int] = {}
+    for caption in sorted(captions, key=lambda item: (item.row, -item.length, item.left, item.record_index)):
+        totals[caption.row] = totals.get(caption.row, 0) + 1
+        kept = kept_by_row.setdefault(caption.row, [])
+        if any(caption.left < other.right + clearance and other.left < caption.right + clearance for other in kept):
+            left_out.add(caption.record_index)
+            left_out_by_row[caption.row] = left_out_by_row.get(caption.row, 0) + 1
+        else:
+            kept.append(caption)
+    return frozenset(left_out), tuple(
+        RecordCaptionsLeftOut(row, count, totals[row]) for row, count in sorted(left_out_by_row.items())
+    )
+
+
 def collision_x_intervals_overlap(
     first: CollisionBand,
     second: CollisionBand,
@@ -735,9 +785,12 @@ __all__ = [
     "LinearRecordRenderContext",
     "LinearResolvedTrack",
     "LinearTrackLayout",
+    "RecordCaption",
+    "RecordCaptionsLeftOut",
     "VerticalBand",
     "calculate_feature_position_factors_linear",
     "collision_x_intervals_overlap",
+    "keep_record_captions_apart",
     "measure_linear_feature_lanes",
     "measure_linear_label_band",
     "place_linear_definition",

@@ -263,7 +263,7 @@ from .requests import (
 )
 
 if TYPE_CHECKING:
-    from gbdraw.linear_comparison import ComparisonTableTally, LinearComparison
+    from gbdraw.linear_comparison import LinearComparison
 
     from .requests import CircularBatchOutputPolicy
 
@@ -3527,24 +3527,25 @@ def _build_request_plan_diagram(
         losat_cache_entries=losat_cache_entries,
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
-        input_summary=_plan_input_summary(
-            plan, linear_metadata.comparison_tallies if linear_metadata is not None else (),
-        ),
+        input_summary=_plan_input_summary(plan, linear_metadata),
     )
 
 
 def _plan_input_summary(
     plan: CircularRequestPlan | LinearRequestPlan,
-    comparisons: Sequence[ComparisonTableTally] = (),
+    linear_metadata: LinearDiagramMetadata | None = None,
 ) -> InputSummary:
-    """The input summary of a built plan, from the feature inputs and the track stack its drawing read."""
+    """The input summary of a built plan, from the feature inputs and the track stack its drawing read, and what a
+    Linear drawing recorded: the rows its comparison tables kept and the record captions its rows left out."""
 
     slots = _plan_track_slots(plan)
     left_out = annotation_sets_left_out(cast(ResolvedAnnotationBundle, plan.resolved_annotations), slots)
+    comparisons = linear_metadata.comparison_tallies if linear_metadata is not None else ()
+    captions_left_out = linear_metadata.record_captions_left_out if linear_metadata is not None else ()
     if not plan.provenance:  # A plan built without record planning has no sources to name.
-        return InputSummary((), tuple(comparisons), left_out)
+        return InputSummary((), tuple(comparisons), left_out, record_captions_left_out=captions_left_out)
     inputs = plan.inputs
-    return summarize_inputs(
+    summary = summarize_inputs(
         plan.records,
         plan.provenance,
         selected_features=plan.request.options.selected_features_set or DEFAULT_SELECTED_FEATURES,
@@ -3556,6 +3557,7 @@ def _plan_input_summary(
         annotation_sets_left_out=left_out,
         left_off_circle=_plan_records_left_off_circle(plan),
     )
+    return replace(summary, record_captions_left_out=captions_left_out)
 
 
 def _plan_records_left_off_circle(plan: CircularRequestPlan | LinearRequestPlan) -> dict[int, int]:

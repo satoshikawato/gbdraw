@@ -112,7 +112,10 @@ from ...layout.linear import (
     LinearRecordRenderContext,
     LinearResolvedTrack,
     LinearTrackLayout,
+    RecordCaption,
+    RecordCaptionsLeftOut,
     VerticalBand,
+    keep_record_captions_apart,
     measure_linear_feature_lanes,
     measure_linear_label_band,
     resolve_axis_gap,
@@ -1341,8 +1344,8 @@ def _build_linear_record_vertical_plans(
     representative_depth_configs: dict[int, DepthConfigurator],
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack],
     definitions: _LinearDefinitionMetrics,
+    caption_floors: Sequence[float | None],
     multi_record_enabled: bool,
-    split_row_definitions: bool,
     render_context: LinearRecordRenderContext,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[list[LinearRecordVerticalPlan], list[_LinearRecordDefinitionGeometry]]:
@@ -1441,16 +1444,23 @@ def _build_linear_record_vertical_plans(
             row_height=float(definitions.row_definition_heights[record_index]),
             row_width=float(definitions.row_definition_widths[record_index]),
             multi_record_enabled=multi_record_enabled,
-            split_row_definitions=split_row_definitions,
+            # A row of several records splits each record's definition into its own lines and its row's.
+            split_row_definitions=multi_record_enabled,
             row_top=definitions.row_definition_tops[record_index],
         )
         if beside.row_band is not None:
             canvas_band = canvas_band.union(beside.row_band)
         local_band = beside.local_band
         if multi_record_enabled and local_definition_height > 0.0:
-            header_bottom_y = (
-                canvas_band.top_y - float(canvas_config.vertical_padding)
-            )
+            header_top_y = canvas_band.top_y
+            caption_floor = caption_floors[record_index]
+            if feature_slot_id is not None and caption_floor is not None:
+                # A caption stands at least above one lane of features on each strand its row draws (OV-3727). Lanes are
+                # measured from the axis: a features slot that holds lanes has its origin there, an empty one may be
+                # packed elsewhere (above the axis band in the "above" layout), so a record with no lane takes the axis.
+                lanes_origin_y = feature_origin_y if feature_geometries[record_index].lanes else 0.0
+                header_top_y = min(header_top_y, lanes_origin_y + caption_floor)
+            header_bottom_y = header_top_y - float(canvas_config.vertical_padding)
             local_band = VerticalBand(
                 header_bottom_y - local_definition_height,
                 header_bottom_y,
@@ -1469,6 +1479,25 @@ def _build_linear_record_vertical_plans(
         )
         definition_geometries.append(replace(beside, local_band=local_band))
     return plans, definition_geometries
+
+
+def _row_caption_floors(
+    rows_by_record: Sequence[int],
+    feature_geometries: Sequence[LinearFeatureLaneGeometry],
+    nominal_feature_lanes: LinearFeatureLaneGeometry,
+) -> list[float | None]:
+    """Where each record's caption stands at least above, in its feature lanes' frame (OV-3727): the top of one lane
+    of features on each strand that some record of its row draws a feature on, as the records' measured lanes place
+    them. ``None`` where no record of the row draws a feature."""
+
+    strand_pools_by_row: dict[int, set[str]] = {}
+    for row, geometry in zip(rows_by_record, feature_geometries, strict=True):
+        strand_pools_by_row.setdefault(row, set()).update(lane.strand_pool for lane in geometry.lanes)
+    floor_by_row = {
+        row: min((lane.band.top_y for lane in nominal_feature_lanes.lanes if lane.strand_pool in pools), default=None)
+        for row, pools in strand_pools_by_row.items()
+    }
+    return [floor_by_row[row] for row in rows_by_record]
 
 
 def _ordinary_row_gap(canvas_config: LinearCanvasConfigurator) -> float:
@@ -2528,6 +2557,8 @@ class _LinearTrackPlan:
     resolved_depth_heights_by_index: dict[int, float]
     primary_depth_track_index: int
     record_feature_lane_geometries: list[LinearFeatureLaneGeometry]
+    # The lanes of a record with no lane feature, as a features track draws them for underlays.
+    nominal_feature_lanes: LinearFeatureLaneGeometry
     # Each record's feature density layers by track id.
     record_feature_density: Sequence[Mapping[str, FeatureDensityLayer]]
 
@@ -2618,8 +2649,8 @@ def _linear_track_plan(
     resolved_depth_heights_by_index = _resolved_linear_depth_heights(
         linear_track_layout
     )
-    record_feature_lane_geometries = [
-        measure_linear_feature_lanes(
+    def feature_lanes(feature_dict: FeatureDict, include_nominal_lanes: bool) -> LinearFeatureLaneGeometry:
+        return measure_linear_feature_lanes(
             feature_dict,
             cds_height=float(canvas_config.cds_height),
             separate_strands=profile.strandedness,
@@ -2629,10 +2660,11 @@ def _linear_track_plan(
                 float(feature_config.block_stroke_width),
                 float(feature_config.line_stroke_width),
             ),
-            include_nominal_lanes=bool(
-                record_feature_layers[index].underlay_features
-            ),
+            include_nominal_lanes=include_nominal_lanes,
         )
+
+    record_feature_lane_geometries = [
+        feature_lanes(feature_dict, bool(record_feature_layers[index].underlay_features))
         for index, feature_dict in enumerate(record_feature_dicts)
     ]
     return _LinearTrackPlan(
@@ -2649,6 +2681,7 @@ def _linear_track_plan(
         resolved_depth_heights_by_index=resolved_depth_heights_by_index,
         primary_depth_track_index=min(resolved_depth_heights_by_index, default=0),
         record_feature_lane_geometries=record_feature_lane_geometries,
+        nominal_feature_lanes=feature_lanes({}, True),
         # The records share one window and one scale per track.
         record_feature_density=feature_density_record_layers(
             records,
@@ -2678,6 +2711,8 @@ class _LinearDefinitionMetrics:
     # Where a row heading's box starts above the line it is placed on: ``None`` for a heading centred there, a
     # windowed row's heading hangs its list below its name line (``RowWindowHeadingGroup``).
     row_definition_tops: list[float | None]
+    # The rows of whole records that left out captions which would overlap (``_keep_record_captions_apart``).
+    record_captions_left_out: tuple[RecordCaptionsLeftOut, ...] = ()
 
 
 def _row_window_heading_content(
@@ -2968,6 +3003,60 @@ def _linear_horizontal_frame(
     )
 
 
+def _keep_record_captions_apart(
+    canvas_config: LinearCanvasConfigurator,
+    frame: _LinearRowFrame,
+    horizontal: _LinearHorizontalFrame,
+    definitions: _LinearDefinitionMetrics,
+) -> _LinearDefinitionMetrics:
+    """The definitions without the record captions that would overlap in a row of whole records (OV-3521).
+
+    A caption stands centred over its record where ``add_record_definition_group`` draws it; a row keeps its longest
+    record's caption first (``keep_record_captions_apart``), and two kept captions stay half the definition font size
+    apart. A left-out caption has no lines and no size, so every later phase measures and draws the same captions.
+    Runs after the records' final translations, which the captions follow; the horizontal frame reads no caption of a
+    row of several records.
+    """
+
+    local_kinds = definitions.local_definition_line_kinds
+    if local_kinds is None:
+        return definitions
+    placements = frame.horizontal_placements
+    captions = []
+    for index, width in enumerate(definitions.definition_widths):
+        if width <= 0.0:
+            continue
+        placement = place_linear_definition(
+            width=width,
+            column_width=0.0,
+            record_x=placements[index].x + horizontal.final_translations[index][0],
+            gap=max(0.0, float(canvas_config.definition_column_gap)),
+            keep_left=bool(canvas_config.keep_definition_left_aligned),
+            sequence_width=placements[index].sequence_width,
+            column_left=horizontal.definition_column_left,
+        )
+        captions.append(RecordCaption(
+            index, frame.rows_by_record[index], frame.axis_lengths[index], placement.left, placement.right
+        ))
+    font_size = canvas_config.profile.config.objects.definition.linear.font_size.for_length_param(
+        str(canvas_config.length_param)
+    )
+    left_out, rows = keep_record_captions_apart(captions, clearance=0.5 * float(font_size))
+    if not left_out:
+        return definitions
+    return replace(
+        definitions,
+        local_definition_line_kinds=[
+            frozenset() if index in left_out else kinds for index, kinds in enumerate(local_kinds)
+        ],
+        definition_widths=[0.0 if index in left_out else width for index, width in enumerate(definitions.definition_widths)],
+        definition_heights=[
+            0.0 if index in left_out else height for index, height in enumerate(definitions.definition_heights)
+        ],
+        record_captions_left_out=rows,
+    )
+
+
 def _linear_feature_labels(
     canvas_config: LinearCanvasConfigurator,
     configurators: DiagramConfigurators,
@@ -3095,8 +3184,10 @@ def _linear_vertical_plans(
         representative_depth_configs=depth.representative_depth_configs,
         annotation_track_layouts=tracks.annotation_track_layouts,
         definitions=definitions,
+        caption_floors=_row_caption_floors(
+            frame.rows_by_record, tracks.record_feature_lane_geometries, tracks.nominal_feature_lanes
+        ),
         multi_record_enabled=frame.multi_record_enabled,
-        split_row_definitions=frame.multi_record_enabled,
         render_context=tracks.render_context,
         record_transforms=record_inputs.record_transforms,
     )
@@ -4493,6 +4584,7 @@ def _attach_linear_facts(
     ))
     setattr(canvas, "_gbdraw_comparison_record_id_warnings", plan.comparisons.rows.record_id_warnings)
     setattr(canvas, "_gbdraw_comparison_tallies", plan.comparisons.rows.tallies)
+    setattr(canvas, "_gbdraw_record_captions_left_out", plan.definitions.record_captions_left_out)
     setattr(canvas, LINEAR_LABEL_FIT_ATTR, label_fit)
 
 
@@ -4533,6 +4625,7 @@ def assemble_linear_diagram(
     definitions = _linear_definition_metrics(canvas_config, record_inputs, frame)
     depth = _linear_depth_data(canvas_config, configurators, record_inputs, track_inputs, tracks)
     horizontal = _linear_horizontal_frame(canvas_config, record_inputs, alignment, frame, tracks, definitions)
+    definitions = _keep_record_captions_apart(canvas_config, frame, horizontal, definitions)
     feature_labels = _linear_feature_labels(
         canvas_config, configurators, record_inputs, frame, comparisons, tracks, horizontal, feature_label_rows
     )
