@@ -1,4 +1,5 @@
 // @ts-check
+import { cloneJsonData } from './json-clone.js';
 /**
  * What these helpers read of a canonical comparison entry.
  * @typedef {{
@@ -72,3 +73,17 @@ export const mapResourceBackedCanonicalComparison = (
     file: mapFile(comparison.file)
   };
 };
+
+/**
+ * A draft's comparisons (`linearCanonicalComparisons`) as a request's input files or a Session's bindings write them:
+ * a resource-backed entry in its canonical fields with its file as `writeFile` writes it, any other as a copy.
+ * @template {ResourceBackedComparison} C
+ * @template F
+ * @param {readonly C[]} comparisons
+ * @param {(file: C['file']) => Promise<F>} writeFile
+ */
+export const writeDraftComparisons = (comparisons, writeFile) => Promise.all(comparisons.map(async (comparison) => (
+  isResourceBackedCanonicalComparison(comparison)
+    ? { ...mapResourceBackedCanonicalComparison(comparison), file: await writeFile(comparison.file) }
+    : cloneJsonData(comparison)
+)));

@@ -1102,7 +1102,7 @@ const ringKeyHelpers = await import('../../gbdraw/web/js/services/circular-conse
 const ringStackEditor = createCircularTrackSlotEditor({ state });
 const ringSources = createCircularConservationSources({
   state,
-  writeLosatCacheInfo: () => {},
+  editLosatRows: () => {},
   syncCircularConservationSlots: ringStackEditor.syncCircularConservationSlots,
   rekeyCircularConservationRows: ringStackEditor.rekeyCircularConservationRows,
   circularConservationRowsLeaving: ringStackEditor.circularConservationRowsLeaving,
@@ -1112,7 +1112,7 @@ const ringSources = createCircularConservationSources({
 const ringFiles = createCircularConservationComparisonFiles({
   state,
   shownAction: (mode, action) => action(modeDrawing(state, mode)),
-  writeLosatCacheInfo: () => {},
+  editLosatRows: () => {},
   runUndoable: async (_label, fn) => fn(),
   setRingGenomeLists: ringSources.setRingGenomeLists,
   setCircularConservationSourceFiles: ringSources.setCircularConservationSourceFiles,

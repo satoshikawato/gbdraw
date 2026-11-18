@@ -1729,22 +1729,28 @@ test('a ring comparison genome of two files is one read of both, kept for those 
   assert.equal(sent.length, 3);
 });
 
-// #1777 review 9 and round 12 (OV-3203, OV-3204): Save Raw LOSAT TSV reads the shown drawing's results; both
-// panels' "Clear the project's N LOSAT results" count the searches Clear removes, the whole cache (PD-OI-022), a
-// search only a deleted drawing names included (round 15, OV-3211).
-test('Save Raw LOSAT TSV reads the shown drawing\'s results and both Clear buttons count the project\'s searches', () => {
+// #1777 review 9 (OV-3203, OV-3204) and PD-OI-022 scenario revision 2 (Owner 2026-11-13, Q2=B): Save Raw LOSAT TSV
+// and both panels' "Clear N LOSAT results" read the shown drawing's results, one per cache key (`losatResultRows`):
+// Clear takes every one of them from its list and no other drawing's.
+test('Save Raw LOSAT TSV and both Clear buttons read the shown drawing\'s results', () => {
   const html = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   assert.equal(html.includes('losatCacheInfo'), false);
-  // The count is the project's, and the button says so (Owner Q2=A, 2026-11-10): one wording in both panels.
-  assert.equal(html.match(/tn\(clearableLosatResultCount, 'Clear the project\\'s \{count\} LOSAT result', 'Clear the project\\'s \{count\} LOSAT results'\)/g)?.length, 2);
-  assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="!semanticMutationAvailable \|\| \(clearableLosatResultCount === 0\)"/g)?.length, 2);
-  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" :aria-describedby="losatResultRows\.length === 0 \? 'circular-losat-cache-reason' : null"/);
-  // Round 13 (OV-3206): each reason is true. The Circular hint gives Save Raw's reason: dev's hint while the project
-  // has no LOSAT results (Clear is disabled too and points at it), else that the shown drawing has none (Clear is
-  // enabled and points at nothing). The Linear hint gives Clear's reason.
-  assert.ok(html.includes(`<p v-if="losatResultRows.length === 0" id="circular-losat-cache-reason" class="ui-hint">{{ clearableLosatResultCount === 0 ? t('No LOSAT results yet') : t('No LOSAT results in this drawing') }}</p>`));
-  assert.ok(html.includes(`<p v-if="clearableLosatResultCount === 0" id="linear-losat-cache-reason" class="ui-hint">{{ t('No LOSAT results yet') }}</p>`));
-  assert.equal(html.match(/:aria-describedby="clearableLosatResultCount === 0 \? '(circular|linear)-losat-cache-reason' : null"/g)?.length, 2);
+  // The wording is dev's, already translated; the project-wide wording of Q2=A is gone.
+  assert.equal(html.match(/\{\{ losatResultRows\.length === 0 \? t\('Clear LOSAT results'\) : tn\(losatResultRows\.length, 'Clear \{count\} LOSAT result', 'Clear \{count\} LOSAT results'\) \}\}/g)?.length, 2);
+  assert.equal(html.includes('Clear the project'), false);
+  assert.equal(html.includes('clearableLosatResultCount'), false);
+  // OV-3768 (D-259): both Clear buttons are off during a run, as Reset Settings is (OV-2446).
+  assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="Boolean\(sessionOperationAvailability\('not-during-run'\)\) \|\| \(losatResultRows\.length === 0\)"/g)?.length, 2);
+  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" aria-describedby="circular-losat-cache-reason"/);
+  // Each reason is true (round 13, OV-3206): while the shown drawing has no results, Save Raw and Clear are disabled
+  // and point at one hint, dev's while the project has none, else that the shown drawing has none. The hint is always
+  // there and empty while the drawing has results, so a fixed aria-describedby names it (a hidden element it names
+  // still describes); each Clear also names its run's reason (`<run-blocked-reason>`, run-blocked-reasons.test.mjs).
+  for (const panel of ['circular', 'linear']) {
+    assert.ok(html.includes(`<p v-show="losatResultRows.length === 0" id="${panel}-losat-cache-reason" class="ui-hint">{{ losatResultRows.length === 0 ? (projectHasLosatResults ? t('No LOSAT results in this drawing') : t('No LOSAT results yet')) : '' }}</p>`), panel);
+    assert.match(html, new RegExp(`@click="clearLosatCache"[^>]*aria-describedby="${panel}-losat-cache-run-reason ${panel}-losat-cache-reason"`), panel);
+  }
+  assert.equal(html.includes(':aria-describedby="losatResultRows'), false);
 });
 
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
@@ -1907,9 +1913,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   // `readLinearCardRecords`.
   const wholeFileRecords = new Map();
   const unreadCards = new Set();
+  // The other project drawings' LOSAT evidence a Generate may reuse (D-224); the harness keeps no slots.
+  let projectEvidence = [];
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
+    projectLosatEvidence: () => projectEvidence,
+    editLosatRows: artifactSnapshots.editLosatRows,
     recordDisplayRows,
     writeSessionDocumentFile,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
@@ -1945,8 +1955,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   let losatCalls = 0;
   let capturedSequences = [];
   const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  /** The raw keys of the searches LOSAT ran. */
+  const losatJobKeys = [];
   globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
     losatCalls += 1;
+    losatJobKeys.push(...jobs.map((job) => job.cacheKey));
     capturedSequences = Array.from(options.sequences.values());
     return jobs.map((job) => ({
       cacheKey: job.cacheKey,
@@ -1977,46 +1990,40 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerHelperResponses.push({ ok: true, result: { scales: [null, null, null], warnings: [] } });
     workerHelperResponses.push(ringTablesUnchanged);
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
-    // A Circular Generate replaces only its own drawing's cache-info rows (#1777 review 8, OV-3201).
-    const linearId = modeDrawing(state, 'linear').id;
-    const linearRows = ['a->b', 'b->c'].map((edgeKey, index) => ({
-      key: `linear-pair-${index}`, filename: `pair-${index}.tsv`, display: true, edgeKey, drawingId: linearId
-    }));
-    state.losatCacheInfo.value = [...linearRows, { key: 'stale-ring', filename: 'old.tsv', display: true, drawingId: state.activeDrawing().id }];
-    // Each row names a cached search, as Generate and Load write them.
-    state.losatCache.value = new Map([...state.losatCache.value, ...linearRows.map(({ key }) => [key, { kind: 'raw-losat', text: '' }])]);
+    // A Circular Generate lists its drawing's rows (#1777 review 8, OV-3201; D-221): the rows it searched or reused
+    // replace the drawing's earlier ones (a stale ring row goes).
+    const { losatRowsOnePerKey } = await import('../../gbdraw/web/js/services/losat-cache.js');
+    state.losatCacheInfo.value = [{ key: 'stale-ring', filename: 'old.tsv', display: true }];
     assert.deepEqual(
       await runner.runAnalysis(),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
-    assert.deepEqual(state.losatCacheInfo.value.map((row) => [row.key.startsWith('linear-pair') || row.key === 'stale-ring' ? row.key : 'ring', row.drawingId]),
-      [['linear-pair-0', 'linear'], ['linear-pair-1', 'linear'], ...cacheEntries.map(() => ['ring', state.activeDrawing().id])]);
+    assert.deepEqual(state.losatCacheInfo.value.map((row) => (row.key === 'stale-ring' ? row.key : 'ring')),
+      cacheEntries.map(() => 'ring'));
 
-    // #1777 review 9 (OV-3203, OV-3204): Save Raw LOSAT TSV saves the LOSAT results of the drawing a panel shows,
-    // one per cache key, through one reader (`losatResultRowsOf`); Clear counts the searches it removes, the whole
-    // cache (`clearableLosatResultCount`, OV-3211), and clears them all, as on dev (PD-OI-022).
-    const ringKeys = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === 'circular').map(({ key }) => key);
+    // #1777 review 9 (OV-3203, OV-3204), D-223: Save Raw LOSAT TSV saves the LOSAT results of the drawing a panel
+    // shows, one per cache key (`losatRowsOnePerKey`), which Clear LOSAT results counts too.
+    const ringKeys = state.losatCacheInfo.value.map(({ key }) => key);
     assert.equal(ringKeys.length, 3);
     const panelOf = async (drawingId) => {
       installShownDrawing(drawingId);
       downloadedFilenames.splice(0);
-      await runner.downloadLosatCache(state.activeDrawing());
-      return { keys: runner.losatResultRowsOf(state.activeDrawing()).map(({ key }) => key), downloads: [...downloadedFilenames] };
+      await runner.downloadLosatCache();
+      return { keys: losatRowsOnePerKey(state.losatCacheInfo.value).map(({ key }) => key), downloads: [...downloadedFilenames] };
     };
     const ringFiles = (await panelOf('circular')).downloads;
     assert.deepEqual(await panelOf('circular'), { keys: ringKeys, downloads: ringFiles },
-      'the Circular panel says 3 and saves only its 3 rings, not the Linear pairs');
+      'the Circular panel says 3 and saves its 3 rings');
     assert.equal(new Set(ringFiles).size, 3, JSON.stringify(ringFiles));
-    assert.deepEqual((await panelOf(linearId)).keys, linearRows.map(({ key }) => key), 'the Linear panel says 2');
-    assert.equal(runner.clearableLosatResultCount(), 5, 'Clear removes the 2 pairs and the 3 ring searches');
     // Two rings of one genome in one drawing share a cache key: one result (as on dev, where Save writes one entry).
     const generatedRows = state.losatCacheInfo.value;
     state.losatCacheInfo.value = [...generatedRows, { ...generatedRows.at(-1), filename: 'same-genome-again.tsv' }];
     assert.deepEqual(await panelOf('circular'), { keys: ringKeys, downloads: ringFiles }, 'one row per cache key');
     state.losatCacheInfo.value = generatedRows;
-    // A copy of the drawing, Generated: each drawing's panel says 3 and saves its 3 files once.
+    // A copy of the drawing, Generated: its panel says 3 and saves its 3 files once. The harness keeps no artifact
+    // slots, so the state's evidence is the copy's, as a Duplicate shares its source's.
     const copy = createDrawingState('circular-copy', 'circular');
     state.addDrawing(copy, 'Circular copy', 2);
     try {
@@ -2027,18 +2034,34 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       workerResponses.push(response(copyResult, validCatalog(copyResult.name)));
       assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
       assert.equal(losatCalls, 0);
-      assert.equal(state.losatCacheInfo.value.length, 8, 'each drawing keeps its own rows');
-      for (const drawingId of [copy.id, 'circular']) {
-        assert.deepEqual(await panelOf(drawingId), { keys: ringKeys, downloads: ringFiles }, drawingId);
-      }
-      // Two drawings hold the 3 ring searches: Clear still counts 5 searches, not 8 rows.
-      assert.equal(runner.clearableLosatResultCount(), 5);
-      // Clear from the copy's panel clears the project, as on dev: every drawing's rows and every search.
+      assert.equal(state.losatCacheInfo.value.length, 3, 'the copy lists its own rows');
+      assert.deepEqual(await panelOf(copy.id), { keys: ringKeys, downloads: ringFiles }, copy.id);
+      // PD-OI-022 scenario revision 2 (Owner 2026-11-13, Q2=B) and D-224: after Clear in the copy (fresh empty
+      // evidence), its next Generate reuses the searches the first drawing holds now and runs LOSAT for the one no
+      // project drawing holds. The first drawing holds two of the three ring searches (as a Generate with two rings
+      // leaves it).
       const kept = { cache: state.losatCache.value, rows: state.losatCacheInfo.value, derived: state.losatDerivedCache.value };
-      installShownDrawing(copy.id);
-      runner.clearLosatCache();
-      assert.deepEqual([state.losatCacheInfo.value, state.losatCache.value.size, runner.clearableLosatResultCount()], [[], 0, 0]);
-      assert.deepEqual([...await Promise.all(['circular', linearId].map(async (drawingId) => (await panelOf(drawingId)).keys))], [[], []]);
+      const ownKey = ringKeys[2];
+      const { emptyLosatEvidence } = await import('../../gbdraw/web/js/services/losat-cache.js');
+      projectEvidence = [{
+        ...emptyLosatEvidence(),
+        losatCacheInfo: kept.rows.filter(({ key }) => key !== ownKey),
+        losatCache: new Map([...kept.cache].filter(([key]) => key !== ownKey)),
+        // Its Result uses the two (OV-3785: another drawing reuses only those).
+        losatNamedKeys: new Set(ringKeys.filter((key) => key !== ownKey))
+      }];
+      state.losatCacheInfo.value = [];
+      state.losatCache.value = new Map();
+      state.losatDerivedCache.value = new Map();
+      losatJobKeys.splice(0);
+      const againResult = result('lazy-circular-copy-again.svg', 'lazy-circular-copy-again');
+      workerResponses.push(response(againResult, validCatalog(againResult.name)));
+      assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+      assert.deepEqual([losatCalls, losatJobKeys], [1, [ownKey]], 'one LOSAT search: the one no drawing holds');
+      assert.deepEqual(losatRowsOnePerKey(state.losatCacheInfo.value).map(({ key }) => key), ringKeys);
+      assert.equal(projectEvidence[0].losatCache.size, 2, 'the reuse copies nothing into the other drawing');
+      losatCalls = 0;
+      projectEvidence = [];
       state.losatCache.value = kept.cache;
       state.losatCacheInfo.value = kept.rows;
       state.losatDerivedCache.value = kept.derived;
@@ -2145,14 +2168,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     losatCalls = 0;
     setCircularFile(referenceView);
 
-    // OV-3260 (D-200): no Generate and no Undo removes a cached search, so a later Generate reuses a search its last
-    // Generate did not use. Each Generate below sends the rings it draws.
+    // OV-3260, D-221: a Generate keeps its drawing's cached searches (until Clear), so a later Generate reuses a
+    // search its last Generate did not use. Each Generate below sends the rings it draws.
     const circularDrawing = modeDrawing(state, 'circular');
     const ringSeries = [...circularDrawing.circularConservation.series];
-    // The copy above left the project without its rows (the drawing list's Delete holds them): no other row names the
-    // ring searches.
-    state.losatCacheInfo.value = state.losatCacheInfo.value.filter(({ drawingId }) => drawingId !== 'circular-copy');
-    const shownRingKeys = () => state.losatCacheInfo.value.filter(({ drawingId }) => drawingId === circularDrawing.id).map(({ key }) => key);
+    const shownRingKeys = () => state.losatCacheInfo.value.map(({ key }) => key);
     /**
      * A Generate of the reference-a drawing with the comparison rings `indexes`; `scales` is Python's reply for a
      * ring set whose scales were not planned yet (one-record files: LOSAT's own scale). A ring table conversion
@@ -2187,7 +2207,34 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(losatCalls, 1, 'ring d searched');
     await artifactSnapshots.restoreGeneratedArtifactHandle(beforeRingD);
     await generateRings([0, 1, 2]);
-    assert.equal(losatCalls, 1, 'the Undo of the Generate that searched ring d keeps its search');
+    // Flipped (D-224): the Undo puts back the drawing's searches as they were before that Generate, so ring d is
+    // searched again; no History step lends its searches to a Generate.
+    assert.equal(losatCalls, 2, 'the Generate after the Undo of the Generate that searched ring d searches it again');
+    losatCalls = 0;
+    // OV-3785 (D-263), PD-OI-022 scenario revision 2: Clear LOSAT results invalidates every search no other drawing
+    // names. Another drawing (a Duplicate) that removed ring d and Generated again keeps ring d's search for its own
+    // reuse without listing it (D-223); a drawing that Cleared, then Generates the three rings, reuses the two searches
+    // the other drawing lists and runs LOSAT for ring d. The other drawing's evidence comes from a real Generate; the
+    // harness keeps no slots, so Clear is the fresh empty evidence it leaves, as in the copy case above.
+    await generateRings([0, 1]);
+    assert.equal(losatCalls, 0);
+    assert.deepEqual([state.losatCacheInfo.value.length, state.losatCache.value.has(ringDKey)], [2, true],
+      'the other drawing lists two rings and keeps ring d\'s search unlisted');
+    assert.equal(state.losatNamedKeys.value.has(ringDKey), false, 'its Result does not use ring d');
+    const { emptyLosatEvidence: clearedEvidence } = await import('../../gbdraw/web/js/services/losat-cache.js');
+    const otherDrawing = {
+      ...clearedEvidence(), losatCacheInfo: state.losatCacheInfo.value, losatCache: state.losatCache.value,
+      losatNamedKeys: state.losatNamedKeys.value
+    };
+    projectEvidence = [otherDrawing];
+    state.losatCacheInfo.value = [];
+    state.losatCache.value = new Map();
+    state.losatDerivedCache.value = new Map();
+    losatJobKeys.splice(0);
+    await generateRings([0, 1, 2]);
+    assert.deepEqual([losatCalls, losatJobKeys], [1, [ringDKey]],
+      'ring d, which no other drawing names, is searched again after Clear; the two listed rings are reused');
+    projectEvidence = [];
     losatCalls = 0;
 
     // OV-2818: with Show Comparison Rings off, Generate reads no ring file, runs no LOSAT search (the cache is
@@ -2477,14 +2524,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().losat.blastn.task = 'megablast';
     assert.equal(state.errorLog.value?.code, 'UNKNOWN');
     assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
-    // D-200: the rollback puts back the committed rows and keeps every search, the failed run's completed one too
-    // (PD-OI-022 retry): no install removes a cached search.
+    // D-221: the rollback puts back the drawing's committed evidence as it was. Flipped (D-224): the failed run's
+    // completed search is not added to it; the retry below takes it from the run (PD-OI-022), not from the cache.
     assert.deepEqual(
-      Array.from(state.losatCache.value.entries()).slice(0, committedLosatCacheEntries.length),
+      Array.from(state.losatCache.value.entries()),
       committedLosatCacheEntries,
-      'artifact rollback keeps the committed searches'
+      'artifact rollback puts back the committed searches'
     );
-    assert.equal(state.losatCache.value.size, committedLosatCacheEntries.length + 1, 'and the failed run\'s completed search');
     assert.deepEqual(state.losatCacheInfo.value, committedLosatCacheInfo);
     assert.deepEqual(
       globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
@@ -2492,6 +2538,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       'failed candidate provenance must roll back with the committed artifact'
     );
     assert.equal(losatCalls, 2, 'the failed candidate must execute without becoming committed evidence');
+    // Design R2, C5 (a): Clear LOSAT results ends the retry, and its Undo, which gives the drawing back the very
+    // values the Clear replaced, revives it (review 2 M4). Clear and its Undo write the six values as the History
+    // command does (`clearLosatResultsCommand`): empty ones, then the held ones, by reference.
+    const heldEvidence = ['losatCacheInfo', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest',
+      'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'].map((key) => [key, state[key].value]);
+    state.losatCache.value = new Map();
+    state.losatDerivedCache.value = new Map();
+    state.losatCacheInfo.value = [];
+    heldEvidence.forEach(([key, value]) => { state[key].value = value; });
 
     state.activeDrawing().losat.blastn.task = 'blastn';
     workerHelperResponses.push({
@@ -2500,13 +2555,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
-    assert.equal(losatCalls, 2, 'retry after artifact rollback must reuse completed raw searches');
+    assert.equal(losatCalls, 2, 'retry after artifact rollback, and after a Clear and its Undo, must reuse completed raw searches');
 
     const warmCacheInfo = [{
       key: 'warm-cache', edgeKey: 'multi->third', queryUid: 'multi', subjectUid: 'third',
       queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
     }];
     state.losatCacheInfo.value = structuredClone(warmCacheInfo);
+    const warmNamedKeys = new Set(['warm-cache', 'warm-reverse', 'warm-payload']);
+    state.losatNamedKeys.value = warmNamedKeys;
     state.activeDrawing().losatProgram.value = 'blastp';
     state.activeDrawing().losat.blastp.mode = 'pairwise';
     state.activeDrawing().losat.blastp.maxHits = 5;
@@ -2558,6 +2615,46 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
+    // OV-3785: the reused Result uses the same searches and payload, so the drawing still names them and another
+    // drawing's Generate after a Clear reuses them.
+    assert.deepEqual([...state.losatNamedKeys.value], [...warmNamedKeys]);
+
+    // OV-3826: stored protein results are reused whatever LOSAT evidence the drawing holds: a Session the Python API
+    // saved again holds none and draws them with no search. After Clear LOSAT results the drawing's next Generate
+    // searches again (PD-OI-022 Revision #2101: Clear invalidates the drawing's retained evidence): it extracts the
+    // records' proteins, which this stub answers with no reply, so the Generate stops there.
+    const warmDrawingId = state.activeDrawingId.value;
+    const warmEvidence = artifactSnapshots.losatEvidenceOf(warmDrawingId);
+    const warmComparisons = modeDrawing(state, 'linear').files.linearCanonicalComparisons;
+    // The committed Session as the warm Generate's: its stored results (that Generate committed the request it built).
+    const warmCommitted = () => {
+      committedRenderRequest = { ...committedRenderRequest, comparisons: [{ kind: 'precomputedProteinComparison' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }] };
+    };
+    warmCommitted();
+    const { emptyLosatEvidence: noEvidence } = await import('../../gbdraw/web/js/services/losat-cache.js');
+    artifactSnapshots.writeArtifactValues(warmDrawingId, noEvidence());
+    const extractionsSince = (count) => workerMessages.slice(count)
+      .filter(({ type, operation }) => type === 'helper' && operation === 'extractCdsProteinFasta').length;
+    const beforeBareReuse = workerMessages.length;
+    const bareResult = result('lazy-linear-bare.svg', 'lazy-linear-bare');
+    workerResponses.push(response(bareResult, validCatalog(bareResult.name)));
+    assert.deepEqual(await runner.runAnalysis(warmComparisonPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+    assert.deepEqual([losatCalls, extractionsSince(beforeBareReuse)], [2, 0], 'stored results without LOSAT evidence are reused');
+    artifactSnapshots.writeArtifactValues(warmDrawingId, warmEvidence);
+    // Clear LOSAT results, as its History step writes the drawing's values (app-setup.js `clearLosatResultsCommand`).
+    const clearing = artifactSnapshots.losatClearOf(warmDrawingId);
+    assert.deepEqual(clearing.held.comparisons, warmComparisons);
+    artifactSnapshots.writeLosatClear(warmDrawingId, clearing.cleared);
+    assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
+    warmCommitted();
+    const beforeCleared = workerMessages.length;
+    assert.equal((await runner.runAnalysis(warmComparisonPlan)).status, 'error');
+    assert.ok(extractionsSince(beforeCleared) > 0, 'the Generate after Clear searches again (OV-3826)');
+    assert.equal(losatCalls, 2);
+    artifactSnapshots.writeArtifactValues(warmDrawingId, warmEvidence);
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons = warmComparisons;
 
     // OV-1128 B (D-114): a Similarity groups Generate draws, records and keys with the stored
     // paralog links per group. The committed result was drawn with 3, so it is reused and the
@@ -3436,6 +3533,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   state.losatCache.value = dormantRawCache;
   state.losatDerivedCache.value = dormantDerivedCache;
   state.losatCacheInfo.value = [{ key: 'dormant-display-cache', drawingId: 'linear' }];
+  state.losatNamedKeys.value = new Set(['dormant-display-cache', 'dormant-raw']);
   modeDrawing(state, 'linear').files.linearCanonicalComparisons = [{
     kind: 'precomputed',
     edgeKey: 'linear-none-first->linear-none-second',
@@ -3578,6 +3676,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(dormantRawCache.probes, 0);
   assert.equal(dormantDerivedCache.probes, 0);
   assert.deepEqual(state.losatCacheInfo.value, []);
+  // A Generate without LOSAT intent lists no result, so its Result names no search for another drawing (OV-3785).
+  assert.deepEqual([...state.losatNamedKeys.value], []);
   assert.equal(annotationValidationCalls, 1);
   assert.equal(activePrimaryReads, primaryReadsBefore + 3);
   assert.equal(inactiveFileReads, inactiveReadsBefore);

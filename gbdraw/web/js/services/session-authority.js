@@ -495,11 +495,13 @@ const readWebOnlyFields = (document, repairs) => {
  * @param {WebBindingInputSlot} inputSlot The input slot schema 2 holds (`webBindingInputSlot`).
  * @param {string} at Where `webFiles` is in the file.
  * @param {LoadRepair[]} repairs Collects the rows.
+ * @param {unknown} [request] A Session 51 drawing's committed request, unvalidated (`webFileBindingFaults`).
  * @returns {unknown} `webFiles` itself when nothing is dropped.
  */
-const readWebFileBindings = (webFiles, resources, inputSlot, at, repairs) => {
+const readWebFileBindings = (webFiles, resources, inputSlot, at, repairs, request = null) => {
   const faults = webFileBindingFaults(/** @type {UnvalidatedFields<'bindings'>} */ (webFiles),
-    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (resources), inputSlot);
+    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (resources), inputSlot,
+    request);
   if (!faults.length || !isPlainObject(webFiles)) return webFiles;
   if (faults.some(({ at: keys }) => keys === null)) {
     repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}.bindings`, effect: 'dropped' }));
@@ -561,7 +563,7 @@ const readSessionInputs = (document, repairs) => {
     const read = entries.map((drawing, index) => {
       if (!isPlainObject(drawing) || !Object.hasOwn(drawing, 'webFiles')) return drawing;
       const drawingFiles = readWebFileBindings(drawing.webFiles, next.resources,
-        webBindingInputSlot(true, drawing.mode), `${drawingSetPath(index)}webFiles`, repairs);
+        webBindingInputSlot(true, drawing.mode), `${drawingSetPath(index)}webFiles`, repairs, drawing.renderRequest);
       return drawingFiles === drawing.webFiles ? drawing : { ...drawing, webFiles: drawingFiles };
     });
     if (read.some((drawing, index) => drawing !== entries[index])) next = { ...next, drawings: read };
@@ -845,11 +847,14 @@ export const validateCurrentComparisonAuthority = (sessionData, { load = false }
         'Current sessions cannot contain per-record LOSAT filename metadata.'
       );
     });
-  assertNoOwnField(
-    bindings,
-    'linearCanonicalComparisons',
-    'Current sessions cannot bind comparison artifacts outside the committed request.'
-  );
+  // Only a Session 51 drawing binds the comparisons its draft adopted (`webFileBindingFaults` checks them).
+  if (!versionHoldsDrawings(Number(sessionData.version))) {
+    assertNoOwnField(
+      bindings,
+      'linearCanonicalComparisons',
+      'Current sessions cannot bind comparison artifacts outside the committed request.'
+    );
+  }
 
   const hasWebComparisonDraft = Object.prototype.hasOwnProperty.call(
     config,
@@ -1665,7 +1670,8 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   const bindings = validateWebFileBindings(
     /** @type {UnvalidatedFields<'bindings'>} */ (sessionData.webFiles),
     /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (sessionData.resources),
-    webBindingInputSlot(versionHoldsDrawings(Number(version)), /** @type {UnvalidatedFields<'mode'>} */ (sessionData.ui)?.mode)
+    webBindingInputSlot(versionHoldsDrawings(Number(version)), /** @type {UnvalidatedFields<'mode'>} */ (sessionData.ui)?.mode),
+    sessionData.renderRequest
   );
   // A Linear record the Session turns OFF names a bound record card (record-selection D-05).
   const linearRecordsOff = /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config', UnvalidatedFields<'recordsOff'>>>} */ (

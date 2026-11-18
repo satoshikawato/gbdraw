@@ -159,8 +159,8 @@ const describedBy = (control) => control.evaluate((element) => (element.getAttri
 const GENERATING_REASON = 'Generating diagram. Retry after generation finishes.';
 // The Generate's search waits for `window.__RELEASE_SEARCH__()`, then runs, single-threaded (the test server is not
 // cross-origin isolated).
-const holdNextSearch = (page) => page.evaluate(() => {
-  window.__GBDRAW_APP__.clearLosatCache();
+const holdNextSearch = (page) => page.evaluate(async () => {
+  await window.__GBDRAW_APP__.clearLosatCache();
   window.__GBDRAW_APP__.losatExecution.executionMode = 'serial';
   window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
     await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });

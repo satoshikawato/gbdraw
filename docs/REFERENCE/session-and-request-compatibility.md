@@ -1200,6 +1200,17 @@ writes, opens with its LOSATP comparison in the Comparison controls; the pairs
 a Pairwise comparison lists become its Selected pairs.
 In the Web, any derived result read from a Session loads unchanged and is
 recomputed once from the raw search rows when the analysis runs again.
+A Linear drawing that the Web app saved in a Session version 51 also keeps
+which stored LOSATP results its next Generate reuses
+(`webFiles.bindings.linearCanonicalComparisons`): the results its last
+Generate drew, or none after **Clear LOSAT results**, so a cleared drawing
+searches again after the Session is loaded. Each entry names a stored result
+of that drawing's request; any other entry makes Python refuse the file, and
+the Web app's Load leaves it out and lists it in the **Load this file?**
+dialog. A Session the CLI wrote, or the Python API wrote from a request
+(`build_session_document`, `replace_drawing_request`), and a Session saved before,
+has no such list: its drawings reuse the results their request stores. Saving a
+built Session document again as it is keeps the list.
 The Web, the CLI, and the Python API compute the cache key of a derived result
 the same way, from every option that changes the result.
 

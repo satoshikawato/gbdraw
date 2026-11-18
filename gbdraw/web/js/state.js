@@ -227,6 +227,8 @@ const proteinIdentityManifest = ref({
 });
 const legacyProteinRawCandidates = ref({ schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] });
 const legacyProteinDerivedEvidence = ref({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] });
+// The keys of the searches and payload the shown drawing's Result uses (`LosatEvidence.losatNamedKeys`, OV-3785).
+const losatNamedKeys = typedRef(/** @type {ReadonlySet<string>} */ (new Set()));
 /** @import { OrthogroupGroup } from './services/orthogroup-feature-metadata.js' */
 const orthogroups = typedRef(/** @type {OrthogroupGroup[]} */ ([]));
 const collinearGroups = ref([]);
@@ -1329,6 +1331,7 @@ export const state = Object.freeze({
   proteinIdentityManifest,
   legacyProteinRawCandidates,
   legacyProteinDerivedEvidence,
+  losatNamedKeys,
   orthogroups,
   collinearGroups,
   featureOrthogroupIndex,

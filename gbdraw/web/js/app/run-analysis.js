@@ -205,14 +205,11 @@ import {
   webLosatRuntimeRecord,
   isReusableLosatEntry,
   writtenLegacyProteinArtifacts,
-  losatResultRowsOfDrawing,
-  losatRowsOfDrawing,
-  losatRowsOfOtherDrawings,
-  losatRowsWithDrawing,
+  losatRowsOnePerKey,
+  projectLosatSearches,
   CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
 import {
-  LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
   LOSATP_NO_SEARCH_MODE,
@@ -503,7 +500,8 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
-/** @import { DraftRequestFacts, LosatCacheInfoEntry, MultiRecordPosition } from '../services/config.js' */
+/** @import { DraftRequestFacts, MultiRecordPosition } from '../services/config.js' */
+/** @import { EditLosatRows, LosatCacheInfoEntry, LosatEvidence } from '../services/losat-cache.js' */
 /** @import { LiveSearchSets, LiveSettingWrite } from '../services/session-request.js' */
 /** @import { SearchRecordSelector } from '../services/sequence-search.js' */
 /** @import { UndoneTrackHide } from '../services/setting-application.js' */
@@ -1032,12 +1030,60 @@ export const requireLegacyProteinReferencesMigrate = (idMap, ...values) => {
 };
 
 /**
+ * The keys a Generate's Result names (`LosatEvidence.losatNamedKeys`, OV-3785): each search it searched or reused,
+ * every direction and self pair included, and its converted payload (none: '').
+ * @param {readonly { cacheKey: string }[]} pairs @param {string} payloadKey
+ * @returns {ReadonlySet<string>}
+ */
+const namedLosatKeysOf = (pairs, payloadKey) => new Set([...pairs.map(({ cacheKey }) => cacheKey), ...(payloadKey ? [payloadKey] : [])]);
+
+/**
+ * The LOSAT rows and named searches a Generate starts from. A Circular Generate writes both anew (OV-3201): its rings'
+ * searches. A Linear one starts from the committed artifact's (`ownerSet`, History's capture of it; the shown
+ * drawing's for a value the capture does not hold), so a Generate that reuses the committed protein result lists and
+ * names the same ones (OV-3785). The capture holds every key, its value null when the state held none
+ * (`capturedLosatEvidence`); no committed artifact has no owner set.
+ * @param {boolean} circular
+ * @param {{ readonly [K in 'losatCacheInfo' | 'losatNamedKeys']: LosatEvidence[K] | null } | null | undefined} ownerSet
+ * @param {Pick<LosatEvidence, 'losatCacheInfo' | 'losatNamedKeys'>} shown
+ * @returns {[readonly LosatCacheInfoEntry[], ReadonlySet<string>]}
+ */
+const startingLosatRowsOf = (circular, ownerSet, shown) => (circular
+  ? [[], new Set()]
+  : [ownerSet?.losatCacheInfo ?? shown.losatCacheInfo, ownerSet?.losatNamedKeys ?? shown.losatNamedKeys]);
+
+/**
+ * The searches and payloads the drawings of the project hold now, read once, when a Generate's first lookup needs them
+ * (D-224).
+ * @param {() => readonly LosatEvidence[]} projectLosatEvidence
+ */
+const lazyProjectLosatSearches = (projectLosatEvidence) => {
+  /** @type {ReturnType<typeof projectLosatSearches> | null} */
+  let index = null;
+  return () => (index ??= projectLosatSearches(projectLosatEvidence()));
+};
+
+/**
+ * A converted payload another drawing of the project holds now (D-224), taken into this Generate's own payloads.
+ * @param {Map<string, LosatDerivedCacheEntry> | null} cacheMap The Generate's own payloads.
+ * @param {Map<string, LosatDerivedCacheEntry>} project @param {string} key @param {unknown} manifest
+ */
+const reuseLosatDerivedCacheEntry = (cacheMap, project, key, manifest) => {
+  const payload = getLosatDerivedCacheEntry(project, key, manifest);
+  const entry = project.get(key);
+  if (payload && cacheMap && entry) {
+    cacheMap.set(key, entry);
+    pruneLosatDerivedCache(cacheMap);
+  }
+  return payload;
+};
+
+/**
  * @param {Map<string, LosatDerivedCacheEntry> | null | undefined} cacheMap
  * @param {string} key
- * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown, rawKeys: readonly string[] }} entry
- *   `rawKeys`: the raw searches it is converted from; an Undo or a Redo puts it back with them (`losatEvidenceAfterStep`).
+ * @param {{ mode: unknown, payload: Record<string, unknown> | null | undefined, manifest: unknown }} entry
  */
-const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest, rawKeys }) => {
+const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) => {
   if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
   }
@@ -1047,8 +1093,7 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest, raw
     idEncoding: 'runtime-handle-v1',
     key,
     mode: String(mode || ''),
-    payload: stripRuntimeCacheStats(payload),
-    rawKeys
+    payload: stripRuntimeCacheStats(payload)
   };
   if (
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
@@ -1758,14 +1803,15 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
  * @property {(drawing: DrawingState) => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
  *   The artifact owners' values, with the color rules and queued palette of `drawing`.
- * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void, commit: boolean }) => void} installGeneratedArtifactOwnerSet
- *   Installs a Generate's owner set (`commit`) as the displayed artifact, its color rules and queued palette into `drawing`.
+ * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: SvgResultEntry[]) => void }) => void} installGeneratedArtifactOwnerSet
+ *   Installs a Generate's owner set as the displayed artifact, its color rules and queued palette into `drawing`.
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: SvgResultEntry[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
- * @property {() => void} [emptyKeptProteinIdentityManifests] Empties the protein identity manifest each drawing not
- *   shown keeps in its artifact slot (Clear LOSAT results, D-197), and counts the Clear for the drawings History holds
- *   out of the store, which come back emptied (OV-3274).
+ * @property {EditLosatRows} editLosatRows The one writer of a drawing's LOSAT result rows (D-221): a downloaded
+ *   result's file name.
+ * @property {() => readonly LosatEvidence[]} [projectLosatEvidence] The LOSAT evidence of every drawing of the
+ *   project (D-221), whose searches a Generate may reuse (D-224).
  * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
  * @property {((label: string, execute: (before: HistoryArtifactHandle | null) => any, options?: HistoryStepOptions<Record<string, any>>) => Promise<Record<string, any>>) | null} [runGeneratedArtifactReplacement]
  *   History's undoable replacement of the generated artifact.
@@ -1817,36 +1863,6 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {ShowNotice} [showNotice] The root's notice banner.
  */
 
-/**
- * The LOSAT result rows of each drawing, over the app's cache-info rows and raw cache: their readers and the swap of a
- * drawing's rows as it leaves the drawing store or comes back.
- * @param {Pick<WebState, 'losatCacheInfo' | 'losatCache'>} refs
- */
-const losatResultRowsAccess = ({ losatCacheInfo, losatCache }) => {
-  /** @returns {LosatCacheInfoEntry[]} */
-  const cacheInfoRows = () => (Array.isArray(losatCacheInfo.value) ? losatCacheInfo.value : []);
-  return {
-    cacheInfoRows,
-    /**
-     * The LOSAT results of a drawing, the one reader of its results (#1777 review 9, OV-3203, OV-3204): **Save Raw
-     * LOSAT TSV** and Run Info read its rows, one per cache key, never another drawing's.
-     * @param {DrawingState} drawing
-     */
-    losatResultRowsOf: (drawing) => losatResultRowsOfDrawing(cacheInfoRows(), drawing.id),
-    /** A drawing's rows as written, which a Duplicate copies (OV-3205). @param {DrawingId} drawingId */
-    losatRowsOf: (drawingId) => losatRowsOfDrawing(cacheInfoRows(), drawingId),
-    /** The count of **Clear LOSAT results**: the searches it removes, the whole cache, one per key (PD-OI-022: Clear Cache
-     * invalidates retained evidence), a search only a deleted drawing's rows name included (OV-3211). */
-    clearableLosatResultCount: () => losatCache.value.size,
-    /** A drawing's rows come and go with it (OV-3205, OV-3209); a row whose search a Clear removed meanwhile stays out. @param {DrawingId} drawingId @param {readonly LosatCacheInfoEntry[]} drawingRows */
-    swapLosatResultRows: (drawingId, drawingRows) => {
-      const { rows, held } = losatRowsWithDrawing(cacheInfoRows(), drawingId, drawingRows.filter((row) => losatCache.value.has(row.key)));
-      losatCacheInfo.value = rows;
-      return held;
-    }
-  };
-};
-
 /** @type {NoticeRequest} */
 const NO_REPRODUCIBILITY_FILES_NOTICE = Object.freeze({ text: () => t('The latest run has no reproducibility files to download.') });
 
@@ -1868,7 +1884,8 @@ export const createRunAnalysis = ({
   installGeneratedArtifactOwnerSet,
   installRedrawnArtifact,
   restoreGeneratedArtifactHandle,
-  emptyKeptProteinIdentityManifests = () => {},
+  projectLosatEvidence = () => [],
+  editLosatRows,
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
   previewRuntime = null,
@@ -1937,6 +1954,7 @@ export const createRunAnalysis = ({
     proteinIdentityManifest,
     legacyProteinRawCandidates,
     legacyProteinDerivedEvidence,
+    losatNamedKeys,
     orthogroups,
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
@@ -2150,7 +2168,6 @@ export const createRunAnalysis = ({
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
         drawing,
         selectedResultIndex,
-        commit: true,
         installResults(nextResults) {
           results.value = nextResults;
         }
@@ -2318,19 +2335,25 @@ export const createRunAnalysis = ({
   };
 
   // Raw searches finish before the artifact transaction: keep the latest search's entries for retry, Result unchanged.
-  // Clear, Session load or a History step that adds entries ends the retry; one that adds none keeps it (D-200).
-  /** @type {{ owner: any, entries: Map<string, any> } | null} */
+  // The retry is its drawing's while that drawing's searches are the Map it started from (D-221): its Generate's
+  // commit, Clear, Session load or a History step that changes them ends it; a step that changes none keeps it (D-200).
+  /** @type {{ drawingId: DrawingId, owner: unknown, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
   /**
+   * A search a Generate may reuse: its drawing's own, one another drawing of the project holds now (`project`, D-224),
+   * or its drawing's retry.
    * @param {Map<string, RawLosatCacheEntry> | null | undefined} cacheMap
    * @param {string} cacheKey
    * @param {LosatCacheMetadata} metadata
-   * @param {Record<string, any> | null} [manifest]
+   * @param {Record<string, any> | null} manifest
+   * @param {Map<string, RawLosatCacheEntry>} project
    */
-  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
-    if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
+  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest, project) => {
+    const retry = completedLosatSearch?.drawingId === state.activeDrawingId.value && completedLosatSearch.owner === losatCache.value
+      ? completedLosatSearch.entries : null;
     return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest)
-      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest);
+      || getRawLosatCacheEntry(project, cacheKey, metadata, manifest)
+      || getRawLosatCacheEntry(retry, cacheKey, metadata, manifest);
   };
   /**
    * @param {Map<string, RawLosatCacheEntry>} cacheMap
@@ -2338,6 +2361,7 @@ export const createRunAnalysis = ({
    */
   const retainCompletedLosatSearch = (cacheMap, pairs) => {
     completedLosatSearch = {
+      drawingId: state.activeDrawingId.value,
       owner: losatCache.value,
       entries: new Map(pairs.map(({ cacheKey }) => [cacheKey, cacheMap.get(cacheKey)]))
     };
@@ -2412,9 +2436,10 @@ export const createRunAnalysis = ({
     return (Array.isArray(edges) ? edges : []).find((edge) => edge.edgeKey === normalizedKey) || null;
   };
 
-  /** @param {DrawingState} drawing @param {string | number} edgeKey An edge key, or the index, among the drawing's rows (OV-3210). */
-  const getLosatCacheInfoEntry = (drawing, edgeKey) => {
-    const entries = losatRowsOfDrawing(cacheInfoRows(), drawing.id);
+  /** @param {string | number} edgeKey An edge key, or the index, among the shown drawing's rows (OV-3210). */
+  const getLosatCacheInfoEntry = (edgeKey) => {
+    // The shown drawing's rows (D-221): Linear's per-pair readers find a pair's row by its edge (OV-3210).
+    const entries = /** @type {LosatCacheInfoEntry[]} */ (losatCacheInfo.value);
     // `Number.isInteger` is true only for a number.
     if (Number.isInteger(edgeKey)) return entries[/** @type {number} */ (edgeKey)] || null;
     const normalizedKey = String(edgeKey || '').trim();
@@ -2461,7 +2486,7 @@ export const createRunAnalysis = ({
    * @param {string} edgeKey
    */
   const losatPairParts = (drawing, edgeKey) => {
-    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(drawing, edgeKey);
+    const edge = getResolvedLinearEdge(drawing, edgeKey) || getLosatCacheInfoEntry(edgeKey);
     const places = catalogUnitPlaces(featureCatalog.value);
     const query = places.get(String(edge?.queryUid ?? ''));
     const subject = places.get(String(edge?.subjectUid ?? ''));
@@ -2520,7 +2545,7 @@ export const createRunAnalysis = ({
    */
   const downloadLosatPair = async (drawing, edgeKey, customName) => {
     if (drawing.mode !== 'linear') return;
-    const entry = getLosatCacheInfoEntry(drawing, edgeKey);
+    const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
@@ -2539,9 +2564,7 @@ export const createRunAnalysis = ({
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     if (!state.sessionOperationAvailability?.()) {
-      losatCacheInfo.value = losatCacheInfo.value.map((/** @type {LosatCacheInfoEntry} */ candidate) => (
-        candidate === entry ? { ...candidate, filename } : candidate
-      ));
+      editLosatRows(drawing.id, (rows) => rows.map((candidate) => (candidate === entry ? { ...candidate, filename } : candidate)));
     }
     const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
@@ -2920,6 +2943,7 @@ export const createRunAnalysis = ({
     /** @type {AbortSignal | null} */
     let generationAbortSignal = null;
     const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle(drawing);
+    const projectSearches = lazyProjectLosatSearches(projectLosatEvidence);
     /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedGeneratedArtifactCandidate = null;
     /** @type {ReadyReceipt | null} */
@@ -2962,8 +2986,8 @@ export const createRunAnalysis = ({
     // The identities of the committed request's records, kept with it when a Generate committed it.
     const previousRecordIdentities = previousRequestRecords.length > 0
       ? committedRecordIdentities.get(getCommittedCanonicalSession?.()?.resources ?? {}) ?? null : null;
-    let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
-      ?? losatCacheInfo.value;
+    let [workingLosatCacheInfo, workingLosatNamedKeys] = startingLosatRowsOf(mode.value === 'circular',
+      committedArtifactHandle?.ownerSet, { losatCacheInfo: losatCacheInfo.value, losatNamedKeys: losatNamedKeys.value });
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
@@ -3113,7 +3137,11 @@ export const createRunAnalysis = ({
     let legacyPromotionCommitted = false;
     /** @type {((candidateOwnerSet: Record<string, any>) => Record<string, any>) | null} */
     let commitProteinMigration = null;
-    /** @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null } | null} */
+    /**
+     * This Generate's LOSAT evidence, committed with its Result: `namedKeys` are the searches and payload it uses.
+     * @type {{ cacheInfo: LosatCacheInfoEntry[], cacheMap: LosatEvidence['losatCache'],
+     *   derivedCacheMap: LosatEvidence['losatDerivedCache'] | null, namedKeys: ReadonlySet<string> } | null}
+     */
     let pendingLosatCacheCommit = null;
 
     processingStatus.value = t('Preparing input files...');
@@ -3439,8 +3467,6 @@ export const createRunAnalysis = ({
         const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
           : 'losat';
-        // A Circular Generate replaces only its own drawing's cache-info rows (OV-3201).
-        workingLosatCacheInfo = losatRowsOfOtherDrawings(workingLosatCacheInfo, drawing.id);
         const circularConservationSourceFiles = sourceMode === 'upload'
           ? normalizeFileList(drawing.files.c_conservation_blasts)
           : ringGenomeFileLists(drawing.files.c_conservation_fastas).filter((files) => files.length > 0);
@@ -3531,8 +3557,8 @@ export const createRunAnalysis = ({
                 filename: fallbackName
               };
               losatPairs.push(pair);
-              cacheInfo.push({ key: cacheKey, filename: fallbackName, display: true, drawingId: drawing.id });
-              const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+              cacheInfo.push({ key: cacheKey, filename: fallbackName, display: true });
+              const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata, null, projectSearches().searches);
               const hasCachedText = Boolean(cached);
               if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
               if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
@@ -3619,7 +3645,7 @@ export const createRunAnalysis = ({
                 text: blastText
               });
             }
-            pendingLosatCacheCommit = { cacheInfo: [...workingLosatCacheInfo, ...cacheInfo], cacheMap, derivedCacheMap: null };
+            pendingLosatCacheCommit = { cacheInfo, cacheMap, derivedCacheMap: null, namedKeys: namedLosatKeysOf(losatPairs, '') };
             return resolved;
           };
 
@@ -3902,6 +3928,11 @@ export const createRunAnalysis = ({
         const derivedCacheMap = useProteinBlastp
           ? new Map(losatDerivedCache.value || [])
           : null;
+        // Every search this Generate searches or reuses, and the payload it converts or reuses: its Result names them.
+        const losatPairs = [];
+        const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
+        // The key of the derived payload these raw results convert to (similarity groups and Collinear).
+        let derivedCacheKey = '';
         const losatTiming = useLosat
           ? {
               fastaExtractionMs: 0,
@@ -3952,9 +3983,7 @@ export const createRunAnalysis = ({
             })
           : null;
 
-        if (!hasLosatIntent) {
-          workingLosatCacheInfo = [];
-        }
+        if (!hasLosatIntent) [workingLosatCacheInfo, workingLosatNamedKeys] = [[], new Set()];
 
         /** @type {string[]} */
         let proteinRecordInstanceKeys = [];
@@ -4422,7 +4451,6 @@ export const createRunAnalysis = ({
         // `losatTiming` is built exactly when `useLosat` holds; the second test narrows it for this block.
         if (useLosat && losatTiming) {
           setProcessingStatus(t('Preparing LOSAT jobs...'));
-          const losatPairs = [];
           /** @type {LosatLinearJob[]} */
           const losatJobs = [];
           const pendingJobKeys = new Set();
@@ -4468,7 +4496,6 @@ export const createRunAnalysis = ({
           const pairNumbers = numberLosatDisplayPairs(
             preparedJobs.map(({ spec }) => spec), unitResolution.edges, gridPairs
           );
-          const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
           // The converter settings. The derived key and the converter read these same values.
           const derivedSettings = {
             mode: blastpMode,
@@ -4496,8 +4523,6 @@ export const createRunAnalysis = ({
               .sort((left, right) => left - right);
           /** @type {readonly string[] | null} */
           let proteinCacheKeys = null;
-          // The key of the derived payload these raw results convert to (similarity groups and Collinear).
-          let derivedCacheKey = '';
           if (useProteinBlastp && preparedJobs.length > 0) {
             throwIfGenerationCanceled();
             const derivedRecords = [];
@@ -4569,7 +4594,8 @@ export const createRunAnalysis = ({
               cacheMap,
               cacheKey,
               cacheMetadata,
-              workingProteinIdentityManifest
+              workingProteinIdentityManifest,
+              projectSearches().searches
             );
             if (useProteinBlastp && !cacheMetadata.searchContext) {
               cached = await tryPromoteLegacyProteinEntry({
@@ -4611,7 +4637,6 @@ export const createRunAnalysis = ({
                 key: cacheKey,
                 filename: pair.filename,
                 display: true,
-                drawingId: drawing.id,
                 edgeKey: spec.edgeKey,
                 ordinal: spec.ordinal,
                 queryUid: resolvedEdge.queryUid,
@@ -4812,6 +4837,7 @@ export const createRunAnalysis = ({
             if (useDerivedProteinPayloadCache) {
               convertedPayload = losatTiming.cacheMisses === 0
                 ? getLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, workingProteinIdentityManifest)
+                  ?? reuseLosatDerivedCacheEntry(derivedCacheMap, projectSearches().payloads, derivedCacheKey, workingProteinIdentityManifest)
                 : null;
               if (convertedPayload) {
                 convertedPayload = {
@@ -4872,7 +4898,7 @@ export const createRunAnalysis = ({
               }
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
-                  mode: blastpMode, payload: convertedPayload, manifest: workingProteinIdentityManifest, rawKeys: proteinCacheKeys ?? []
+                  mode: blastpMode, payload: convertedPayload, manifest: workingProteinIdentityManifest
                 });
               }
             }
@@ -5036,7 +5062,8 @@ export const createRunAnalysis = ({
               (left, right) => Number(left?.ordinal) - Number(right?.ordinal)
             ),
             cacheMap,
-            derivedCacheMap
+            derivedCacheMap,
+            namedKeys: namedLosatKeysOf(losatPairs, useDerivedProteinPayloadCache ? derivedCacheKey : '')
           };
           recordSessionLifecycleEvent('losat-cache-preparation-end', {
             cacheHits: Number(losatTiming?.cacheHits || 0),
@@ -5313,7 +5340,7 @@ export const createRunAnalysis = ({
           losatComparisons: mode.value === 'linear'
             ? requestComparisonPlan?.hasLosatIntent === true : searchedRingTables.length > 0,
           losatRuntimes: summarizeLosatRuntimes(
-            losatResultRowsOfDrawing(pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo, drawing.id),
+            losatRowsOnePerKey(pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo),
             pendingLosatCacheCommit?.cacheMap || losatCache.value
           ),
           featureIdentityNotices: generationMetadata.featureIdentityNotices
@@ -5378,6 +5405,7 @@ export const createRunAnalysis = ({
         losatDerivedCache:
           pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
         losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+        losatNamedKeys: pendingLosatCacheCommit?.namedKeys || workingLosatNamedKeys,
         lastRunInfo: candidateRunInfo,
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
@@ -6476,13 +6504,9 @@ export const createRunAnalysis = ({
     }
   };
 
-  const {
-    cacheInfoRows, losatResultRowsOf, losatRowsOf, clearableLosatResultCount, swapLosatResultRows
-  } = losatResultRowsAccess({ losatCacheInfo, losatCache });
-
-  /** @param {DrawingState} drawing */
-  const downloadLosatCache = async (drawing) => {
-    const rows = losatResultRowsOf(drawing);
+  // **Save Raw LOSAT TSV** saves the shown drawing's LOSAT results, one per cache key (OV-3203, OV-3204).
+  const downloadLosatCache = async () => {
+    const rows = losatRowsOnePerKey(/** @type {LosatCacheInfoEntry[]} */ (losatCacheInfo.value));
     if (rows.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
@@ -6515,19 +6539,6 @@ export const createRunAnalysis = ({
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
-  };
-
-  const clearLosatCache = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    completedLosatSearch = null;
-    losatCache.value = new Map();
-    losatDerivedCache.value = new Map();
-    proteinIdentityManifest.value = emptyProteinIdentityManifest();
-    emptyKeptProteinIdentityManifests();
-    legacyProteinRawCandidates.value = { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries: [] };
-    legacyProteinDerivedEvidence.value = { schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] };
-    losatCacheInfo.value = [];
   };
 
   // A run that is not a Generate (a Sequence search, PD-OI-117; Find in other files, PD-OI-123) under the
@@ -6607,11 +6618,8 @@ export const createRunAnalysis = ({
     readDrawingRecordIdentities,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
-    losatResultRowsOf,
-    clearableLosatResultCount, swapLosatResultRows, losatRowsOf,
     downloadLosatCache,
     downloadLosatPair,
-    clearLosatCache,
     getLosatPairDefaultName
   };
 };

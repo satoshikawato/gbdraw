@@ -12,11 +12,13 @@
  * @param {{ endReviewOutside: (drawingIds: readonly string[]) => void }} [alignment] The Similarity alignment owner's
  *   port; by default no review is open.
  * @param {{ keepDrawingSearch?: (drawing: any) => void, returnToDrawingSearch?: (drawing: any) => void,
- *   drawingCopyFollowers?: readonly ((drawing: any, copy: any) => void)[] }} [ports] The Preview search owner's
- *   port, by default no search typed, and the followers of a drawing's same-ID copy, by default the CLI options' own.
+ *   drawingCopyFollowers?: readonly ((drawing: any, copy: any) => void)[],
+ *   slots?: ReturnType<typeof import('../../../gbdraw/web/js/services/artifact-slot.js').createArtifactSlotStore> }} [ports]
+ *   The Preview search owner's port, by default no search typed; the followers of a drawing's same-ID copy, by default
+ *   the CLI options' own; and the slot store of the drawings not shown, by default a new, empty one.
  */
 export const sessionRollbackPort = async (
-  state, history = null, alignment = { endReviewOutside: () => {} }, ports = {}
+  state, history = null, alignment = { endReviewOutside: () => {} }, { slots = null, ...ports } = {}
 ) => {
   const { createSessionImportRollbackState } = await import('../../../gbdraw/web/js/app/app-setup.js');
   const { followDrawingCopyCliOptions } = await import('../../../gbdraw/web/js/services/config.js');
@@ -28,7 +30,7 @@ export const sessionRollbackPort = async (
   });
   const historyMembers = Object.freeze({ histories: [] });
   return createSessionImportRollbackState({
-    artifactSlots: createArtifactSlotStore(),
+    artifactSlots: slots ?? createArtifactSlotStore(),
     captureHistoryMembers: () => (history ? history.captureMembers() : /** @type {any} */ (historyMembers)),
     replaceHistoryMembers: (drawingIds) => { history?.replaceMembers(drawingIds); },
     restoreHistoryMembers: (members) => { history?.restoreMembers(members); },

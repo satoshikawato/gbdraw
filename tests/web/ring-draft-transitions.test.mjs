@@ -50,6 +50,11 @@ const { readFileText } = await import('../../gbdraw/web/js/services/file-content
 const { ringIdentityDefects } = await import('./helpers/ring-identity.mjs');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
+// Each drawing's LOSAT result rows, as the History snapshot service keeps them (D-221): an edit reaches one drawing's.
+/** @type {Map<string, readonly object[]>} */
+const losatRowsByDrawing = new Map();
+/** @type {import('../../gbdraw/web/js/services/losat-cache.js').EditLosatRows} */
+const editLosatRows = (drawingId, edit) => { losatRowsByDrawing.set(drawingId, edit(losatRowsByDrawing.get(drawingId) ?? [])); };
 
 const circular = () => modeDrawing(state, 'circular');
 sessionConfig.installShownDrawing('circular');
@@ -59,20 +64,20 @@ const askingStackPorts = () => ({
 });
 const editor = createCircularTrackSlotEditor({ state });
 const sources = createCircularConservationSources({
-  state, writeLosatCacheInfo: sessionConfig.writeLosatCacheInfo, askingStackPorts,
+  state, editLosatRows, askingStackPorts,
   syncCircularConservationSlots: (drawing) => editor.syncCircularConservationSlots(drawing),
   rekeyCircularConservationRows: (drawing, keyChanges) => editor.rekeyCircularConservationRows(drawing, keyChanges),
   circularConservationRowsLeaving: (drawing, entries, keyChanges) => editor.circularConservationRowsLeaving(drawing, entries, keyChanges)
 });
 const panel = createCircularConservationSeriesPanel({
-  state, shownAction, shownDrawingOfMode: (mode) => modeDrawing(state, mode), writeLosatCacheInfo: sessionConfig.writeLosatCacheInfo,
+  state, shownAction, shownDrawingOfMode: (mode) => modeDrawing(state, mode), editLosatRows,
   circularConservationFastaInput: { value: null },
   reconcileCircularConservation: sources.reconcileCircularConservation,
   refreshCircularConservationSlots: sources.refreshCircularConservationSlots,
   askRingSourceRemoval: sources.askRingSourceRemoval
 });
 const files = createCircularConservationComparisonFiles({
-  state, shownAction, writeLosatCacheInfo: sessionConfig.writeLosatCacheInfo, runUndoable: async () => undefined,
+  state, shownAction, editLosatRows, runUndoable: async () => undefined,
   setRingGenomeLists: sources.setRingGenomeLists,
   setCircularConservationSourceFiles: sources.setCircularConservationSourceFiles,
   reconcileCircularConservation: sources.reconcileCircularConservation,
@@ -312,17 +317,20 @@ test('a ring edit clears only its drawing\'s LOSAT cache-info rows (#1777 review
   const linear = modeDrawing(state, 'linear');
   clearRings(drawing);
   placeReference(drawing);
-  const ringRow = { key: 'ring-key', filename: 'g_AAAAA.circular_conservation.losatn.tsv', display: true, drawingId: drawing.id };
-  const linearRow = { key: 'pair-key', filename: 'pair.tsv', display: true, edgeKey: 'edge-1', drawingId: linear.id };
+  const ringRow = { key: 'ring-key', filename: 'g_AAAAA.circular_conservation.losatn.tsv', display: true };
+  const linearRow = { key: 'pair-key', filename: 'pair.tsv', display: true, edgeKey: 'edge-1' };
+  const linearRows = [linearRow];
   for (const [name, edit] of /** @type {const} */ ([
     ['Add Seq', () => addSeq(genome(false, 'AAAAA'))],
     ['a ring row\'s Add file', () => files.addRingRowFiles(0, /** @type {any} */ ({ target: { files: [textFile('plasmid.fasta', '>p\nACACA\n')], value: 'x' } }))],
     ['Remove series', () => files.removeCircularConservationSource(0)]
   ])) {
-    state.losatCacheInfo.value = [ringRow, linearRow];
+    losatRowsByDrawing.set(drawing.id, [ringRow]);
+    losatRowsByDrawing.set(linear.id, linearRows);
     await edit();
-    assert.deepEqual(state.losatCacheInfo.value, [linearRow], `${name}: the Linear drawing's row stays`);
+    assert.deepEqual(losatRowsByDrawing.get(drawing.id), [], `${name}: the ring drawing's rows go`);
+    assert.equal(losatRowsByDrawing.get(linear.id), linearRows, `${name}: the Linear drawing's rows stay`);
   }
-  state.losatCacheInfo.value = [];
+  losatRowsByDrawing.clear();
   clearRings(drawing);
 });

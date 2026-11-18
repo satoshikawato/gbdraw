@@ -11,8 +11,8 @@ import {
 import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.generated.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { LOSAT_WASM_BUILD } from './losat-build.generated.js';
-/** @import { CardRecordFacts } from './linear-card-windows.js' */
 /** @import { DrawingId } from './drawing-view.js' */
+/** @import { CardRecordFacts } from './linear-card-windows.js' */
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -72,9 +72,9 @@ export { CIRCULAR_CONSERVATION_FLOW };
 export const losatEntryDrawingKind = ({ flow }) => (flow === CIRCULAR_CONSERVATION_FLOW ? 'circular' : 'linear');
 
 /**
- * Cache-info rows one per raw cache key, each its key's first row: rows that share a key (two rings of one genome,
- * two drawings that hold one entry) name one LOSAT result, with the first row's file name, as the CLI raw cache keeps
- * one file per key. Save writes one entry for each, and a drawing's results show each once (`losatResultRowsOfDrawing`).
+ * Cache-info rows one per raw cache key, each its key's first row: rows that share a key (two rings of one genome)
+ * name one LOSAT result, with the first row's file name, as the CLI raw cache keeps one file per key. Save writes one
+ * entry for each, and a drawing's results show each once.
  * @template {{ key: unknown }} Row
  * @param {readonly Row[]} rows
  * @returns {Row[]}
@@ -89,86 +89,91 @@ export const losatRowsOnePerKey = (rows) => {
 };
 
 /**
- * A drawing's cache-info rows, as its Generate or a Load wrote them: Linear's per-pair readers find a pair's row among
- * them by its edge (OV-3210; two pairs of identical sequences share one key), and a Duplicate copies them (OV-3205).
- * @template {{ drawingId: DrawingId }} Row
- * @param {readonly Row[]} rows @param {DrawingId} drawingId
- * @returns {Row[]}
+ * One row of a drawing's `losatCacheInfo`, the pairs its Generate keeps cache entries for: a circular conservation
+ * comparison carries `key`, `filename` and `display`, a linear comparison also its edge.
+ * @typedef {object} LosatCacheInfoEntry
+ * @property {string} key The raw cache key: Generate's, or the saved one a Session load reads (text, not empty).
+ * @property {string} filename A file name: Generate's, or the saved one a Session load reads (a default when it is
+ *   no text or empty).
+ * @property {boolean} display
+ * @property {string} [edgeKey]
+ * @property {number} [ordinal]
+ * @property {string} [queryUid]
+ * @property {string} [subjectUid]
+ * @property {number} [queryIndex]
+ * @property {number} [subjectIndex]
  */
-export const losatRowsOfDrawing = (rows, drawingId) => rows.filter((row) => row.drawingId === drawingId);
 
 /**
- * The LOSAT results of a drawing: its cache-info rows, one per raw key. **Save Raw LOSAT TSV** saves them and Run
- * Info lists their runtimes (OV-3203, OV-3204).
- * @template {{ key: unknown, drawingId: DrawingId }} Row
- * @param {readonly Row[]} rows @param {DrawingId} drawingId
- * @returns {Row[]}
+ * A drawing's LOSAT evidence (D-221): artifact values of one drawing, as its Results are. The shown drawing's are in
+ * the state, another's in its artifact slot; History steps and a drawing History holds out of the project keep them
+ * by reference. A search exists for a drawing exactly while its `losatCache` holds it; no operation counts holders.
+ * Writers make new arrays, Maps and Sets, never change one in place (a Duplicate and History share them).
+ * @typedef {object} LosatEvidence
+ * @property {readonly LosatCacheInfoEntry[]} losatCacheInfo The listed results; every key is in `losatCache`.
+ * @property {ReadonlyMap<string, RawLosatCacheEntry>} losatCache Every raw search the drawing used or keeps for reuse.
+ * @property {ReadonlyMap<string, LosatDerivedCacheEntry>} losatDerivedCache The converted protein payloads (at most
+ *   `LOSAT_DERIVED_CACHE_LIMIT`).
+ * @property {ProteinIdentityManifest} proteinIdentityManifest The record instances its protein searches resolve in (D-197).
+ * @property {LegacyProteinCandidateEnvelope} legacyProteinRawCandidates The older Session's protein candidates Load gave it.
+ * @property {{ schema: number, entries: unknown[] }} legacyProteinDerivedEvidence
+ * @property {ReadonlySet<string>} losatNamedKeys The keys of the searches and the converted payload its current Result
+ *   uses (OV-3785): every search Generate searched or reused for it (rows, reverse directions, self pairs and pairs
+ *   without a row alike) and its payload, or those Load gave it; Clear empties it. Another drawing's Generate reuses
+ *   only these (`projectLosatSearches`); the rest of `losatCache` and `losatDerivedCache` serves this drawing alone.
+ *   Not saved: Load derives it.
  */
-export const losatResultRowsOfDrawing = (rows, drawingId) => losatRowsOnePerKey(losatRowsOfDrawing(rows, drawingId));
-
 /**
- * The cache-info rows of the other drawings: what a drawing's Generate or ring edit leaves.
- * @template {{ drawingId: DrawingId }} Row
- * @param {readonly Row[]} rows @param {DrawingId} drawingId
- * @returns {Row[]}
+ * @typedef {(drawingId: DrawingId, edit: (rows: readonly LosatCacheInfoEntry[]) => LosatCacheInfoEntry[]) => void} EditLosatRows
+ *   Rewrites one drawing's LOSAT result rows, and only its (D-221, OV-3470): a ring edit, a Linear comparison edit.
  */
-export const losatRowsOfOtherDrawings = (rows, drawingId) => rows.filter((row) => row.drawingId !== drawingId);
-
+/** The keys of a drawing's LOSAT evidence, as artifact slot keys. */
+export const LOSAT_EVIDENCE_KEYS = /** @type {const} */ ([
+  'losatCacheInfo', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest', 'legacyProteinRawCandidates',
+  'legacyProteinDerivedEvidence', 'losatNamedKeys'
+]);
 /**
- * The cache-info rows with a drawing's rows replaced by `drawingRows` under its ID, and the rows it held: a drawing
- * that leaves the store (Delete, the Undo of New or Duplicate) hands its rows over, and one that comes back or is
- * made takes its own (a copy its source's), so a drawing's rows are in the state only while it is (OV-3205, OV-3209).
- * The cached searches are shared by key, so none is copied or dropped.
- * @template {{ drawingId: DrawingId }} Row
- * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} drawingRows
- * @returns {{ rows: Row[], held: Row[] }}
+ * Empty LOSAT evidence of each key, new objects every call: a shared empty Map would let two drawings' values be
+ * one object (the retry and the Undo of Clear tell values apart by identity).
+ * @satisfies {Readonly<Record<(typeof LOSAT_EVIDENCE_KEYS)[number], () => unknown>>}
  */
-export const losatRowsWithDrawing = (rows, drawingId, drawingRows) => ({
-  rows: [...losatRowsOfOtherDrawings(rows, drawingId), ...drawingRows.map((row) => ({ ...row, drawingId }))],
-  held: losatRowsOfDrawing(rows, drawingId)
+export const LOSAT_EVIDENCE_EMPTY = Object.freeze({
+  losatCacheInfo: () => /** @type {LosatCacheInfoEntry[]} */ ([]),
+  losatCache: () => /** @type {Map<string, RawLosatCacheEntry>} */ (new Map()),
+  losatDerivedCache: () => /** @type {Map<string, LosatDerivedCacheEntry>} */ (new Map()),
+  proteinIdentityManifest: () => emptyProteinIdentityManifest(),
+  legacyProteinRawCandidates: () => createLegacyProteinCandidateEnvelope([]),
+  legacyProteinDerivedEvidence: () => ({ schema: LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, entries: [] }),
+  losatNamedKeys: () => /** @type {Set<string>} */ (new Set())
 });
+/** @returns {LosatEvidence} Fresh empty evidence: what **Clear LOSAT results** leaves in a drawing. */
+export const emptyLosatEvidence = () => ({
+  losatCacheInfo: LOSAT_EVIDENCE_EMPTY.losatCacheInfo(),
+  losatCache: LOSAT_EVIDENCE_EMPTY.losatCache(),
+  losatDerivedCache: LOSAT_EVIDENCE_EMPTY.losatDerivedCache(),
+  proteinIdentityManifest: LOSAT_EVIDENCE_EMPTY.proteinIdentityManifest(),
+  legacyProteinRawCandidates: LOSAT_EVIDENCE_EMPTY.legacyProteinRawCandidates(),
+  legacyProteinDerivedEvidence: LOSAT_EVIDENCE_EMPTY.legacyProteinDerivedEvidence(),
+  losatNamedKeys: LOSAT_EVIDENCE_EMPTY.losatNamedKeys()
+});
+/** @param {Partial<LosatEvidence> | null | undefined} values @returns {boolean} Whether a drawing lists LOSAT results. */
+export const listsLosatResults = (values) => Array.isArray(values?.losatCacheInfo) && values.losatCacheInfo.length > 0;
 
 /**
- * The project's rows after a Generate or a History step of `drawingId` installs the rows it holds (`stepRows`, the
- * project's rows when it was captured): the drawing's rows are the step's, the other drawings' stay (OV-3207, OV-3212).
- * The step's array itself when it is the whole result, so an unchanged owner set keeps its array (OV-2210).
- * @template {{ key: unknown, drawingId: DrawingId }} Row
- * @param {readonly Row[]} rows @param {DrawingId} drawingId @param {readonly Row[]} stepRows
- * @returns {readonly Row[]}
+ * The raw searches and converted payloads a Generate may reuse besides its drawing's own: those the drawings of the
+ * project hold now (D-224: not a held drawing's, not a History step's) and name, that is, their current Results use
+ * (`losatNamedKeys`, OV-3785; PD-OI-022 Revision #2101: a search no other drawing names is gone after Clear). A search
+ * a drawing keeps for its own reuse alone is lent to no other. A lookup index that owns nothing; the Generate drops it.
+ * @param {readonly LosatEvidence[]} project Every project drawing's evidence (`projectLosatEvidence`).
+ * @returns {{ searches: Map<string, RawLosatCacheEntry>, payloads: Map<string, LosatDerivedCacheEntry> }}
  */
-export const losatRowsAfterStep = (rows, drawingId, stepRows) => {
-  const others = losatRowsOfOtherDrawings(rows, drawingId);
-  const own = losatRowsOfDrawing(stepRows, drawingId);
-  return others.length === 0 && own.length === stepRows.length ? stepRows : [...others, ...own];
-};
-
-/**
- * The LOSAT caches an install leaves (D-200). No install removes a cached search or converted payload: only Clear does,
- * for the whole project, as on dev. A Generate's commit installs its caches whole: they are the cache it started from
- * and what it searched or converted (as on dev). An Undo, a Redo or a rollback keeps the current caches and puts back
- * from the step only the evidence of the drawing it restores: the searches its rows name, the protein searches that
- * resolve in its protein identity manifest (the all-against-all searches of Similarity groups and Collinear have no
- * row), and the converted payloads all of whose searches (`rawKeys`) are then cached. So a Clear's searches come back
- * only with a row or a manifest that names them (PD-OI-022: no History replacement revives unrelated retry data,
- * OV-3215), and a search no row names any more stays for a later Generate to reuse (OV-3260). The current Maps
- * themselves when nothing comes back, so a rollback keeps the retry of the searches its run completed.
- * @template Entry
- * @template {{ rawKeys?: readonly unknown[] }} Derived
- * @param {{ commit: boolean, rows: readonly { key: unknown }[], manifest: unknown }} restored A Generate's commit, or
- *   the rows and manifest of the drawing an Undo, a Redo or a rollback restores.
- * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} step The caches the step holds.
- * @param {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }} current The current caches.
- * @returns {{ cache: ReadonlyMap<unknown, Entry>, derived: ReadonlyMap<unknown, Derived> }}
- */
-export const losatEvidenceAfterStep = ({ commit, rows, manifest }, step, current) => {
-  if (commit) return step;
-  const keys = new Set(rows.map(({ key }) => key));
-  const searches = [...step.cache].filter(([key, entry]) => !current.cache.has(key)
-    && (keys.has(key) || proteinSearchResolvesIn(entry, manifest)));
-  const cache = searches.length ? new Map([...current.cache, ...searches]) : current.cache;
-  const payloads = [...step.derived].filter(([key, { rawKeys }]) => !current.derived.has(key)
-    && Array.isArray(rawKeys) && rawKeys.every((rawKey) => cache.has(rawKey)));
-  return { cache, derived: payloads.length ? new Map([...current.derived, ...payloads]) : current.derived };
+export const projectLosatSearches = (project) => {
+  /** @template V @param {ReadonlyMap<string, V>} map @param {ReadonlySet<string>} named @returns {[string, V][]} */
+  const namedOf = (map, named) => [...map].filter(([key]) => named.has(key));
+  return {
+    searches: new Map(project.flatMap(({ losatCache, losatNamedKeys }) => namedOf(losatCache, losatNamedKeys))),
+    payloads: new Map(project.flatMap(({ losatDerivedCache, losatNamedKeys }) => namedOf(losatDerivedCache, losatNamedKeys)))
+  };
 };
 
 // The runtime identity the Web stores beside each raw entry it searches
@@ -387,11 +392,8 @@ export const isCurrentRawLosatCacheEntry = (entry) => {
 };
 
 /**
- * A derived cache entry: what `isLosatDerivedCacheEntry` has checked. `mode` is stored unchecked. `rawKeys`, in memory
- * only (Save writes no derived entry), are the keys of the raw searches it was converted from, which name it
- * (`losatEvidenceAfterStep`); an entry without them (a Session's) never comes back with a step.
- * @typedef {{ schema: number, kind: 'derived-losatp-payload', key: string, payload: Record<string, unknown>, idEncoding?: unknown, mode?: unknown,
- *   rawKeys?: readonly string[] }} LosatDerivedCacheEntry
+ * A derived cache entry: what `isLosatDerivedCacheEntry` has checked. `mode` is stored unchecked.
+ * @typedef {{ schema: number, kind: 'derived-losatp-payload', key: string, payload: Record<string, unknown>, idEncoding?: unknown, mode?: unknown }} LosatDerivedCacheEntry
  */
 
 /**

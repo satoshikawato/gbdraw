@@ -8,6 +8,8 @@ import {
 } from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
+  comparisonKey,
+  committedComparisonKeys,
   createSessionResourceFileView,
   fileBackedDescriptor,
   fileBackedReaderOf,
@@ -23,10 +25,11 @@ import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
 } from './canonical-resource-references.js';
+import { isResourceBackedCanonicalComparison, writeDraftComparisons } from './canonical-comparisons.js';
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, StoredResourceBytes } from './session-resource-backing.js' */
-/** @import { BoundFileValue, CircularSource, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularSource, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
 /**
  * What a Session binds of a drawing (`webBindings`): a Circular drawing's File
  * cards and input fields, a Linear drawing's record rows and comparison plan.
@@ -277,6 +280,47 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  *   webFiles: CanonicalRenderEnvelope['webFiles']
  * }} SessionResourceDrawing
  */
+/**
+ * The source of one input file's bytes.
+ * @param {FileLike} file
+ * @param {Map<object, Promise<ResourceSource>>} storedFileSources The sources a Save read from stored files, by file.
+ * @returns {Promise<ResourceSource>}
+ */
+const sourceOfFile = async (file, storedFileSources) => {
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
+  if (source?.descriptor) return source;
+  // The descriptor Generate made of this File names the committed resource
+  // by its reader, so binding it reads, hashes and decodes nothing.
+  const described = fileDescriptorOf(file);
+  const readFile = fileBackedReaderOf(described);
+  if (described && readFile) {
+    const descriptor = fileBackedDescriptor({
+      kind: 'web-file', name: String(file.name ?? 'file'), type: String(file.type || 'application/octet-stream'),
+      size: Number(described.size), lastModified: Number(file.lastModified) || 0
+    }, readFile);
+    return { descriptor, readBytes: readFile };
+  }
+  return storedFileSourceOnce(storedFileSources, file);
+};
+/**
+ * The comparisons a Linear draft adopted from the committed request, as it holds them (OV-3826): Load gives the draft
+ * these, not the request's projection, so a draft that Clear LOSAT results emptied stays empty. A stored one is written
+ * only when the request stores its bytes as a comparison of its kind, so the list adds no bytes; one that it does not
+ * is left out, and the next Generate searches again.
+ * @param {readonly BoundCanonicalComparison[]} comparisons
+ * @param {unknown} renderRequest The request the drawing's Session entry writes.
+ * @param {(ref: InputFileRef | null | undefined) => Promise<string | null>} writtenIdOf The resource that already holds
+ *   a file's bytes in the Session, or null.
+ * @param {(ref: InputFileRef | null | undefined) => Promise<unknown>} bindFile The binding of a file.
+ */
+const adoptedComparisons = async (comparisons, renderRequest, writtenIdOf, bindFile) => {
+  const committed = committedComparisonKeys(renderRequest);
+  const written = await Promise.all(comparisons.map(async (comparison) => (
+    !isResourceBackedCanonicalComparison(comparison)
+      || committed.has(comparisonKey(comparison.kind, await writtenIdOf(comparison.file))))));
+  return writeDraftComparisons(comparisons.filter((_, index) => written[index]), bindFile);
+};
+
 /**
  * One resource table for the committed requests and the input bindings of
  * every drawing Save writes: all are allocated through the same
@@ -545,21 +589,17 @@ export const buildSessionDrawingResources = async (state, sets) => {
    */
   const bindFile = async (ref) => {
     const file = inputFiles.fileOf(ref);
-    if (!file) return null;
-    const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
-    if (source?.descriptor) return bindSource(source, file);
-    // The descriptor Generate made of this File names the committed resource
-    // by its reader, so binding it reads, hashes and decodes nothing.
-    const described = fileDescriptorOf(file);
-    const readFile = fileBackedReaderOf(described);
-    if (described && readFile) {
-      const descriptor = fileBackedDescriptor({
-        kind: 'web-file', name: String(file.name ?? 'file'), type: String(file.type || 'application/octet-stream'),
-        size: Number(described.size), lastModified: Number(file.lastModified) || 0
-      }, readFile);
-      return bindSource({ descriptor, readBytes: readFile }, file);
-    }
-    return bindSource(await storedFileSourceOnce(storedFileSources, file), file);
+    return file ? bindSource(await sourceOfFile(file, storedFileSources), file) : null;
+  };
+  /**
+   * The resource that already holds one input file's bytes in this Session, or null; it allocates nothing.
+   * @param {InputFileRef | null | undefined} ref
+   * @returns {Promise<string | null>}
+   */
+  const writtenIdOf = async (ref) => {
+    const file = inputFiles.fileOf(ref);
+    const candidate = file ? candidateFor(await sourceOfFile(file, storedFileSources)) : null;
+    return candidate && /** @type {Promise<string | null>} */ (allocation = allocation.then(() => equivalentId(candidate)));
   };
 
   /**
@@ -599,8 +639,11 @@ export const buildSessionDrawingResources = async (state, sets) => {
       files.c_conservation_sequence_sources
     )
   });
-  /** @param {SessionBindingDrawing} drawing */
-  const linearBindings = async ({ linearSeqs, linearComparisonPlan }) => ({
+  /**
+   * @param {SessionBindingDrawing} drawing
+   * @param {unknown} renderRequest The request this drawing's Session entry writes.
+   */
+  const linearBindings = async ({ files, linearSeqs, linearComparisonPlan }, renderRequest) => ({
     linearSeqs: await Promise.all(linearSeqs.map(async (sequence) => ({
       uid: String(sequence?.uid || ''),
       gb: await bindFile(sequence?.gb),
@@ -625,15 +668,19 @@ export const buildSessionDrawingResources = async (state, sets) => {
           id: String(comparison?.id || ''),
           file: await bindFile(comparison.file)
         }))
-    )
+    ),
+    linearCanonicalComparisons: await adoptedComparisons(files.linearCanonicalComparisons ?? [], renderRequest, writtenIdOf, bindFile)
   });
-  /** @param {SessionBindingDrawing} drawing */
-  const bindingsOf = async (drawing) => {
+  /**
+   * @param {SessionBindingDrawing} drawing
+   * @param {unknown} renderRequest The request this drawing's Session entry writes.
+   */
+  const bindingsOf = async (drawing, renderRequest) => {
     // The cards first: a drawing's files are allocated in the order 48 wrote them.
     const cards = await cardBindings(drawing);
     return {
       schema: 2,
-      ...(drawing.mode === 'linear' ? await linearBindings(drawing) : await circularBindings(drawing)),
+      ...(drawing.mode === 'linear' ? await linearBindings(drawing, renderRequest) : await circularBindings(drawing)),
       ...cards
     };
   };
@@ -647,7 +694,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
       ? (identity ? set.committed.renderRequest : rewriteResourceRefs(set.committed.renderRequest, setAlias))
       : null;
     const webFiles = rewriteOriginalNameHints(set.committed?.webFiles, setAlias);
-    written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing) } : webFiles });
+    written.push({ renderRequest, webFiles: set.drawing ? { ...webFiles, bindings: await bindingsOf(set.drawing, renderRequest) } : webFiles });
   }
   return { resources, written };
 };
