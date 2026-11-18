@@ -30,7 +30,7 @@ import {
 } from '../../services/drawing/paint.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
 import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys } from '../../services/specific-color-rules.js';
-import { drawnBlockStrokeElement } from '../../services/feature-dom.js';
+import { drawnBlockStrokeElement, featureStrokeElements } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
   featureOverrideKey,
@@ -1472,7 +1472,7 @@ export const createFeatureColorActions = ({
       : String(strokeColor).trim();
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (normalizedStrokeColor === null && normalizedStrokeWidth === null) return false;
-    const changed = elements.some((element) => (
+    const changed = featureStrokeElements(elements).some((element) => (
       (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor))
       || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
     ));
@@ -1703,7 +1703,7 @@ export const createFeatureColorActions = ({
     let updatedCount = 0;
     targetFeatures.forEach((feature) => {
       const elements = getFeatureElements(svg, feature.svg_id);
-      const needsUpdate = elements.some((element) => (
+      const needsUpdate = featureStrokeElements(elements).some((element) => (
         (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor))
         || (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth))
       ));
