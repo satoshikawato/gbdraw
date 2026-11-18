@@ -83,7 +83,7 @@ from ...labels.circular import (
     circular_label_shape,
     minimum_bbox_gap_px,
     circular_label_radii,
-    place_clear_of_tick_numbers,
+    inner_labels_newly_over_paint,
     prepare_label_list,
     x_overlap,
     y_overlap,
@@ -1544,24 +1544,6 @@ def _record_track_ink(
     return tuple(inks)
 
 
-@dataclass(frozen=True, eq=False)
-class _RecordTrackInk:
-    """What the tracks of the circle's records paint (``_record_track_ink``, the owner the definition-over-track
-    check reads), for the inner labels held off the scale numbers (``CircularLabelRadii.track_paint``): they may
-    not go onto paint they were not on. Read only when labels are held; annotation labels are left out, as they are
-    placed after the feature labels. The ``circular_labels`` stage is keyed by these fields."""
-
-    axis: CircularAxisLayout
-    slots: tuple[CircularResolvedSlot, ...]
-    # One record's paint sources each, in drawing order.
-    sources: tuple[CircularTrackInkSources, ...]
-
-    def inks(self) -> tuple[CircularInk, ...]:
-        """The paint of every record's tracks."""
-
-        return tuple(ink for sources in self.sources for ink in _record_track_ink(self.axis, self.slots, sources, {}))
-
-
 def definition_lines_over_tracks(
     definition_lines: tuple[Aabb, ...],
     axis: CircularAxisLayout,
@@ -2642,34 +2624,6 @@ def _drawn_tick_numbers(
     return tuple(numbers)
 
 
-def _held_inner_label_room(
-    radial_layout: CircularRadialLayout,
-    units: Sequence[_DrawnUnit],
-    canvas_config: CircularCanvasConfigurator,
-    user_slot_mode: bool,
-    *,
-    inner_labels: bool,
-    unit_ink_sources: Callable[..., CircularTrackInkSources],
-    unit_feature_layers: Callable[[int], FeatureBuildResult],
-) -> tuple[tuple[CircularInkRing, ...], _RecordTrackInk | None]:
-    """What horizontal inner labels keep off (``CircularLabelRadii.tick_numbers`` and ``track_paint``): the letters
-    of the scale numbers the figure draws (``_drawn_tick_numbers``, which refuses a scale that does not fit) and
-    what its tracks paint, each record's from ``unit_ink_sources`` (``_unit_track_ink_sources`` given the record and
-    its features, ``unit_feature_layers`` of its place in drawing order). Neither when the figure has no
-    ``inner_labels``: the numbers hold none, and a change of a track's data then rebuilds no labels."""
-
-    numbers = _drawn_tick_numbers(radial_layout, units, canvas_config, user_slot_mode)
-    if not (numbers and inner_labels):
-        return (), None
-    return numbers, _RecordTrackInk(
-        radial_layout.axis,
-        radial_layout.slots,
-        tuple(
-            unit_ink_sources(unit, feature_layers=unit_feature_layers(position)) for position, unit in enumerate(units)
-        ),
-    )
-
-
 def _feature_band_overrides(
     layout: CircularRadialLayout, radius_px: float, track_ratio: float
 ) -> tuple[float, float] | None:
@@ -3401,47 +3355,37 @@ def _place_circular_labels(
     """Place one record's labels with ``label_profile`` and the geometry of ``state``, as far as ``label_pass``."""
 
     font_size = circular_label_font_size(label_profile.config, state.total_length)
-    def place(room: CircularLabelRadii | None) -> PlacedCircularLabels:
-        """The labels placed with ``room``."""
-
-        return prepare_label_list(
-            state.feature_dict,
-            state.total_length,
-            (
-                float(state.resolved_feature_anchor_radius_px)
-                if state.resolved_feature_anchor_radius_px is not None
-                else state.geometry.radius
-            ),
-            state.geometry.track_ratio,
-            label_profile,
-            # The arena follows the outer label offsets, which a probe may change.
-            outer_arena=(
-                _default_outer_label_arena(
-                    geometry=state.geometry,
-                    cfg=label_profile.config,
-                    strandedness=state.strandedness,
-                )
-                if state.outer_arena_enabled
-                else None
-            ),
-            feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
-            label_lanes=state.label_lanes,
-            room=room,
-            track_preset=state.track_preset,
-            feature_lane_direction=state.feature_lane_direction,
-            _candidate_cache=candidate_caches.setdefault(font_size, {}),
-            record_transform=state.record_transform,
-            label_pass=label_pass,
-            definition_text=state.definition_text,
-            label_filtering=state.label_filtering,
-            record_id=state.record_id,
-        )
-    return place_clear_of_tick_numbers(
-        place,
-        state.label_radii,
-        total_length=state.total_length,
-        definition_text=state.definition_text,
+    return prepare_label_list(
+        state.feature_dict,
+        state.total_length,
+        (
+            float(state.resolved_feature_anchor_radius_px)
+            if state.resolved_feature_anchor_radius_px is not None
+            else state.geometry.radius
+        ),
+        state.geometry.track_ratio,
+        label_profile,
+        # The arena follows the outer label offsets, which a probe may change.
+        outer_arena=(
+            _default_outer_label_arena(
+                geometry=state.geometry,
+                cfg=label_profile.config,
+                strandedness=state.strandedness,
+            )
+            if state.outer_arena_enabled
+            else None
+        ),
+        feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
+        label_lanes=state.label_lanes,
+        room=state.label_radii,
+        track_preset=state.track_preset,
+        feature_lane_direction=state.feature_lane_direction,
+        _candidate_cache=candidate_caches.setdefault(font_size, {}),
+        record_transform=state.record_transform,
         label_pass=label_pass,
+        definition_text=state.definition_text,
+        label_filtering=state.label_filtering,
+        record_id=state.record_id,
     )
 
 
@@ -3465,6 +3409,30 @@ class CircularLabelPlacement:
     report: _PlacementReport
     # Text measurements per label font size, for the fit probes.
     label_candidates: tuple[tuple[float, tuple[CircularLabelCandidate, ...]], ...]
+    # The labels placed again with the inner labels held off the scale numbers (``PlacedCircularLabels.held``), or
+    # None; ``drawn`` says which of the two is drawn.
+    held: PlacedCircularLabels | None = None
+
+    def drawn(
+        self, layout: CircularRadialLayout, track_ink_sources: Callable[[], Sequence[CircularTrackInkSources]]
+    ) -> CircularLabelPlacement:
+        """The placement to draw (OV-3636): the held one, unless one of its inner labels is over a piece of the
+        tracks' paint that the same label of ``labels`` is not over (``inner_labels_newly_over_paint``). The paint is
+        ``_record_track_ink`` of each record's ``track_ink_sources`` on ``layout``, the owner the definition-over-track
+        check reads, and is built only when there is a held placement. It is not a stage input: a change of a
+        track's data places no labels again."""
+
+        if self.held is None:
+            return self
+        paint = tuple(ink for sources in track_ink_sources() for ink in _record_track_ink(layout.axis, layout.slots, sources, {}))
+        if inner_labels_newly_over_paint(self.labels, self.held.labels, paint, self.state.total_length):
+            return replace(self, held=None)
+        return replace(
+            self,
+            labels=tuple(self.held.labels),
+            report=self.report._replace(packer_skipped=self.held.packer_skipped),
+            held=None,
+        )
 
 
 @dataclass(frozen=True)
@@ -3540,12 +3508,12 @@ def circular_labels(
     slots = list(layout_slots)
     capacity: tuple[CircularLabelCapacity, ...] = ()
     try:
-        labels, packer_skipped = _place_circular_labels(
+        labels, packer_skipped, held = _place_circular_labels(
             state(), profile, label_pass=label_pass, candidate_caches=candidate_caches
         )
     except CircularLabelCapacityExceeded as exceeded:
         # CAPACITY-STOP: the figure stops at the label fit check; nothing of this record is placed.
-        labels, capacity, packer_skipped = [], exceeded.capacities, False
+        labels, capacity, packer_skipped, held = [], exceeded.capacities, False, None
     # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
     radial_refused = False
     if radial_growth is not None:
@@ -3701,6 +3669,7 @@ def circular_labels(
             for font_size, cache in candidate_caches.items()
             if "candidates" in cache
         ),
+        held=held,
     )
 
 
@@ -3967,6 +3936,39 @@ def _unit_feature_layers(
     features = layers.foreground_features
     return FeatureBuildResult(
         {key: features[key] for key in unit_keys[position] if key in features}, (), layers.used_color_rules
+    )
+
+
+def _circle_track_ink_sources(
+    units: Sequence[_DrawnUnit],
+    layout: CircularRadialLayout,
+    canvas_config: CircularCanvasConfigurator,
+    configurators: DiagramConfigurators,
+    layout_feature_layers: FeatureBuildResult,
+    unit_feature_keys: tuple[tuple[str, ...], ...] | None,
+    *,
+    gc_content_tick_font_size_override: float | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack],
+    use_slot_tick_options: bool,
+) -> tuple[CircularTrackInkSources, ...]:
+    """What the tracks of each record of the circle paint from, in drawing order, as ``layout`` places them
+    (``_unit_track_ink_sources`` with the record's features of ``layout_feature_layers``): the definition-over-track
+    check and the held inner labels (``CircularLabelPlacement.drawn``) read the same paint."""
+
+    return tuple(
+        _unit_track_ink_sources(
+            unit,
+            layout,
+            canvas_config,
+            configurators,
+            feature_layers=_unit_feature_layers(layout_feature_layers, unit_feature_keys, position),
+            gc_content_tick_font_size_override=gc_content_tick_font_size_override,
+            depth_tracks_by_index=depth_tracks_by_index,
+            annotation_track_layouts=annotation_track_layouts,
+            use_slot_tick_options=use_slot_tick_options,
+        )
+        for position, unit in enumerate(units)
     )
 
 
@@ -4274,19 +4276,20 @@ def add_record_on_circular_canvas(
             tuple(definition_lines),
             layout.axis,
             layout.slots,
-            _unit_track_ink_sources(
-                unit,
-                layout,
-                canvas_config,
-                configurators,
-                feature_layers=_unit_feature_layers(layout_feature_layers, unit_feature_keys, position),
-                gc_content_tick_font_size_override=gc_content_tick_font_size_override,
-                depth_tracks_by_index=depth_tracks_by_index,
-                annotation_track_layouts=annotation_track_layouts,
-                use_slot_tick_options=user_slot_mode,
-            ),
+            sources,
             labels,
-        ) for position, unit in enumerate(units))))
+        ) for sources in _circle_track_ink_sources(
+            units,
+            layout,
+            canvas_config,
+            configurators,
+            layout_feature_layers,
+            unit_feature_keys,
+            gc_content_tick_font_size_override=gc_content_tick_font_size_override,
+            depth_tracks_by_index=depth_tracks_by_index,
+            annotation_track_layouts=annotation_track_layouts,
+            use_slot_tick_options=user_slot_mode,
+        ))))
 
     def definition_clears_tracks(font_size: float) -> bool:
         """A hint for the definition row: the tracks and the text at ``font_size`` before the labels are placed."""
@@ -4308,24 +4311,9 @@ def add_record_on_circular_canvas(
     )
     annotation_track_layouts = dict(annotation_tracks.layouts)
     radial_layout = centre_fit.layout
-    held_label_room = (  # Radial labels can move the tracks.
-        ((), None) if show_external_labels and profile.label_placement == "radial"
-        else _held_inner_label_room(
-            radial_layout, units, canvas_config, user_slot_mode,
-            inner_labels=show_external_labels and profile.inner_labels_enabled,
-            unit_ink_sources=partial(
-                _unit_track_ink_sources,
-                layout=radial_layout,
-                canvas_config=canvas_config,
-                configurators=configurators,
-                # The labels read the drawn radial layout: the font the drawing gives the Percent axis.
-                gc_content_tick_font_size_override=_gc_content_axis_font_size(configurators, scalar_axes, radial_layout.slots),
-                depth_tracks_by_index=depth_tracks_by_index,
-                annotation_track_layouts=annotation_track_layouts,
-                use_slot_tick_options=user_slot_mode,
-            ),
-            unit_feature_layers=partial(_unit_feature_layers, layout_feature_layers, unit_feature_keys),
-        )
+    tick_numbers = (  # Radial labels can move the tracks.
+        () if show_external_labels and profile.label_placement == "radial"
+        else _drawn_tick_numbers(radial_layout, units, canvas_config, user_slot_mode)
     )
     definition_reserved_radius_px = centre_fit.reserved_radius_px
     band = _feature_band_overrides(radial_layout, float(canvas_config.radius), float(canvas_config.track_ratio))
@@ -4359,7 +4347,8 @@ def add_record_on_circular_canvas(
             geometry=canvas_config.geometry(),
             # The labels read the centre band only as their inner reserve (OV-2103).
             resolved_slots=radial_layout.slots,
-            label_radii=circular_label_radii(radial_layout, *held_label_room),
+            # Only inner labels keep off the numbers: without them, a change of the scale places no labels again.
+            label_radii=circular_label_radii(radial_layout, tick_numbers if profile.inner_labels_enabled else ()),
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,
@@ -4382,7 +4371,19 @@ def add_record_on_circular_canvas(
             annotation_tracks=annotation_tracks,
             record_id=str(record.gb_record.id),
             label_pass=presentation.label_pass,
-        )
+        ).drawn(radial_layout, partial(
+            _circle_track_ink_sources,
+            units,
+            radial_layout,
+            canvas_config,
+            configurators,
+            layout_feature_layers,
+            unit_feature_keys,
+            gc_content_tick_font_size_override=_gc_content_axis_font_size(configurators, scalar_axes, radial_layout.slots),
+            depth_tracks_by_index=depth_tracks_by_index,
+            annotation_track_layouts=annotation_track_layouts,
+            use_slot_tick_options=user_slot_mode,
+        ))
         # The one write of the radius the labels grew (a stage result is never changed).
         canvas_config.radius = placement.state.geometry.radius
         label_state = placement.state

@@ -6,7 +6,8 @@ The figures are drawn by the command line; the tests read the labels the label d
 numbers the drawn tick groups have (``TickSlotLayout.numbers``) and what the tracks paint (``_record_track_ink``, as
 the definition-over-track check reads it). Whether a label is over a number is the placement's own test
 (``labels_over_tick_numbers``); whether a label is over a track's paint is checked here on its own, each label's fit
-box against each piece of paint (``box_meets_ink``).
+box against each piece of paint (``box_meets_ink``). The track paint is read after the ``circular_labels`` render
+stage, so a Worker transaction still reuses the labels of a figure whose labels keep off the numbers.
 """
 
 from __future__ import annotations
@@ -23,10 +24,12 @@ from gbdraw.labels.circular import _label_fit_box, labels_over_tick_numbers
 from gbdraw.labels.circular_types import CircularLabel
 from gbdraw.layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink
 from gbdraw.layout.spatial import Aabb
+from tests.utils.render_stage_equivalence import EquivalenceHarness
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 P1 = INPUTS / "NC_005856.1.gb"
 BGC = INPUTS / "BGC0000708.gbk"
+MELA = Path(__file__).resolve().parent.parent / "examples" / "MelaMJNV.gb"
 P1_ARGS = ("--separate_strands", "--track_type", "spreadout", "--labels", "both")
 BGC_ARGS = ("--definition_font_size", "30", "--species", "<i>Genus species</i>", "--strain", "strain X-1", "--labels", "both")
 # GC content and GC skew inside the scale, under the inner labels.
@@ -158,3 +161,41 @@ def test_held_inner_labels_go_onto_no_track_paint_they_were_not_on(tmp_path: Pat
 
     assert held.track_ink and len(held.inner_labels) > 20 and unheld.over_numbers()
     assert held.newly_over_tracks(unheld) == []
+
+
+@pytest.mark.circular
+def test_held_inner_labels_over_inside_tracks_are_drawn_when_they_go_onto_no_new_paint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MelaMJNV with GC content and GC skew inside the scale, strands not separated: holding the inner labels off
+    the numbers puts none of them onto track paint it was not over, so the held figure is drawn."""
+
+    args = ("--track_type", "spreadout", "--labels", "both", *INSIDE_TRACKS)
+    held_svg, held = _draw(tmp_path / "held", monkeypatch, MELA, args)
+    _without_tick_numbers(monkeypatch)
+    unheld_svg, unheld = _draw(tmp_path / "unheld", monkeypatch, MELA, args)
+
+    assert held.track_ink and unheld.over_numbers()
+    assert held.over_numbers() == [] and held.newly_over_tracks(unheld) == []
+    assert held_svg != unheld_svg
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("tracks", [(), INSIDE_TRACKS], ids=["held-drawn", "held-over-gc-paint"])
+def test_a_warm_render_reuses_the_labels_held_off_the_numbers(tmp_path: Path, tracks: tuple[str, ...]) -> None:
+    """In a Worker transaction the ``circular_labels`` stage of NC_005856.1 (inner labels held off the numbers;
+    with GC tracks inside, the held placement is not drawn) is built once: the same render again and a GC window
+    change, which the labels do not read, reuse it."""
+
+    harness = EquivalenceHarness("circular", tmp_path)
+    args = ["--gbk", str(P1), *P1_ARGS, *tracks]
+    first, again, window = (
+        harness.warm(arguments).stages for arguments in (args, args, [*args, "--window", "500", "--step", "100"])
+    )
+
+    counts = [
+        (stages.builds.get("circular_labels", 0), stages.hits.get("circular_labels", 0),
+         stages.uncacheable.get("circular_labels", 0))
+        for stages in (first, again, window)
+    ]
+    assert counts == [(1, 0, 0), (0, 1, 0), (0, 1, 0)]

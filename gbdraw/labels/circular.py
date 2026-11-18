@@ -5,13 +5,14 @@
 
 from __future__ import annotations
 
+import copy
 import heapq
 import math
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import cached_property, lru_cache, partial
-from typing import Any, Literal, NamedTuple, Protocol, TypeAlias, get_args
+from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 
 from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
@@ -24,7 +25,6 @@ from .circular_capacity import (
     check_label_capacity,
     circular_label_capacity,
     label_capacity_checked,
-    label_capacity_unchecked,
     sides_packable,
 )
 from .circular_types import (
@@ -103,6 +103,10 @@ class PlacedCircularLabels(NamedTuple):
 
     labels: list[CircularLabel]
     packer_skipped: bool = False
+    # The same labels placed again with the inner labels held off the scale numbers, when one of ``labels`` is over a
+    # number and holding them is no worse (``_place_clear_of_tick_numbers``); the caller draws it instead unless it
+    # puts an inner label onto track paint (``inner_labels_newly_over_paint``), which the labels do not read.
+    held: PlacedCircularLabels | None = None
 
 
 class CircularLabelProbeStopped(Exception):
@@ -186,12 +190,6 @@ def outer_label_scale_floor_px(radial_layout: CircularRadialLayout) -> float:
     )
 
 
-class CircularTrackPaint(Protocol):
-    """What a record's tracks paint, read when the inner labels are held off the scale numbers."""
-
-    def inks(self) -> tuple[CircularInk, ...]: ...
-
-
 @dataclass(frozen=True)
 class CircularLabelRadii:
     """What the labels read of the radial layout besides the feature lanes (``circular_label_radii``)."""
@@ -203,29 +201,21 @@ class CircularLabelRadii:
     # Horizontal outer labels and their leader elbows keep past it (``outer_label_scale_floor_px``).
     outer_floor_px: float = 0.0
     # The letters of the record's scale numbers, from the tick groups that draw them (``TickSlotLayout.numbers``):
-    # horizontal inner labels keep inside those they would be drawn over (``place_clear_of_tick_numbers``).
+    # horizontal inner labels keep inside those they would be drawn over (``_place_clear_of_tick_numbers``).
     tick_numbers: tuple[CircularInkRing, ...] = ()
-    # What the record's tracks paint, which inner labels held off the numbers may not go onto; given with the numbers.
-    track_paint: CircularTrackPaint | None = None
-
-    def __post_init__(self) -> None:
-        if self.tick_numbers and self.track_paint is None:
-            raise ValueError("Scale numbers for the labels to keep off need the tracks' paint as well.")
 
 
 def circular_label_radii(
     radial_layout: CircularRadialLayout,
     tick_numbers: tuple[CircularInkRing, ...] = (),
-    track_paint: CircularTrackPaint | None = None,
 ) -> CircularLabelRadii:
-    """The radii the labels of ``radial_layout`` keep clear of, and the scale numbers and track paint they keep off."""
+    """The radii the labels of ``radial_layout`` keep clear of, and the scale numbers ``tick_numbers`` they keep off."""
 
     return CircularLabelRadii(
         outer_content_radius_px=float(radial_layout.outer_content_radius_px),
         inner_reserve_px=radial_label_inner_reserve_px(radial_layout),
         outer_floor_px=outer_label_scale_floor_px(radial_layout),
         tick_numbers=tick_numbers,
-        track_paint=track_paint,
     )
 
 
@@ -2744,43 +2734,34 @@ def _hold_inner_labels_clear(
     return _hold_inner_text_inside(labels, total_length, ceiling)
 
 
-def place_clear_of_tick_numbers(
-    place: Callable[[CircularLabelRadii | None], PlacedCircularLabels],
-    room: CircularLabelRadii | None,
+def _place_clear_of_tick_numbers(
+    drawn: Callable[[Sequence[CircularInkRing]], PlacedCircularLabels],
+    tick_numbers: Sequence[CircularInkRing],
     *,
     total_length: int,
     definition_text: Sequence[Aabb],
-    label_pass: CircularLabelPass,
 ) -> PlacedCircularLabels:
-    """A record's labels as ``place`` places them with ``room`` (``prepare_label_list``), the inner labels held off
-    the scale numbers (``CircularLabelRadii.tick_numbers``, OV-3636) when one is drawn over a number and holding
-    them makes the drawn labels no worse.
+    """A record's labels as ``drawn`` places them without the scale numbers, and, when one of their horizontal inner
+    labels is over a number of ``tick_numbers`` (OV-3636), the same labels placed again with all inner labels held
+    off the numbers (``_hold_inner_labels_clear``) as its ``held`` placement, when that one has no inner label over a
+    number and the fit check counts no more overlapping pairs, crossing leader pairs or labels over the definition
+    text of either side than in the first. A record whose inner labels reach no number is placed as before; a probe
+    (a fit search) passes no numbers. Whether the held placement is drawn is the caller's: it reads the tracks'
+    paint (``inner_labels_newly_over_paint``), which the labels do not."""
 
-    The labels are placed first without the numbers. When no inner label is then over a number, or in a probe (a
-    fit search), that placement is the result: a record whose inner labels reach no number is placed as before.
-    Otherwise they are placed again with the numbers held (``_hold_inner_labels_clear``); that placement is drawn
-    when no inner label is over a number, the fit check counts no more overlapping pairs, crossing leader pairs
-    or labels over the definition text of either side than in the first, and no inner label is over a track's
-    paint (``CircularLabelRadii.track_paint``, read only then) that the same label of the first is not over.
-    Otherwise the first is drawn, its labels over the numbers."""
-
-    if room is None or not room.tick_numbers:
-        return place(room)
-    first = place(replace(room, tick_numbers=()))
-    if label_pass == "probe" or not _inner_labels_over_numbers(first.labels, room.tick_numbers, total_length):
+    first = drawn(())
+    if not (tick_numbers and _inner_labels_over_numbers(first.labels, tick_numbers, total_length)):
         return first
-    with label_capacity_unchecked():  # the first placement checked the same labels on the same arcs
-        held = place(room)
+    held = drawn(tick_numbers)
     before, after = (
         Counter(defect.kind for defect in circular_label_defects(placed.labels, total_length, definition_text=definition_text))
         for placed in (first, held)
     )
-    if _inner_labels_over_numbers(held.labels, room.tick_numbers, total_length) or any(
+    if _inner_labels_over_numbers(held.labels, tick_numbers, total_length) or any(
         after[kind] > before[kind] for kind in after
     ):
         return first
-    paint = room.track_paint.inks() if room.track_paint is not None else ()  # never None with numbers
-    return first if _inner_labels_newly_over_tracks(first.labels, held.labels, paint, total_length) else held
+    return first._replace(held=held)
 
 
 def _horizontal_inner_labels(labels: Sequence[CircularLabel]) -> list[CircularLabel]:
@@ -2797,11 +2778,12 @@ def _inner_labels_over_numbers(
     return bool(labels_over_tick_numbers(_horizontal_inner_labels(labels), tick_numbers, total_length))
 
 
-def _inner_labels_newly_over_tracks(
+def inner_labels_newly_over_paint(
     first: Sequence[CircularLabel], held: Sequence[CircularLabel], track_ink: Sequence[CircularInk], total_length: int
 ) -> list[CircularLabel]:
-    """The horizontal inner labels of ``held`` whose fit box meets a piece of ``track_ink`` that the same label of
-    ``first`` (by its stable id) does not meet."""
+    """The horizontal inner labels of ``held`` whose fit box meets a piece of ``track_ink`` (``_record_track_ink``)
+    that the same label of ``first`` (by its stable id) does not meet: a held placement
+    (``PlacedCircularLabels.held``) that has one is not drawn."""
 
     before = {label["stable_id"]: label for label in _horizontal_inner_labels(first)}
     newly: list[CircularLabel] = []
@@ -6202,10 +6184,61 @@ def prepare_label_list(
     if record_id is not None and not probe and label_capacity_checked():
         check_label_capacity(record_id, capacities)
 
-    def place_external_labels(
-        dense_outer_rows: DenseOuterRows, packed: PackedSides | None = None
-    ) -> list[CircularLabel]:
-        """The external labels placed as today, or from the packer's sides (``packed``, CP-D04)."""
+    feature_outer_radius_intervals: list[tuple[float, float, float]] | None = (
+        _build_outer_feature_radius_intervals(
+            feature_dict,
+            total_length,
+            radius,
+            track_ratio,
+            profile,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            feature_layout=label_lanes.outer,
+            track_preset=track_type,
+        )
+        if outer_lane_clearance
+        else None
+    )
+    feature_inner_radius_intervals: list[tuple[float, float, float]] | None = (
+        _build_inner_feature_radius_intervals(
+            feature_dict,
+            total_length,
+            radius,
+            track_ratio,
+            profile,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            feature_layout=label_lanes.inner,
+            track_preset=track_type,
+        )
+        if lane_clearance
+        else None
+    )
+    # OV-3301: a scale between the features and the outer labels holds them off as a feature track would.
+    if room is not None and room.outer_floor_px > 0.0:
+        feature_outer_radius_intervals = [
+            *(feature_outer_radius_intervals or ()), (0.0, float(total_length), float(room.outer_floor_px))
+        ]
+    clear_text = partial(
+        _hold_outer_text_clear,
+        total_length=total_length,
+        intervals=feature_outer_radius_intervals or [],
+        clearance_px=effective_text_clearance_px,
+    )
+    clear_elbows = partial(
+        _hold_outer_elbows_clear,
+        total_length=total_length,
+        intervals=feature_outer_radius_intervals or [],
+        clearance_px=effective_anchor_clearance_px,
+    )
+    # The work before the inner labels are held off the scale numbers, per dense-row attempt of the first placement
+    # of a record with numbers: a held placement (``_place_clear_of_tick_numbers``) continues from a copy of it
+    # (OV-3636).
+    rearranged_before_hold: dict[DenseOuterRows, tuple[list[CircularLabel], list[CircularLabel]]] = {}
+
+    def rearrange_external_labels(
+        dense_outer_rows: DenseOuterRows, packed: PackedSides | None
+    ) -> tuple[list[CircularLabel], list[CircularLabel]]:
+        """The outer and inner labels rearranged (or packed, ``packed``) and cleared of the features, before any
+        inner label is held off the scale numbers."""
         outer_labels_rearranged = packed[0] if packed is not None else rearrange_labels_fc(
             [label.copy() for label in outer_labels],
             radius,
@@ -6221,75 +6254,10 @@ def prepare_label_list(
             dense_outer_rows=dense_outer_rows,
             probe=probe,
         )
-        feature_outer_radius_intervals: list[tuple[float, float, float]] | None = (
-            _build_outer_feature_radius_intervals(
-                feature_dict,
-                total_length,
-                radius,
-                track_ratio,
-                profile,
-                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-                feature_layout=label_lanes.outer,
-                track_preset=track_type,
-            )
-            if outer_lane_clearance
-            else None
-        )
-        feature_inner_radius_intervals: list[tuple[float, float, float]] | None = (
-            _build_inner_feature_radius_intervals(
-                feature_dict,
-                total_length,
-                radius,
-                track_ratio,
-                profile,
-                feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-                feature_layout=label_lanes.inner,
-                track_preset=track_type,
-            )
-            if lane_clearance
-            else None
-        )
-        # OV-3301: a scale between the features and the outer labels holds them off as a feature track would.
-        if room is not None and room.outer_floor_px > 0.0:
-            feature_outer_radius_intervals = [
-                *(feature_outer_radius_intervals or ()), (0.0, float(total_length), float(room.outer_floor_px))
-            ]
-        clear_text = partial(
-            _hold_outer_text_clear,
-            total_length=total_length,
-            intervals=feature_outer_radius_intervals or [],
-            clearance_px=effective_text_clearance_px,
-        )
-        clear_elbows = partial(
-            _hold_outer_elbows_clear,
-            total_length=total_length,
-            intervals=feature_outer_radius_intervals or [],
-            clearance_px=effective_anchor_clearance_px,
-        )
-        hold_inner = partial(
-            _hold_inner_labels_clear,
-            total_length=total_length,
-            feature_intervals=feature_inner_radius_intervals,
-            tick_numbers=room.tick_numbers if room is not None else (),
-            gap_px=label_spacing_px,
-            text_clearance_px=effective_text_clearance_px,
-            anchor_clearance_px=effective_anchor_clearance_px,
-        )
         if feature_outer_radius_intervals is not None:
-            outer_labels_rearranged = clear_text(outer_labels_rearranged)
-            for _ in range(2):
-                outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
-                outer_labels_rearranged = clear_text(outer_labels_rearranged)
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = clear_text(outer_labels_rearranged)
-            # Final overlap pass, then enforce outer clearances as the final priority.
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = clear_text(outer_labels_rearranged)
-            outer_labels_rearranged = clear_elbows(outer_labels_rearranged)
-            # Reconcile angular overlaps once more after stricter radial clearances.
-            outer_labels_rearranged = _resolve_outer_label_overlaps_with_fixed_radii(outer_labels_rearranged, total_length)
-            outer_labels_rearranged = clear_text(outer_labels_rearranged)
-            outer_labels_rearranged = clear_elbows(outer_labels_rearranged)
+            outer_labels_rearranged = _clear_outer_labels_of_features(
+                outer_labels_rearranged, total_length, clear_text, clear_elbows
+            )
         inner_labels_rearranged: list[CircularLabel] = []
         if inner_labels_enabled:
             inner_labels_rearranged = packed[1] if packed is not None else rearrange_labels_fc(
@@ -6309,6 +6277,32 @@ def prepare_label_list(
                     inner_labels_rearranged,
                     total_length,
                 )
+
+        return outer_labels_rearranged, inner_labels_rearranged
+
+    def place_external_labels(
+        dense_outer_rows: DenseOuterRows,
+        tick_numbers: Sequence[CircularInkRing] = (),
+        packed: PackedSides | None = None,
+    ) -> list[CircularLabel]:
+        """The external labels placed as today, or from the packer's sides (``packed``, CP-D04), the inner labels
+        held off ``tick_numbers``."""
+        if packed is None and dense_outer_rows in rearranged_before_hold:
+            outer_labels_rearranged, inner_labels_rearranged = rearranged_before_hold.pop(dense_outer_rows)
+        else:
+            outer_labels_rearranged, inner_labels_rearranged = rearrange_external_labels(dense_outer_rows, packed)
+            if packed is None and not (probe or tick_numbers) and room is not None and room.tick_numbers:
+                rearranged_before_hold[dense_outer_rows] = copy.deepcopy((outer_labels_rearranged, inner_labels_rearranged))
+        hold_inner = partial(
+            _hold_inner_labels_clear,
+            total_length=total_length,
+            feature_intervals=feature_inner_radius_intervals,
+            tick_numbers=tick_numbers,
+            gap_px=label_spacing_px,
+            text_clearance_px=effective_text_clearance_px,
+            anchor_clearance_px=effective_anchor_clearance_px,
+        )
+        if inner_labels_enabled:
             inner_labels_rearranged = hold_inner(inner_labels_rearranged) or inner_labels_rearranged
 
         external_labels = outer_labels_rearranged + inner_labels_rearranged
@@ -6348,47 +6342,80 @@ def prepare_label_list(
         assign_leader_start_points(external_labels_ordered, total_length)
         return external_labels_ordered
 
-    # OV-479 / LP-D45: dense outer rows keep the circular label spacing when the
-    # drawn layout then fits; otherwise the record is placed as in earlier releases.
-    if not (
-        len(outer_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
-        and max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX) > LEGACY_MIN_ROW_GAP_PX
-    ):
-        final_labels = embedded_labels + place_external_labels("legacy")
-    else:
-        # A probe asks only whether either layout fits. It tries today's layout first
-        # and stops when its dense rows overlap: wider spaced rows overlap as well.
-        attempts: tuple[DenseOuterRows, ...] = ("legacy", "spaced") if probe else ("spaced", "legacy")
-        final_labels = []
-        for dense_outer_rows in attempts:
-            try:
-                attempt_labels = place_external_labels(dense_outer_rows)
-            except CircularLabelProbeStopped:
+    def drawn(tick_numbers: Sequence[CircularInkRing]) -> PlacedCircularLabels:
+        """The external labels placed, the inner labels held off ``tick_numbers``, and repaired or packed."""
+        # OV-479 / LP-D45: dense outer rows keep the circular label spacing when the
+        # drawn layout then fits; otherwise the record is placed as in earlier releases.
+        if not (
+            len(outer_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
+            and max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX) > LEGACY_MIN_ROW_GAP_PX
+        ):
+            final_labels = embedded_labels + place_external_labels("legacy", tick_numbers)
+        else:
+            # A probe asks only whether either layout fits. It tries today's layout first
+            # and stops when its dense rows overlap: wider spaced rows overlap as well.
+            attempts: tuple[DenseOuterRows, ...] = ("legacy", "spaced") if probe else ("spaced", "legacy")
+            final_labels = []
+            for dense_outer_rows in attempts:
+                try:
+                    attempt_labels = place_external_labels(dense_outer_rows, tick_numbers)
+                except CircularLabelProbeStopped:
+                    if dense_outer_rows == "legacy":
+                        raise
+                    continue
+                if circular_label_fits(attempt_labels, total_length).get("circular_outer", FITS).fits:
+                    final_labels = embedded_labels + attempt_labels
+                    break
                 if dense_outer_rows == "legacy":
-                    raise
-                continue
-            if circular_label_fits(attempt_labels, total_length).get("circular_outer", FITS).fits:
-                final_labels = embedded_labels + attempt_labels
-                break
-            if dense_outer_rows == "legacy":
-                final_labels = embedded_labels + attempt_labels
-    if probe:
-        return PlacedCircularLabels(final_labels)
-    # LP-D57 repair (Q7: not in probes; Q2: not the spaced attempt), then the packer (CP-D04).
-    return _drawn_placement(
-        final_labels,
-        total_length,
-        definition_text,
-        capacities,
-        pack=partial(
-            _pack_sides,
-            sides=((outer_labels, outer_arc, True), (inner_labels if inner_labels_enabled else [], inner_arc, False)),
-            total_length=total_length,
-            spacing_px=label_spacing_px,
-        ),
-        place=lambda packed: embedded_labels + place_external_labels("legacy", packed),
-        packer=label_pass == "packed",
+                    final_labels = embedded_labels + attempt_labels
+        if probe:
+            return PlacedCircularLabels(final_labels)
+        # LP-D57 repair (Q7: not in probes; Q2: not the spaced attempt), then the packer (CP-D04).
+        return _drawn_placement(
+            final_labels,
+            total_length,
+            definition_text,
+            capacities,
+            pack=partial(
+                _pack_sides,
+                sides=((outer_labels, outer_arc, True), (inner_labels if inner_labels_enabled else [], inner_arc, False)),
+                total_length=total_length,
+                spacing_px=label_spacing_px,
+            ),
+            place=lambda packed: embedded_labels + place_external_labels("legacy", tick_numbers, packed),
+            packer=label_pass == "packed",
+        )
+
+    return _place_clear_of_tick_numbers(
+        drawn,
+        room.tick_numbers if room is not None and not probe else (),
+        total_length=total_length,
+        definition_text=definition_text,
     )
+
+
+def _clear_outer_labels_of_features(
+    labels: list[CircularLabel],
+    total_length: int,
+    clear_text: Callable[[list[CircularLabel]], list[CircularLabel]],
+    clear_elbows: Callable[[list[CircularLabel]], list[CircularLabel]],
+) -> list[CircularLabel]:
+    """Rearranged outer labels held clear of the features (``clear_text``, ``clear_elbows``), their overlaps cleared
+    at fixed radii in between, before the leaders are assigned."""
+    labels = clear_text(labels)
+    for _ in range(2):
+        labels = _resolve_outer_label_overlaps_with_fixed_radii(labels, total_length)
+        labels = clear_text(labels)
+    labels = _resolve_outer_label_overlaps_with_fixed_radii(labels, total_length)
+    labels = clear_text(labels)
+    # Final overlap pass, then enforce outer clearances as the final priority.
+    labels = _resolve_outer_label_overlaps_with_fixed_radii(labels, total_length)
+    labels = clear_text(labels)
+    labels = clear_elbows(labels)
+    # Reconcile angular overlaps once more after stricter radial clearances.
+    labels = _resolve_outer_label_overlaps_with_fixed_radii(labels, total_length)
+    labels = clear_text(labels)
+    return clear_elbows(labels)
 
 
 def _pack_sides(
@@ -6458,7 +6485,7 @@ __all__ = [
     "CircularLabelProbeStopped",
     "CircularLabelRadii",
     "circular_label_radii",
-    "place_clear_of_tick_numbers",
+    "inner_labels_newly_over_paint",
     "calculate_angle_degrees",
     "circular_label_defects",
     "circular_label_fits",
