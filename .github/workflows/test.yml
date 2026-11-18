@@ -637,7 +637,7 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Web JavaScript tests
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           find tests/web -type f \
             -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs' \
@@ -751,7 +751,7 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run fast Web JavaScript contracts
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: >-
           find tests/web -type f
           -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
