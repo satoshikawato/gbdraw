@@ -1541,6 +1541,21 @@
       "reason": "Web Load projects a stored Linear request's Record Order into its card rows and a stored Circular canvas's into its record positions, and refuses the token lists the renderer refuses in either mode, without starting the Worker (a saved preview loads without Python); the records table of a Result reads the same tokens. The row pattern and Python's whitespace class are generated from Python (RECORD_ROW_PATTERN, PYTHON_SPACE_PATTERN in tools/generate_web_contracts.py); the selector rule (`#N`, a record ID, the record of a one-record file) reads each request's records and cannot be generated, so the shared vector pins both the rows and the placements. Two rules read the request's records beside the tokens and cannot be generated either: a Linear record drawn in several windows draws its windows together, in window order, at its token's place (`_unit_positions`; the Web's `storedLinearCellPlaces` gives each window its column at Load), and a Circular canvas whose records each draw one record (cardinality exactly_one, one window at most) counts its tokens against the request's records (Python counts the drawn records in `_circular_drawn_order`; the Web's `refusedRecordPlacement` checks only such canvases). The vector's `windowPlacements` (drawn by `build_request_diagram`) and `circularCounts` pin both, loaded through Web Load in tests/web/stored-request-read.test.mjs.",
       "retireWhen": "Web Load reads a stored request's record placement through Python",
       "source": "twin.unregistered.v1 on fix/record-order-row-one-rule (OV-3313 fix round 2, 2026-11-17); an authority-only row that goes in before its twin and waits for the Owner's approval (R9)"
+    },
+    {
+      "id": "vector:tests/fixtures/linear-file-uid-vectors.json",
+      "concern": "The fileUid of a Linear row binding in a Session 51 (webFiles.bindings.linearSeqs[i].fileUid, the row's File card): which values a Load accepts (a non-empty string, kept as written) and which it refuses",
+      "pythonOwner": [
+        "gbdraw/session_io.py:_validate_web_file_bindings"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-resource-backing.js:webFileBindingFaults"
+      ],
+      "vector": "tests/fixtures/linear-file-uid-vectors.json",
+      "reason": "The Web checks a Session's file bindings at Load (it drops a refused fileUid with a repair row) and the CLI checks them at replay (it refuses the Session); the shared vector file makes both accept and refuse the same values.",
+      "retireWhen": "Web Load reads a stored Session's file bindings through Python",
+      "source": "twin.unregistered.v1 on fix/linear-file-card-identity; an authority-only row that goes in before its twin, with pending until that branch lands",
+      "pending": true
     }
   ]
 }
