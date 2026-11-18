@@ -22,9 +22,20 @@ const { readCanvasPadding } = await import('../../gbdraw/web/js/services/config-
 const row = (key, caption = key) => ({ caption, originalCaption: key, color: '#cccccc', xPos: 0, yPos: 0, featureIds: [] });
 const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
 const leavesOf = (draft) => legendEditConfigLeaves({
-  legendEntries: [], deletedLegendEntries: [], originalLegendOrder: [], rules: [], results: [{ features: [], palette: {}, pythonRows: new Map() }], canvasPadding: NO_PADDING,
+  legendEntries: [], deletedLegendEntries: [], originalLegendOrder: [], rules: [], results: { renderedFeaturesByResult: [[]], palette: {} }, canvasPadding: NO_PADDING,
   pythonRowKeys: draft.originalLegendOrder ?? [], ...draft
 });
+
+// The keys Python gives the rows of a rule for every type of the type color value over each drawn type set
+// (tests/fixtures/legend_rule_keys.json, which tests/test_specific_color_captions.py checks against Python).
+const RULE_KEY_CASES = JSON.parse(readFileSync(new URL('../fixtures/legend_rule_keys.json', import.meta.url), 'utf8')).cases;
+const ruleKeyCase = (name) => {
+  const found = RULE_KEY_CASES.find((each) => each.name === name);
+  assert.ok(found, name);
+  return found;
+};
+const TWO_TYPES = ruleKeyCase('a palette rule for every type over two drawn types, a key per type');
+const ONE_TYPE = ruleKeyCase('a palette rule for every type over one drawn type, keyed by its caption');
 
 test('a drawing without Legend edits or padding writes no leaf', () => {
   assert.deepEqual(leavesOf({ legendEntries: [row('CDS'), row('tRNA')], originalLegendOrder: ['CDS', 'tRNA'] }), {});
@@ -54,7 +65,7 @@ test('a rule row is not renamed through the leaves (its rule caption carries the
 // rules too: a rule for every type draws a row per drawn type, and a caption
 // also written in a literal color is keyed in the type's color.
 test('the rows of a rule of the type color value are rule rows by Python\'s keys (OV-3803)', () => {
-  const drawn = { features: [{ type: 'rRNA' }, { type: 'CDS' }], palette: { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' }, pythonRows: new Map() };
+  const drawn = { renderedFeaturesByResult: [[{ type: 'rRNA' }, { type: 'CDS' }]], palette: { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' } };
   for (const [shape, rules, keys] of [
     ['a rule for every type', [{ feat: '*', qual: 'product', val: 'x', color: 'palette', cap: 'Ribosomal' }],
       ['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]']],
@@ -67,7 +78,7 @@ test('the rows of a rule of the type color value are rule rows by Python\'s keys
       legendEntries: [...keys.map((key) => row(key, 'Renamed')), row('CDS', 'Genes')],
       originalLegendOrder: [...keys, 'CDS'],
       rules,
-      results: [drawn]
+      results: drawn
     });
     assert.deepEqual(leaves, { 'objects.legends.row_names': [['CDS', 'Genes']] }, shape);
   }
@@ -76,17 +87,18 @@ test('the rows of a rule of the type color value are rule rows by Python\'s keys
 // A batch's rule rows are keyed in each Result alone, as Python keys them
 // (`gbdraw circular` of HmmtDNA, NC_001416 and MjeNMV with
 // `* translation . palette Ribosomal`: `Ribosomal [#54bcf8]` in the Result that
-// draws CDS, rRNA and tRNA; `Ribosomal` in the Results that draw CDS only), and
-// the leaves name the rule rows of any Result, whichever Result is shown.
+// draws CDS, rRNA and tRNA; `Ribosomal` in the Results that draw CDS only;
+// tests/fixtures/legend_rule_keys.json, a rule for every type over two drawn
+// types and over one), and the leaves name the rule rows of any Result,
+// whichever Result is shown.
 test('the rule rows of a batch are the rows of each Result keyed alone, whichever Result is shown', () => {
-  const palette = { rRNA: '#71ee7d', CDS: '#54bcf8', tRNA: '#e8b441', default: '#d3d3d3' };
-  const results = [
-    { features: [{ type: 'CDS' }, { type: 'rRNA' }, { type: 'tRNA' }], palette, pythonRows: new Map() },
-    { features: [{ type: 'CDS' }], palette, pythonRows: new Map() }
-  ];
+  const results = {
+    renderedFeaturesByResult: [TWO_TYPES.types.map((type) => ({ type })), ONE_TYPE.types.map((type) => ({ type }))],
+    palette: TWO_TYPES.palette
+  };
   const rules = [{ feat: '*', qual: 'translation', val: '.', color: 'palette', cap: 'Ribosomal' }];
-  const keys = ['Ribosomal [#54bcf8]', 'Ribosomal [#71ee7d]', 'Ribosomal [#e8b441]', 'Ribosomal'];
-  for (const shown of [keys.slice(0, 3), ['Ribosomal']]) {
+  const keys = [...TWO_TYPES.keys[0], ...ONE_TYPE.keys[0]];
+  for (const shown of [TWO_TYPES.keys[0], ONE_TYPE.keys[0]]) {
     const leaves = leavesOf({
       legendEntries: [...shown.map((key) => row(key, 'Renamed')), row('CDS', 'Genes')],
       originalLegendOrder: [...shown, 'CDS'],
@@ -111,7 +123,7 @@ test('a rename of a renderer row a rule caption names in another color is sent (
     legendEntries: [row('tRNA [#ff0000]', 'tRNA'), row('tRNA', 'Transfer RNA')],
     originalLegendOrder: ['tRNA [#ff0000]', 'tRNA'],
     rules: [{ feat: 'CDS', qual: 'product', val: '.', color: '#ff0000', cap: 'tRNA' }],
-    results: [{ features: [{ type: 'CDS' }, { type: 'tRNA' }], palette: { CDS: '#54bcf8', tRNA: '#e8b441' }, pythonRows }]
+    results: { renderedFeaturesByResult: [[{ type: 'CDS' }, { type: 'tRNA' }]], palette: { CDS: '#54bcf8', tRNA: '#e8b441' }, pythonRowsByResult: [pythonRows] }
   });
   assert.deepEqual(leaves, { 'objects.legends.row_names': [['tRNA', 'Transfer RNA']] });
 });
@@ -178,9 +190,12 @@ const COMPOSITION = 'data-gbdraw-composition';
 const decodeAttribute = (value) => value.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
   .replace(/&amp;/g, '&');
 const galleryDocuments = { HmmtDNA_basic_circular: await gallerySessionDocument('HmmtDNA_basic_circular') };
-const galleryRoot = (base) => {
+const galleryResultText = (base) => {
   const saved = galleryDocuments[base];
-  const content = savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content;
+  return savedDrawingView(saved, saved.ui.activeDrawingId).results[0].content;
+};
+const galleryRoot = (base) => {
+  const content = galleryResultText(base);
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   svg.setAttribute(COMPOSITION, decodeAttribute(svg.getAttribute(COMPOSITION)));
   return svg;
@@ -258,6 +273,90 @@ test('D-58: a row deleted on one Result of a batch stays hidden in the request w
   const refuse = class { parseFromString() { throw new Error('parsed again'); } };
   assert.deepEqual(pythonLegendRowKeys(keysOfA, results, /** @type {typeof DOMParser} */ (/** @type {unknown} */ (refuse))).sort(),
     ['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)', 'rRNA', 'tRNA']);
+});
+
+// A two-Result batch's catalog (Session 40+): Result 0 draws a feature of each of `TWO_TYPES.types`, Result 1 one of
+// `ONE_TYPE.types`.
+const catalogFeature = (recordKey, id, type, start) => ({
+  recordKey, biologicalFeatureId: id, record_id: recordKey, type, start, end: start + 30, strand: 1,
+  anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' }, qualifiers: { locus_tag: [id] }
+});
+const catalogItem = (resultIndex, recordKey, types) => {
+  const biologicalFeatures = types.map((type, index) => catalogFeature(recordKey, `${recordKey}-${index}`, type, index * 100));
+  return {
+    resultIndex, resultName: `result-${resultIndex}.svg`, recordKeys: [recordKey], biologicalFeatures,
+    features: biologicalFeatures.map(({ biologicalFeatureId }) => ({
+      svgId: `svg-${biologicalFeatureId}`, recordKey, biologicalFeatureId, fillColor: '#000000',
+      drawnSelector: { hash: `svg-${biologicalFeatureId}`, location: null, recordLocation: null }
+    })),
+    orthogroups: [], annotations: [], comparisonMatches: []
+  };
+};
+const batchCatalog = () => ({ schema: 5, items: [catalogItem(0, 'REC1', TWO_TYPES.types), catalogItem(1, 'REC2', ONE_TYPE.types)] });
+const ref = (value) => ({ value });
+const batchState = (catalog, shown, extra = {}) => ({
+  originalLegendOrder: ref([]), results: ref([0, 1].map((index) => ({ name: `result-${index}.svg`, content: '<svg/>' }))),
+  selectedResultIndex: ref(shown), featureCatalog: catalog, extractedFeatures: ref([]), displayedResultMetadata: () => null,
+  paletteDefinitions: ref({ default: TWO_TYPES.palette }), appliedPaletteName: ref('default'), appliedPaletteColors: ref({}),
+  ...extra
+});
+const ruleDrawing = (rules, entries) => ({
+  mode: 'circular', slices: {}, legendEntries: ref(entries), deletedLegendEntries: ref([]), dormantLegendEntries: ref([]),
+  manualSpecificRules: rules, featureOverrides: {}, featureVisibilityManualRules: [], canvasPadding: NO_PADDING
+});
+
+// The Save and Generate leaves key a batch's rule rows in each Result's own features of the catalog
+// (`requestLegendEditLeaves`), as Python keys them: every row of the rule is a rule row, whichever Result is shown.
+test('the request\'s leaves key the rule rows of each Result of a batch catalog alone, whichever Result is shown', () => {
+  const rules = [{ feat: '*', qual: 'translation', val: '.', color: 'palette', cap: 'Ribosomal' }];
+  const keys = [...TWO_TYPES.keys[0], ...ONE_TYPE.keys[0]];
+  for (const shown of [0, 1]) {
+    // The shown Result's inventory lists every row, so each is Python's; the displayed Result's features are none.
+    const state = batchState(ref(batchCatalog()), shown, { originalLegendOrder: ref([...keys, 'CDS']) });
+    const drawing = ruleDrawing(rules, [...keys.map((key) => row(key, 'Renamed')), row('CDS', 'Genes')]);
+    // The rule rows' renames are carried by the rule; the CDS type row's is sent.
+    assert.deepEqual(requestLegendEditLeaves(state, drawing), { 'objects.legends.row_names': [['CDS', 'Genes']] }, `shown: Result ${shown}`);
+  }
+});
+
+// Without a catalog (a Session 27-39 batch before its first Generate), the leaves key the rule rows in the shown
+// Result alone: its drawn features and Python's rows of that Result. HmmtDNA batch, rule `CDS product . #ff0000
+// "tRNA"`: Result 1 (shown) draws tRNA, so the rule's row there is `tRNA [#ff0000]`; Result 0 draws no tRNA, and
+// Python keys the rule's row `tRNA`. The tRNA type row renamed on Result 1 is sent.
+test('without a catalog the leaves read the shown Result\'s features with that Result\'s rows', () => {
+  // The Result's text with its Legend row of `key` keyed `as`, its swatch drawn in `fill` (as Python writes it).
+  const base = galleryResultText('HmmtDNA_basic_circular');
+  const redrawn = (key, fill, as = key) => {
+    const row = new RegExp(`<g data-legend-key="${key}"><path ([^>]*?)fill="#[0-9a-f]{6}"`);
+    assert.match(base, row, key);
+    return base.replace(row, `<g data-legend-key="${as}"><path $1fill="${fill}"`);
+  };
+  const contents = [redrawn('tRNA', '#ff0000'), redrawn('rRNA', '#ff0000', 'tRNA [#ff0000]')];
+  const inventory = ['tRNA [#ff0000]', 'tRNA', 'CDS'];
+  const state = batchState(null, 1, {
+    originalLegendOrder: ref(inventory), results: ref(contents.map((content, index) => ({ name: `result-${index}.svg`, content }))),
+    extractedFeatures: ref([{ svg_id: 'c1', type: 'CDS' }, { svg_id: 't1', type: 'tRNA' }])
+  });
+  const drawing = ruleDrawing([{ feat: 'CDS', qual: 'product', val: '.', color: '#ff0000', cap: 'tRNA' }],
+    [row('tRNA [#ff0000]', 'tRNA'), row('tRNA', 'Transfer RNA'), row('CDS')]);
+  assert.deepEqual(requestLegendEditLeaves(state, drawing), { 'objects.legends.row_names': [['tRNA', 'Transfer RNA']] });
+});
+
+// A request whose rules have no caption reads no Result's catalog features: the leaves admit the catalog only
+// when a rule row's key needs them.
+test('the request\'s leaves admit no catalog without a captioned rule', () => {
+  // An admission reads the catalog's schema first (`admitFeatureCatalog`).
+  let admissions = 0;
+  const catalog = batchCatalog();
+  const { schema } = catalog;
+  Object.defineProperty(catalog, 'schema', { get: () => { admissions += 1; return schema; } });
+  const drawing = ruleDrawing([{ feat: 'CDS', qual: 'product', val: '.', color: '#ff0000', cap: '' }], [row('CDS', 'Genes')]);
+  const state = batchState(ref(catalog), 0, { originalLegendOrder: ref(['CDS']) });
+  assert.deepEqual(requestLegendEditLeaves(state, drawing), { 'objects.legends.row_names': [['CDS', 'Genes']] });
+  assert.equal(admissions, 0, 'no admission without a captioned rule');
+  drawing.manualSpecificRules[0].cap = 'Red';
+  requestLegendEditLeaves(state, drawing);
+  assert.ok(admissions > 0, 'a captioned rule admits the catalog');
 });
 
 // Load reads the leaves of a stored request once (`readLegendEditLeaves`): a Web request's overrides, else a CLI or

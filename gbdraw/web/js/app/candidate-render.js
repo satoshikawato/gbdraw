@@ -528,12 +528,13 @@ const identityTargets = (catalogAdmission, row) => (
 
 // The Legend state of each Result a compile keys its rule rows in: the live
 // draft's displayed Result (one state for every Result), else (Generate
-// compiles before it reads Python's rows) each Result in the features it
-// renders and the type colors it was drawn in, keyed alone, as Python keys
-// each Result of a batch (`resultLegendRowContexts`). A Result's features are
-// read when iterated (a compile without a captioned rule reads none). Without
-// Python's rows, the key is the one the rule table allocates, which is the key
-// of every caption written in several fills.
+// compiles before it reads Python's rows) each Result in the features its
+// catalog admission renders and the type colors it was drawn in, keyed alone,
+// as Python keys each Result of a batch (`resultLegendRowContexts`, which
+// reads a Result's features when a key reads them: a compile without a
+// captioned rule reads none). Without Python's rows, the key is the one the
+// rule table allocates, which is the key of every caption written in several
+// fills.
 /**
  * @param {readonly Partial<SpecificColorRule>[]} rules
  * @param {Iterable<string>} originalCaptions
@@ -545,17 +546,20 @@ const identityTargets = (catalogAdmission, row) => (
 const compiledRuleRowContexts = (rules, originalCaptions, livePreview, catalogAdmission, typeColors) => {
   const table = { rules: [...rules], originalLegendOrder: [...originalCaptions] };
   if (livePreview) {
-    const [live] = resultLegendRowContexts(table, [
-      { pythonRows: livePreview.pythonRows ?? new Map(), features: livePreview.features ?? [], palette: livePreview.paletteColors }
-    ]);
+    const features = livePreview.features ?? [];
+    const [live] = resultLegendRowContexts(table, {
+      renderedFeaturesByResult: [{ values: () => features }], palette: livePreview.paletteColors, pythonRowsByResult: [livePreview.pythonRows ?? new Map()]
+    });
     return catalogAdmission.resultNames.map(() => live);
   }
-  return resultLegendRowContexts(table, catalogAdmission.resultNames.map((_, resultIndex) => ({
-    pythonRows: new Map(),
-    // A Result the addressing holds no rendered features of draws none.
-    features: { * [Symbol.iterator]() { yield* (catalogAdmission.renderedFeaturesByResult[resultIndex] || new Map()).values(); } },
+  // One per Result the compile writes, by index, read from the admission when a key reads it; a Result the
+  // addressing holds no rendered features of draws none.
+  return resultLegendRowContexts(table, {
+    renderedFeaturesByResult: catalogAdmission.resultNames.map((_, resultIndex) => ({
+      values: () => catalogAdmission.renderedFeaturesByResult[resultIndex]?.values() ?? []
+    })),
     palette: typeColors
-  })));
+  });
 };
 
 // The rule rows of a compile in `contexts` (one per Result): a rule's row key

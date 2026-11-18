@@ -10,7 +10,7 @@ import { displayedLegendRowColors, draftLegendRowColors, LIVE_EDIT_DOMAINS, name
 import { draftLegendRows } from '../../services/legend-draft-rows.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColorOf, appliedFeatureColors, appliedRuleFill, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, appliedFeatureColors, appliedRuleFill, isTypeColorValue, resolveColorToHex } from '../../utils/color-utils.js';
 import { TYPE_COLOR_VALUE } from '../../contracts/schema.generated.js';
 import { getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue, literalPatternText, namedFeatureInstance } from '../../services/feature-selector.js';
@@ -296,6 +296,24 @@ const typeDefaultRowRename = ({ listed, dormant }, row, type, name, keepDormant)
     ? [{ caption: /** @type {LegendCaption} */ (name), originalCaption: typeKey, color: row.color, featureIds: [] }] : [];
   if (namesType || kept.length !== dormant.length) keepDormant([...kept, ...typeName]);
   return /** @type {LegendCaption} */ (namesType ? key : name);
+};
+
+// The colors of a Legend rename: `color`, the row's color after it (its live row's and the Legend's); whether it
+// keeps the row's color; and `written`, the color the rules it writes take. A rename that keeps the row's color keeps
+// each rule's own color (OV-3806), in every branch of the rename: the row's rules take the new name only
+// (`keepsColor`), and rules written for its features (a feature alone in its row, "This feature only", a split) take
+// the type color value where every rule of the row is of it, so they still follow the palette; a row of literal
+// colors gives them the hex it shows. A Merge into a row of another color recolors.
+/**
+ * @param {Pick<LegendRenameRequest, 'finalColor' | 'currentColor'>} request
+ * @param {readonly Partial<SpecificColorRule>[]} sourceRules The rules that draw the renamed row.
+ * @returns {{ color: string, keepsColor: boolean, written: string }}
+ */
+const legendRenameColors = (request, sourceRules) => {
+  const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
+  const keepsColor = color.toLowerCase() === (resolveColorToHex(request.currentColor) || '#cccccc').toLowerCase();
+  const followsType = keepsColor && sourceRules.length > 0 && sourceRules.every((rule) => isTypeColorValue(rule.color));
+  return { color, keepsColor, written: followsType ? TYPE_COLOR_VALUE : color };
 };
 
 // Without History (a test of this owner, a rename in its caller's step), a step's function runs alone.
@@ -912,13 +930,10 @@ export const createFeatureColorActions = ({
   /** @param {DrawingState} drawing @param {LegendRenameRequest} request */
   const applyPreparedLegendRename = async (drawing, request) => {
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
-    const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
-    // A rename that keeps the row's color names the row's rules only: each keeps its own color, so a rule of the
-    // type color value still follows the palette (OV-3806). A Merge into a row of another color recolors them.
-    const keepsColor = colorsMatch(color, resolveColorToHex(request.currentColor) || '#cccccc');
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
     const sourceRules = getLegendRowRules(drawing, request.sourceKey);
+    const { color, keepsColor, written } = legendRenameColors(request, sourceRules);
     // OV-244 (c): a type's palette row renamed whole keeps its features and
     // its color and takes the new name, which Python's row names draw. The
     // test the row's color edit takes (D-15, `paletteRowType`) decides it, so
@@ -943,8 +958,8 @@ export const createFeatureColorActions = ({
       const retireOld = Boolean(oldEntry) && features.length > 0 && takesWholeRow(request.sourceKey, features);
       const joins = request.joins ?? null;
       const rules = request.sourceScope === 'group' && sourceRules.length
-        ? reviseColorRules(sourceRules, { cap: caption, color }, joins, keepsColor)
-        : groupColorRules(features, color, caption, retireOld && !joins ? 'row' : 'group', joins);
+        ? reviseColorRules(sourceRules, { cap: caption, color: written }, joins, keepsColor)
+        : groupColorRules(features, written, caption, retireOld && !joins ? 'row' : 'group', joins);
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],

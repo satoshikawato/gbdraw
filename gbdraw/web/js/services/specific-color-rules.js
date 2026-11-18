@@ -290,6 +290,26 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  * @typedef {Pick<LegendRowContext, 'features' | 'palette' | 'pythonRows'>} ResultLegendState
  */
 
+/**
+ * The features one Result renders as a holder keeps them, read when a key reads them: a catalog admission's map by
+ * rendered ID (`renderedFeaturesByResult`), or what a holder without one reads in its place.
+ * @typedef {{ values(): Iterable<LegendRowFeature> }} ResultRenderedFeatures
+ */
+
+/**
+ * What a reader holds of the Results of one drawing, in which their rule rows are keyed (`resultLegendRowContexts`):
+ * each Result's rendered features, by index (`renderedFeaturesByResult`; none for a Result it holds none of), the
+ * type colors they are drawn in, Python's rows of each Result where the reader has them (one per Result, by index;
+ * none at Generate's compile, which keys before Python draws), and the features still drawn (`drawn`; every
+ * rendered feature without it).
+ * @typedef {{ renderedFeaturesByResult: readonly (ResultRenderedFeatures | undefined)[], palette: FeatureTypeColors,
+ *   pythonRowsByResult?: readonly ReadonlyMap<PythonLegendKey, PythonLegendRow>[],
+ *   drawn?: (feature: LegendRowFeature) => boolean }} DrawingResults
+ */
+
+/** @type {ReadonlyMap<PythonLegendKey, PythonLegendRow>} */
+const NO_PYTHON_ROWS = new Map();
+
 // The key of a feature type's "other" row: Python's `_other_feature_legend_key`.
 /** @param {string} type @returns {PythonLegendKey} */
 export const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
@@ -971,18 +991,37 @@ export const captionedRuleRows = (context, ruleMatches) => {
 };
 
 // THE Legend states of the Results of a drawing that its rule rows are keyed
-// in: the table (its rules and inventory) over each Result's own drawn state.
-// Python keys the rule rows of each Result of a batch over the types that
-// Result draws (`gbdraw circular` of several records): a `*` rule of the type
-// color value in one type's color only where that Result draws no other type.
-// A reader of a drawing's Results reads them one by one here, never as one
-// state of every Result's features.
+// in: the table (its rules and inventory) over each Result's own drawn state
+// (`ResultLegendState`), built here from what the reader holds: each Result's
+// rendered features, still drawn, paired by index with Python's rows of that
+// Result. Python keys the rule rows of each Result of a batch over the types
+// that Result draws (`gbdraw circular` of several records): a `*` rule of the
+// type color value in one type's color only where that Result draws no other
+// type. A reader of a drawing's Results reads them one by one here, never as
+// one state of every Result's features. A Result's features are read when a
+// key reads them: a table without a captioned rule reads none.
 /**
  * @param {Pick<LegendRowContext, 'rules' | 'originalLegendOrder'>} table
- * @param {Iterable<ResultLegendState>} results
- * @returns {LegendRowContext[]}
+ * @param {DrawingResults} results
+ * @returns {LegendRowContext[]} One per Result, by index.
  */
-export const resultLegendRowContexts = (table, results) => Array.from(results, (result) => ({ ...table, ...result }));
+export const resultLegendRowContexts = (table, { renderedFeaturesByResult, palette, pythonRowsByResult, drawn }) => {
+  if (pythonRowsByResult && pythonRowsByResult.length !== renderedFeaturesByResult.length) {
+    throw new Error(`Python's rows of ${pythonRowsByResult.length} Results do not pair with the features of ${renderedFeaturesByResult.length}.`);
+  }
+  return renderedFeaturesByResult.map((rendered, index) => {
+    /** @type {ResultLegendState} */
+    const result = {
+      features: { * [Symbol.iterator]() {
+        if (!rendered) return;
+        for (const feature of rendered.values()) if (!drawn || drawn(feature)) yield feature;
+      } },
+      palette,
+      pythonRows: pythonRowsByResult ? pythonRowsByResult[index] : NO_PYTHON_ROWS
+    };
+    return { ...table, ...result };
+  });
+};
 
 // The keys of every rule row the Results of a drawing draw: the union of each
 // Result's (`captionedRuleRows`), so a reader names the same rule rows

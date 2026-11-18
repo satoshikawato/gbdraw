@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { makeTempDir } from './helpers/temp-dir.cjs';
+import { ruleOwnerPorts } from './helpers/rule-preparation-ports.mjs';
 
 // No type colors and no drawn types: rules of literal colors only (`RuleFills`).
 const NO_FILLS = Object.freeze({ palette: Object.freeze({}), types: Object.freeze([]) });
@@ -131,6 +132,7 @@ const applyRulePreviewFill = (featureId, color) => {
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
 const { createRulePreparation, ruleFeaturePayload, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { createFeatureRuleActions } = await import(pathToFileURL(join(tempDir, 'app', 'feature-editor', 'rule-actions.js')));
 const { ruleMatcher } = await import(pathToFileURL(join(tempDir, 'services', 'rule-matchers.js')));
 const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 // The rule owner's `runWithRuleMatches` for these fakes: the color matches of the rules, prepared once.
@@ -1038,7 +1040,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     };
   };
   const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {}, deleted = [], scopeDialog = {}, clicked = null, legendRowIsNamed,
-    legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {}, featureColorOverrides = {}, dormant = [] }) => {
+    legendRowName, legendEntryName, findLegendRowNamed, keepBothNamesOf, ruleOverrides = {}, otherRows = {}, featureColorOverrides = {}, dormant = [],
+    productionRules = false }) => {
     // Each derivation of the Legend row colors reads the displayed Result once.
     const derivations = { count: 0 };
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
@@ -1067,6 +1070,21 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       ]))
     });
     const stateDormantEntries = ref(dormant.map((entry) => ({ featureIds: [], ...entry })));
+    const typeColors = { tRNA: '#e8b441', CDS: '#54bcf8' };
+    // The Legend state a rule build reads (`SpecificRuleBuild`'s `legendRows`): the displayed Result's rows as the
+    // fixture lists them, its features and type colors.
+    const legendRowContext = () => ({
+      rules, originalLegendOrder: originalOrder.value, features: featureList.value, palette: typeColors,
+      pythonRows: new Map(stateLegendEntries.value.map((entry) => [entry.originalCaption, { key: entry.originalCaption, color: entry.color }]))
+    });
+    // `productionRules`: the rule owner's own builds (app/feature-editor/rule-actions.js), not the test's stand-in,
+    // over the same rule preparation.
+    const ruleOwner = productionRules ? createFeatureRuleActions({
+      state: withDrawings({ ...renameState, errorLog: ref(null), newSpecRule: {}, specificRulePresets: [], selectedSpecificPreset: ref(''),
+        specificRulePresetLoading: ref(false), editableLabels: ref([]) }),
+      ref, computed: (get) => ({ get value() { return get(); } }), watch: () => () => {}, nextTick: async () => {},
+      ...ruleOwnerPorts(renamePreparation)
+    }) : null;
     // History's checkpoint steps the owner runs, by label.
     const checkpoints = [];
     const renameActions = createFeatureColorActions({ readDrawnTracks: () => [],
@@ -1089,7 +1107,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       nextTick: async () => {},
       runWithRuleMatches: runWithRuleMatchesOf(renamePreparation, renameState),
       commitSpecificRules: async (next, _label, options = {}) => {
-        committed.push((await next(rules, (row, patch) => ({ ...row, ...patch }))).map((rule) => ({ ...rule })));
+        const built = await next(rules, (row, patch) => ({ ...row, ...patch }), () => featureList.value, legendRowContext);
+        committed.push((Array.isArray(built) ? built : built.rules).map((rule) => ({ ...rule })));
         commitOptions.push(options);
         return true;
       },
@@ -1100,8 +1119,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
       findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
       getIndividualFeatureLabel: (feature) => feature.product,
-      groupColorRules: groupColorRulesOver(renamePreparation, (feature) => [feature.product], rowRules),
-      reviseColorRules: reviseColorRulesOver(renamePreparation, rowRules),
+      groupColorRules: ruleOwner ? ruleOwner.groupColorRules : groupColorRulesOver(renamePreparation, (feature) => [feature.product], rowRules),
+      reviseColorRules: ruleOwner ? ruleOwner.reviseColorRules : reviseColorRulesOver(renamePreparation, rowRules),
       ...ruleOverrides,
       getFeatureElements: () => [],
       getFeatureFillElements: () => []
@@ -1263,7 +1282,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   });
   const rowNames = (fixture, rules = []) => legendEditConfigLeaves({
     legendEntries: fixture.stateLegendEntries.value, deletedLegendEntries: [], originalLegendOrder: fixture.originalOrder.value,
-    pythonRowKeys: fixture.originalOrder.value, rules, results: [{ features: [], palette: {}, pythonRows: new Map() }],
+    pythonRowKeys: fixture.originalOrder.value, rules, results: { renderedFeaturesByResult: [[]], palette: {} },
     canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
   });
   const namesOf = (fixture) => fixture.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]);
@@ -1347,12 +1366,45 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   ]) {
     const renamedRule = build({
       entries: [{ caption: 'Highlighted', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: ['Highlighted', 'GC content'],
-      rules: [rule], features: [cds('h1', 'COX1', 'Highlighted'), cds('h2', 'COX2', 'Highlighted')],
+      rules: [rule], features: [cds('h1', 'COX1', 'Highlighted'), cds('h2', 'COX2', 'Highlighted')], productionRules: true,
       ruleOverrides: { getLegendRowRules: (_drawing, key) => (key === 'Highlighted' ? [rule] : []) }
     });
     await renamedRule.renameActions.renameLegendEntry(0, 'rRNA genes');
     if (renamedRule.legendRenameDialog.mode === 'scope') await renamedRule.renameActions.handleLegendRenameChoice('group');
     assert.deepEqual(renamedRule.committed.map((rules) => rules.map(({ color, cap }) => [color, cap])), [[[rule.color, 'rRNA genes']]], shape);
+  }
+  // OV-3806 through the feature popup's Legend name, in the rule owner's own builds: a feature alone in its row, and
+  // "This feature only" on a row of two, keep the type color value of the row's rule; a literal rule's row writes the
+  // hex it shows, as before. HmmtDNA, `CDS product ^COX1$ palette "Mine"` (alone), `CDS product ^COX palette
+  // "Highlighted"` (two features), COX1 renamed "Renamed" in the popup.
+  for (const color of ['palette', '#54BCF8']) {
+    const written = color === 'palette' ? 'palette' : '#54bcf8';
+    const mine = { feat: 'CDS', qual: 'product', val: '^COX1$', color, cap: 'Mine' };
+    const alone = cds('h1', 'COX1', 'Mine');
+    const aloneRow = build({
+      entries: [{ caption: 'Mine', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: ['Mine', 'GC content'],
+      rules: [mine], features: [alone], productionRules: true,
+      clicked: { svg_id: 'h1', feat: alone, color: '#54bcf8', legendName: 'Renamed', appliedLegendName: 'Mine' },
+      ruleOverrides: { getLegendRowRules: (_drawing, key) => (key === 'Mine' ? [mine] : []) }
+    });
+    await aloneRow.renameActions.handleLegendNameCommit();
+    assert.deepEqual(aloneRow.committed.map((rules) => rules.map(({ color: each, cap }) => [each, cap])), [[[written, 'Renamed']]],
+      `${color}: a feature alone in its row`);
+    const highlighted = { feat: 'CDS', qual: 'product', val: '^COX', color, cap: 'Highlighted' };
+    const cox1 = cds('h1', 'COX1', 'Highlighted');
+    const split = build({
+      entries: [{ caption: 'Highlighted', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: ['Highlighted', 'GC content'],
+      rules: [highlighted], features: [cox1, cds('h2', 'COX2', 'Highlighted')], productionRules: true,
+      clicked: { svg_id: 'h1', feat: cox1, color: '#54bcf8', legendName: 'Renamed', appliedLegendName: 'Highlighted' },
+      ruleOverrides: { getLegendRowRules: (_drawing, key) => (key === 'Highlighted' ? [highlighted] : []) }
+    });
+    await split.renameActions.handleLegendNameCommit();
+    assert.deepEqual([split.legendRenameDialog.show, split.legendRenameDialog.mode], [true, 'scope'], 'a row of two features asks the scope');
+    await split.renameActions.handleLegendRenameChoice('single');
+    assert.equal(split.committed.length, 1, `${color}: "This feature only" writes rules`);
+    const [renamed, kept] = split.committed[0];
+    assert.deepEqual([renamed.color, renamed.cap], [written, 'Renamed'], `${color}: the feature split off keeps the rule's color`);
+    assert.deepEqual(kept, highlighted, `${color}: the row's rule stays as written`);
   }
   // V-OD27 (review R2 findings 1 and 2): a type's default row has one name, on the type's key. In S2 (CDS renamed
   // Coding, then a captioned rule "Marker" for COX1) the figure draws CDS's default row as its "other" row, named
@@ -1379,7 +1431,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   };
   const s2Leaves = (fixture, rules) => legendEditConfigLeaves({
     legendEntries: fixture.stateLegendEntries.value, deletedLegendEntries: [], dormantLegendEntries: fixture.stateDormantEntries.value,
-    originalLegendOrder: fixture.originalOrder.value, pythonRowKeys: fixture.originalOrder.value, rules, results: [{ features: [], palette: {}, pythonRows: new Map() }],
+    originalLegendOrder: fixture.originalOrder.value, pythonRowKeys: fixture.originalOrder.value, rules, results: { renderedFeaturesByResult: [[]], palette: {} },
     canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
   });
   const dormantOf = (fixture) => fixture.stateDormantEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]);

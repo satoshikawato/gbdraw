@@ -140,6 +140,7 @@
       "keys": ["tRNA"] },
     {"name": "a palette rule and a literal rule sharing one caption", "rules": [{"feat": "rRNA", "qual": "product", "val": "x", "color": "palette", "cap": "small rRNA"}, {"feat": "rRNA", "qual": "product", "val": "x", "color": "#ff00ff", "cap": "small rRNA"}], "renderer_rows": [], "palette": {"rRNA": "#71ee7d", "CDS": "#54bcf8", "default": "#d3d3d3"}, "types": ["rRNA"], "keys": ["small rRNA [#71ee7d]", "small rRNA [#ff00ff]"]},
     {"name": "a palette rule for every type over two drawn types, a key per type", "rules": [{"feat": "*", "qual": "product", "val": "x", "color": "palette", "cap": "Ribosomal"}], "renderer_rows": [], "palette": {"rRNA": "#71ee7d", "CDS": "#54bcf8", "default": "#d3d3d3"}, "types": ["rRNA", "CDS"], "keys": [["Ribosomal [#71ee7d]", "Ribosomal [#54bcf8]"]]},
+    {"name": "a palette rule for every type over one drawn type, keyed by its caption", "rules": [{"feat": "*", "qual": "product", "val": "x", "color": "palette", "cap": "Ribosomal"}], "renderer_rows": [], "palette": {"rRNA": "#71ee7d", "CDS": "#54bcf8", "default": "#d3d3d3"}, "types": ["CDS"], "keys": [["Ribosomal"]]},
     {"name": "a palette rule whose type color is a literal rule's color is one row (D-28)", "rules": [{"feat": "rRNA", "qual": "product", "val": "x", "color": "palette", "cap": "Shared"}, {"feat": "CDS", "qual": "product", "val": "x", "color": "#71ee7d", "cap": "Shared"}], "renderer_rows": [], "palette": {"rRNA": "#71ee7d", "CDS": "#54bcf8", "default": "#d3d3d3"}, "types": ["rRNA", "CDS"], "keys": ["Shared", "Shared"]}
   ]
 }

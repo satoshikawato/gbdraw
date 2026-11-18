@@ -28,8 +28,8 @@ import { createRuleLegendCaptions, featureLegendRows, ruleFillsOf, ruleRowFills 
 /** @import { AnnotationTarget } from './annotation-state.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
-/** @import { DrawnLegendState, LegendRowContext, RuleFills, SpecificColorRule } from './specific-color-rules.js' */
-/** @import { PythonLegendKey } from './legend-svg.js' */
+/** @import { DrawingResults, DrawnLegendState, LegendRowContext, RuleFills, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { WebState } from '../state.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
@@ -826,34 +826,41 @@ export const displayedDrawnFeatures = (state, drawing) => ({
   }
 });
 
-// The drawn state of each Result of the shown drawing that its rule rows are
-// keyed in (`ResultLegendState` without Python's rows): the features its
-// catalog renders that are still drawn (`resolveFeatureDrawn`), in the applied
-// type colors, as Generate's compile keys each Result (app/candidate-render.js
-// `compiledRuleRowContexts`). Without a Result, or a catalog of every Result
-// (a Session older than 40, which holds no rule of the type color value), the
-// displayed Result's state alone.
+// What the shown drawing holds of its Results, in which its rule rows are
+// keyed (`DrawingResults`, paired by `resultLegendRowContexts`): each Result's
+// features its catalog renders that are still drawn (`resolveFeatureDrawn`),
+// in the applied type colors, with Python's rows of that Result, as Generate's
+// compile keys each Result (app/candidate-render.js `compiledRuleRowContexts`).
+// A Result's catalog features are admitted when a key first reads them (a
+// request without a captioned rule admits none). Without a catalog (a Session
+// older than 40 until its first Generate) or a Result, the displayed Result
+// alone: its drawn features with the shown Result's rows.
 /**
  * @param {DisplayedDrawnInputs & Parameters<typeof resultCatalogFeatures>[0]} state
  * @param {Parameters<typeof displayedDrawnFeatures>[1]} drawing
  * @param {string} mode The drawing's mode, whose catalog the Results are admitted in.
- * @returns {DrawnLegendState[]}
+ * @param {readonly ReadonlyMap<PythonLegendKey, PythonLegendRow>[]} pythonRowsByResult Python's rows of each of
+ *   `state.results`, by index.
+ * @returns {DrawingResults}
  */
-export const resultDrawnStates = (state, drawing, mode) => {
+export const drawingDrawnResults = (state, drawing, mode, pythonRowsByResult) => {
   const palette = appliedFeatureColors(state);
-  const count = Array.isArray(state?.results?.value) ? state.results.value.length : 0;
-  /** @type {DrawnLegendState[]} */
-  const states = [];
-  for (let index = 0; index < count; index += 1) {
-    const catalogFeatures = resultCatalogFeatures(state, mode, index);
-    if (!catalogFeatures) return [displayedDrawnState(state, drawing)];
-    const { rendered } = catalogFeatures;
-    states.push({ features: { * [Symbol.iterator]() {
-      const context = featureDrawnContext(drawing);
-      for (const feature of rendered.values()) if (resolveFeatureDrawn(feature, context) !== false) yield feature;
-    } }, palette });
+  if (pythonRowsByResult.length === 0 || !state.featureCatalog?.value) {
+    const shown = Number(state.selectedResultIndex?.value) || 0;
+    const shownRows = pythonRowsByResult.length === 0 ? new Map() : pythonRowsByResult[shown];
+    if (!shownRows) throw new Error(`The shown Result ${shown} is not one of the drawing's ${pythonRowsByResult.length} Results.`);
+    return { renderedFeaturesByResult: [{ values: () => displayedDrawnFeatures(state, drawing) }], palette, pythonRowsByResult: [shownRows] };
   }
-  return states.length > 0 ? states : [displayedDrawnState(state, drawing)];
+  /** @type {FeatureDrawnContext | null} One pass of the request over the features. */
+  let context = null;
+  return {
+    renderedFeaturesByResult: pythonRowsByResult.map((_, index) => ({
+      values: () => resultCatalogFeatures(state, mode, index)?.rendered.values() ?? []
+    })),
+    palette,
+    pythonRowsByResult,
+    drawn: (feature) => resolveFeatureDrawn(feature, context ??= featureDrawnContext(drawing)) !== false
+  };
 };
 
 /**

@@ -12,7 +12,7 @@ import {
 import { resultLegendRowContexts, resultsRuleRowKeys } from './specific-color-rules.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
 /** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
-/** @import { ResultLegendState, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { DrawingResults, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { CanvasPadding } from './drawing/canvas.js' */
 /** @import { HistoryChangeLike, RefitField } from './setting-application.js' */
 
@@ -178,10 +178,10 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
 /**
  * The draft a request projects into `LegendEditConfigLeaves`. `pythonRowKeys`: the keys of the rows Python drew, by
  * which a row is Python's and not the editor's; `originalLegendOrder` stays the shown Result's inventory, by which an
- * order is edited. `results`: each Result of the drawing as its rule rows are keyed (`ResultLegendState`: the features
- * it draws, its type colors, and Python's rows of it, `pythonRowsOfResults`); the rule rows are those of any Result
- * (`resultsRuleRowKeys`), so the leaves do not change with the shown Result.
- * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], results: readonly ResultLegendState[],
+ * order is edited. `results`: what the drawing holds of its Results, in which their rule rows are keyed
+ * (`DrawingResults`: each Result's features, its type colors, and Python's rows of it, `pythonRowsOfResults`); the
+ * rule rows are those of any Result (`resultsRuleRowKeys`), so the leaves do not change with the shown Result.
+ * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], results: DrawingResults,
  *   canvasPadding: Readonly<CanvasPadding>, pythonRowKeys: readonly string[] }} LegendEditDraft
  */
 
@@ -230,7 +230,7 @@ const resultPythonRows = (results, parser = globalThis.DOMParser) => {
 
 /**
  * Python's rows of each Result of a drawing, by key with the fill Python drew, in which a request keys the rule rows
- * of that Result (`ResultLegendState.pythonRows`).
+ * of that Result (`DrawingResults.pythonRowsByResult`).
  * @param {readonly { content?: unknown }[]} results
  * @param {typeof DOMParser} [parser]
  * @returns {ReadonlyMap<PythonLegendKey, PythonLegendRow>[]}
@@ -282,6 +282,10 @@ export const legendEditConfigLeaves = ({ rules, results, canvasPadding, pythonRo
   return leaves;
 };
 
+// A drawing whose Results the leaves read nothing of.
+/** @type {DrawingResults} */
+const NO_RESULTS = Object.freeze({ renderedFeaturesByResult: [], palette: {} });
+
 /**
  * What Python draws and sizes of a Legend draft and its canvas padding, as the request's config leaves carry it
  * (`legendEditConfigLeaves`), with a rule row's name too: without rules the projection names every renamed row
@@ -307,7 +311,7 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, dormantLegendEntr
   const ruleRows = Array.isArray(rules) ? rules : [];
   // No rules, so no rule row is keyed: no Result's state is read.
   return JSON.stringify([legendEditConfigLeaves({
-    rules: [], results: [], canvasPadding: padding,
+    rules: [], results: NO_RESULTS, canvasPadding: padding,
     legendEntries: listed, deletedLegendEntries: deleted, dormantLegendEntries: dormant,
     originalLegendOrder, pythonRowKeys
   }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);

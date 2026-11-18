@@ -29,7 +29,7 @@ globalThis.window = { Vue: {
 const { savedResultEdits } = await import('../../gbdraw/web/js/services/config.js');
 // A saved Result that draws no feature, in no type color: its rule rows are keyed as written.
 // One Result that draws no feature (`SavedDrawnResults`).
-const NONE_DRAWN = Object.freeze({ featuresByResult: [[]], palette: {} });
+const NONE_DRAWN = Object.freeze({ renderedFeaturesByResult: [[]], palette: {} });
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {

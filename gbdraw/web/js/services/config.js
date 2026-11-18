@@ -396,7 +396,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow, ResourceTexts } from './session-request.js' */
 /** @import { AddedResource, DerivedRegionDrawing, PastedRecords } from '../contracts/locate.generated.js' */
-/** @import { FeatureTypeColors, LegendRowFeature, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { DrawingResults, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { RecordDisplayDraft } from './record-display-model.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
@@ -532,21 +532,34 @@ const paletteColorsFromDefinitions = (paletteName) => {
   return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
 
-// The palette a stored drawing's saved Results were drawn with: the applied
-// palette its Session saved with them (`resultUi`: `ui.appliedPaletteName`,
-// `ui.appliedPaletteColors`, as `restoreAppliedPaletteFromSession` restores
-// it), else its config's (a drawing without Results, or a `ui` without it). A
-// queued palette (Instant Preview off) is the config's and drew no Result;
-// the committed request holds the applied one, which `gbdraw render --session`
-// reads (tests/fixtures/saved_rule_captions.json, `draft`).
+// THE applied palette a Session saved with a drawing's Results
+// (`ui.appliedPaletteName`, `ui.appliedPaletteColors`), else the draft palette
+// the reader holds (`draft`: a drawing without Results, or a `ui` without it).
+// A queued palette (Instant Preview off) is the draft and drew no Result; the
+// committed request holds the applied one, which `gbdraw render --session`
+// reads (tests/fixtures/saved_rule_captions.json, `draft`). Load reads it for
+// the shown drawing (`restoreAppliedPaletteFromSession`, over the drawing's
+// palette) and for the drawn state of each drawing's saved Results
+// (`storedPalette`, over the config's).
+/**
+ * @template {Record<string, string | null> | null} Colors
+ * @param {SavedPaletteFields | null | undefined} ui
+ * @param {{ name: string, colors: Colors }} draft
+ * @returns {{ name: string, colors: Record<string, string | null> | Colors }}
+ */
+const savedAppliedPalette = (ui, draft) => ({
+  name: String(ui?.appliedPaletteName || draft.name || 'default'),
+  colors: readPaletteColors(ui?.appliedPaletteColors).value ?? draft.colors
+});
+// The palette a stored drawing's saved Results were drawn with
+// (`savedAppliedPalette` over its config's palette).
 /**
  * @param {Readonly<Record<string, unknown>> | null | undefined} config
  * @param {SavedPaletteFields | null} resultUi The `ui` saved with the drawing's Results; null without Results.
  */
-const storedPalette = (config, resultUi) => ({
-  name: String(resultUi?.appliedPaletteName || config?.palette || 'default'),
-  colors: readPaletteColors(resultUi?.appliedPaletteColors).value
-    ?? (isPlainObject(config?.colors) ? /** @type {Record<string, string | null>} */ (config?.colors) : null)
+const storedPalette = (config, resultUi) => savedAppliedPalette(resultUi, {
+  name: String(config?.palette || ''),
+  colors: isPlainObject(config?.colors) ? /** @type {Record<string, string | null>} */ (config?.colors) : null
 });
 // The type colors of that palette (`appliedFeatureColors`: its colors with the
 // drawing's own Default colors over them). Load keys the rule rows of its
@@ -577,15 +590,9 @@ const storedTypeColors = (config, resultUi) => () => savedResetTypeColors(
 // The `ui` a stored Result set saved with its Results (`storedPalette`).
 /** @param {{ ui?: unknown } | undefined} set @returns {SavedPaletteFields | null} */
 const setResultUi = (set) => (set && isPlainObject(set.ui) ? /** @type {SavedPaletteFields} */ (set.ui) : null);
-// Each Result's rendered features of a catalog's feature state, in which Load
-// keys that Result's rule rows (`SavedDrawnResults`); one Result of none
-// without a catalog.
-/**
- * @param {{ renderedFeaturesByResult: readonly ReadonlyMap<string, LegendRowFeature>[] } | null | undefined} featureState
- * @returns {LegendRowFeature[][]}
- */
-const catalogResultFeatures = (featureState) => (featureState
-  ? featureState.renderedFeaturesByResult.map((rendered) => [...rendered.values()]) : [[]]);
+// One Result that draws no feature: a drawing without Results or a catalog (`SavedDrawnResults`).
+/** @type {SavedDrawnResults['renderedFeaturesByResult']} */
+const NO_RESULT_FEATURES = Object.freeze([new Map()]);
 
 /** @param {unknown} source */
 const cloneStringMap = (source) => readStringMap(source).value;
@@ -3479,16 +3486,18 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
 };
 
 /**
- * What the saved Results of a drawing draw, in which Load keys their rule rows: each Result's features (its
- * catalog's rendered features; one Result of none for a drawing without Results or a catalog) and the type colors
- * they were drawn in (`storedFeatureColors`).
- * @typedef {{ featuresByResult: readonly (readonly LegendRowFeature[])[], palette: FeatureTypeColors }} SavedDrawnResults
+ * What the saved Results of a drawing draw, in which Load keys their rule rows: each Result's rendered features (its
+ * catalog's feature state, `renderedFeaturesByResult`; one Result of none for a drawing without Results or a
+ * catalog) and the type colors they were drawn in (`storedFeatureColors`).
+ * @typedef {Pick<DrawingResults, 'renderedFeaturesByResult' | 'palette'>} SavedDrawnResults
  */
 
 // The rule rows whose key the reading of the saved captions `rules` changes
 // (F2), allocated over the generated rows a saved Result set kept (`kept`: its
-// inventory and Python's colors; none for a mode without a Result), in each
-// Result alone (`resultLegendRowContexts`): the re-keys of every Result.
+// inventory and Python's colors, the shown Result's, which a set keeps for
+// every Result; none for a mode without a Result), in each Result alone
+// (`resultLegendRowContexts`): the re-keys of every Result, the first Result
+// that re-keys a row giving its key.
 /**
  * @param {unknown} rules
  * @param {{ originalOrder: readonly PythonLegendKey[], originalColors: Record<string, string> }} kept
@@ -3503,7 +3512,7 @@ const savedLegendRekeys = (rules, kept, drawn) => {
     if (color) pythonRows.set(key, { key, color: /** @type {PythonLegendRow['color']} */ (color) });
   });
   const contexts = resultLegendRowContexts({ rules: Array.isArray(rules) ? rules : [], originalLegendOrder: kept.originalOrder },
-    drawn.featuresByResult.map((features) => ({ features, palette: drawn.palette, pythonRows })));
+    { ...drawn, pythonRowsByResult: drawn.renderedFeaturesByResult.map(() => pythonRows) });
   /** @type {Map<PythonLegendKey, PythonLegendKey>} */
   const rekeys = new Map();
   for (const context of contexts) {
@@ -3885,12 +3894,12 @@ const restorePaletteStateAfterConfigImport = (drawing) => {
  * @param {SavedPaletteFields} [ui]
  */
 const restoreAppliedPaletteFromSession = (drawing, ui = {}) => {
-  const draftPaletteName = String(drawing.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
-  const savedAppliedPaletteName = String(ui.appliedPaletteName || draftPaletteName || 'default');
-  const savedAppliedPaletteColors = readPaletteColors(ui.appliedPaletteColors).value ?? draftColors;
-  state.appliedPaletteName.value = savedAppliedPaletteName;
-  state.appliedPaletteColors.value = normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
+  const { name, colors } = savedAppliedPalette(ui, {
+    name: String(drawing.selectedPalette.value || state.appliedPaletteName.value || 'default'),
+    colors: normalizePaletteColors(cloneColors(drawing.currentColors.value))
+  });
+  state.appliedPaletteName.value = name;
+  state.appliedPaletteColors.value = normalizePaletteColors(cloneColors(colors));
 };
 
 /** @param {SavedPaletteFields | undefined} ui A saved `ui`. */
@@ -7570,7 +7579,7 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
   const { draft } = await readStoredDrawingDraft({
     id, mode, part, config,
     // A drawing that holds a request and no Result draws no feature.
-    legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }, { featuresByResult: [[]], palette: storedFeatureColors(config, null) }),
+    legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }, { renderedFeaturesByResult: NO_RESULT_FEATURES, palette: storedFeatureColors(config, null) }),
     resultUi: null, files, storedConservationBlasts: null, resolveTrackPlacements: true, validatedConfig: null,
     sourceSessionVersion: SESSION_VERSION, sliceVersion: SESSION_VERSION
   }, repairs);
@@ -8873,7 +8882,7 @@ const importSessionDocument = async (e, options = {}) => {
     const committedResultUi = logicalImportedResults.length > 0 ? ui : null;
     const committedSavedEdits = savedResultEdits(
       data, generatedMode, data.editorState, sourceSessionVersion, upgrade.sourceFacts, {
-        featuresByResult: catalogResultFeatures(currentCatalogFeatureState),
+        renderedFeaturesByResult: currentCatalogFeatureState ? currentCatalogFeatureState.renderedFeaturesByResult : NO_RESULT_FEATURES,
         palette: storedFeatureColors(draftConfigOf(committedSetDrawingId), committedResultUi)
       }, draftConfigOf(committedSetDrawingId)?.rules, storedTypeColors(draftConfigOf(committedSetDrawingId), committedResultUi)
     );
@@ -8931,7 +8940,7 @@ const importSessionDocument = async (e, options = {}) => {
       // The drawing's own draft part, found by its ID.
       const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
         sourceSessionVersion, upgrade.sourceFacts, {
-          featuresByResult: catalogResultFeatures(featureStateFromCatalog(catalog, { mode })),
+          renderedFeaturesByResult: featureStateFromCatalog(catalog, { mode }).renderedFeaturesByResult,
           palette: storedFeatureColors(draftConfigOf(drawing.id), setResultUi(set))
         }, draftConfigOf(drawing.id)?.rules, storedTypeColors(draftConfigOf(drawing.id), setResultUi(set)));
       savedEditsOf.set(drawing.id, savedEdits);
@@ -8954,7 +8963,7 @@ const importSessionDocument = async (e, options = {}) => {
     /** @param {DrawingId} drawingId @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
     const legendRekeysOf = (drawingId) => savedEditsOf.get(drawingId)?.legendRekeys
       ?? savedLegendRekeys(draftConfigOf(drawingId)?.rules, { originalOrder: [], originalColors: {} },
-        { featuresByResult: [[]], palette: storedFeatureColors(draftConfigOf(drawingId), null) });
+        { renderedFeaturesByResult: NO_RESULT_FEATURES, palette: storedFeatureColors(draftConfigOf(drawingId), null) });
     // The `ui` saved with a drawing's Results (`storedPalette`): the committed set's, a stored set's; none without.
     /** @param {DrawingId} drawingId @returns {SavedPaletteFields | null} */
     const resultUiOf = (drawingId) => (drawingId === committedSetDrawingId ? committedResultUi

@@ -56,7 +56,7 @@ globalThis.window = { Vue: {
 const { savedResultEdits } = await import('../../gbdraw/web/js/services/config.js');
 // A saved Result that draws no feature, in no type color: its rule rows are keyed as written.
 // One Result that draws no feature (`SavedDrawnResults`).
-const NONE_DRAWN = Object.freeze({ featuresByResult: [[]], palette: {} });
+const NONE_DRAWN = Object.freeze({ renderedFeaturesByResult: [[]], palette: {} });
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -1780,6 +1780,28 @@ test('Load moves a one-color rule row saved under its color ID, with its stored 
   const row = svg.querySelectorAll('g[data-legend-key]').find((each) => each.getAttribute('data-legend-key') === 'Complex IV');
   assert.equal(row.querySelector('path').getAttribute('stroke'), '#d62728', 'the saved stroke stays on its row');
   assert.equal(reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]).legendChanged, false);
+});
+
+// Load re-keys the rule rows of a batch's saved Results in each Result alone, in what it renders
+// (`SavedDrawnResults`), as Python keys each Result: a rule for every type of the type color value draws
+// `Ribosomal [#54bcf8]` in a Result that draws rRNA and CDS, and `Ribosomal` in one that draws only CDS, so a caption
+// saved as `Ribosomal [#54bcf8]` re-keys a row of each Result, and the re-keys of every Result reach the Legend records.
+test('Load re-keys the saved rule rows of each Result of a batch in what that Result renders', async () => {
+  const { savedRuleRowRekeys } = await import('../../gbdraw/web/js/services/specific-color-rules.js');
+  const session = sessionFixture(RULE_CAPTIONS);
+  const palette = { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' };
+  const rules = [
+    { feat: '*', qual: 'product', val: 'x', color: 'palette', cap: 'Ribosomal' },
+    { feat: 'CDS', qual: 'product', val: 'y', color: '#54bcf8', cap: 'Ribosomal [#54bcf8]' }
+  ];
+  const typesByResult = [['rRNA', 'CDS'], ['CDS']];
+  const rekeysOf = (types) => [...savedRuleRowRekeys({ rules, pythonRows: new Map(), originalLegendOrder: [], palette, features: types.map((type) => ({ type })) })];
+  const [twoTypes, oneType] = typesByResult.map(rekeysOf);
+  assert.deepEqual(twoTypes, [['Ribosomal [#54bcf8] (2)', 'Ribosomal [#54bcf8]']]);
+  assert.deepEqual(oneType, [['Ribosomal [#54bcf8]', 'Ribosomal']]);
+  const drawn = { renderedFeaturesByResult: typesByResult.map((types) => new Map(types.map((type, index) => [`f${index}`, { type }]))), palette };
+  const edits = savedResultEdits(session, 'circular', {}, session.version, sessionSourceFactsOf(session.version, false), drawn, rules);
+  assert.deepEqual([...edits.legendRekeys], [...twoTypes, ...oneType], 'the re-keys of each Result, the first Result first');
 });
 
 // OV-288 (R15-4): the stroked repeat_region row has a Legend color of its

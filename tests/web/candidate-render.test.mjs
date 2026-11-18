@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 
 import { compileDirectEditorMutationPlan, namedLegendCaption } from '../../gbdraw/web/js/app/candidate-render.js';
 import { legendRowFeatureIds } from '../../gbdraw/web/js/services/legend-svg.js';
@@ -455,23 +456,26 @@ test('the rows of a rule of the type color value are its rule\'s rows by their k
 // `gbdraw circular` with several records: a rule for every type of the type
 // color value draws `Ribosomal [#54bcf8]` and `Ribosomal [#71ee7d]` in the
 // Result that draws CDS and rRNA, and `Ribosomal` in the Result that draws
-// only CDS. Every one of them is a rule row, whichever Result is shown; the
-// compile adds none of them.
+// only CDS (tests/fixtures/legend_rule_keys.json, which Python checks). Every
+// one of them is a rule row, whichever Result is shown; the compile adds none
+// of them.
 test('a batch keys the rows of a rule for every type of the type color value in each Result alone at Generate', () => {
-  const palette = { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' };
+  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_rule_keys.json', import.meta.url), 'utf8'));
+  const [twoTypes, oneType] = ['a palette rule for every type over two drawn types, a key per type',
+    'a palette rule for every type over one drawn type, keyed by its caption'].map((name) => cases.find((each) => each.name === name));
+  const { palette } = twoTypes;
+  /** @param {string} result @param {string[]} types */
+  const renderedOf = (result, types) => new Map(types.map((type, index) => [`${result}${index}`, { type, fill_color: palette[type] }]));
   const options = {
     catalogAdmission: {
       ...admission(), resultNames: ['a.svg', 'b.svg'],
-      renderedFeaturesByResult: [
-        new Map([['f0001', { type: 'rRNA', fill_color: '#71ee7d' }], ['f0002', { type: 'CDS', fill_color: '#54bcf8' }]]),
-        new Map([['f0003', { type: 'CDS', fill_color: '#54bcf8' }]])
-      ]
+      renderedFeaturesByResult: [renderedOf('a', twoTypes.types), renderedOf('b', oneType.types)]
     },
     manualSpecificRules: [{ feat: '*', qual: 'translation', val: '.', color: 'palette', cap: 'Ribosomal' }],
     typeColors: palette,
     originalLegendOrder: ['CDS']
   };
-  for (const shown of [['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]'], ['Ribosomal']]) {
+  for (const shown of [twoTypes.keys[0], oneType.keys[0]]) {
     const plan = compileDirectEditorMutationPlan({ ...options, legendEntries: [
       ...shown.map((key) => ({ caption: key, originalCaption: key, color: '#000000' })),
       { caption: 'Mine', originalCaption: 'Mine', color: '#778899' }

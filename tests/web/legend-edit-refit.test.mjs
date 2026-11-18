@@ -27,7 +27,7 @@ const ENTRIES = [row('CDS'), row('tRNA'), row('rRNA')];
 const drawing = (values = {}) => ({
   legendEntries: ENTRIES, deletedLegendEntries: [], canvasPadding: NO_PADDING, originalLegendOrder: INVENTORY,
   // One Result that draws no feature: these rules' rows are keyed in no type color.
-  results: [{ features: [], palette: {}, pythonRows: new Map() }], ...values,
+  results: { renderedFeaturesByResult: [[]], palette: {} }, ...values,
   // Python's rows hold the shown Result's inventory.
   pythonRowKeys: values.pythonRowKeys ?? values.originalLegendOrder ?? INVENTORY
 });
