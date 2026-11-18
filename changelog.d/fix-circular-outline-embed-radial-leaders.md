@@ -16,3 +16,7 @@
   running under them (for example NitaCp079 in the rotated tobacco plastome of the command-line reference).
 - Fixed: Circular radial labels: the leaders of two overlapping arrowheads end in the order of their labels, so they
   no longer cross; the tobacco plastome with radial labels outside, refused at every font size, draws again.
+- Fixed: Circular radial labels: a leader ends at the nearest point of its feature from which it passes the
+  neighbouring features of its lane, instead of at an arrowhead's tip that it reached under the neighbour; such
+  leaders crossed at every radius, so a crowded genome (M16-5) with radial labels on both sides, drawn before, was
+  refused.

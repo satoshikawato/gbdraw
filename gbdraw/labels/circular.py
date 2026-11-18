@@ -5813,13 +5813,14 @@ def embedded_label_middle(
 
 
 class RadialLeaderEnds(NamedTuple):
-    """Where a radial label's leader may end, and what it must pass when its feature's facing edge lies wholly under
-    other features (OV-3841): their outlines grown by the leader's clearance, as polygons, and how far from its
-    middle (bp, before and after) the label may be aimed to pass them."""
+    """Where a radial label's leader may end, and the features it must pass (OV-3841): the outlines of the other
+    features its leader can reach, grown by the leader's clearance, as polygons. ``aim_offsets_bp`` is set when its
+    feature's facing edge lies wholly under other features: how far from its middle (bp, before and after) the label
+    may be aimed to pass them."""
 
     points: tuple[tuple[float, float], ...]
     obstacles: tuple[tuple[tuple[float, float], ...], ...] = ()
-    aim_offsets_bp: tuple[float, float] = (0.0, 0.0)
+    aim_offsets_bp: tuple[float, float] | None = None
 
 
 def _radial_leader_ends(
@@ -5842,9 +5843,13 @@ def _radial_leader_ends(
     Leaders are drawn below the features, so the points leave out the positions where a block of another feature
     (``blocks``: every feature's blocks on the label's side) lies beyond the facing edge: a leader that ended there
     ran under that feature. When such blocks cover the whole segment, no leader rising from the facing edge clears
-    them: every point stays, and the result holds the outlines of the other blocks that reach the facing edge or lie
-    beyond it (``block_outline``, grown by ``clearance_px``) for the radial placer, which aims the label where its
-    leader passes them.
+    them: every point stays, and the placer aims the label where its leader passes them.
+
+    The result also holds the outlines (``block_outline``, grown by ``clearance_px``) of the other blocks a leader
+    to these points can meet, for the placer, which ends each leader at a point whose leader passes them: in every
+    lane at or beyond the facing edge, the blocks over the segment and the nearest block before and after it. A
+    leader to an arrowhead's tip that came in along the band ran under the neighbour of the same lane there (M16-5);
+    a leader that passes the nearest block of a lane passes the blocks further along it, nearer the band's edge.
     """
     start_bp, end_bp = segment_bp
     span_bp = (end_bp - start_bp) % total_length
@@ -5879,39 +5884,60 @@ def _radial_leader_ends(
             position_angle(position_bp, total_length),
         )
 
-    if clear:
-        return RadialLeaderEnds(tuple(edge_point(position_bp) for position_bp in clear))
     middle_bp = start_bp + 0.5 * span_bp
 
     def offset(position_bp: float) -> float:
         return ((position_bp - middle_bp + 0.5 * total_length) % total_length) - 0.5 * total_length
 
-    over = {id(block): block for hits in covered for block in hits}.values()
-    run_low = min(offset(block.start) for block in over)
-    run_high = max(offset(block.end) for block in over)
-    # The label may move past the covering features by as far again as they extend.
-    aim_low, aim_high = 2.0 * run_low - run_high, 2.0 * run_high - run_low
-    obstacles: list[tuple[tuple[float, float], ...]] = []
-    for block in reaching:
-        if offset(block.end) < aim_low or offset(block.start) > aim_high:
-            continue
+    def outline(block: FeatureRadiusBlock) -> tuple[tuple[float, float], ...]:
         margin = clearance_bp(block.outer_px)
         along = [
             block.start - margin + (block.end - block.start + 2.0 * margin) * step / _FEATURE_EDGE_SAMPLES
             for step in range(_FEATURE_EDGE_SAMPLES + 1)
         ]
         radii = [block_outline(block, position_bp) for position_bp in along]
-        obstacles.append(
-            tuple(
-                circle_point(outer_px + clearance_px, position_angle(position_bp, total_length))
-                for position_bp, (_inner_px, outer_px) in zip(along, radii, strict=True)
-            )
-            + tuple(
-                circle_point(max(0.0, inner_px - clearance_px), position_angle(position_bp, total_length))
-                for position_bp, (inner_px, _outer_px) in reversed(list(zip(along, radii, strict=True)))
-            )
+        return tuple(
+            circle_point(outer_px + clearance_px, position_angle(position_bp, total_length))
+            for position_bp, (_inner_px, outer_px) in zip(along, radii, strict=True)
+        ) + tuple(
+            circle_point(max(0.0, inner_px - clearance_px), position_angle(position_bp, total_length))
+            for position_bp, (inner_px, _outer_px) in reversed(list(zip(along, radii, strict=True)))
         )
-    return RadialLeaderEnds(tuple(edge_point(position_bp) for position_bp in positions), tuple(obstacles), (aim_low, aim_high))
+
+    half_span = 0.5 * span_bp
+    met: dict[int, FeatureRadiusBlock] = {}
+    lanes: dict[tuple[float, float], list[FeatureRadiusBlock]] = {}
+    for block in reaching:
+        lanes.setdefault((block.inner_px, block.outer_px), []).append(block)
+    for lane_blocks in lanes.values():
+        before = [block for block in lane_blocks if offset(block.end) <= -half_span]
+        after = [block for block in lane_blocks if offset(block.start) >= half_span]
+        met.update(
+            (id(block), block) for block in lane_blocks if -half_span < offset(block.end) and offset(block.start) < half_span
+        )
+        if before:
+            nearest = max(before, key=lambda block: offset(block.end))
+            met[id(nearest)] = nearest
+        if after:
+            nearest = min(after, key=lambda block: offset(block.start))
+            met[id(nearest)] = nearest
+    if clear:
+        return RadialLeaderEnds(
+            tuple(edge_point(position_bp) for position_bp in clear), tuple(outline(block) for block in met.values())
+        )
+    over = {id(block): block for hits in covered for block in hits}.values()
+    run_low = min(offset(block.start) for block in over)
+    run_high = max(offset(block.end) for block in over)
+    # The label may move past the covering features by as far again as they extend.
+    aim_low, aim_high = 2.0 * run_low - run_high, 2.0 * run_high - run_low
+    met.update(
+        (id(block), block) for block in reaching if not (offset(block.end) < aim_low or offset(block.start) > aim_high)
+    )
+    return RadialLeaderEnds(
+        tuple(edge_point(position_bp) for position_bp in positions),
+        tuple(outline(block) for block in met.values()),
+        (aim_low, aim_high),
+    )
 
 
 def _block_outline_radii(
@@ -5940,10 +5966,12 @@ def _block_outline_radii(
 
 
 def _set_radial_leader_ends(label: CircularLabel, ends: RadialLeaderEnds) -> None:
-    """Write a radial label's leader ends, and the obstacles its placer aims it past when it has them."""
+    """Write a radial label's leader ends, the features its leader must pass, and how far it may be aimed past
+    them when its facing edge lies wholly under them."""
     label["feature_edge_points"] = ends.points
     if ends.obstacles:
         label["leader_obstacles"] = ends.obstacles
+    if ends.aim_offsets_bp is not None:
         label["leader_aim_offsets_bp"] = ends.aim_offsets_bp
 
 

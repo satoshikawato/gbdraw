@@ -76,16 +76,45 @@ def _radius_of_point(x_coord: float, y_coord: float) -> float:
     return math.hypot(float(x_coord), float(y_coord))
 
 
+def _leader_ends(label: CircularLabel, elbow: tuple[float, float]) -> list[tuple[float, float]]:
+    """Where a radial leader from ``elbow`` may end: the points of its feature's outline edge facing the label whose
+    leader passes the other features it can meet (``leader_obstacles``), nearest ``elbow`` first; every point,
+    nearest first, when none passes (OV-3841)."""
+    points = sorted(label["feature_edge_points"], key=lambda point: math.dist(point, elbow))
+    obstacles = label.get("leader_obstacles", ())
+    passing = [
+        point for point in points if not any(_meets_outline((point, elbow), outline) for outline in obstacles)
+    ]
+    return passing or points
+
+
+def _leader_passing_end(label: CircularLabel, elbow: tuple[float, float]) -> tuple[float, float] | None:
+    """The point of the facing edge nearest ``elbow`` whose leader passes ``leader_obstacles``; None when none does."""
+    obstacles = label.get("leader_obstacles", ())
+    for point in sorted(label["feature_edge_points"], key=lambda point: math.dist(point, elbow)):
+        if not any(_meets_outline((point, elbow), outline) for outline in obstacles):
+            return point
+    return None
+
+
 def _leader_anchor(label: CircularLabel, elbow: tuple[float, float]) -> tuple[float, float]:
-    """Where a radial leader ends: the point of its feature's outline edge facing the label nearest ``elbow``."""
-    points = label.get("feature_edge_points")
-    if not points:
+    """Where a radial leader ends: the point of its feature's outline edge facing the label nearest ``elbow`` whose
+    leader passes the other features (the nearest point when none does)."""
+    if "feature_edge_points" not in label:
         return float(label["feature_anchor_x"]), float(label["feature_anchor_y"])
-    return min(points, key=lambda point: math.dist(point, elbow))
+    passing = _leader_passing_end(label, elbow)
+    if passing is not None:
+        return passing
+    return min(label["feature_edge_points"], key=lambda point: math.dist(point, elbow))
 
 
 def _meets_outline(segment: tuple[tuple[float, float], tuple[float, float]], outline: Sequence[tuple[float, float]]) -> bool:
     """Whether a leader segment crosses or lies inside a feature outline (a simple polygon, not always convex)."""
+    (x1, y1), (x2, y2) = segment
+    xs = [point[0] for point in outline]
+    ys = [point[1] for point in outline]
+    if max(x1, x2) < min(xs) or min(x1, x2) > max(xs) or max(y1, y2) < min(ys) or min(y1, y2) > max(ys):
+        return False
     if any(
         segments_intersect(segment, (outline[index], outline[(index + 1) % len(outline)]), touching=True)
         for index in range(len(outline))
@@ -105,10 +134,9 @@ def _leader_aim_middle(label: CircularLabel, elbow_radius_px: float, total_lengt
     none of ``leader_obstacles``; its middle when none does or it has none. The positions step half a pixel of arc
     at the elbow."""
     middle = float(label["middle"])
-    obstacles = label.get("leader_obstacles")
-    if not obstacles or elbow_radius_px <= 0.0:
+    if "leader_aim_offsets_bp" not in label or elbow_radius_px <= 0.0:
         return middle
-    low, high = label["leader_aim_offsets_bp"]  # written with the obstacles
+    low, high = label["leader_aim_offsets_bp"]
     step_bp = 0.5 * total_length / (_TAU * float(elbow_radius_px))
     offsets = sorted(
         (index * step_bp for index in range(int(low / step_bp), int(high / step_bp) + 1)),
@@ -127,20 +155,19 @@ def _elbow_at(position_bp: float, elbow_radius_px: float, total_length: int) -> 
 
 
 def _leader_passes(label: CircularLabel, elbow: tuple[float, float]) -> bool:
-    """Whether the leader from ``elbow`` to its feature's facing edge passes the label's ``leader_obstacles``."""
-    segment = (_leader_anchor(label, elbow), elbow)
-    return not any(_meets_outline(segment, outline) for outline in label.get("leader_obstacles", ()))
+    """Whether a leader from ``elbow`` to its feature's facing edge can pass the label's ``leader_obstacles``."""
+    return "feature_edge_points" not in label or _leader_passing_end(label, elbow) is not None
 
 
 def _packed_under_obstacles(placed: Sequence[CircularLabel], total_length: int) -> int:
     """The aimed labels the packing moved to where their leaders meet the features they were aimed past (OV-3841).
 
-    A label is aimed from its preferred position; packing may move it. Its leader at the packed angle must pass the
-    obstacles as it does at the preferred position, or the pass is not done. A label aimed where no position
-    passes (its preferred position is its middle) is not counted."""
+    A label whose facing edge lies under other features is aimed from its preferred position; packing may move it.
+    Its leader at the packed angle must pass the obstacles as it does at the preferred position, or the pass is not
+    done. A label aimed where no position passes (its preferred position is its middle) is not counted."""
     count = 0
     for label in placed:
-        if not label.get("leader_obstacles"):
+        if "leader_aim_offsets_bp" not in label:
             continue
         elbow = (float(label["middle_x"]), float(label["middle_y"]))
         preferred = _elbow_at(_preferred_middle(label), math.hypot(*elbow), total_length)
@@ -150,11 +177,12 @@ def _packed_under_obstacles(placed: Sequence[CircularLabel], total_length: int) 
 
 
 def _aim_side(labels: Sequence[CircularLabel], anchor_radius_px: float, *, is_inner: bool, total_length: int) -> bool:
-    """Aim the labels that carry leader obstacles from the side's elbow radius; whether a preferred position moved."""
+    """Aim the labels whose facing edge lies under other features from the side's elbow radius; whether a preferred
+    position moved."""
     elbow_radius = anchor_radius_px + (_RADIAL_CLEARANCE_PX if is_inner else -_RADIAL_CLEARANCE_PX)
     moved = False
     for label in labels:
-        if not label.get("leader_obstacles"):
+        if "leader_aim_offsets_bp" not in label:
             continue
         aim = _leader_aim_middle(label, elbow_radius, total_length)
         if abs(aim - _preferred_middle(label)) > _ANGLE_EPSILON:
@@ -200,9 +228,9 @@ def _leader_ends_in_order(placed: Sequence[CircularLabel], angles: Sequence[floa
             floor = -math.inf if earlier is None else earlier
             pairs = [
                 (math.dist(first, elbow_of(previous)) + math.dist(second, elbow_of(label)), first, second)
-                for first in previous["feature_edge_points"]
+                for first in _leader_ends(previous, elbow_of(previous))
                 if unwrapped(first, previous_angle) >= floor - _ANGLE_EPSILON
-                for second in points
+                for second in _leader_ends(label, elbow_of(label))
                 if unwrapped(second, angle) >= unwrapped(first, previous_angle) - _ANGLE_EPSILON
             ]
             if pairs:

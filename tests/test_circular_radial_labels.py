@@ -415,9 +415,16 @@ def test_radial_leaders_run_outside_the_feature_band(
     output = tmp_path / "radial"
     run_circular_from_namespace(_get_args(_radial_case_argv(case, tmp_path, output)))
 
-    outlines = _block_outlines(output.with_suffix(".svg").read_text(encoding="utf-8"))
     labels = [label for label in results[-1].labels if label.get("placement") == "radial"]
-    assert outlines and len(labels) > 50
+    assert len(labels) > 50
+    assert not _hidden_leaders(labels, output.with_suffix(".svg").read_text(encoding="utf-8"))
+
+
+def _hidden_leaders(labels, svg_text: str) -> dict[tuple[str, str], float]:
+    """The radial leaders that run inside a drawn feature block before their end, with the length hidden (px)."""
+
+    outlines = _block_outlines(svg_text)
+    assert outlines
     buried = {}
     for label in labels:
         anchor, elbow, contact = leader_polyline(label)
@@ -433,7 +440,7 @@ def test_radial_leaders_run_outside_the_feature_band(
                     hidden += length / steps
         if hidden > 0.0:
             buried[(label["feature_id"], label["label_text"])] = round(hidden, 1)
-    assert not buried, buried
+    return buried
 
 
 # Two overlapping hypothetical proteins of the tobacco plastome (NC_001879.gbk) drawn in one lane as arrowheads that
@@ -470,6 +477,51 @@ def test_leaders_of_overlapping_arrowheads_end_in_the_order_of_their_labels(
     by_id = {label["feature_id"]: label for label in results[-1].labels}
     first, second = (by_id[feature_id] for feature_id in TOBACCO_OVERLAPPING_HEADS)
     assert crossing_pairs([leader_polyline(first), leader_polyline(second)]) == []
+
+
+# Two neighbouring features of one lane in the M16-5 genome (M16-5.gb): "hypothetical protein" and the tip of
+# "Large ribosomal subunit protein uL10", which points at it.
+M16_5_NEIGHBOURS = ("fd3da9502", "fd1c87198")
+
+
+@pytest.mark.parametrize("track_type", ["default", "tuckin"])
+def test_a_radial_leader_ends_where_it_passes_the_neighbouring_features_of_its_lane(
+    track_type: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3841, M16-5 with radial labels on both sides: a crowded inner label moved far along the circle ended its
+    leader at the nearest point of its feature, the tip of an arrowhead in the middle of the lane. That leader came in
+    along the band, ran under the neighbouring feature of the same lane, and crossed the neighbour's leader at every
+    radius, so growth stalled and the figure, drawn before, was refused. A leader now ends at the nearest point from
+    which it passes the neighbouring features."""
+
+    results = []
+    original = circular_labels_module.place_radial_labels
+
+    def captured(*args, **kwargs):
+        result = original(*args, **kwargs)
+        results.append(result)
+        return result
+
+    monkeypatch.setattr(circular_labels_module, "place_radial_labels", captured)
+    output = tmp_path / "m16-5"
+    layout = ["--separate_strands", "--track_type", "tuckin", "--legend", "right"] if track_type == "tuckin" else []
+    run_circular_from_namespace(
+        _get_args(
+            [
+                "--gbk", str(Path(__file__).parents[1] / "tests/test_inputs/M16-5.gb"),
+                *layout,
+                "--labels", "both", "--label_placement", "radial", "--label_font_size", "10",
+                "--format", "svg", "--output", str(output),
+            ]
+        )
+    )
+
+    labels = [label for label in results[-1].labels if label.get("placement") == "radial"]
+    by_id = {label["feature_id"]: label for label in labels}
+    first, second = (by_id[feature_id] for feature_id in M16_5_NEIGHBOURS)
+    assert crossing_pairs([leader_polyline(first), leader_polyline(second)]) == []
+    assert results[-1].leader_crossing_count == 0
+    assert not _hidden_leaders(labels, output.with_suffix(".svg").read_text(encoding="utf-8"))
 
 
 # Feature id of "AAA family ATPase" in lambda (NC_001416.gb).
