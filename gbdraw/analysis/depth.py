@@ -849,11 +849,18 @@ def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[n
     return prefix[bound_of[starts.size :]] - prefix[bound_of[: starts.size]]
 
 
-def _validate_depth_range(min_depth: float | None, max_depth: float | None) -> None:
-    """A value range may be negative; its minimum is at most its maximum."""
+def check_depth_range(min_depth: float | None, max_depth: float | None, *, log_scale: bool) -> None:
+    """A value range may be negative, except on a log-scaled axis (which draws only values of 0 or more); its
+    minimum is at most its maximum. Every surface's depth range (CLI, API, request, one series') meets this rule."""
 
     if min_depth is not None and max_depth is not None and min_depth > max_depth:
         raise ValidationError("min_depth must be <= max_depth.")
+    for name, bound in (("min_depth", min_depth), ("max_depth", max_depth)):
+        if log_scale and bound is not None and bound < 0:
+            raise ValidationError(
+                f"A log-scaled depth range must not be negative; got {name}={bound:g}.",
+                diagnostic={"code": "INPUT_INVALID", "field": name, "reason": "NONNEGATIVE"},
+            )
 
 
 def _refuse_negative_values(depths: DepthArray) -> None:
@@ -899,7 +906,7 @@ def depth_df(
         raise ValidationError("step must be > 0.")
     if agg not in DEPTH_AGGREGATIONS:
         raise ValidationError(f"Depth agg must be one of {', '.join(DEPTH_AGGREGATIONS)}; got {agg!r}.")
-    _validate_depth_range(min_depth, max_depth)
+    check_depth_range(min_depth, max_depth, log_scale=log_scale)
 
     coverage_source = depth_table if isinstance(depth_table, DepthCoverage) else _table_coverage(depth_table)
     record_len = len(record.seq)
@@ -939,6 +946,7 @@ __all__ = [
     "DepthAggregation",
     "DepthCoverage",
     "DepthFileFormat",
+    "check_depth_range",
     "checked_depth_file_format",
     "clear_depth_tsv_cache",
     "depth_df",

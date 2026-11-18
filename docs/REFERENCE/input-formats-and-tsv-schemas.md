@@ -156,36 +156,57 @@ were placed by position.** beside the Result. A Session file stores that notice
 as `runMetadata.comparisonWarnings` and restores it on Load. The SVG record-ID
 metadata always names the endpoint records.
 
-A depth file is a tab-separated table in one of three forms. gbdraw tells them
-apart by the number of columns in the first row, not by the file name:
+A depth file (a numeric series) is a tab-separated table in one of five
+formats. Each depth track names its format (`--depth_track_format`, the Python
+`format` field); the default, `auto`, tells three of them apart by the number of
+columns in the first row, not by the file name:
 
-| Columns | Form | Fields |
+| Format | `auto` reads it at | Fields |
 |---|---|---|
-| 2 | Position and value | a 1-based positive `position` and a value (`depth`) |
-| 3 | `samtools depth` | `reference_name`, a 1-based positive `position`, and a value (`depth`) |
-| 4 or more | bedGraph | `reference_name`, a 0-based `start`, an `end` after it, and a value (`depth`); later columns are ignored |
+| `position_value` | 2 columns | a 1-based positive `position` and a value |
+| `samtools` | 3 columns | `reference_name`, a 1-based positive `position`, and a value; further value columns (more samples) are ignored |
+| `bedgraph` | 4 or more columns | `reference_name`, a 0-based `start`, an `end` after it, and a value; later columns are ignored |
+| `bed` | never: name it | `reference_name`, a 0-based `start`, an `end` after it, then an optional `name` and `score`; later columns are ignored |
 
 A bedGraph row gives its value to the positions `start + 1` to `end`, as
 `bedtools genomecov -bg` or `-bga` writes them. The rows of a reference come
 in increasing order and do not overlap (`sort -k1,1 -k2,2n` sorts a file).
-Values are finite and non-negative. Files are normally headerless. Lines that
-start with `#`, `track`, or `browser` before the rows are skipped unless they
-read as a row, and one header line is accepted when a number field of the
-first row is nonnumeric. A tab at the end of a line starts an empty column. A
-position named by several rows of a two- or three-column file takes the mean
-of their values; a position no row names reads as zero. A two-column file
-names no reference: every record that reads it takes its values, as with a
-file of one reference that the record's ID does not match. A `samtools depth`
-file of several samples draws its first sample when it starts with the header
-line `samtools depth -H` writes (`#CHROM`, `POS`, then the samples). Without
-that line it has four or more columns, reads as bedGraph, and is refused: keep
-the reference, position, and one sample's column (`cut -f1-3`), or write it
-with `-H`. Each file is one measured series for the named record; a missing
-series is not equivalent to zero depth. Positions are source coordinates of the named record,
-as in the input file. A crop keeps only the positions inside it, and a reverse
-complement flips them with the record, so the same file draws the same coverage
-for any region or orientation. The automatic Depth maximum comes from the
-positions that are drawn.
+A BED row is a feature: it adds its score (column 5; 1 when the row has no
+score column or its score is `.`) to every position from `start + 1` to `end`.
+BED rows may overlap and come in any order, so the rows covering a position add
+up: a BED file of variant or insertion sites, read with `--depth_track_agg sum`,
+draws how many fall in each window.
+
+Values are finite numbers and may be negative, for example a log2 ratio; only
+a log-scaled track (`--depth_log_scale`) refuses a negative value. Files are
+normally headerless. Lines that start with `#`, `track`, or `browser` before
+the rows are skipped unless they read as a row, and one header line is accepted
+when a number field of the first row is nonnumeric. A tab at the end of a line
+starts an empty column. A position named by several rows of a `position_value`
+or `samtools` file takes the mean of their values; a position no row names
+reads as zero. A `position_value` file names no reference: every record that
+reads it takes its values, as with a file of one reference that the record's
+ID does not match.
+
+A `samtools depth` file of several samples draws its first sample. Read with
+`auto`, it does so only when it starts with the header line `samtools depth -H`
+writes (`#CHROM`, `POS`, then the samples); without that line it has four or
+more columns and reads as bedGraph, whose rows it does not hold. Name the format
+`samtools` to read such a file, or keep the reference, position, and one
+sample's column (`cut -f1-3`).
+
+Each window of a track takes one value from the positions it reads
+(`--depth_track_agg`, the Python `agg` field): `mean` (the default) is their
+mean, `max` their largest value, and `sum` their sum. A position between the
+first and last position a file names for the record that no row names reads
+as zero, also for `max`. Each file is one measured series for the named
+record; a missing series is not equivalent to zero depth. Positions are source
+coordinates of the named record, as in the input file. A crop keeps only the
+positions inside it, and a reverse complement flips them with the record, so
+the same file draws the same coverage for any region or orientation. The
+automatic value range runs from the smallest drawn value (0 when no value is
+below 0) to the largest; `--depth_min`, `--depth_max`, and a track's own
+`--depth_track_min` and `--depth_track_max` set it.
 
 ## Manifest tables
 

@@ -133,6 +133,14 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               --no-gc] [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
               [--depth_track_label LABEL [LABEL ...]]
               [--depth_track_color COLOR [COLOR ...]]
+              [--depth_track_format FORMAT [FORMAT ...]]
+              [--depth_track_agg AGG [AGG ...]]
+              [--depth_track_style STYLE [STYLE ...]]
+              [--depth_track_negative_color COLOR [COLOR ...]]
+              [--depth_track_baseline VALUE [VALUE ...]]
+              [--depth_track_min VALUE [VALUE ...]]
+              [--depth_track_max VALUE [VALUE ...]]
+              [--depth_track_unit TEXT [TEXT ...]]
               [--depth_track_large_tick_interval VALUE [VALUE ...]]
               [--depth_track_small_tick_interval VALUE [VALUE ...]]
               [--depth_track_tick_font_size VALUE [VALUE ...]]
@@ -374,14 +382,57 @@ options:
   --skew                Show the GC skew track.
   --no-skew             Hide the GC skew track.
   --depth_track DEPTH [DEPTH ...]
-                        Repeatable logical depth track. Provide one file for
-                        all records or one file per record.
+                        Repeatable numeric series (depth) track. Provide one
+                        file for all records or one file per record. A file
+                        may be samtools depth output, a bedGraph, a BED file
+                        (each row adds its score, or 1, to the bases it
+                        covers), or position-value rows, optionally gzip-
+                        compressed; values may be negative.
+                        --depth_track_format names the form when its columns
+                        do not.
   --depth_track_label LABEL [LABEL ...]
                         Depth track label(s). Provide one label or one per
                         --depth_track.
   --depth_track_color COLOR [COLOR ...]
                         Depth track fill color(s). Provide one color or one
                         per --depth_track.
+  --depth_track_format FORMAT [FORMAT ...]
+                        How each depth track file is read: auto (by its
+                        columns), samtools, bedgraph, bed, or position_value.
+                        samtools reads the first sample of a file of several.
+                        Default: auto. Provide one value or one per
+                        --depth_track.
+  --depth_track_agg AGG [AGG ...]
+                        The value of each window: mean, max (the largest base
+                        value), or sum. Default: mean. Provide one value or
+                        one per --depth_track.
+  --depth_track_style STYLE [STYLE ...]
+                        Draw each depth track as a filled area or as a line.
+                        Default: area. Provide one value or one per
+                        --depth_track.
+  --depth_track_negative_color COLOR [COLOR ...]
+                        Color of each depth track below its baseline. Default:
+                        the track color. Provide one value or one per
+                        --depth_track.
+  --depth_track_baseline VALUE [VALUE ...]
+                        The value each depth track is drawn from: auto (0, or
+                        the bottom of a range above 0), mean, or a number.
+                        Default: auto. Provide one value or one per
+                        --depth_track.
+  --depth_track_min VALUE [VALUE ...]
+                        Bottom of each depth track's value range: a number, or
+                        auto for its own smallest value; - for --depth_min.
+                        Default: --depth_min. Provide one value or one per
+                        --depth_track.
+  --depth_track_max VALUE [VALUE ...]
+                        Top of each depth track's value range: a number, or
+                        auto for its own largest value; - for --depth_max.
+                        Default: --depth_max. Provide one value or one per
+                        --depth_track.
+  --depth_track_unit TEXT [TEXT ...]
+                        Text after the axis numbers of a depth track; "" for
+                        none. Default: x. Provide one value or one per
+                        --depth_track.
   --depth_track_large_tick_interval VALUE [VALUE ...]
                         Depth track large tick interval(s). Provide one value
                         or one per --depth_track.
@@ -517,10 +568,10 @@ options:
   --share_depth_axis    Use one depth y-axis scale across records.
   --depth_min DEPTH_MIN
                         Minimum depth for clipping/normalization (optional;
-                        must be >= 0).
+                        may be negative, except with --depth_log_scale).
   --depth_max DEPTH_MAX
                         Maximum depth for clipping/normalization (optional;
-                        must be >= 0).
+                        may be negative, except with --depth_log_scale).
   --depth_log_scale     Render depth coverage on a log10 scale (IGV-style).
   --no_depth_log_scale  Render depth coverage on a linear scale.
   --show_depth_axis     Show depth coverage axis line, ticks, and labels.
@@ -1252,6 +1303,9 @@ gbdraw circular \
 
 Depth tracks use repeatable `--depth_track` groups. Each group is one logical
 track; provide one file to reuse it for every record, or one file per record.
+Each `--depth_track_*` option takes one value for every track or one value per
+track, in the order of the `--depth_track` groups. The file forms and how each
+is read are in [Comparison and numeric tables](./REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 Semantic SVG track hooks identify the renderer and logical slot; internal ID
 spelling is deterministic but is not a cross-version selector contract.
 
@@ -1307,6 +1361,14 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--depth_track DEPTH [DEPTH ...]]
               [--depth_track_label LABEL [LABEL ...]]
               [--depth_track_color COLOR [COLOR ...]]
+              [--depth_track_format FORMAT [FORMAT ...]]
+              [--depth_track_agg AGG [AGG ...]]
+              [--depth_track_style STYLE [STYLE ...]]
+              [--depth_track_negative_color COLOR [COLOR ...]]
+              [--depth_track_baseline VALUE [VALUE ...]]
+              [--depth_track_min VALUE [VALUE ...]]
+              [--depth_track_max VALUE [VALUE ...]]
+              [--depth_track_unit TEXT [TEXT ...]]
               [--depth_track_height PX [PX ...]]
               [--depth_track_large_tick_interval VALUE [VALUE ...]]
               [--depth_track_small_tick_interval VALUE [VALUE ...]]
@@ -1614,14 +1676,57 @@ options:
                         max] label for the axis; default) or numbered (a
                         number on each large tick).
   --depth_track DEPTH [DEPTH ...]
-                        Repeatable logical depth track. Provide one file for
-                        all records or one file per input record.
+                        Repeatable numeric series (depth) track. Provide one
+                        file for all records or one file per input record. A
+                        file may be samtools depth output, a bedGraph, a BED
+                        file (each row adds its score, or 1, to the bases it
+                        covers), or position-value rows, optionally gzip-
+                        compressed; values may be negative.
+                        --depth_track_format names the form when its columns
+                        do not.
   --depth_track_label LABEL [LABEL ...]
                         Depth track label(s). Provide one label or one per
                         --depth_track.
   --depth_track_color COLOR [COLOR ...]
                         Depth track fill color(s). Provide one color or one
                         per --depth_track.
+  --depth_track_format FORMAT [FORMAT ...]
+                        How each depth track file is read: auto (by its
+                        columns), samtools, bedgraph, bed, or position_value.
+                        samtools reads the first sample of a file of several.
+                        Default: auto. Provide one value or one per
+                        --depth_track.
+  --depth_track_agg AGG [AGG ...]
+                        The value of each window: mean, max (the largest base
+                        value), or sum. Default: mean. Provide one value or
+                        one per --depth_track.
+  --depth_track_style STYLE [STYLE ...]
+                        Draw each depth track as a filled area or as a line.
+                        Default: area. Provide one value or one per
+                        --depth_track.
+  --depth_track_negative_color COLOR [COLOR ...]
+                        Color of each depth track below its baseline. Default:
+                        the track color. Provide one value or one per
+                        --depth_track.
+  --depth_track_baseline VALUE [VALUE ...]
+                        The value each depth track is drawn from: auto (0, or
+                        the bottom of a range above 0), mean, or a number.
+                        Default: auto. Provide one value or one per
+                        --depth_track.
+  --depth_track_min VALUE [VALUE ...]
+                        Bottom of each depth track's value range: a number, or
+                        auto for its own smallest value; - for --depth_min.
+                        Default: --depth_min. Provide one value or one per
+                        --depth_track.
+  --depth_track_max VALUE [VALUE ...]
+                        Top of each depth track's value range: a number, or
+                        auto for its own largest value; - for --depth_max.
+                        Default: --depth_max. Provide one value or one per
+                        --depth_track.
+  --depth_track_unit TEXT [TEXT ...]
+                        Text after the axis numbers of a depth track; "" for
+                        none. Default: x. Provide one value or one per
+                        --depth_track.
   --depth_track_height PX [PX ...]
                         Linear depth track height(s) in px. Provide one value
                         or one per --depth_track.
@@ -1665,10 +1770,10 @@ options:
   --share_depth_axis    Use one depth y-axis scale across records.
   --depth_min DEPTH_MIN
                         Minimum depth for clipping/normalization (optional;
-                        must be >= 0).
+                        may be negative, except with --depth_log_scale).
   --depth_max DEPTH_MAX
                         Maximum depth for clipping/normalization (optional;
-                        must be >= 0).
+                        may be negative, except with --depth_log_scale).
   --depth_log_scale     Render depth coverage on a log10 scale (IGV-style).
   --no_depth_log_scale  Render depth coverage on a linear scale.
   --show_depth_axis     Show depth coverage axis line, ticks, and labels.

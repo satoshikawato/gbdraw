@@ -15,7 +15,7 @@ from gbdraw.analysis.skew import DeviationScale, deviation_scale
 from gbdraw.auto_sizes import TickedAxisSource
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
-from .series_style import ScalarAxisStyle, SeriesBaseline, SeriesStyle
+from .series_style import DEPTH_UNIT, ScalarAxisStyle, SeriesBaseline, SeriesStyle
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
@@ -336,7 +336,6 @@ def _format_scalar_number(value: float) -> str:
 
 
 PERCENT_UNIT = "%"
-DEPTH_UNIT = "x"
 
 
 def scalar_axis_range_label(axis_min: float, axis_max: float, unit: str, *, log_scale: bool = False) -> str:

@@ -17,6 +17,7 @@ import gbdraw.render.output_paths as output_paths_module
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api.options import (
     CircularDiagramOptions,
+    DepthTrackInput,
     CircularOutputOptions,
     CircularRequestTrackOptions,
     LinearDiagramOptions,
@@ -356,8 +357,9 @@ def test_grouped_options_compile_to_the_existing_render_engine(
     assert options.colors.color_table is color_table
     assert options.plot_title == "Genome"
     assert options.output.plot_title_position == "top"
-    assert options.depth_track_files == [["depth.tsv"]]
-    assert options.depth_track_labels == ["Coverage"]
+    # Each track is the DepthTrackInput it is; the compatibility depth lists stay unset.
+    assert options.depth_tracks == (DepthTrackInput(source="depth.tsv", label="Coverage", color="#336699"),)
+    assert options.depth_track_files is None and options.depth_track_labels is None
     assert options.feature_visibility_table is visibility_table
     assert options.feature_visibility_table_file is None
     assert options.label_whitelist_table is whitelist_table

@@ -1714,13 +1714,17 @@ def _primary_radial_half_stroke_px(
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     depth_config: DepthConfigurator | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
 ) -> float:
     """Return conservative stroke safety for radial record/track geometry: half the widest stroke, and for a series
-    track half its stroke only when it paints (``stroke_pad_px``, the rule of the series' own room)."""
+    track half its stroke only when it paints (``stroke_pad_px``, the rule of the series' own room). Each depth
+    series of ``depth_tracks_by_index`` paints as its own config says, beside the base ``depth_config`` (a line
+    series strokes in its colour, OV-3747)."""
     cfg = canvas_config.profile.config
     series = [gc_config.series_paint, skew_config.series_paint]
     if depth_config is not None:
         series.append(depth_config.series_paint)
+    series.extend(track.config.series_paint for track in (depth_tracks_by_index or {}).values())
     return max(
         0.5 * float(cfg.objects.axis.circular.stroke_width.for_length_param(canvas_config.length_param)),
         0.5 * float(feature_config.block_stroke_width),
@@ -1738,6 +1742,7 @@ def _collect_circular_primary_bounds(
     gc_config: GcContentConfigurator,
     skew_config: GcSkewConfigurator,
     depth_config: DepthConfigurator | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
     overlay_obstacles: Sequence[Aabb],
     definition_target: Group | None = None,
 ) -> Aabb:
@@ -1749,6 +1754,7 @@ def _collect_circular_primary_bounds(
         gc_config=gc_config,
         skew_config=skew_config,
         depth_config=depth_config,
+        depth_tracks_by_index=depth_tracks_by_index,
     )
     radius = float(radial_layout.ring_outer_radius_px) + stroke_safety
     center_x = float(canvas_config.offset_x)
@@ -4336,6 +4342,7 @@ def add_record_on_circular_canvas(
             gc_config=configurators.gc,
             skew_config=configurators.skew,
             depth_config=configurators.depth,
+            depth_tracks_by_index=depth_tracks_by_index,
             overlay_obstacles=annotation_label_obstacles,
             definition_target=definition,
         )
@@ -4355,6 +4362,7 @@ def add_record_on_circular_canvas(
         gc_config=configurators.gc,
         skew_config=configurators.skew,
         depth_config=configurators.depth,
+        depth_tracks_by_index=depth_tracks_by_index,
         overlay_obstacles=overlay_obstacles,
     )
     legend_measurement = measure_legend(
@@ -4405,6 +4413,7 @@ def add_record_on_circular_canvas(
                 gc_config=configurators.gc,
                 skew_config=configurators.skew,
                 depth_config=configurators.depth,
+                depth_tracks_by_index=depth_tracks_by_index,
                 overlay_obstacles=overlay_obstacles,
             )
 
@@ -4559,6 +4568,7 @@ def add_record_on_circular_canvas(
         gc_config=configurators.gc,
         skew_config=configurators.skew,
         depth_config=configurators.depth,
+        depth_tracks_by_index=depth_tracks_by_index,
         overlay_obstacles=overlay_obstacles,
         definition_target=definition_target,
     )

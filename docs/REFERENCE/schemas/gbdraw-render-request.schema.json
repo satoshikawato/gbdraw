@@ -1732,6 +1732,80 @@
             }
           ],
           "default": null
+        },
+        "format": {
+          "enum": [
+            "auto",
+            "samtools",
+            "bedgraph",
+            "bed",
+            "position_value"
+          ]
+        },
+        "agg": {
+          "enum": [
+            "mean",
+            "max",
+            "sum"
+          ]
+        },
+        "style": {
+          "enum": [
+            "area",
+            "line"
+          ]
+        },
+        "negativeColor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "baseline": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "mean"
+              ]
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "minValue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "auto"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxValue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "auto"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "type": "string"
         }
       },
       "required": [
@@ -2324,6 +2398,80 @@
             }
           ],
           "default": null
+        },
+        "format": {
+          "enum": [
+            "auto",
+            "samtools",
+            "bedgraph",
+            "bed",
+            "position_value"
+          ]
+        },
+        "agg": {
+          "enum": [
+            "mean",
+            "max",
+            "sum"
+          ]
+        },
+        "style": {
+          "enum": [
+            "area",
+            "line"
+          ]
+        },
+        "negativeColor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "baseline": {
+          "anyOf": [
+            {
+              "enum": [
+                "auto",
+                "mean"
+              ]
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "minValue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "auto"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxValue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "auto"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "type": "string"
         }
       },
       "required": [

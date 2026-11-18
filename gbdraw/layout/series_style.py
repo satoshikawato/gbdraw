@@ -21,6 +21,11 @@ SERIES_STYLES: tuple[SeriesStyle, ...] = get_args(SeriesStyle)
 # Where a series' area closes: ``auto`` (0 when the axis holds it, else the axis' lower end), the series' mean, or a
 # value (held within the axis).
 SeriesBaseline = Literal["auto", "mean"] | float
+# A bound of one series' value range: a number, ``auto`` (from its values, whatever the global setting), or None (the
+# global range).
+SeriesBound = float | Literal["auto"] | None
+# The text after the axis numbers of a depth series that names no unit of its own.
+DEPTH_UNIT = "x"
 
 
 @dataclass(frozen=True)

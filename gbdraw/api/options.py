@@ -29,6 +29,7 @@ from gbdraw.analysis.collinearity_units import (
     CollinearityUnitMode,
     normalize_collinearity_unit_mode,
 )
+from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, DepthAggregation, DepthFileFormat
 from gbdraw.analysis.feature_density import FeatureDensityTrack, unique_feature_density_tracks
 from gbdraw.analysis.conservation import (
     ConservationSearchResult,
@@ -58,6 +59,7 @@ from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
 from gbdraw.layout.composition import LegendPlacement
+from gbdraw.layout.series_style import DEPTH_UNIT, SERIES_STYLES, SeriesBaseline, SeriesBound, SeriesStyle
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
     linear_wrap_default_overrides,
@@ -188,6 +190,18 @@ DEPTH_COMPATIBILITY_FIELDS: tuple[str, ...] = (
     "depth_track_small_tick_intervals",
     "depth_track_tick_font_sizes",
 )
+# The DepthTrackInput fields of how a series is read and drawn; each has a default that draws as a depth track
+# drew before it existed, and a request writes it only when it differs from that default.
+DEPTH_TRACK_SERIES_FIELDS: tuple[str, ...] = (
+    "format",
+    "agg",
+    "style",
+    "negative_color",
+    "baseline",
+    "min_value",
+    "max_value",
+    "unit",
+)
 # The DepthTrackInput fields that hold a finite number > 0 or None.
 DEPTH_TRACK_POSITIVE_FIELDS: tuple[str, ...] = (
     "height",
@@ -199,7 +213,15 @@ DEPTH_TRACK_POSITIVE_FIELDS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class DepthTrackInput:
-    """Data and styling for one logical depth track in a typed request."""
+    """Data and styling for one logical depth track (a numeric series) in a typed request.
+
+    ``format`` is how its files are read (``DEPTH_FILE_FORMATS``; ``auto`` tells the forms apart by their columns),
+    ``agg`` the value of a window (``DEPTH_AGGREGATIONS``), ``style`` how it draws (``SERIES_STYLES``),
+    ``negative_color`` the colour below its baseline (None: its colour), ``baseline`` the value it is drawn from
+    (``auto``, ``mean`` or a number), ``min_value``/``max_value`` its value range (a number or ``auto``; None: the
+    global depth range) and ``unit`` the text after each axis number (empty for none). Every default draws as a
+    depth track drew before these fields existed.
+    """
 
     source: _DepthTrackSource | Sequence[_DepthTrackSource | None]
     label: str | None = None
@@ -208,6 +230,14 @@ class DepthTrackInput:
     large_tick_interval: float | None = None
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
+    format: DepthFileFormat = "auto"
+    agg: DepthAggregation = "mean"
+    style: SeriesStyle = "area"
+    negative_color: str | None = None
+    baseline: SeriesBaseline = "auto"
+    min_value: SeriesBound = None
+    max_value: SeriesBound = None
+    unit: str = DEPTH_UNIT
 
     def __post_init__(self) -> None:
         source = self.source
@@ -244,7 +274,7 @@ class DepthTrackInput:
                 "of per-record sources."
             )
 
-        for field_name in ("label", "color"):
+        for field_name in ("label", "color", "negative_color"):
             value = getattr(self, field_name)
             if value is None:
                 continue
@@ -263,6 +293,48 @@ class DepthTrackInput:
                     field_name=f"DepthTrackInput.{field_name}",
                 ),
             )
+        self._check_series_settings()
+
+    def _check_series_settings(self) -> None:
+        """Refuse a format, aggregate or style that is not one of its kind, a baseline or range bound that is not
+        a finite number (or its word), a range whose minimum is above its maximum, and a unit that is not text."""
+
+        _checked_word(self.format, DEPTH_FILE_FORMATS, "DepthTrackInput.format")
+        _checked_word(self.agg, DEPTH_AGGREGATIONS, "DepthTrackInput.agg")
+        _checked_word(self.style, SERIES_STYLES, "DepthTrackInput.style")
+        object.__setattr__(
+            self, "baseline", _finite_or_word(self.baseline, ("auto", "mean"), "DepthTrackInput.baseline")
+        )
+        for field_name in ("min_value", "max_value"):
+            bound = getattr(self, field_name)
+            if bound is not None:
+                object.__setattr__(self, field_name, _finite_or_word(bound, ("auto",), f"DepthTrackInput.{field_name}"))
+        if isinstance(self.min_value, float) and isinstance(self.max_value, float) and self.min_value > self.max_value:
+            raise ValidationError(
+                "DepthTrackInput.min_value must be <= DepthTrackInput.max_value.",
+                diagnostic=_invalid_input("min_value", "ORDER"),
+            )
+        if not isinstance(self.unit, str):
+            raise ValidationError("DepthTrackInput.unit must be a string (empty for no unit).")
+
+
+def _checked_word(value: object, words: Sequence[str], field_name: str) -> None:
+    if not isinstance(value, str) or value not in words:
+        raise ValidationError(f"{field_name} must be one of: {', '.join(words)}; got {value!r}.")
+
+
+def _finite_or_word(value: object, words: Sequence[str], field_name: str) -> float | str:
+    """``value`` as one of ``words`` or a finite number (a float); anything else is refused."""
+
+    if isinstance(value, str) and value in words:
+        return value
+    if not isinstance(value, bool) and isinstance(value, Real) and math.isfinite(float(value)):
+        return float(value)
+    allowed = " or ".join(f'"{word}"' for word in words)
+    raise ValidationError(
+        f"{field_name} must be a finite number or {allowed}; got {value!r}.",
+        diagnostic=_invalid_input(field_name, "FINITE"),
+    )
 
 
 def _validate_track_configuration(

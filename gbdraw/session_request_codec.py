@@ -163,6 +163,7 @@ from gbdraw.annotations.models import DEFAULT_HIGHLIGHT_FILL
 from .api.options import (
     CIRCULAR_DEFAULT_PLOT_TITLE_POSITION,
     DEPTH_TRACK_POSITIVE_FIELDS,
+    DEPTH_TRACK_SERIES_FIELDS,
     LINEAR_DEFAULT_PLOT_TITLE_POSITION,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
@@ -3113,6 +3114,13 @@ def canonical_depth_tracks(
     return tuple(tracks)
 
 
+# A series setting's default (DepthTrackInput's), which the request leaves out: a track without settings encodes as
+# before they existed, and a request written before reads with them.
+_DEPTH_TRACK_SERIES_DEFAULTS: Mapping[str, object] = {
+    item.name: item.default for item in fields(DepthTrackInput) if item.name in DEPTH_TRACK_SERIES_FIELDS
+}
+
+
 def _encode_depth_tracks(
     value: object,
     *,
@@ -3158,6 +3166,11 @@ def _encode_depth_tracks(
                 "largeTickInterval": track.large_tick_interval,
                 "smallTickInterval": track.small_tick_interval,
                 "tickFontSize": track.tick_font_size,
+                **{
+                    _camel(name): setting
+                    for name, default in _DEPTH_TRACK_SERIES_DEFAULTS.items()
+                    if (setting := getattr(track, name)) != default
+                },
             }
         )
     return encoded
@@ -3213,9 +3226,12 @@ def _decode_depth_tracks(
         "smallTickInterval",
         "tickFontSize",
     }
+    series_keys = {_camel(name): name for name in DEPTH_TRACK_SERIES_FIELDS}
     for track_index, raw_track in enumerate(raw_tracks, start=1):
         path = f"renderRequest.diagramOptions.depthTracks[{track_index - 1}]"
-        track = _object(raw_track, path=path, required=required)
+        track = _object(raw_track, path=path)
+        _require_exact_fields(track, path=path, required=required, optional=set(series_keys))
+        series = {name: track.get(key, _DEPTH_TRACK_SERIES_DEFAULTS[name]) for key, name in series_keys.items()}
         raw_source = track["source"]
         source_name = f"depth-tracks-{track_index}-source"
         if isinstance(raw_source, list):
@@ -3246,6 +3262,14 @@ def _decode_depth_tracks(
                 large_tick_interval=track["largeTickInterval"],
                 small_tick_interval=track["smallTickInterval"],
                 tick_font_size=track["tickFontSize"],
+                format=series["format"],
+                agg=series["agg"],
+                style=series["style"],
+                negative_color=_optional_string(series["negative_color"], f"{path}.negativeColor"),
+                baseline=series["baseline"],
+                min_value=series["min_value"],
+                max_value=series["max_value"],
+                unit=series["unit"],
             )
         )
     return tuple(decoded)
@@ -6640,7 +6664,8 @@ def describe_canonical_request() -> dict[str, Any]:
         # (CircularDiagramOptions.__post_init__).
         # DepthTrackInput.__post_init__: at least one source, and positive numbers.
         depth_hints = _class_type_hints(DepthTrackInput)
-        data(DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}), replace={
+        # _encode_depth_tracks writes a series setting only when it differs from its default.
+        data(DepthTrackInput, f"{title}DepthTrack", files=frozenset({"source"}), optional=frozenset(DEPTH_TRACK_SERIES_FIELDS), replace={
             "source": bounded(resource(depth_hints["source"]), minItems=1),
             **{name: bounded(of(depth_hints[name]), exclusiveMinimum=0) for name in DEPTH_TRACK_POSITIVE_FIELDS},
             **({"height": NULL} if mode == "circular" else {}),

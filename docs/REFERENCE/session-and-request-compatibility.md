@@ -223,6 +223,15 @@ Session saved with a row per track after the features row; it adds no row to
 a stack you changed. It has no editor for the tracks themselves yet and shows
 how many the drawing has under the track switches.
 
+Each `diagramOptions.depthTracks` entry of request schema 10 may also hold
+how its series is read and drawn: `format`, `agg`, `style`, `negativeColor`,
+`baseline`, `minValue`, `maxValue`, and `unit`, the fields of
+`DepthTrackInput` ([Typed requests](typed-requests.md#depth-tracks)) and the
+`--depth_track_*` options of the same names. A writer writes each key only when
+it differs from its default, so a track drawn as before is written as before;
+a request or Session without them reads each track with the defaults and draws
+as it did. An entry with any other key is refused.
+
 Request schema 10 also writes `diagramOptions.conservationFastaFiles` as one
 list of file references per similarity ring: the files of the ring's
 comparison genome in the listed order, or an empty list for a ring without

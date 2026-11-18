@@ -821,9 +821,43 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         tickFontSize: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
-        })
+        }),
+        format: Object.freeze({
+          kind: "literal",
+          values: Object.freeze(["auto", "samtools", "bedgraph", "bed", "position_value"])
+        }),
+        agg: Object.freeze({kind: "literal", values: Object.freeze(["mean", "max", "sum"])}),
+        style: Object.freeze({kind: "literal", values: Object.freeze(["area", "line"])}),
+        negativeColor: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        }),
+        baseline: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "literal", values: Object.freeze(["auto", "mean"])}),
+            Object.freeze({kind: "number"})
+          ])
+        }),
+        minValue: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "number"}),
+            Object.freeze({kind: "literal", values: Object.freeze(["auto"])}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
+        maxValue: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "number"}),
+            Object.freeze({kind: "literal", values: Object.freeze(["auto"])}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
+        unit: Object.freeze({kind: "string"})
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["agg", "baseline", "format", "maxValue", "minValue", "negativeColor", "style", "unit"]),
       open: false,
       defaults: Object.freeze({
         color: null,
@@ -1156,9 +1190,43 @@ export const CANONICAL_REQUEST_DESCRIPTION = Object.freeze({
         tickFontSize: Object.freeze({
           kind: "union",
           options: Object.freeze([Object.freeze({kind: "number", exclusiveMinimum: 0}), Object.freeze({kind: "null"})])
-        })
+        }),
+        format: Object.freeze({
+          kind: "literal",
+          values: Object.freeze(["auto", "samtools", "bedgraph", "bed", "position_value"])
+        }),
+        agg: Object.freeze({kind: "literal", values: Object.freeze(["mean", "max", "sum"])}),
+        style: Object.freeze({kind: "literal", values: Object.freeze(["area", "line"])}),
+        negativeColor: Object.freeze({
+          kind: "union",
+          options: Object.freeze([Object.freeze({kind: "string"}), Object.freeze({kind: "null"})])
+        }),
+        baseline: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "literal", values: Object.freeze(["auto", "mean"])}),
+            Object.freeze({kind: "number"})
+          ])
+        }),
+        minValue: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "number"}),
+            Object.freeze({kind: "literal", values: Object.freeze(["auto"])}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
+        maxValue: Object.freeze({
+          kind: "union",
+          options: Object.freeze([
+            Object.freeze({kind: "number"}),
+            Object.freeze({kind: "literal", values: Object.freeze(["auto"])}),
+            Object.freeze({kind: "null"})
+          ])
+        }),
+        unit: Object.freeze({kind: "string"})
       }),
-      optional: Object.freeze([]),
+      optional: Object.freeze(["agg", "baseline", "format", "maxValue", "minValue", "negativeColor", "style", "unit"]),
       open: false,
       defaults: Object.freeze({
         color: null,

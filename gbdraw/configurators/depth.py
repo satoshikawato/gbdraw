@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from gbdraw.config.models import RenderProfile
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
-from gbdraw.layout.series_style import ScalarAxisStyle, SeriesBaseline, SeriesPaint, SeriesStyle
+from gbdraw.layout.series_style import DEPTH_UNIT, ScalarAxisStyle, SeriesBaseline, SeriesPaint, SeriesStyle
 
 # The stroke of a ``line`` series when the Depth stroke width is 0, which would draw nothing (D-25).
 LINE_SERIES_MIN_STROKE_PX = 1.0
@@ -17,7 +17,7 @@ class DepthConfigurator:
     """Collect drawing and normalization options for depth coverage tracks.
 
     One series' own values (``depth_track_config``) replace the colour, the value range (``min_depth``,
-    ``max_depth``), the ticks, and set ``series_style``, ``negative_color`` and ``baseline``; the defaults draw as
+    ``max_depth``), the ticks, and set ``series_style``, ``negative_color``, ``baseline`` and ``unit``; the defaults draw as
     every depth track drew before they existed.
     """
 
@@ -71,6 +71,8 @@ class DepthConfigurator:
         # The paint of the part below the baseline; None: the series colour.
         self.negative_color: str | None = None
         self.baseline: SeriesBaseline = "auto"
+        # The text after each axis number and in the range label; empty for none.
+        self.unit: str = DEPTH_UNIT
 
     @property
     def series_paint(self) -> SeriesPaint:

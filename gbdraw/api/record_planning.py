@@ -79,6 +79,9 @@ from gbdraw.io.regions import (
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology, drawn_circular, reads_over_origin
+from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS
+from gbdraw.core.numeric import parse_ascii_finite_float
+from gbdraw.layout.series_style import DEPTH_UNIT, SERIES_STYLES, SeriesBaseline, SeriesBound
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -1505,56 +1508,95 @@ def _optional_positive_float(value: object | None, *, field_name: str) -> float 
     return numeric
 
 
+@dataclass(frozen=True)
+class DepthTrackCliValues:
+    """The values of the CLI's per-track depth options (``--depth_track_label`` ...), as typed: each one value for
+    every ``--depth_track`` or one per track (``_expanded_cli_track_values``), or None when the option is not given.
+    Numbers are text (``auto`` or empty: unset); ``min_values``/``max_values`` take ``auto`` for the series' own
+    bound and an empty value or ``-`` for the global one; ``baselines`` take ``auto``, ``mean`` or a number."""
+
+    labels: Sequence[str] | None = None
+    colors: Sequence[str] | None = None
+    heights: Sequence[object] | None = None
+    large_tick_intervals: Sequence[object] | None = None
+    small_tick_intervals: Sequence[object] | None = None
+    tick_font_sizes: Sequence[object] | None = None
+    formats: Sequence[str] | None = None
+    aggs: Sequence[str] | None = None
+    styles: Sequence[str] | None = None
+    negative_colors: Sequence[str] | None = None
+    baselines: Sequence[str] | None = None
+    min_values: Sequence[str] | None = None
+    max_values: Sequence[str] | None = None
+    units: Sequence[str] | None = None
+
+
+_Word = TypeVar("_Word", bound=str)
+_CLI_UNSET_WORDS = frozenset({"", "-", "none", "null"})
+
+
+def _cli_text(value: object | None) -> str | None:
+    return str(value).strip() if value is not None else None
+
+
+def _cli_word(value: object | None, words: Sequence[_Word], default: _Word, *, field_name: str) -> _Word:
+    """``value`` as one of ``words`` (``default`` when unset)."""
+
+    if value is None:
+        return default
+    for word in words:
+        if str(value).strip() == word:
+            return word
+    raise ValidationError(f"{field_name} values must be one of: {', '.join(words)}; got {value!r}.")
+
+
+def _cli_number(text: str, *, field_name: str, words: str) -> float:
+    numeric = parse_ascii_finite_float(text)
+    if numeric is None:
+        raise ValidationError(f"{field_name} values must be finite numbers or {words}; got {text!r}.")
+    return numeric
+
+
+def _cli_bound(value: object | None, *, field_name: str) -> SeriesBound:
+    text = str(value).strip().lower() if value is not None else ""
+    if text in _CLI_UNSET_WORDS:
+        return None
+    return "auto" if text == "auto" else _cli_number(text, field_name=field_name, words="auto")
+
+
+def _cli_baseline(value: object | None, *, field_name: str) -> SeriesBaseline:
+    text = str(value).strip().lower() if value is not None else "auto"
+    if text == "auto":
+        return "auto"
+    return "mean" if text == "mean" else _cli_number(text, field_name=field_name, words="auto or mean")
+
+
 def depth_track_inputs_from_cli(
     groups: Sequence[Sequence[str]] | None,
-    *,
-    labels: Sequence[str] | None = None,
-    colors: Sequence[str] | None = None,
-    heights: Sequence[object] | None = None,
-    large_tick_intervals: Sequence[object] | None = None,
-    small_tick_intervals: Sequence[object] | None = None,
-    tick_font_sizes: Sequence[object] | None = None,
+    values: DepthTrackCliValues = DepthTrackCliValues(),
 ) -> tuple[DepthTrackInput, ...] | None:
-    """Translate logical CLI depth groups without knowing record cardinality."""
+    """Translate logical CLI depth groups and their per-track ``values`` without knowing record cardinality."""
 
     if not groups:
         return None
     track_count = len(groups)
-    label_values = _expanded_cli_track_values(
-        labels,
-        track_count=track_count,
-        field_name="depth_track_labels",
-    )
-    color_values = _expanded_cli_track_values(
-        colors,
-        track_count=track_count,
-        field_name="depth_track_colors",
-    )
-    height_values = _expanded_cli_track_values(
-        heights,
-        track_count=track_count,
-        field_name="depth_track_heights",
-    )
-    large_values = _expanded_cli_track_values(
-        large_tick_intervals,
-        track_count=track_count,
-        field_name="depth_track_large_tick_intervals",
-    )
-    small_values = _expanded_cli_track_values(
-        small_tick_intervals,
-        track_count=track_count,
-        field_name="depth_track_small_tick_intervals",
-    )
-    font_values = _expanded_cli_track_values(
-        tick_font_sizes,
-        track_count=track_count,
-        field_name="depth_track_tick_font_sizes",
-    )
+
+    def each(items: Sequence[object] | None, name: str) -> list[object | None]:
+        return _expanded_cli_track_values(items, track_count=track_count, field_name=f"depth_track_{name}")
+
+    labels, colors = each(values.labels, "labels"), each(values.colors, "colors")
+    heights, large_ticks = each(values.heights, "heights"), each(values.large_tick_intervals, "large_tick_intervals")
+    small_ticks = each(values.small_tick_intervals, "small_tick_intervals")
+    font_sizes = each(values.tick_font_sizes, "tick_font_sizes")
+    formats, aggs, styles = each(values.formats, "formats"), each(values.aggs, "aggs"), each(values.styles, "styles")
+    negative_colors, baselines = each(values.negative_colors, "negative_colors"), each(values.baselines, "baselines")
+    min_values, max_values = each(values.min_values, "min_values"), each(values.max_values, "max_values")
+    units = each(values.units, "units")
     inputs: list[DepthTrackInput] = []
     for index, group in enumerate(groups):
         sources = tuple(
             None
-            if str(path).strip().lower() in {"", "-", "none", "null"}
+            if str(path).strip().lower() in _CLI_UNSET_WORDS
             else str(path)
             for path in group
         )
@@ -1566,32 +1608,24 @@ def depth_track_inputs_from_cli(
         inputs.append(
             DepthTrackInput(
                 source=source,
-                label=(
-                    str(label_values[index]).strip()
-                    if label_values[index] is not None
-                    else None
-                ),
-                color=(
-                    str(color_values[index]).strip()
-                    if color_values[index] is not None
-                    else None
-                ),
-                height=_optional_positive_float(
-                    height_values[index],
-                    field_name="depth_track_heights",
-                ),
+                label=_cli_text(labels[index]),
+                color=_cli_text(colors[index]),
+                height=_optional_positive_float(heights[index], field_name="depth_track_heights"),
                 large_tick_interval=_optional_positive_float(
-                    large_values[index],
-                    field_name="depth_track_large_tick_intervals",
+                    large_ticks[index], field_name="depth_track_large_tick_intervals"
                 ),
                 small_tick_interval=_optional_positive_float(
-                    small_values[index],
-                    field_name="depth_track_small_tick_intervals",
+                    small_ticks[index], field_name="depth_track_small_tick_intervals"
                 ),
-                tick_font_size=_optional_positive_float(
-                    font_values[index],
-                    field_name="depth_track_tick_font_sizes",
-                ),
+                tick_font_size=_optional_positive_float(font_sizes[index], field_name="depth_track_tick_font_sizes"),
+                format=_cli_word(formats[index], DEPTH_FILE_FORMATS, "auto", field_name="depth_track_formats"),
+                agg=_cli_word(aggs[index], DEPTH_AGGREGATIONS, "mean", field_name="depth_track_aggs"),
+                style=_cli_word(styles[index], SERIES_STYLES, "area", field_name="depth_track_styles"),
+                negative_color=_cli_text(negative_colors[index]) or None,
+                baseline=_cli_baseline(baselines[index], field_name="depth_track_baselines"),
+                min_value=_cli_bound(min_values[index], field_name="depth_track_min_values"),
+                max_value=_cli_bound(max_values[index], field_name="depth_track_max_values"),
+                unit=DEPTH_UNIT if units[index] is None else str(units[index]),
             )
         )
     return tuple(inputs)
@@ -2882,6 +2916,7 @@ __all__ = [
     "RecordInputManifest",
     "ResolvedRecordCollection",
     "ResolvedRecordProvenance",
+    "DepthTrackCliValues",
     "depth_track_inputs_from_cli",
     "parse_cli_bool",
     "prepared_parsed_source",

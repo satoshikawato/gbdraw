@@ -21,7 +21,6 @@ from ..analysis.gc import gc_content_percent_df
 from ..configurators import DepthConfigurator, GcContentConfigurator, GcSkewConfigurator
 from ..layout.circular_ink import paint_shows
 from ..layout.scalar_axis import (
-    DEPTH_UNIT,
     PERCENT_UNIT,
     ScalarAxis,
     SeriesSamples,
@@ -136,8 +135,9 @@ def gc_content_axis(config: GcContentConfigurator) -> ScalarAxis | None:
 
 def depth_axis(config: DepthConfigurator, depth_df: DataFrame) -> ScalarAxis | None:
     """The axis of a depth track, when it is shown: from the set minimum to the set maximum, else from the
-    smallest value (0 for values of 0 or more) to the largest, linear or log-scaled; each record of a shared circle
-    draws its own. Its lower bound is labelled when it is set or below 0."""
+    smallest value (0 for values of 0 or more) to the largest, linear or log-scaled, each number followed by the
+    series' ``unit``; each record of a shared circle draws its own. Its lower bound is labelled when it is set or
+    below 0."""
 
     style = _drawn_style(config.axis_style)
     if style is None:
@@ -146,7 +146,7 @@ def depth_axis(config: DepthConfigurator, depth_df: DataFrame) -> ScalarAxis | N
     return ScalarAxis(
         axis_min=axis_min,
         axis_max=axis_max,
-        unit=DEPTH_UNIT,
+        unit=config.unit,
         log_scale=bool(config.normalize),
         label_axis_min=config.min_depth is not None or axis_min < 0,
         style=style,

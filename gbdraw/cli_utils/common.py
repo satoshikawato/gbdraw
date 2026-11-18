@@ -39,9 +39,11 @@ from gbdraw.config.models.objects import (
 from gbdraw.core.figure_length import argparse_figure_length
 from gbdraw.core.numeric import JS_WHITESPACE, argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
+from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, check_depth_range
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.series_style import SERIES_STYLES
 from gbdraw.api.options import DepthTrackInput
-from gbdraw.api.record_planning import RecordInputManifest, depth_track_inputs_from_cli
+from gbdraw.api.record_planning import DepthTrackCliValues, RecordInputManifest, depth_track_inputs_from_cli
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
 from gbdraw.features.shapes import parse_feature_shape_assignment
 from gbdraw.labels.label_style import (
@@ -73,14 +75,19 @@ _TRACK_VISIBILITY_FLAG_SPECS = (
     ("gc", "show_gc", "GC content"),
     ("skew", "show_skew", "GC skew"),
 )
+_DEPTH_TRACK_FORMS_HELP = (
+    "A file may be samtools depth output, a bedGraph, a BED file (each row adds its score, or 1, to the bases it "
+    "covers), or position-value rows, optionally gzip-compressed; values may be negative. "
+    "--depth_track_format names the form when its columns do not."
+)
 _DEPTH_TRACK_HELP_BY_MODE = {
     "circular": (
-        "Repeatable logical depth track. Provide one file for all records "
-        "or one file per record."
+        "Repeatable numeric series (depth) track. Provide one file for all records "
+        f"or one file per record. {_DEPTH_TRACK_FORMS_HELP}"
     ),
     "linear": (
-        "Repeatable logical depth track. Provide one file for all records "
-        "or one file per input record."
+        "Repeatable numeric series (depth) track. Provide one file for all records "
+        f"or one file per input record. {_DEPTH_TRACK_FORMS_HELP}"
     ),
 }
 # The rule ``--label_rendering`` meets in one mode, said in its help before the default.
@@ -511,6 +518,69 @@ def _add_depth_track_label_color_args(parser: argparse.ArgumentParser) -> None:
         nargs='+')
 
 
+def _add_depth_track_series_args(parser: argparse.ArgumentParser) -> None:
+    """The per-track numeric series options; each takes one value for every --depth_track or one per track."""
+
+    each = "Provide one value or one per --depth_track."
+    parser.add_argument(
+        '--depth_track_format',
+        metavar='FORMAT',
+        help='How each depth track file is read: auto (by its columns), samtools, bedgraph, bed, or '
+        f'position_value. samtools reads the first sample of a file of several. Default: auto. {each}',
+        choices=DEPTH_FILE_FORMATS,
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_agg',
+        metavar='AGG',
+        help='The value of each window: mean, max (the largest base value), or sum. Default: mean. '
+        f'{each}',
+        choices=DEPTH_AGGREGATIONS,
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_style',
+        metavar='STYLE',
+        help=f'Draw each depth track as a filled area or as a line. Default: area. {each}',
+        choices=SERIES_STYLES,
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_negative_color',
+        metavar='COLOR',
+        help=f'Color of each depth track below its baseline. Default: the track color. {each}',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_baseline',
+        metavar='VALUE',
+        help='The value each depth track is drawn from: auto (0, or the bottom of a range above 0), mean, or a '
+        f'number. Default: auto. {each}',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_min',
+        metavar='VALUE',
+        help='Bottom of each depth track\'s value range: a number, or auto for its own smallest value; '
+        f'- for --depth_min. Default: --depth_min. {each}',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_max',
+        metavar='VALUE',
+        help='Top of each depth track\'s value range: a number, or auto for its own largest value; '
+        f'- for --depth_max. Default: --depth_max. {each}',
+        type=str,
+        nargs='+')
+    parser.add_argument(
+        '--depth_track_unit',
+        metavar='TEXT',
+        help='Text after the axis numbers of a depth track; "" for none. Default: x. '
+        f'{each}',
+        type=str,
+        nargs='+')
+
+
 def _add_depth_track_tick_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_track_large_tick_interval',
@@ -547,11 +617,11 @@ def _add_depth_axis_args(parser: argparse.ArgumentParser) -> None:
         action='store_true')
     parser.add_argument(
         '--depth_min',
-        help='Minimum depth for clipping/normalization (optional; must be >= 0).',
+        help='Minimum depth for clipping/normalization (optional; may be negative, except with --depth_log_scale).',
         type=argparse_float)
     parser.add_argument(
         '--depth_max',
-        help='Maximum depth for clipping/normalization (optional; must be >= 0).',
+        help='Maximum depth for clipping/normalization (optional; may be negative, except with --depth_log_scale).',
         type=argparse_float)
     parser.add_argument(
         '--depth_log_scale',
@@ -630,12 +700,13 @@ def validate_depth_axis_args(
     """Refuse a depth range or tick interval out of bounds, and a per-track depth number that is not a number
     > 0 or ``auto`` (``track_heights``: also Linear's ``--depth_track_height``)."""
 
-    if args.depth_min is not None and args.depth_min < 0:
-        parser.error("--depth_min must be >= 0")
-    if args.depth_max is not None and args.depth_max < 0:
-        parser.error("--depth_max must be >= 0")
-    if args.depth_min is not None and args.depth_max is not None and args.depth_min > args.depth_max:
-        parser.error("--depth_min must be <= --depth_max")
+    try:
+        check_depth_range(args.depth_min, args.depth_max, log_scale=bool(args.depth_normalize))
+    except ValidationError as exc:
+        if exc.diagnostic is None:
+            parser.error("--depth_min must be <= --depth_max")
+        option = {"min_depth": "--depth_min", "max_depth": "--depth_max"}[str(exc.diagnostic["field"])]
+        parser.error(f"{option} must be >= 0 with --depth_log_scale")
     require_positive_args(parser, args, "depth_large_tick_interval", "depth_small_tick_interval")
     per_track = (("depth_track_height",) if track_heights else ()) + _DEPTH_TRACK_NUMBER_OPTIONS
     for option_name in per_track:
@@ -1038,18 +1109,29 @@ def depth_track_inputs_from_args(
 
     return depth_track_inputs_from_cli(
         args.depth_track,
-        labels=_cli_list(args.depth_track_label),
-        colors=_cli_list(args.depth_track_color),
-        heights=_cli_list(heights),
-        large_tick_intervals=_cli_list(args.depth_track_large_tick_interval),
-        small_tick_intervals=_cli_list(args.depth_track_small_tick_interval),
-        tick_font_sizes=_cli_list(args.depth_track_tick_font_size),
+        DepthTrackCliValues(
+            labels=_cli_list(args.depth_track_label),
+            colors=_cli_list(args.depth_track_color),
+            heights=_cli_list(heights),
+            large_tick_intervals=_cli_list(args.depth_track_large_tick_interval),
+            small_tick_intervals=_cli_list(args.depth_track_small_tick_interval),
+            tick_font_sizes=_cli_list(args.depth_track_tick_font_size),
+            formats=_cli_list(args.depth_track_format),
+            aggs=_cli_list(args.depth_track_agg),
+            styles=_cli_list(args.depth_track_style),
+            negative_colors=_cli_list(args.depth_track_negative_color),
+            baselines=_cli_list(args.depth_track_baseline),
+            min_values=_cli_list(args.depth_track_min),
+            max_values=_cli_list(args.depth_track_max),
+            units=_cli_list(args.depth_track_unit),
+        ),
     )
 
 
 def _add_depth_track_source_args(parser: argparse.ArgumentParser, *, mode: str) -> None:
     _add_depth_track_arg(parser, mode=mode)
     _add_depth_track_label_color_args(parser)
+    _add_depth_track_series_args(parser)
 
 
 def add_feature_density_args(parser: argparse.ArgumentParser) -> None:

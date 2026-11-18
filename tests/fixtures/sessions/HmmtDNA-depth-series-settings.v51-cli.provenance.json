@@ -1,0 +1,14 @@
+{
+  "purpose": "Positive fixture of Session 51 that the CLI wrote with two depth tracks that carry every series setting of request schema 10: format, agg, style, negativeColor, baseline, minValue, maxValue and unit. The request's diagramOptions.depthTracks writes each setting only where it differs from its default; the CLI replays it and draws both tracks with their settings.",
+  "sourceCommit": "feat/numeric-series-features after 683d7d369 (PR-3 stage A2, uncommitted work tree)",
+  "history": "branch feat/numeric-series-features; request schema 10 and Session 51 are not on main yet (docs/internal/SESSION_FORMAT_HISTORY.md)",
+  "route": "in a directory holding a copy of tests/test_inputs/HmmtDNA.gbk and ratio.bedgraph (a bedGraph of 34 rows over NC_012920.1: a 500 bp row from each 0-based start 0, 500, ..., 16500 with the value 2 sin(i/3) - 0.5 to 3 places, after a 'track type=bedGraph name=ratio' line; tests/test_numeric_series_surfaces.py::_signed_bedgraph writes the same file): gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA -f svg --depth_track ratio.bedgraph --depth_track ratio.bedgraph --depth_track_label 'log2 ratio' 'ratio (max, line)' --depth_track_color '#2b6cb0' '#2f855a' --depth_track_format bedgraph auto --depth_track_agg mean max --depth_track_style area line --depth_track_negative_color '#c53030' --depth_track_baseline auto 0.5 --depth_track_min -3 auto --depth_track_max 2 - --depth_track_unit '' x --session_output HmmtDNA.gbdraw, with gbdraw from that work tree",
+  "inputs": {
+    "tests/test_inputs/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f",
+    "ratio.bedgraph": "e0b3257b12c633c8edb5780c978f8175f18e9f3752af1abbfebffab2adb87934"
+  },
+  "values": "drawings[0].renderRequest.diagramOptions.depthTracks: [0] format bedgraph, negativeColor #c53030, minValue -3.0, maxValue 2.0, unit ''; [1] agg max, style line, negativeColor #c53030, baseline 0.5, minValue auto (format auto and unit x are defaults, not written); the drawn range labels are [-3–2] and [-2.5–1.49x]",
+  "sha256": "ae3171170c0ecd7be7d10ed576787efb17c525160845e0dfd0bff29686aea027",
+  "sessionVersion": 51,
+  "requestSchema": 10
+}

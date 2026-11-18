@@ -34,7 +34,11 @@ from gbdraw.api.input_summary import log_input_warnings as _log_input_warnings
 from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
 from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.io.record_sequences import detached_records
+from gbdraw.analysis.depth import DepthAggregation, DepthFileFormat
+from gbdraw.api.record_planning import _optional_positive_float
+from gbdraw.layout.series_style import DEPTH_UNIT, SeriesBaseline, SeriesBound, SeriesStyle
 from gbdraw.api.options import (
+    DepthTrackInput,
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
     CircularOutputOptions as _CircularOutputOptions,
@@ -200,7 +204,11 @@ def _resolve_thresholds(
 
 @dataclass(frozen=True)
 class DepthTrackOptions:
-    """One depth track, with one source per displayed record when needed."""
+    """One depth track (a numeric series), with one source per displayed record when needed.
+
+    ``format``, ``agg``, ``style``, ``negative_color``, ``baseline``, ``min_value``, ``max_value`` and ``unit`` are
+    those of :class:`gbdraw.api.DepthTrackInput`, which each track becomes.
+    """
 
     source: TableSource | Sequence[TableSource | None]
     label: str | None = None
@@ -209,6 +217,14 @@ class DepthTrackOptions:
     large_tick_interval: float | str | None = None
     small_tick_interval: float | str | None = None
     tick_font_size: float | str | None = None
+    format: DepthFileFormat = "auto"
+    agg: DepthAggregation = "mean"
+    style: SeriesStyle = "area"
+    negative_color: str | None = None
+    baseline: SeriesBaseline = "auto"
+    min_value: SeriesBound = None
+    max_value: SeriesBound = None
+    unit: str = DEPTH_UNIT
 
     def __post_init__(self) -> None:
         source = self.source
@@ -870,10 +886,11 @@ def _depth_kwargs(
     record_count: int,
     mode: Literal["circular", "linear"],
 ) -> dict[str, object]:
+    """Each track as the ``DepthTrackInput`` it is: one source per record (one for a single record)."""
+
     if not tracks:
         return {}
-    table_rows: list[list[DataFrame | None]] = [list() for _ in range(record_count)]
-    file_rows: list[list[str | None]] = [list() for _ in range(record_count)]
+    inputs: list[DepthTrackInput] = []
     for track_index, track in enumerate(tracks, start=1):
         source = track.source
         if isinstance(source, (DataFrame, str, PathLike)):
@@ -889,26 +906,40 @@ def _depth_kwargs(
                     f"Depth track {track_index} has {len(sources)} source(s); "
                     f"expected {record_count}."
                 )
-        for record_index, item in enumerate(sources):
-            table, file_path = _source(item, name=f"depth track {track_index}")
-            table_rows[record_index].append(table)
-            file_rows[record_index].append(file_path)
         if mode == "circular" and track.height is not None:
             raise ValidationError("Depth track height is supported only by linear diagrams.")
-    result: dict[str, object] = {
-        "depth_track_labels": [track.label for track in tracks],
-        "depth_track_colors": [track.color for track in tracks],
-        "depth_track_large_tick_intervals": [track.large_tick_interval for track in tracks],
-        "depth_track_small_tick_intervals": [track.small_tick_interval for track in tracks],
-        "depth_track_tick_font_sizes": [track.tick_font_size for track in tracks],
-    }
-    if any(table is not None for row in table_rows for table in row):
-        result["depth_track_tables"] = table_rows
-    if any(file_path is not None for row in file_rows for file_path in row):
-        result["depth_track_files"] = file_rows
-    if mode == "linear":
-        result["depth_track_heights"] = [track.height for track in tracks]
-    return result
+        record_sources = tuple(_depth_source(item, name=f"depth track {track_index}") for item in sources)
+        first = record_sources[0]
+        inputs.append(
+            DepthTrackInput(
+                source=first if record_count == 1 and first is not None else record_sources,
+                # A blank label or colour is unset, as the beginner API read it before.
+                label=(track.label or "").strip() or None,
+                color=(track.color or "").strip() or None,
+                height=_optional_positive_float(track.height, field_name="depth_track_heights"),
+                large_tick_interval=_optional_positive_float(
+                    track.large_tick_interval, field_name="depth_track_large_tick_intervals"
+                ),
+                small_tick_interval=_optional_positive_float(
+                    track.small_tick_interval, field_name="depth_track_small_tick_intervals"
+                ),
+                tick_font_size=_optional_positive_float(track.tick_font_size, field_name="depth_track_tick_font_sizes"),
+                format=track.format,
+                agg=track.agg,
+                style=track.style,
+                negative_color=track.negative_color,
+                baseline=track.baseline,
+                min_value=track.min_value,
+                max_value=track.max_value,
+                unit=track.unit,
+            )
+        )
+    return {"depth_tracks": tuple(inputs)}
+
+
+def _depth_source(value: TableSource | None, *, name: str) -> DataFrame | str | None:
+    table, path = _source(value, name=name)
+    return table if table is not None else path
 
 
 def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["circular", "linear"]):

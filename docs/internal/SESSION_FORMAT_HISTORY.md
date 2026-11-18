@@ -480,6 +480,27 @@ without the key reads as no tracks; an entry that leaves the request's track
 shape is dropped with its Load repair row (`services/feature-density-tracks.js`).
 Fixture: `tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw`.
 
+## Unreleased: request schema 10 stores the series settings of depth tracks
+
+Request schema 10 and Session 51 (neither on `main` yet, so their numbers
+stay) let each `diagramOptions.depthTracks` entry hold the optional keys
+`format` (`auto`, `samtools`, `bedgraph`, `bed`, `position_value`), `agg`
+(`mean`, `max`, `sum`), `style` (`area`, `line`), `negativeColor` (a colour or
+`null`), `baseline` (`auto`, `mean`, or a number), `minValue` and `maxValue` (a
+number, `auto`, or `null`), and `unit` (text, `""` for none). The writer is
+`_encode_depth_tracks` in `gbdraw/session_request_codec.py`; the typed owner is
+`DepthTrackInput` (`gbdraw/api/options.py`, `DEPTH_TRACK_SERIES_FIELDS`), whose
+defaults are the values a track drew with before the keys existed (`auto`,
+`mean`, `area`, `null`, `auto`, `null`, `null`, `x`). The writer writes a key
+only when its value differs from that default, so a request whose tracks keep
+the defaults has the bytes it had before, and no stored Session or Gallery
+Session changes. The decoder reads an absent key as its default, so every
+request and Session written before reads and draws as it did; a key outside
+the declared set is refused, as before. The request description declares the
+keys optional (`request-shape.generated.js`), so the Web app's Load reads a
+stored entry without them as unchanged. Fixture:
+`tests/fixtures/sessions/HmmtDNA-depth-series-settings.v51-cli.gbdraw`.
+
 ## Unreleased: depth and GC Percent axis label styles
 
 No Session or request version changes. The config leaves `objects.depth.axis_labels` and

@@ -7,7 +7,7 @@ from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from numbers import Integral
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Literal, Sequence, TypeVar
+from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -26,7 +26,7 @@ from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import bind_record_transforms
-from gbdraw.layout.series_style import SeriesBaseline, SeriesStyle
+from gbdraw.layout.series_style import DEPTH_UNIT, SeriesBaseline, SeriesBound, SeriesStyle
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import depth_slot_track_index, slot_legend_label
@@ -36,12 +36,7 @@ if TYPE_CHECKING:
     from gbdraw.legend.table import LegendTable
 
 
-# A bound of one series' value range: a number, ``auto`` (from its values, whatever the global setting), or None
-# (the global ``min_depth``/``max_depth``).
-DepthSeriesBound = float | Literal["auto"] | None
-
-
-def series_bound(bound: DepthSeriesBound, global_bound: float | None) -> float | None:
+def series_bound(bound: SeriesBound, global_bound: float | None) -> float | None:
     """A series' bound as its drawing config holds it: its own number, None for ``auto``, else the global one."""
 
     if bound is None:
@@ -61,8 +56,9 @@ class DepthTrackStyle:
     series_style: SeriesStyle = "area"
     negative_color: str | None = None
     baseline: SeriesBaseline = "auto"
-    min_value: DepthSeriesBound = None
-    max_value: DepthSeriesBound = None
+    min_value: SeriesBound = None
+    max_value: SeriesBound = None
+    unit: str = DEPTH_UNIT
 
 
 @dataclass(frozen=True)
@@ -70,8 +66,9 @@ class DepthTrackSpec:
     """One depth source for one displayed record and logical track.
 
     ``table`` is a parsed file (its reader takes the file format), or an API table that ``depth_df`` converts. ``agg`` is the
-    value of a window; ``style``, ``negative_color``, ``baseline`` and the value range ``min_value``/``max_value``
-    (``DepthSeriesBound``) say how the series draws. Every default draws as before these fields existed.
+    value of a window; ``style``, ``negative_color``, ``baseline``, the value range ``min_value``/``max_value``
+    (``SeriesBound``) and ``unit`` (the text after each axis number, empty for none) say how the series draws.
+    Every default draws as before these fields existed.
     """
 
     id: str
@@ -87,8 +84,9 @@ class DepthTrackSpec:
     style: SeriesStyle = "area"
     negative_color: str | None = None
     baseline: SeriesBaseline = "auto"
-    min_value: DepthSeriesBound = None
-    max_value: DepthSeriesBound = None
+    min_value: SeriesBound = None
+    max_value: SeriesBound = None
+    unit: str = DEPTH_UNIT
 
     @property
     def drawing_style(self) -> DepthTrackStyle:
@@ -102,6 +100,7 @@ class DepthTrackSpec:
             baseline=self.baseline,
             min_value=self.min_value,
             max_value=self.max_value,
+            unit=self.unit,
         )
 
 
@@ -372,7 +371,8 @@ def _tracks_from_logical_inputs(
     record_count = len(records)
     track_count = len(inputs)
     record_tracks: list[list[DepthTrackSpec]] = [[] for _ in range(record_count)]
-    loaded_files: dict[str, DepthCoverage] = {}
+    # A file read in two formats is two series.
+    loaded_files: dict[tuple[str, DepthFileFormat], DepthCoverage] = {}
     track_ids = _default_depth_track_ids(track_count)
     default_labels = _default_depth_track_labels(track_count)
 
@@ -405,10 +405,10 @@ def _tracks_from_logical_inputs(
             if isinstance(source_value, DataFrame):
                 table = source_value
             elif isinstance(source_value, (str, Path)):
-                source_path = str(source_value)
-                if source_path not in loaded_files:
-                    loaded_files[source_path] = _read_depth_series(source_path, track_index)
-                table = loaded_files[source_path]
+                file_key = (str(source_value), track.format)
+                if file_key not in loaded_files:
+                    loaded_files[file_key] = _read_depth_series(file_key[0], track_index, track.format)
+                table = loaded_files[file_key]
             else:
                 raise ValidationError(
                     f"depth_tracks[{track_index}].source[{record_index}] must be "
@@ -425,6 +425,13 @@ def _tracks_from_logical_inputs(
                     large_tick_interval=track.large_tick_interval,
                     small_tick_interval=track.small_tick_interval,
                     tick_font_size=track.tick_font_size,
+                    agg=track.agg,
+                    style=track.style,
+                    negative_color=track.negative_color,
+                    baseline=track.baseline,
+                    min_value=track.min_value,
+                    max_value=track.max_value,
+                    unit=track.unit,
                 )
             )
 
@@ -731,7 +738,7 @@ def depth_track_config(
 
     It reads the track's style, not its label, so a label change keeps the
     config and the depth content drawn with it (OV-1229): its colour, ticks,
-    value range (``series_bound``), series style, negative colour and baseline.
+    value range (``series_bound``), series style, negative colour, baseline and axis unit.
     ``shared_bounds`` are the auto bounds over every record's frame of this
     logical track when the axis is shared (``_shared_bounds``); the config is
     complete when it is returned, so nothing writes into it afterwards (M5).
@@ -753,6 +760,7 @@ def depth_track_config(
         None if style.negative_color is None else _checked_series_color(style.negative_color, "negativeColor")
     )
     config.baseline = style.baseline
+    config.unit = style.unit
     if shared_bounds is not None:
         shared_min, shared_max = shared_bounds
         if config.min_depth is None and shared_min is not None:
@@ -929,7 +937,7 @@ def sync_depth_track_legend_entries(
 __all__ = [
     "DepthTrackData",
     "DepthTrackSpec",
-    "DepthSeriesBound",
+    "SeriesBound",
     "DepthTrackStyle",
     "ResolvedDepthTracks",
     "build_depth_track_dataframes",

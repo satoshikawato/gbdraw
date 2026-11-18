@@ -295,6 +295,14 @@
  * @property {number | null} largeTickInterval
  * @property {number | null} smallTickInterval
  * @property {number | null} tickFontSize
+ * @property {'auto' | 'samtools' | 'bedgraph' | 'bed' | 'position_value'} [format]
+ * @property {'mean' | 'max' | 'sum'} [agg]
+ * @property {'area' | 'line'} [style]
+ * @property {string | null} [negativeColor]
+ * @property {'auto' | 'mean' | number} [baseline]
+ * @property {number | 'auto' | null} [minValue]
+ * @property {number | 'auto' | null} [maxValue]
+ * @property {string} [unit]
  */
 /**
  * @typedef {object} CanonicalCircularFeaturePlacement
@@ -371,6 +379,14 @@
  * @property {number | null} largeTickInterval
  * @property {number | null} smallTickInterval
  * @property {number | null} tickFontSize
+ * @property {'auto' | 'samtools' | 'bedgraph' | 'bed' | 'position_value'} [format]
+ * @property {'mean' | 'max' | 'sum'} [agg]
+ * @property {'area' | 'line'} [style]
+ * @property {string | null} [negativeColor]
+ * @property {'auto' | 'mean' | number} [baseline]
+ * @property {number | 'auto' | null} [minValue]
+ * @property {number | 'auto' | null} [maxValue]
+ * @property {string} [unit]
  */
 /**
  * @typedef {object} CanonicalLinearFeaturePlacement

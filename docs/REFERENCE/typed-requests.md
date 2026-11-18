@@ -105,6 +105,20 @@ example](python-api.md#typed-linear-similarity-group-alignment) and the
 
 One `DepthTrackInput` represents one logical series. `source` accepts a path or `DataFrame` shared by all displayed records, or one path, `DataFrame`, or `None` per record. Linear entries may set `height`.
 
+Its other fields say how the series is read and drawn. Each default draws as a depth track drew before the field existed, and a request writes a field only when it differs from its default:
+
+| Field | Values | Default |
+|---|---|---|
+| `format` | `"auto"`, `"samtools"`, `"bedgraph"`, `"bed"`, `"position_value"` ([depth file formats](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables)) | `"auto"` |
+| `agg` | `"mean"`, `"max"`, `"sum"`: the value of each window | `"mean"` |
+| `style` | `"area"` (filled between the baseline and the value) or `"line"` (the value line only, at the Depth stroke width, 1 px when that is 0) | `"area"` |
+| `negative_color` | a color for the part below the baseline | `None`: the track color |
+| `baseline` | `"auto"` (0 when the range holds 0, else its lower end), `"mean"` (the series mean), or a number | `"auto"` |
+| `min_value`, `max_value` | a number, or `"auto"` for the series' own smallest or largest value | `None`: the global `depth_min` and `depth_max` |
+| `unit` | the text after the axis numbers; `""` for none | `"x"` |
+
+`DepthTrackInput` refuses a value outside these, a `min_value` above `max_value`, and, on a log-scaled track, a negative range. `gbdraw.DepthTrackOptions` takes the same fields.
+
 The legacy `depth_table`, `depth_file`, `depth_tables`, `depth_files`, and `depth_track_*` inputs remain compatibility inputs. Do not combine them with `depth_tracks`; normalization rejects mixed forms. Current request and session writers serialize an accepted form as `depthTracks`.
 
 ## Current analysis artifacts
