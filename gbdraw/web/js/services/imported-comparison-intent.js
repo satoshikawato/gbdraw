@@ -70,7 +70,7 @@ import { toRaw } from '../utils/vue-raw.js';
  *   mode?: unknown,
  *   comparisons?: SavedComparison[],
  *   records?: SavedRecord[],
- *   diagramOptions?: { [option: string]: unknown, conservationBlastFiles?: unknown }
+ *   diagramOptions?: { [option: string]: unknown }
  * }} SavedRenderRequest
  */
 /** @typedef {{ [resourceId: string]: { kind?: unknown } }} SavedResources */
@@ -388,10 +388,10 @@ export const classifyImportedComparisonIntent = ({
   const comparisons = Array.isArray(renderRequest?.comparisons)
     ? renderRequest.comparisons
     : [];
-  const conservation = Array.isArray(renderRequest?.diagramOptions?.conservationBlastFiles)
-    ? renderRequest.diagramOptions.conservationBlastFiles
-    : [];
-  const hasCommittedComparison = comparisons.length > 0 || conservation.length > 0;
+  // The state is a Linear drawing's (`settleStoredDrawing` in services/config.js): it classifies the comparisons a
+  // Linear drawing draws. A Circular request's conservation rings are its Circular drawing's, which the Circular
+  // controls hold, and no comparison of a Linear drawing (OV-3713).
+  const hasCommittedComparison = comparisons.length > 0;
   /** @param {string} [message] */
   const editable = (message = '') => ({
     disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE,
@@ -423,18 +423,8 @@ export const classifyImportedComparisonIntent = ({
     return decision(msg('The saved comparison has no supported diagram mode.'));
   }
 
-  if (mode === 'circular') {
-    if (comparisons.length > 0) {
-      return decision(msg('A Circular session contains unsupported Linear comparison data.'));
-    }
-    for (const reference of conservation) {
-      const resourceId = String(reference?.resourceId || '').trim();
-      if (!resourceId || !isObject(resources?.[resourceId])) {
-        return decision(msg('The saved Circular comparison is missing a required resource.'));
-      }
-    }
-    return editable(msg('The saved Circular comparison is represented by the current controls.'));
-  }
+  // Linear comparisons in a Circular request, which no Circular drawing draws, need a decision in the Linear drawing.
+  if (mode === 'circular') return decision(msg('A Circular session contains unsupported Linear comparison data.'));
 
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
   if (records.length === 0) {

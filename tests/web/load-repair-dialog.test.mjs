@@ -1548,6 +1548,22 @@ test('a stored label style outside its list reads as its mode\'s default and is 
   }
 });
 
+// A retired protein-search field that holds the value every writer of it
+// wrote (the Web of Sessions 27 and 28 wrote the merge gaps 50 and 25 and had
+// no control for them) loses no setting: it is not listed (OV-3925), as
+// Python's replay of such a Session warns of nothing. Another value is listed,
+// and so is any value of a retired field no writer wrote.
+test('a retired field that holds the value its writers always wrote is not listed; another value is', async () => {
+  const { configFieldRepairs, defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  // The protein search is a Linear drawing's.
+  const listed = (blastp) => configFieldRepairs(defaultSettingsContainers('linear'), { losat: { blastp } }, 'config', { mode: 'linear' })
+    .map(({ code, path }) => `${code} ${path}`);
+  assert.deepEqual(listed({ collinearBlockMergeGap: 50, collinearSingletonMergeGap: 25 }), []);
+  assert.deepEqual(listed({ collinearBlockMergeGap: 40, collinearSingletonMergeGap: 25, orthogroupMaxHits: 3 }), [
+    'setting-replaced config.losat.blastp.collinearBlockMergeGap', 'setting-replaced config.losat.blastp.orthogroupMaxHits'
+  ]);
+});
+
 // A similarity-group name that is no text (an object, a boolean) is
 // dropped and counted, not applied as its text; a number is its text. The
 // older `priorityRules` is read only when `qualifierPriorityRules` is

@@ -365,6 +365,20 @@ const circular = classifyImportedComparisonIntent({
   resources
 });
 assert.equal(circular.disposition, IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE);
+// OV-3713: the state is a Linear drawing's. A Circular request's conservation rings are its Circular drawing's, so
+// they are no comparison of a Linear drawing, a missing table of theirs included (Load lists that table); Linear
+// comparisons in a Circular request need a decision in the Linear drawing.
+{
+  const circularRequest = (comparisons, conservationBlastFiles) => classifyImportedComparisonIntent({
+    renderRequest: { schema: 6, mode: 'circular', records: [records[0]], comparisons, diagramOptions: { conservationBlastFiles } },
+    resources
+  });
+  assert.deepEqual(circular, createImportedComparisonIntentState());
+  assert.deepEqual(circularRequest([], [{ resourceId: 'missing' }]), createImportedComparisonIntentState());
+  const linearData = circularRequest([{ kind: 'nucleotideBlast', resourceId: 'comparison', queryRecordIndex: 0, subjectRecordIndex: 1 }], []);
+  assert.deepEqual([linearData.disposition, linearData.hasCommittedComparison, linearData.message],
+    [IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED, true, 'A Circular session contains unsupported Linear comparison data.']);
+}
 
 // OV-796 (PR-D): a schema-1 request is classified as its reader reads it,
 // through the lift, like the schema-2 re-save of the same Gallery entry.

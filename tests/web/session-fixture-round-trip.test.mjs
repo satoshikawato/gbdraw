@@ -7,12 +7,14 @@
 //   drawing tabs, the shown drawing, and every slice of every drawing, read
 //   by the one slice reader (`drawingSliceTexts`, the reader the random walk
 //   and the Gallery round-trip audit hash) with the runtime identities a Load
-//   gives anew renamed.
+//   gives anew renamed, and the tables of each drawing's saved comparison by
+//   their bytes.
 // Each state is read after the record read a user makes after a Load (Reload
 // Records in each drawing, Product Contract PD-OI-044: a Load of a preview
 // reads no records), so a Load that loses a value that read rewrites fails.
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -46,6 +48,7 @@ const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/
 const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
 const { callerSession } = await import('./helpers/session-caller.mjs');
 const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
+const { storedResourceBytes } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 
 const app = createAppSetup();
 // The app runs these ports in its diagram Worker; node runs them in Python.
@@ -108,19 +111,46 @@ const readRecords = async () => {
 // record read after the Load places those selectors by record identity
 // (`placeFlatRecordSelectors`), so after it no setting depends on the mark,
 // and a Save writes none. The state is compared as a Save writes it.
-const LOAD_ONLY = Object.freeze({ inputs: [{ path: 'files.c_legacy_record_cards' }] });
+//
+// What Inherit copies (`importedComparisonIntent.source`) holds the saved
+// tables as resource descriptors, which say how the file stored the bytes: a
+// Session 27-50 holds them as base64 texts in its JSON, a Session file as its
+// entries, which Load reads from there (`copyContainerInputs`), and a Save
+// writes both as entries (`storedResourceBytes`). Each is compared as Inherit
+// puts it into a request: its fields but the stored text, and the sha256 of
+// the bytes a Save stores, read from either form (`comparisonSourceTables`).
+const LOAD_ONLY = Object.freeze({
+  inputs: [{ path: 'files.c_legacy_record_cards' }],
+  settings: [{ path: 'importedComparisonIntent.source.resources' }]
+});
+/**
+ * The tables of each drawing's saved comparison, by resource ID: each
+ * descriptor's fields but its stored text, and the sha256 of its stored bytes.
+ * @returns {Promise<Record<string, Record<string, unknown>>>}
+ */
+const comparisonSourceTables = async () => Object.fromEntries(await Promise.all(state.drawingList().map(async ({ id }) => {
+  const resources = state.drawingOf(id).importedComparisonIntent.source?.resources ?? {};
+  return [id, Object.fromEntries(await Promise.all(Object.entries(resources).map(async ([resourceId, descriptor]) => {
+    const { data: _data, encoding: _encoding, ...fields } = /** @type {Record<string, unknown>} */ (descriptor);
+    const bytes = new Uint8Array(await new Response(await storedResourceBytes(/** @type {never} */ (descriptor)).open()).arrayBuffer());
+    return [resourceId, { ...fields, sha256: createHash('sha256').update(bytes).digest('hex') }];
+  })))];
+})));
 /**
  * The state a Load leaves, after the record read: the drawing tabs, the shown
- * drawing, and every slice of every drawing (runtime identities renamed).
- * @returns {{ active: string, tabs: { id: string, name: string }[], drawings: Record<string, Record<string, unknown>> }}
+ * drawing, every slice of every drawing (runtime identities renamed), and the
+ * tables of each drawing's saved comparison.
+ * @returns {Promise<{ active: string, tabs: { id: string, name: string }[], drawings: Record<string, Record<string, unknown>>,
+ *   comparisonTables: Record<string, Record<string, unknown>> }>}
  */
-const loadedState = () => {
+const loadedState = async () => {
   const { active, renamed } = drawingSliceTexts(state, DRAWING_SLICES, { omit: LOAD_ONLY });
   return {
     active,
     tabs: state.drawingTabs.value.map(({ id, name }) => ({ id, name })),
     drawings: Object.fromEntries(Object.entries(renamed).map(([id, slices]) => [id,
-      Object.fromEntries(Object.entries(slices).map(([name, text]) => [name, JSON.parse(text)]))]))
+      Object.fromEntries(Object.entries(slices).map(([name, text]) => [name, JSON.parse(text)]))])),
+    comparisonTables: await comparisonSourceTables()
   };
 };
 /**
@@ -213,7 +243,7 @@ test('every Session fixture and Gallery Session loads without a repair (G3), its
       if (JSON.stringify(first.loaded.repairs.map(({ code }) => code)) !== JSON.stringify(expected)) note(name, 'Load (G3)', rows(first.loaded));
       if (askedDiagramWorker !== nodeOnly.length > 0) note(name, 'Load', `asked the diagram Worker: ${askedDiagramWorker}`);
       await readRecords();
-      const before = loadedState();
+      const before = await loadedState();
       // A Session 27-39 with a Result is saved only after a Generate (PD-OI-079).
       const written = await exportSession(`round trip ${name}`, { askChoice: async () => 'download', readKeptArtifacts: () => first.kept })
         .catch((error) => (error?.code === 'SESSION_SAVE_REQUIRES_GENERATE' && session.version < 40 ? null : { status: 'error', error }));
@@ -226,7 +256,7 @@ test('every Session fixture and Gallery Session loads without a repair (G3), its
       if (second.loaded.status !== 'ok') { note(name, 'Load of the saved file', second.loaded.error ?? second.loaded.status); continue; }
       if (second.loaded.repairs.length) note(name, 'Load of the saved file', rows(second.loaded));
       await readRecords();
-      const found = differences(before, loadedState());
+      const found = differences(before, await loadedState());
       if (found.length) note(name, 'Load, Save and Load', found);
     }
   } finally {
