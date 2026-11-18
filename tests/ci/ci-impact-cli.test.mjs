@@ -1101,8 +1101,8 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
   ]));
   assert.deepEqual(jobTimeouts, {
     gallery: 25,
-    browser: 20,
-    'web-contracts-pr': 20,
+    browser: 25,
+    'web-contracts-pr': 30,
     'web-pr-smoke': 20,
     'playwright-functional': 45,
     'playwright-performance': 25,
