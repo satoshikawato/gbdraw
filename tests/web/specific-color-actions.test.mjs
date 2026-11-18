@@ -1011,12 +1011,15 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   let rerenders = 0;
   /** @type {unknown[]} The Legend order each commit gives the Legend owner. */
   const orders = [];
+  /** @type {ReadonlyMap<string, string>[]} The rows each commit keeps in their place under a new key. */
+  const rekeys = [];
   const actions = createFeatureRuleActions({
     ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
     ...ruleOwnerPorts(createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers })),
     runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
     prepareFileLegendEntries: async (intents, options = {}) => {
       orders.push(options.legendOrder ?? null);
+      rekeys.push(options.rekeyed ?? new Map());
       const diff = diffLegendIntents(state.legendEntries.value, intents);
       return { diff, isCurrent: () => true, apply: () => {
         state.legendEntries.value = intents;
@@ -1131,6 +1134,20 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const whole = await actions.reviseColorRules([recolored[0], recolored[2]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored],
     revise, () => state.extractedFeatures.value);
   assert.ok(Array.isArray(whole), 'a revision of whole rows is a plain table');
+  // OV-158: a row renamed whole onto the name of a rule group that draws no
+  // row here (its rule colors no feature of the displayed Result) keeps its
+  // place under the key the commit gives it, also when a Legend color is
+  // stored under that key: the commit finds the placed row by its key, not
+  // by the color the row would show.
+  for (const legendColor of [null, '#ff0000']) {
+    state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A|B', 'beta'), tagRule('Z', 'gamma'));
+    state.legendEntries.value = [{ caption: 'beta', color: '#112233' }];
+    if (legendColor) state.legendColorOverrides.gamma = legendColor;
+    assert.equal(await actions.commitSpecificRules(() => [tagRule('A|B', 'gamma'), tagRule('Z', 'gamma')], 'Rename legend item',
+      { legendPlacement: { name: 'gamma', color: '#112233', at: 'beta', replaces: true } }), true);
+    assert.deepEqual([...rekeys.at(-1)], [['beta', 'gamma']], `the renamed row keeps its place (Legend color ${legendColor})`);
+    delete state.legendColorOverrides.gamma;
+  }
 });
 
 // Review round 2 of #1474: a commit whose answer moves a listed row writes the

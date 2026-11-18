@@ -574,21 +574,22 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       && isRuleInputCurrent(candidate.snapshot);
     if (!current()) return false;
     const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows, defaultRowOf, rowTypeOf } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
-    // The placed row is the intent of its name and color, by the key the
-    // commit allocates to it (`X [<fill>]` while another row shows `X`).
-    /** @type {PythonLegendKey | undefined} */
-    const placedKey = legendPlacement ? intents.find(intent => captionMatches(intent.name ?? intent.caption, legendPlacement.name)
-      && resolveColorToHex(intent.color) === resolveColorToHex(legendPlacement.color))?.caption : undefined;
-    /** @type {Map<PythonLegendKey, PythonLegendKey>} */
-    const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
-    // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
-    const inPlace = new Map([...rekeyed, ...replaced]);
-    const placement = !placedKey || !legendPlacement || legendPlacement.replaces ? null
-      : { caption: placedKey, after: legendPlacement.at };
     // OV-2194, OV-2247, OV-2248 (Owner 2026-10-29): Python's answer is where
     // Generate draws each row from the next table; its rule rows are keyed as
     // the commit keys them. A row Keep both places stays where it goes (D-29).
     const commitKey = createRuleLegendCaptions(candidate.rules, rendererRows);
+    // The placed row is the group of its name and color, by the key the
+    // commit allocates to it (`X [<fill>]` while another row shows `X`), never
+    // by the color an intent shows, which may be a Legend color of its key.
+    const groupKey = legendPlacement ? commitKey({ cap: legendPlacement.name, color: legendPlacement.color }) : undefined;
+    const placedKey = intents.some(intent => intent.caption === groupKey) ? groupKey : undefined;
+    // The rows the Legend owner keeps in their place under a new key (OV-645,
+    // OV-1235), and the row a rename replaces whole.
+    /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+    const inPlace = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at
+      ? [...rekeyed, [legendPlacement.at, placedKey]] : rekeyed);
+    const placement = !placedKey || !legendPlacement || legendPlacement.replaces ? null
+      : { caption: placedKey, after: legendPlacement.at };
     const order = !legendOrder || placement ? null : legendOrder.map((row) => (
       typeof row === 'number' ? commitKey(candidate.rules[row]) : /** @type {PythonLegendKey} */ (row)));
     const legend = await prepareFileLegendEntries(intents.filter(intent => !drawing.deletedLegendEntries.value
