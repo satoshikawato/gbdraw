@@ -76,10 +76,10 @@ const featureStrokes = (svg) => Object.fromEntries(Array.from(svg.querySelectorA
 
 // The edit strokes what carries the feature's stroke as Python draws it: the
 // partial block's outline, open at the partial end, takes the edit and its
-// fill path keeps no stroke, so the end stays open. The connector line
-// follows the edit, as before (the Owner chooses whether it should).
+// fill path keeps no stroke, so the end stays open. The connector line keeps
+// Python's line stroke (a separate control; Owner 2026-11-18).
 const EDITED = {
-  f22f5f5cf__line1: '#222222/3',
+  f22f5f5cf__line1: 'lightgray/5.0',
   f22f5f5cf__part1: 'none/2.0',
   f22f5f5cf__part1__outline: '#222222/3',
   f22f5f5cf__part2: '#222222/3'

@@ -74,18 +74,21 @@ const isFeatureFillTarget = (element) => (
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);
 
-// The elements of one feature that show its stroke as Python draws it: each
-// element except a block Python drew under an outline (the outline's id is
-// the block's plus the outline suffix, found by id). That block (a partial
-// feature's fill path) has no stroke; its outline, open at the partial end,
-// carries the block stroke (OV-3725), so a stroke edit that reaches the fill
-// path would close the open end (OV-3726). The stroke readers and both stroke
-// writers (a feature's and a Legend row's) take the elements from here.
+// The elements of one feature that show its block stroke as Python draws it:
+// each element except a connector line (it keeps the line stroke, a separate
+// control; Owner 2026-11-18) and except a block Python drew under an outline
+// (the outline's id is the block's plus the outline suffix, found by id). That
+// block (a partial feature's fill path) has no stroke; its outline, open at
+// the partial end, carries the block stroke (OV-3725), so a stroke edit that
+// reaches the fill path would close the open end (OV-3726). The stroke readers
+// and both stroke writers (a feature's and a Legend row's) take the elements
+// from here.
 /** @param {Iterable<Element> | ArrayLike<Element> | null | undefined} elements */
 export const featureStrokeElements = (elements) => {
   const all = Array.from(elements || []);
   const outlined = new Set(all.map(elementDomId).filter((id) => id.endsWith(OUTLINE_ID_SUFFIX)));
   return all.filter((element) => {
+    if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return false;
     const id = elementDomId(element);
     return !id || !outlined.has(`${id}${OUTLINE_ID_SUFFIX}`);
   });
