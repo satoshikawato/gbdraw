@@ -299,37 +299,9 @@ def _canonicalize_legacy_session_cli_args(
                 rewritten = (f"{retired_option.renamed_to}={inline_value}",)
             extend(source_index, source_index, rewritten)
             continue
-        if separator:
-            if mode == "circular" and option == "--circular_track_slot":
-                inline_value = _migrate_legacy_circular_track_slot_spec(inline_value)
-            if option == "--multi_record_size_mode":
-                inline_value = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(inline_value, inline_value)
-            elif mode == "linear" and option == "--label_placement":
-                inline_value = {
-                    "on_feature": "above_feature",
-                }.get(inline_value, inline_value)
-            elif mode == "linear" and option == "--track_layout":
-                inline_value = {
-                    "spreadout": "above",
-                    "tuckin": "below",
-                }.get(inline_value, inline_value)
-            token = f"{option}={inline_value}"
-        else:
-            token = option
-            if canonical_args:
-                previous_option = canonical_args[-1].partition("=")[0]
-                if previous_option == "--multi_record_size_mode" and token in LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES:
-                    token = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES[token]
-                elif (
-                    mode == "linear"
-                    and previous_option == "--label_placement"
-                    and token == "on_feature"
-                ):
-                    token = "above_feature"
-                elif mode == "linear" and previous_option == "--track_layout":
-                    token = {"spreadout": "above", "tuckin": "below"}.get(token, token)
-                elif mode == "circular" and previous_option == "--circular_track_slot":
-                    token = _migrate_legacy_circular_track_slot_spec(token)
+        token = _canonical_legacy_token(
+            option, separator, inline_value, canonical_args=canonical_args, mode=mode
+        )
         source_to_canonical_index[source_index] = len(canonical_args)
         canonical_args.append(token)
     if pending_retired is not None:
@@ -337,6 +309,50 @@ def _canonicalize_legacy_session_cli_args(
         source_to_canonical_index[option_index] = len(canonical_args)
         canonical_args.append(retired.option)
     return canonical_args, source_to_canonical_index
+
+
+def _canonical_legacy_token(
+    option: str,
+    separator: str,
+    inline_value: str,
+    *,
+    canonical_args: Sequence[str],
+    mode: Literal["circular", "linear"],
+) -> str:
+    """One token of a legacy argv that no retired flag consumes, with its old value spellings rewritten: the value of
+    ``--option=value``, or a bare token read as the value of the option before it."""
+    if separator:
+        if mode == "circular" and option == "--circular_track_slot":
+            inline_value = _migrate_legacy_circular_track_slot_spec(inline_value)
+        if option == "--multi_record_size_mode":
+            inline_value = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(inline_value, inline_value)
+        elif mode == "linear" and option == "--label_placement":
+            inline_value = {
+                "on_feature": "above_feature",
+            }.get(inline_value, inline_value)
+        elif mode == "linear" and option == "--track_layout":
+            inline_value = {
+                "spreadout": "above",
+                "tuckin": "below",
+            }.get(inline_value, inline_value)
+        token = f"{option}={inline_value}"
+    else:
+        token = option
+        if canonical_args:
+            previous_option = canonical_args[-1].partition("=")[0]
+            if previous_option == "--multi_record_size_mode" and token in LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES:
+                token = LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES[token]
+            elif (
+                mode == "linear"
+                and previous_option == "--label_placement"
+                and token == "on_feature"
+            ):
+                token = "above_feature"
+            elif mode == "linear" and previous_option == "--track_layout":
+                token = {"spreadout": "above", "tuckin": "below"}.get(token, token)
+            elif mode == "circular" and previous_option == "--circular_track_slot":
+                token = _migrate_legacy_circular_track_slot_spec(token)
+    return token
 
 
 def canonicalize_cli_invocation(
@@ -1126,26 +1142,46 @@ def _append_linear_gui_args(
         card_files=_linear_card_files(run_args, bindings, "gb" if input_type == "gb" else "gff"),
     )
     if form.get("show_depth") is True:
-        depth_rows = [
-            _as_list(seq.get("depth") if isinstance(seq, Mapping) else None)
-            for seq in linear_seqs
-        ]
-        track_count = max((len(row) for row in depth_rows), default=0)
-        for track_index in range(track_count):
-            _append_flag(run_args, invocation_args, "--depth_track")
-            for record_index, row in enumerate(depth_rows):
-                if track_index >= len(row) or not row[track_index]:
-                    _append_value(run_args, invocation_args, "none")
-                    continue
-                _append_materialized_value(
-                    run_args,
-                    invocation_args,
-                    bindings,
-                    session=session,
-                    slot=f"files.linearSeqs[{record_index}].depth"
-                    + (f"[{track_index}]" if isinstance(linear_seqs[record_index].get("depth"), list) else ""),
-                    temp_dir=temp_dir,
-                )
+        _append_linear_gui_depth_tracks(
+            run_args,
+            invocation_args,
+            bindings,
+            session=session,
+            linear_seqs=linear_seqs,
+            temp_dir=temp_dir,
+        )
+
+
+def _append_linear_gui_depth_tracks(
+    run_args: list[str],
+    invocation_args: list[str],
+    bindings: list[SessionFileBinding],
+    *,
+    session: Mapping[str, Any],
+    linear_seqs: list[Any],
+    temp_dir: Path,
+) -> None:
+    """One ``--depth_track`` per depth track, with one file (or ``none``) per Linear record."""
+    depth_rows = [
+        _as_list(seq.get("depth") if isinstance(seq, Mapping) else None)
+        for seq in linear_seqs
+    ]
+    track_count = max((len(row) for row in depth_rows), default=0)
+    for track_index in range(track_count):
+        _append_flag(run_args, invocation_args, "--depth_track")
+        for record_index, row in enumerate(depth_rows):
+            if track_index >= len(row) or not row[track_index]:
+                _append_value(run_args, invocation_args, "none")
+                continue
+            _append_materialized_value(
+                run_args,
+                invocation_args,
+                bindings,
+                session=session,
+                slot=f"files.linearSeqs[{record_index}].depth"
+                + (f"[{track_index}]" if isinstance(linear_seqs[record_index].get("depth"), list) else ""),
+                temp_dir=temp_dir,
+            )
 
 
 def _append_linear_definition_line_style_args(
