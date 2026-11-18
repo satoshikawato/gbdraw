@@ -17,7 +17,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { captionedRuleRows, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions, ruleRowFills } from '../services/specific-color-rules.js';
+import { drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, resultLegendRowContexts, resultsRuleRowKeys, ruleLegendCaptions, ruleRowFills } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -50,8 +50,8 @@ import { draftLegendRows, normalizedLegendEntries } from '../services/legend-dra
  * @property {Record<string, SavedStrokeEdit>} [legendStrokeOverrides]
  * @property {readonly Partial<SpecificColorRule>[]} [manualSpecificRules]
  * @property {FeatureTypeColors} typeColors The type colors the Results were drawn in (Generate's: its request's), in
- *   which their rule rows are keyed with the features each Result renders (`captionedRuleRows`); a live preview keys
- *   them in its own palette and features, read from the same owners.
+ *   which each Result's rule rows are keyed with the features it renders (`resultLegendRowContexts`); a live preview
+ *   keys them in its own palette and features, read from the same owners.
  * @property {string[] | null} [replayDefaultLegendOrder]
  * @property {SvgResultTransform[]} [resultTransforms] One transform per Result, by index.
  * @property {SvgResultTransform | null} [transformSvg] A transform applied to every Result.
@@ -526,50 +526,61 @@ const identityTargets = (catalogAdmission, row) => (
 );
 
 
-// The features every Result of an addressing renders, read when iterated (a
-// compile without a captioned rule reads none).
-/** @param {EditorAddressing} catalogAdmission @returns {Iterable<AddressedFeature>} */
-const renderedFeaturesOf = (catalogAdmission) => ({
-  * [Symbol.iterator]() {
-    for (const rendered of catalogAdmission.renderedFeaturesByResult) yield* rendered.values();
-  }
-});
-
-// The Legend state a compile keys its rule rows in: what the Results draw,
-// the live draft's displayed Result, else (Generate compiles before it reads
-// Python's rows) the features the Results render, in the type colors they
-// were drawn in. Without Python's rows, the key is the one the rule table
-// allocates, which is the key of every caption written in several fills.
+// The Legend state of each Result a compile keys its rule rows in: the live
+// draft's displayed Result (one state for every Result), else (Generate
+// compiles before it reads Python's rows) each Result in the features it
+// renders and the type colors it was drawn in, keyed alone, as Python keys
+// each Result of a batch (`resultLegendRowContexts`). A Result's features are
+// read when iterated (a compile without a captioned rule reads none). Without
+// Python's rows, the key is the one the rule table allocates, which is the key
+// of every caption written in several fills.
 /**
  * @param {readonly Partial<SpecificColorRule>[]} rules
  * @param {Iterable<string>} originalCaptions
  * @param {LivePreview | null | undefined} livePreview
  * @param {EditorAddressing} catalogAdmission
  * @param {FeatureTypeColors} typeColors
- * @returns {LegendRowContext}
+ * @returns {LegendRowContext[]} One per Result, by index.
  */
-const compiledRuleRowContext = (rules, originalCaptions, livePreview, catalogAdmission, typeColors) => ({
-  rules: [...rules], pythonRows: livePreview?.pythonRows ?? new Map(), originalLegendOrder: [...originalCaptions],
-  ...(livePreview
-    ? { features: livePreview.features ?? [], palette: livePreview.paletteColors }
-    : { features: renderedFeaturesOf(catalogAdmission), palette: typeColors })
-});
+const compiledRuleRowContexts = (rules, originalCaptions, livePreview, catalogAdmission, typeColors) => {
+  const table = { rules: [...rules], originalLegendOrder: [...originalCaptions] };
+  if (livePreview) {
+    const [live] = resultLegendRowContexts(table, [
+      { pythonRows: livePreview.pythonRows ?? new Map(), features: livePreview.features ?? [], palette: livePreview.paletteColors }
+    ]);
+    return catalogAdmission.resultNames.map(() => live);
+  }
+  return resultLegendRowContexts(table, catalogAdmission.resultNames.map((_, resultIndex) => ({
+    pythonRows: new Map(),
+    // A Result the addressing holds no rendered features of draws none.
+    features: { * [Symbol.iterator]() { yield* (catalogAdmission.renderedFeaturesByResult[resultIndex] || new Map()).values(); } },
+    palette: typeColors
+  })));
+};
 
-// The rule rows of a compile in `context`: a rule's row key (`rowOf`),
-// `known` (the live draft's) else allocated when a color edit first names a
-// row (a compile without one reads no feature), and the keys of every row the
-// captioned rules draw (`keys`: a rule draws a row in each fill it draws,
-// one per drawn type for a rule for every type of the type color value).
+// The rule rows of a compile in `contexts` (one per Result): a rule's row key
+// in a Result (`rowOf`), `known` (the live draft's) else allocated when a
+// color edit first names a row in that Result (a compile without one reads no
+// feature), and the keys of every row the captioned rules draw in any Result
+// (`keys`: a rule draws a row in each fill it draws, one per drawn type for a
+// rule for every type of the type color value; `resultsRuleRowKeys`).
 /**
- * @param {LegendRowContext} context
+ * @param {readonly LegendRowContext[]} contexts
  * @param {ReturnType<typeof ruleLegendCaptions> | null} known
- * @returns {{ rowOf: (rule: Partial<SpecificColorRule>) => PythonLegendKey, keys: () => Set<PythonLegendKey> }}
+ * @returns {{ rowOf: (resultIndex: number, rule: Partial<SpecificColorRule>) => PythonLegendKey, keys: () => Set<PythonLegendKey> }}
  */
-const compiledRuleRows = (context, known) => {
-  let rowOf = known;
+const compiledRuleRows = (contexts, known) => {
+  /** @type {Map<LegendRowContext, ReturnType<typeof ruleLegendCaptions>>} */
+  const rowOfContext = new Map();
+  /** @param {LegendRowContext} context */
+  const rowsOf = (context) => {
+    let rowOf = rowOfContext.get(context);
+    if (!rowOf) rowOfContext.set(context, rowOf = known || ruleLegendCaptions(context));
+    return rowOf;
+  };
   return {
-    rowOf: (rule) => (rowOf ||= ruleLegendCaptions(context))(rule),
-    keys: () => new Set(captionedRuleRows(context).map((row) => row.key))
+    rowOf: (resultIndex, rule) => rowsOf(contexts[resultIndex])(rule),
+    keys: () => resultsRuleRowKeys([...new Set(contexts)])
   };
 };
 
@@ -736,7 +747,7 @@ const compilePlanBundle = ({
   });
   /** @param {PythonLegendKey} key */
   const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);
-  const tableRows = compiledRuleRows(compiledRuleRowContext(rules, originalCaptions, livePreview, catalogAdmission, typeColors),
+  const tableRows = compiledRuleRows(compiledRuleRowContexts(rules, originalCaptions, livePreview, catalogAdmission, typeColors),
     draftRowColors ? draftRowColors.rowOf : null);
 
   runStage('legend', () => {
@@ -847,14 +858,15 @@ const compilePlanBundle = ({
     const caption = text(edit?.caption);
     if (!caption) return;
     const named = namedLegendCaption(override, rules) === caption;
-    const row = named ? caption : tableRows.rowOf({ cap: caption, color: text(edit?.color) });
-    const renderedIds = renderedIdsByEditRow.get(row) || new Set();
-    resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
+    // Each Result files the features it draws under the edit's row in that Result.
+    resolvedStableTargets(catalogAdmission, key).forEach(({ resultIndex, renderedId }) => {
       if (!renderedId) return;
+      const row = named ? caption : tableRows.rowOf(resultIndex, { cap: caption, color: text(edit?.color) });
+      const renderedIds = renderedIdsByEditRow.get(row) || new Set();
       renderedIds.add(/** @type {RenderedFeatureId} */ (renderedId));
       if (!named) ruleDrawnIds.add(/** @type {RenderedFeatureId} */ (renderedId));
+      renderedIdsByEditRow.set(row, renderedIds);
     });
-    renderedIdsByEditRow.set(row, renderedIds);
   });
   // The row a style addresses by its key in Python's output, and where a
   // Result may lack it; null for a deleted category.

@@ -216,7 +216,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
   effectiveLegendCaptions: () => () => 'Core',
   // The port's answer for this table, whose row `Core` holds every rule captioned `Core` (the key
   // allocation, which gives one caption in several colors a row per color, has its own fixture).
-  getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
+  getLegendRowRules: (_drawing, caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
   otherLegendRowType: () => null,
   getIndividualFeatureLabel: (feature) => feature.product || '',
   // FE-09 (rule-actions.js): a feature's single-feature condition is its stable hash.
@@ -950,7 +950,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       return true;
     },
     effectiveLegendCaptions: () => resetRowOf,
-    getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
+    getLegendRowRules: (_drawing, caption) => legendRowRules(caption, { rules: resetRules, pythonRows: new Map() }),
     otherLegendRowType: () => null,
     getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
     // rule-actions.js: the other drawn features of the feature's Legend row.
@@ -1094,7 +1094,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
         return true;
       },
       effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
-      getLegendRowRules: rowRules,
+      getLegendRowRules: (_drawing, key) => rowRules(key),
       otherLegendRowType: (key) => otherRows[key] ?? null,
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
@@ -1263,7 +1263,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   });
   const rowNames = (fixture, rules = []) => legendEditConfigLeaves({
     legendEntries: fixture.stateLegendEntries.value, deletedLegendEntries: [], originalLegendOrder: fixture.originalOrder.value,
-    pythonRowKeys: fixture.originalOrder.value, rules, canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
+    pythonRowKeys: fixture.originalOrder.value, rules, results: [{ features: [], palette: {}, pythonRows: new Map() }],
+    canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
   });
   const namesOf = (fixture) => fixture.stateLegendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]);
   const renamedPalette = paletteRow();
@@ -1335,6 +1336,24 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   });
   await overridden.renameActions.renameLegendEntry(0, 'Coding');
   assert.equal(overridden.committed.length, 1, 'a row with a per-feature color edit takes rules');
+  // OV-3806: a rename that keeps a rule row's color writes only the caption: each rule keeps its own color, so a
+  // rule of the type color value still follows the palette (a captioned one, and a `*` one renamed whole: every other
+  // type keeps its own color), and a literal stays the same literal. HmmtDNA, `* product rRNA|cytochrome palette
+  // "Highlighted"`, the row renamed "rRNA genes".
+  for (const [shape, rule] of [
+    ['a captioned rule of the type color value', { feat: 'CDS', qual: 'product', val: '^COX', color: 'palette', cap: 'Highlighted' }],
+    ['a rule for every type of the type color value', { feat: '*', qual: 'product', val: '^COX', color: 'palette', cap: 'Highlighted' }],
+    ['a rule of a literal color', { feat: 'CDS', qual: 'product', val: '^COX', color: '#54BCF8', cap: 'Highlighted' }]
+  ]) {
+    const renamedRule = build({
+      entries: [{ caption: 'Highlighted', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }], order: ['Highlighted', 'GC content'],
+      rules: [rule], features: [cds('h1', 'COX1', 'Highlighted'), cds('h2', 'COX2', 'Highlighted')],
+      ruleOverrides: { getLegendRowRules: (_drawing, key) => (key === 'Highlighted' ? [rule] : []) }
+    });
+    await renamedRule.renameActions.renameLegendEntry(0, 'rRNA genes');
+    if (renamedRule.legendRenameDialog.mode === 'scope') await renamedRule.renameActions.handleLegendRenameChoice('group');
+    assert.deepEqual(renamedRule.committed.map((rules) => rules.map(({ color, cap }) => [color, cap])), [[[rule.color, 'rRNA genes']]], shape);
+  }
   // V-OD27 (review R2 findings 1 and 2): a type's default row has one name, on the type's key. In S2 (CDS renamed
   // Coding, then a captioned rule "Marker" for COX1) the figure draws CDS's default row as its "other" row, named
   // "Coding" from the dormant [CDS, Coding]. A rename of that row from the Legend tab or the popup writes the name on
@@ -1360,7 +1379,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   };
   const s2Leaves = (fixture, rules) => legendEditConfigLeaves({
     legendEntries: fixture.stateLegendEntries.value, deletedLegendEntries: [], dormantLegendEntries: fixture.stateDormantEntries.value,
-    originalLegendOrder: fixture.originalOrder.value, pythonRowKeys: fixture.originalOrder.value, rules,
+    originalLegendOrder: fixture.originalOrder.value, pythonRowKeys: fixture.originalOrder.value, rules, results: [{ features: [], palette: {}, pythonRows: new Map() }],
     canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
   });
   const dormantOf = (fixture) => fixture.stateDormantEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]);

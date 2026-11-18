@@ -1243,6 +1243,31 @@ test('a v0.14.5 Session with a Reset fill color rule loads it as a palette rule 
   ]);
 });
 
+// The same Session saved while a palette was queued (Instant Preview off: the draft palette is mint, the Result and
+// the committed request were drawn with the applied default palette). Load reads the reset rule by the applied
+// palette, as `gbdraw render --session` reads it by the committed request's (tests/fixtures/saved_rule_captions.json,
+// `draft`; tests/test_specific_color_captions.py): the rule in default's rRNA color is the type color value; a rule
+// in the queued palette's rRNA color is no reset.
+test('a v0.14.5 Session saved under a queued palette reads its reset rule by the applied palette', () => withBootPalettes(state, async () => {
+  const reset = { feat: 'rRNA', qual: 'hash', val: '^f24a47546@record-1$' };
+  const mint = state.paletteDefinitions.value.mint;
+  for (const [color, read] of [['#71ee7d', { color: 'palette', cap: '' }], [mint.rRNA, { color: mint.rRNA, cap: 'other rRNAs' }]]) {
+    const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-reset-fill-color.v50-web0145.gbdraw-session.json.gz', import.meta.url))));
+    const circular = fixture.modes.circular;
+    circular.config.palette = 'mint';
+    circular.config.colors = { ...circular.config.colors, ...mint };
+    circular.ui.pendingPaletteName = 'mint';
+    circular.config.rules[1] = { ...circular.config.rules[1], color };
+    assert.equal(fixture.ui.appliedPaletteName, 'default');
+    resetDrawings();
+    loadDialogs.length = 0;
+    const loaded = await load(fixture);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual(state.activeDrawing().manualSpecificRules.filter((rule) => rule.qual === 'hash')
+      .map(({ feat, qual, val, color: ruleColor, cap }) => ({ feat, qual, val, color: ruleColor, cap })), [{ ...reset, ...read }], color);
+  }
+}));
+
 // Issue #1427: a Web Save of a Circular drawing sized 180 x 180 mm
 // (tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.provenance.json) keeps both sides as typed in the
 // form and in the committed request; Load reads them back with no repair row, and its Save keeps them.

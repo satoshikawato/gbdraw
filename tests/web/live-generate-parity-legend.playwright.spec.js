@@ -941,6 +941,50 @@ test('a Legend color and a rename on the row of a rule for every type of the typ
   expect(await keys(), 'Generate adds no row after the rename').toEqual(renamed);
 });
 
+// A Circular batch keys the rows of a rule for every type of the type color
+// value in each Result alone, as Python keys each Result: TESTA draws CDS,
+// misc_feature and tRNA, so its rows of the rule are `Shared [<fill>]`; R2c
+// draws CDS only, so its row is `Shared`. A rename of that row on R2c is the
+// same live and at Generate, and the rule keeps the type color value (OV-3806):
+// every feature keeps its type's color.
+test('a rename of the row of a rule for every type in a batch Result that draws one type, live = Generate', async ({ page }) => {
+  test.setTimeout(240_000);
+  const records = (file) => readFileSync(file, 'utf8').split(/^(?=LOCUS)/m);
+  const fixture = path.join(test.info().outputDir, 'one-type-batch.gb');
+  mkdirSync(path.dirname(fixture), { recursive: true });
+  writeFileSync(fixture, records(BATCH_FIXTURE)[0] + records('tests/fixtures/web_comparison_shared_block.gb')[0]);
+  await openWithGenBank(page, fixture, () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.labels_mode = 'out';
+    app.form.multi_record_canvas = false;
+    app.adv.circular_grouping_intent = 'batch';
+  });
+  await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
+  await generate(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(2);
+  await addColorRule(page, { feat: '*', qual: 'product', val: '.', color: 'palette', cap: 'Shared' });
+  await generate(page);
+  const keys = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+    .map((entry) => entry.originalCaption || entry.caption).filter((key) => key.startsWith('Shared') || key.startsWith('Renamed')));
+  // Each drawn feature's parts with their fill and stroke colors, by rendered ID.
+  const fills = async () => (await semanticSnapshot(page)).features;
+  await showResult(page, 0);
+  expect((await keys()).every((key) => /^Shared \[#[0-9a-f]{6}\]$/.test(key)), 'TESTA: a row per drawn type').toBe(true);
+  await showResult(page, 1);
+  expect(await keys(), 'R2c draws one type: one row under the caption').toEqual(['Shared']);
+  const before = await fills();
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === 'Shared'), 'Renamed');
+  });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ color, cap }) => [color, cap])),
+    'the rename keeps the type color value').toEqual([['palette', 'Renamed']]);
+  await expectLiveEqualsGenerate(page, { label: 'a rename of a one-type batch Result\'s row of a rule for every type' });
+  expect(await keys(), 'Generate adds no row').toEqual(['Renamed']);
+  expect(await fills(), 'every feature keeps its color').toEqual(before);
+});
+
 // U3a (R14-8): Legend edits the Result executor shows live, without the
 // automatic rerender, combined with the edits of other domains. Each case
 // ends with live = Generate, in both modes. Auto Reflow decides only whether

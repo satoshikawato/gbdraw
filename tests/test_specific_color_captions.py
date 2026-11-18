@@ -440,6 +440,11 @@ def test_a_saved_rule_answers_the_shared_fixture(case):
                          columns=["feature_type", "qualifier_key", "value", "color", "caption"])
     read = saved_rule_captions(table, lambda: saved_reset_type_colors(case["type_colors"], case["palette"]))
     assert read[["color", "caption"]].values.tolist() == [[case["read"]["color"], case["read"]["cap"]]]
+    if "draft" in case:
+        # A queued palette's draft reads no rule: by it the answer would differ.
+        draft = case["draft"]
+        by_draft = saved_rule_captions(table, lambda: saved_reset_type_colors(draft["type_colors"], draft["palette"]))
+        assert by_draft[["color", "caption"]].values.tolist() != [[case["read"]["color"], case["read"]["cap"]]]
     assert saved_rule_captions(table)["color"].tolist() == [rule["color"]]
 
 

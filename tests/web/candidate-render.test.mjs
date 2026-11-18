@@ -451,6 +451,36 @@ test('the rows of a rule of the type color value are its rule\'s rows by their k
   }
 });
 
+// A batch is keyed per Result at Generate, as Python keys each Result of
+// `gbdraw circular` with several records: a rule for every type of the type
+// color value draws `Ribosomal [#54bcf8]` and `Ribosomal [#71ee7d]` in the
+// Result that draws CDS and rRNA, and `Ribosomal` in the Result that draws
+// only CDS. Every one of them is a rule row, whichever Result is shown; the
+// compile adds none of them.
+test('a batch keys the rows of a rule for every type of the type color value in each Result alone at Generate', () => {
+  const palette = { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' };
+  const options = {
+    catalogAdmission: {
+      ...admission(), resultNames: ['a.svg', 'b.svg'],
+      renderedFeaturesByResult: [
+        new Map([['f0001', { type: 'rRNA', fill_color: '#71ee7d' }], ['f0002', { type: 'CDS', fill_color: '#54bcf8' }]]),
+        new Map([['f0003', { type: 'CDS', fill_color: '#54bcf8' }]])
+      ]
+    },
+    manualSpecificRules: [{ feat: '*', qual: 'translation', val: '.', color: 'palette', cap: 'Ribosomal' }],
+    typeColors: palette,
+    originalLegendOrder: ['CDS']
+  };
+  for (const shown of [['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]'], ['Ribosomal']]) {
+    const plan = compileDirectEditorMutationPlan({ ...options, legendEntries: [
+      ...shown.map((key) => ({ caption: key, originalCaption: key, color: '#000000' })),
+      { caption: 'Mine', originalCaption: 'Mine', color: '#778899' }
+    ] });
+    assert.deepEqual(plan.operationsByResult.map(({ legendAdds }) => legendAdds.map(({ caption }) => caption)), [['Mine'], ['Mine']],
+      `shown: ${shown.join(', ')}`);
+  }
+});
+
 // OV-46, OV-63: a Legend row with no known features is required by the plan in each
 // Result. Admission lets Python's Legend row facts excuse the absence (suppressed by
 // the draft, or drawn by another Result), so the plan carries no guess of its own.

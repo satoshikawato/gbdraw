@@ -826,6 +826,36 @@ export const displayedDrawnFeatures = (state, drawing) => ({
   }
 });
 
+// The drawn state of each Result of the shown drawing that its rule rows are
+// keyed in (`ResultLegendState` without Python's rows): the features its
+// catalog renders that are still drawn (`resolveFeatureDrawn`), in the applied
+// type colors, as Generate's compile keys each Result (app/candidate-render.js
+// `compiledRuleRowContexts`). Without a Result, or a catalog of every Result
+// (a Session older than 40, which holds no rule of the type color value), the
+// displayed Result's state alone.
+/**
+ * @param {DisplayedDrawnInputs & Parameters<typeof resultCatalogFeatures>[0]} state
+ * @param {Parameters<typeof displayedDrawnFeatures>[1]} drawing
+ * @param {string} mode The drawing's mode, whose catalog the Results are admitted in.
+ * @returns {DrawnLegendState[]}
+ */
+export const resultDrawnStates = (state, drawing, mode) => {
+  const palette = appliedFeatureColors(state);
+  const count = Array.isArray(state?.results?.value) ? state.results.value.length : 0;
+  /** @type {DrawnLegendState[]} */
+  const states = [];
+  for (let index = 0; index < count; index += 1) {
+    const catalogFeatures = resultCatalogFeatures(state, mode, index);
+    if (!catalogFeatures) return [displayedDrawnState(state, drawing)];
+    const { rendered } = catalogFeatures;
+    states.push({ features: { * [Symbol.iterator]() {
+      const context = featureDrawnContext(drawing);
+      for (const feature of rendered.values()) if (resolveFeatureDrawn(feature, context) !== false) yield feature;
+    } }, palette });
+  }
+  return states.length > 0 ? states : [displayedDrawnState(state, drawing)];
+};
+
 /**
  * What `displayedLegendRowContext` reads of the app state.
  * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & Parameters<typeof appliedFeatureColors>[0]

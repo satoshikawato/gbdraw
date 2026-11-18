@@ -206,8 +206,8 @@ result = legacy_session_to_drawings_json(json.dumps(request["document"]), json.d
  * @param {{ synthesizeGroup: Function }} preparation
  * @param {(key: string) => readonly unknown[]} rowRules
  */
-export const reviseColorRulesOver = (preparation, rowRules) => (rows, patch, joins) => async (current, revise) => {
-  const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
+export const reviseColorRulesOver = (preparation, rowRules) => (rows, patch, joins, keepsColors = false) => async (current, revise) => {
+  const next = current.map((rule) => (rows.includes(rule) ? revise(rule, keepsColors ? { cap: patch.cap } : patch) : rule));
   const joined = joins === null ? null : joinedLegendRow(rowRules(joins), current, rows);
   if (!joined || !joined.rows.some((index) => index < joined.at)) return next;
   const { table } = await preparation.synthesizeGroup({

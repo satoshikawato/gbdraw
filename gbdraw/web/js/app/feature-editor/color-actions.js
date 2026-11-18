@@ -109,7 +109,7 @@ import { msg } from '../../utils/i18n.js';
  */
 /**
  * The rules the Legend row of key `key` draws.
- * @typedef {(key: PythonLegendKey) => ColorRule[]} GetLegendRowRulesPort
+ * @typedef {(drawing: DrawingState, key: PythonLegendKey) => ColorRule[]} GetLegendRowRulesPort
  */
 /**
  * The drawn type whose "other" row `key` is: the row the drawing names for the type's features of no rule
@@ -123,8 +123,10 @@ import { msg } from '../../utils/i18n.js';
  */
 /**
  * The next rule table of a rename of a row's rules: `rows` take `patch`, each in its row, unless they join the
- * listed row of key `joins`, which keeps its place (OV-2193).
- * @typedef {(rows: readonly ColorRule[], patch: { cap: string, color: string }, joins: PythonLegendKey | null) => SpecificRuleBuild} ReviseColorRulesPort
+ * listed row of key `joins`, which keeps its place (OV-2193). `keepsColors`: the rename keeps the row's color, so each
+ * rule keeps its own color (OV-3806).
+ * @typedef {(rows: readonly ColorRule[], patch: { cap: string, color: string }, joins: PythonLegendKey | null,
+ *   keepsColors?: boolean) => SpecificRuleBuild} ReviseColorRulesPort
  */
 /**
  * Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
@@ -911,9 +913,12 @@ export const createFeatureColorActions = ({
   const applyPreparedLegendRename = async (drawing, request) => {
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
+    // A rename that keeps the row's color names the row's rules only: each keeps its own color, so a rule of the
+    // type color value still follows the palette (OV-3806). A Merge into a row of another color recolors them.
+    const keepsColor = colorsMatch(color, resolveColorToHex(request.currentColor) || '#cccccc');
     if (!caption) return false;
     const features = (request.features || []).filter(Boolean);
-    const sourceRules = getLegendRowRules(request.sourceKey);
+    const sourceRules = getLegendRowRules(drawing, request.sourceKey);
     // OV-244 (c): a type's palette row renamed whole keeps its features and
     // its color and takes the new name, which Python's row names draw. The
     // test the row's color edit takes (D-15, `paletteRowType`) decides it, so
@@ -938,7 +943,7 @@ export const createFeatureColorActions = ({
       const retireOld = Boolean(oldEntry) && features.length > 0 && takesWholeRow(request.sourceKey, features);
       const joins = request.joins ?? null;
       const rules = request.sourceScope === 'group' && sourceRules.length
-        ? reviseColorRules(sourceRules, { cap: caption, color }, joins)
+        ? reviseColorRules(sourceRules, { cap: caption, color }, joins, keepsColor)
         : groupColorRules(features, color, caption, retireOld && !joins ? 'row' : 'group', joins);
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
@@ -1090,7 +1095,7 @@ export const createFeatureColorActions = ({
       types: otherLegendRowType(legendEntryKey(targetRow)) === null ? featureTypes(getFeaturesForLegendCaption(legendEntryKey(targetRow))) : new Set(),
       ruleOnly: false
     } : targetGroup && { key: null, caption: targetGroup.name, color: targetGroup.color, types: new Set(targetGroup.types), ruleOnly: true };
-    const featureOrRuleRename = features.length > 0 || getLegendRowRules(request.sourceKey).length > 0;
+    const featureOrRuleRename = features.length > 0 || getLegendRowRules(drawing, request.sourceKey).length > 0;
     // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
     // one type and the type is the same. A row without features (GC content,
     // GC skew), rows of different types, and a row that spans several types
@@ -1223,7 +1228,7 @@ export const createFeatureColorActions = ({
     // A type's "other" row is drawn in its type's default color, as its own row is (PD-OI-089).
     const type = otherLegendRowType(/** @type {PythonLegendKey} */ (normalizeCaption(caption))) ?? normalizeCaption(caption);
     if (!features.every((feature) => feature?.type === type)
-      || getLegendRowRules(/** @type {PythonLegendKey} */ (normalizeCaption(caption))).length > 0) return null;
+      || getLegendRowRules(drawing, /** @type {PythonLegendKey} */ (normalizeCaption(caption))).length > 0) return null;
     const matches = ruleMatcher(drawing.manualSpecificRules);
     return features.every((feature) => matches.matchesAny(feature) === false
       && !getFeatureOverride(drawing.featureColorOverrides, feature)) ? type : null;
@@ -1257,7 +1262,7 @@ export const createFeatureColorActions = ({
   // color in the rule commit's step, so a merged row stays one row (D-35).
   /** @param {DrawingState} drawing @param {readonly PythonLegendKey[]} keys @param {string} color */
   const applyColorToLegendSpecificRules = async (drawing, keys, color) => {
-    const rows = keys.map((key) => ({ key, rules: getLegendRowRules(key) }));
+    const rows = keys.map((key) => ({ key, rules: getLegendRowRules(drawing, key) }));
     const rowRules = rows.flatMap((row) => row.rules);
     const legendOnly = rows.filter((row) => row.rules.length === 0).map((row) => row.key);
     const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
@@ -1733,7 +1738,7 @@ export const createFeatureColorActions = ({
     const color = appliedFeatureColorOf(state, feature.type) ? TYPE_COLOR_VALUE : '';
     if (choice === 'this_with_legend') return color ? setFeatureColor(drawing, feature, color, legendRowName(caption)) : false;
     // "Reset all" resets the features of the row: the rules that draw it, by its key.
-    const rowRules = new Set(getLegendRowRules(caption));
+    const rowRules = new Set(getLegendRowRules(drawing, caption));
     // "This feature only" takes back the `hash` rules that name the feature, in
     // Python: a rule another copy of it shares keeps coloring that copy. A
     // feature that another rule still colors takes the type color value by

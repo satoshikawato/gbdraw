@@ -7,12 +7,12 @@
 // `objects.legends.hidden_rows`, `objects.legends.row_order`, and `canvas.padding` (gbdraw/config/models/objects.py
 // and canvas.py read them; issue #1427, PD-OI-114 scenario revision 2).
 import {
-  getVisibleFeatureLegendGroup, isLegendOrderEdited, pythonLegendKey, pythonOrderedLegendRows, resultLegendRows
+  getVisibleFeatureLegendGroup, isLegendOrderEdited, pythonLegendKey, pythonLegendRows, pythonOrderedLegendRows, resultLegendRows
 } from './legend-svg.js';
-import { captionedRuleRows } from './specific-color-rules.js';
+import { resultLegendRowContexts, resultsRuleRowKeys } from './specific-color-rules.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
-/** @import { PythonLegendKey } from './legend-svg.js' */
-/** @import { DrawnLegendState, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
+/** @import { ResultLegendState, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { CanvasPadding } from './drawing/canvas.js' */
 /** @import { HistoryChangeLike, RefitField } from './setting-application.js' */
 
@@ -178,29 +178,64 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
 /**
  * The draft a request projects into `LegendEditConfigLeaves`. `pythonRowKeys`: the keys of the rows Python drew, by
  * which a row is Python's and not the editor's; `originalLegendOrder` stays the shown Result's inventory, by which an
- * order is edited. `drawn`: the features the shown Result draws and its type colors, in which the rows of `rules` are
- * keyed (`captionedRuleRows`; a rule of the type color value is keyed in its type's color).
- * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], drawn: DrawnLegendState,
+ * order is edited. `results`: each Result of the drawing as its rule rows are keyed (`ResultLegendState`: the features
+ * it draws, its type colors, and Python's rows of it, `pythonRowsOfResults`); the rule rows are those of any Result
+ * (`resultsRuleRowKeys`), so the leaves do not change with the shown Result.
+ * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], results: readonly ResultLegendState[],
  *   canvasPadding: Readonly<CanvasPadding>, pythonRowKeys: readonly string[] }} LegendEditDraft
  */
 
 /**
- * The keys of the Legend rows Python drew in one Result's SVG text (`resultLegendRows`; the editor's own rows left out).
+ * What one Result's SVG text holds of Python's Legend rows: their keys (`resultLegendRows`; the editor's own rows left
+ * out) and Python's rows by key with the fill Python drew (`pythonLegendRows`, as the live draft reads the mounted
+ * Result).
+ * @typedef {{ keys: readonly PythonLegendKey[], rows: ReadonlyMap<PythonLegendKey, PythonLegendRow> }} ResultPythonRows
+ */
+
+/**
  * @param {string} content
  * @param {typeof DOMParser} parser
- * @returns {readonly PythonLegendKey[]}
+ * @returns {ResultPythonRows}
  */
-const pythonKeysOfResult = (content, parser) => {
+const pythonRowsOfText = (content, parser) => {
   const root = new parser().parseFromString(content, 'image/svg+xml').documentElement;
   // An `image/svg+xml` document's root element is the Result's `<svg>`.
   const svg = root.localName === 'svg' ? /** @type {SVGSVGElement} */ (/** @type {Element} */ (root)) : null;
-  return (resultLegendRows(svg) ?? []).filter((row) => !row.editor).map((row) => row.key);
+  return { keys: (resultLegendRows(svg) ?? []).filter((row) => !row.editor).map((row) => row.key), rows: pythonLegendRows(svg) };
 };
 
-// The keys of the Results the last call read, by their text: a Result is parsed again only when its text changed
+// The rows of the Results the last call read, by their text: a Result is parsed again only when its text changed
 // (a six-Result batch of 2.7 MB took about 60 ms to parse in Chromium).
-/** @type {Map<string, readonly PythonLegendKey[]>} */
-let keysByResultText = new Map();
+/** @type {Map<string, ResultPythonRows>} */
+let rowsByResultText = new Map();
+
+/**
+ * Python's rows of each Result of a drawing, by index (none for a Result without text).
+ * @param {readonly { content?: unknown }[]} results
+ * @param {typeof DOMParser} [parser]
+ * @returns {ResultPythonRows[]}
+ */
+const resultPythonRows = (results, parser = globalThis.DOMParser) => {
+  /** @type {Map<string, ResultPythonRows>} */
+  const read = new Map();
+  const rows = results.map(({ content }) => {
+    if (typeof content !== 'string') return { keys: [], rows: new Map() };
+    const known = read.get(content) ?? rowsByResultText.get(content) ?? pythonRowsOfText(content, parser);
+    read.set(content, known);
+    return known;
+  });
+  rowsByResultText = read;
+  return rows;
+};
+
+/**
+ * Python's rows of each Result of a drawing, by key with the fill Python drew, in which a request keys the rule rows
+ * of that Result (`ResultLegendState.pythonRows`).
+ * @param {readonly { content?: unknown }[]} results
+ * @param {typeof DOMParser} [parser]
+ * @returns {ReadonlyMap<PythonLegendKey, PythonLegendRow>[]}
+ */
+export const pythonRowsOfResults = (results, parser) => resultPythonRows(results, parser).map(({ rows }) => rows);
 
 /**
  * The keys of the Legend rows Python drew in a drawing: the shown Result's inventory and the rows Python drew in every
@@ -212,16 +247,9 @@ let keysByResultText = new Map();
  * @param {typeof DOMParser} [parser]
  * @returns {PythonLegendKey[]}
  */
-export const pythonLegendRowKeys = (inventory, results, parser = globalThis.DOMParser) => {
-  /** @type {Map<string, readonly PythonLegendKey[]>} */
-  const read = new Map();
-  for (const { content } of results) {
-    if (typeof content !== 'string' || read.has(content)) continue;
-    read.set(content, keysByResultText.get(content) ?? pythonKeysOfResult(content, parser));
-  }
-  keysByResultText = read;
-  return [...new Set([.../** @type {readonly PythonLegendKey[]} */ (inventory), ...[...read.values()].flat()])];
-};
+export const pythonLegendRowKeys = (inventory, results, parser) => [...new Set([
+  .../** @type {readonly PythonLegendKey[]} */ (inventory), ...resultPythonRows(results, parser).flatMap(({ keys }) => keys)
+])];
 
 /**
  * The one projection of a drawing's Legend row edits and canvas padding into the config leaves Python draws them
@@ -232,11 +260,9 @@ export const pythonLegendRowKeys = (inventory, results, parser = globalThis.DOMP
  * @param {LegendEditDraft} draft
  * @returns {LegendEditConfigLeaves}
  */
-export const legendEditConfigLeaves = ({ rules, drawn, canvasPadding, pythonRowKeys, ...legend }) => {
+export const legendEditConfigLeaves = ({ rules, results, canvasPadding, pythonRowKeys, ...legend }) => {
   const rows = draftLegendRows({ ...legend, originalLegendOrder: pythonRowKeys });
-  const ruleRowKeys = new Set(captionedRuleRows({
-    rules: [...rules], pythonRows: new Map(), ...drawn, originalLegendOrder: [...rows.originalCaptions]
-  }).map((row) => row.key));
+  const ruleRowKeys = resultsRuleRowKeys(resultLegendRowContexts({ rules: [...rules], originalLegendOrder: [...rows.originalCaptions] }, results));
   const pythonRows = rows.currentEntries.filter((entry) => rows.originalCaptions.has(entry.originalCaption));
   const key = (/** @type {NormalizedLegendEntry} */ entry) => /** @type {PythonLegendKey} */ (entry.originalCaption);
   // A dormant rename (OV-120) is sent too: Python names the row when it draws it, and a type's name names its
@@ -279,9 +305,9 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, dormantLegendEntr
     canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : { top: 0, right: 0, bottom: 0, left: 0 });
   /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
   const ruleRows = Array.isArray(rules) ? rules : [];
-  // No rules, so no rule row is keyed: the drawn state is read for none (`drawn` holds no feature).
+  // No rules, so no rule row is keyed: no Result's state is read.
   return JSON.stringify([legendEditConfigLeaves({
-    rules: [], drawn: { features: [], palette: {} }, canvasPadding: padding,
+    rules: [], results: [], canvasPadding: padding,
     legendEntries: listed, deletedLegendEntries: deleted, dormantLegendEntries: dormant,
     originalLegendOrder, pythonRowKeys
   }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);

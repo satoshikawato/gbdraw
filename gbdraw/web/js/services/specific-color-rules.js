@@ -284,6 +284,12 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  * @typedef {Pick<LegendRowContext, 'features' | 'palette'>} DrawnLegendState
  */
 
+/**
+ * What one Result of a drawing gives the keys of its rule rows: the features it draws, the type colors it draws them
+ * in, and Python's rows of it (none before its first Generate, nor where a reader has none).
+ * @typedef {Pick<LegendRowContext, 'features' | 'palette' | 'pythonRows'>} ResultLegendState
+ */
+
 // The key of a feature type's "other" row: Python's `_other_feature_legend_key`.
 /** @param {string} type @returns {PythonLegendKey} */
 export const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
@@ -963,6 +969,26 @@ export const captionedRuleRows = (context, ruleMatches) => {
   const fills = ruleFillsOf(context);
   return captioned.flatMap((rule) => typedRowFills(rule, fills)).map(({ row }) => ({ key: keyOf(row), name: row.cap }));
 };
+
+// THE Legend states of the Results of a drawing that its rule rows are keyed
+// in: the table (its rules and inventory) over each Result's own drawn state.
+// Python keys the rule rows of each Result of a batch over the types that
+// Result draws (`gbdraw circular` of several records): a `*` rule of the type
+// color value in one type's color only where that Result draws no other type.
+// A reader of a drawing's Results reads them one by one here, never as one
+// state of every Result's features.
+/**
+ * @param {Pick<LegendRowContext, 'rules' | 'originalLegendOrder'>} table
+ * @param {Iterable<ResultLegendState>} results
+ * @returns {LegendRowContext[]}
+ */
+export const resultLegendRowContexts = (table, results) => Array.from(results, (result) => ({ ...table, ...result }));
+
+// The keys of every rule row the Results of a drawing draw: the union of each
+// Result's (`captionedRuleRows`), so a reader names the same rule rows
+// whichever Result of a batch is shown.
+/** @param {readonly LegendRowContext[]} contexts @returns {Set<PythonLegendKey>} */
+export const resultsRuleRowKeys = (contexts) => new Set(contexts.flatMap((context) => captionedRuleRows(context).map((row) => row.key)));
 
 // The key of the Legend row each color-rule group of `context.rules` is drawn
 // in: a group is the rules of one caption and one color, which share that row.

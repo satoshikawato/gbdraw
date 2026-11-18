@@ -1061,7 +1061,7 @@ const mockLegendEntry = (caption, color, x) => {
     prepared.apply();
     const leaves = legendEditConfigLeaves({
       legendEntries: state.legendEntries.value, deletedLegendEntries: [], dormantLegendEntries: state.dormantLegendEntries.value,
-      originalLegendOrder: state.originalLegendOrder.value, pythonRowKeys: state.originalLegendOrder.value, rules: [],
+      originalLegendOrder: state.originalLegendOrder.value, pythonRowKeys: state.originalLegendOrder.value, rules: [], results: [{ features: [], palette: {}, pythonRows: new Map() }],
       canvasPadding: { top: 0, right: 0, bottom: 0, left: 0 }
     });
     return {

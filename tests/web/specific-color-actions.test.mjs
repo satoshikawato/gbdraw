@@ -442,8 +442,14 @@ test('a rule captioned like a generated row commits, and is edited through, its 
   ];
   s.state.svgContainer = mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000']]);
   assert.equal(s.actions.getEffectiveLegendCaption(trna), 'CDS [#ff0000]');
-  assert.deepEqual(s.actions.getLegendRowRules('CDS'), []);
-  assert.deepEqual(s.actions.getLegendRowRules('CDS [#ff0000]'), s.state.manualSpecificRules);
+  assert.deepEqual(s.actions.getLegendRowRules(s.view.activeDrawing(), 'CDS'), []);
+  assert.deepEqual(s.actions.getLegendRowRules(s.view.activeDrawing(), 'CDS [#ff0000]'), s.state.manualSpecificRules);
+  // OV-3804 (R15): the rules of a row are those of the drawing the action resolved, never a second read of the
+  // shown drawing.
+  const resolved = { ...s.view.activeDrawing(), manualSpecificRules: [...s.state.manualSpecificRules] };
+  const shownRules = s.state.manualSpecificRules.splice(0);
+  assert.deepEqual(s.actions.getLegendRowRules(resolved, 'CDS [#ff0000]'), resolved.manualSpecificRules, 'the resolved drawing\'s rules');
+  s.state.manualSpecificRules.push(...shownRules);
 
   // Recoloring the rule retires the drawn row and adds the row for the new color.
   assert.equal(await s.actions.commitSpecificRules(() => [{ ...rule, color: '#00ff00' }]), true);
@@ -860,7 +866,7 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
         options.afterCommit?.([]);
         return true;
       },
-      getLegendRowRules: (key) => (key === 'Shared' ? state.manualSpecificRules : []),
+      getLegendRowRules: (_drawing, key) => (key === 'Shared' ? state.manualSpecificRules : []),
       otherLegendRowType: () => null,
       effectiveLegendCaptions: () => () => key,
       findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
@@ -1686,10 +1692,15 @@ for (const { name, caption, color, read } of savedCaptions) {
 const savedRules = JSON.parse(
   readFileSync(new URL('../fixtures/saved_rule_captions.json', import.meta.url), 'utf8')
 ).rules;
-for (const { name, rule, type_colors: typeColors, palette, read } of savedRules) {
+for (const { name, rule, type_colors: typeColors, palette, draft, read } of savedRules) {
   test(`saved rule: ${name}`, () => {
     const [loaded] = savedSpecificRules([rule], () => savedResetTypeColors(typeColors, palette));
     assert.deepEqual([loaded.color, loaded.cap], [read.color, read.cap]);
+    // A queued palette's draft reads no rule: by it the answer would differ.
+    if (draft) {
+      const [byDraft] = savedSpecificRules([rule], () => savedResetTypeColors(draft.type_colors, draft.palette));
+      assert.notDeepEqual([byDraft.color, byDraft.cap], [read.color, read.cap], 'the case tells the applied palette from the draft');
+    }
     assert.deepEqual(savedSpecificRules([rule])[0].color, rule.color, 'a file is read without type colors');
   });
 }

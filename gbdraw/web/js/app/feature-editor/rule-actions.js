@@ -816,10 +816,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  // The rules a legend row draws, by its Python key (`legendEntryKey`);
-  // editing the row edits them (N-06).
-  /** @param {PythonLegendKey} key */
-  const getLegendRowRules = (key) => legendRowRules(key, displayedLegendRowContext(state, state.activeDrawing()));
+  // The rules a legend row of `drawing` draws, by its Python key
+  // (`legendEntryKey`); editing the row edits them (N-06). The drawing is the
+  // one the action resolved (R15).
+  /** @param {DrawingState} drawing @param {PythonLegendKey} key */
+  const getLegendRowRules = (drawing, key) => legendRowRules(key, displayedLegendRowContext(state, drawing));
 
   // Resolve the effective legend item label used by current SVG coloring
   // priority: a rule's feature belongs to the row Generate draws for it (N-06);
@@ -1157,10 +1158,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {readonly Partial<SpecificColorRule>[]} rows
    * @param {{ cap: string, color: string }} patch
    * @param {PythonLegendKey | null} joins
+   * @param {boolean} [keepsColors] The edit keeps the row's color (a rename): each rule takes only the caption and
+   *   keeps its own color, so a rule of the type color value stays one (OV-3806). Rules Python writes for a revision
+   *   that splits rows take `patch.color`.
    * @returns {SpecificRuleBuild}
    */
-  const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures, legendRows) => {
-    const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
+  const reviseColorRules = (rows, patch, joins, keepsColors = false) => async (current, revise, drawnFeatures, legendRows) => {
+    const own = keepsColors ? { cap: patch.cap } : patch;
+    const next = current.map((rule) => (rows.includes(rule) ? revise(rule, own) : rule));
     const joined = joins === null ? null : joinedLegendRow(legendRowRules(joins, legendRows()), current, rows);
     if (!joined && revisesWholeRuleRows(current, next, rows, ruleFillsOf(legendRows()))) return next;
     const { table, legend } = await synthesizeGroupRules({
