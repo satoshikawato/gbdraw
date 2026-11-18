@@ -135,6 +135,8 @@ class CircularLabel(_CircularLabelRequired, total=False):
     leader_start_y: float
     leader_contact: tuple[float, float]
     feature_edge_points: tuple[tuple[float, float], ...]
+    leader_obstacles: tuple[tuple[tuple[float, float], ...], ...]
+    leader_aim_offsets_bp: tuple[float, float]
     placement: Literal["radial"]
     placed_angle_deg: float
     text_x: float

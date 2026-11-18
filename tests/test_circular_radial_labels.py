@@ -382,7 +382,13 @@ def _lambda_two_slot_argv(font_size: str, output: Path) -> list[str]:
     ]
 
 
-@pytest.mark.parametrize("case", ["lambda-8.5pt", "lambda-8pt"])
+def _radial_case_argv(case: str, tmp_path: Path, output: Path) -> list[str]:
+    if case == "rotated-tobacco":
+        return _rotated_tobacco_argv(tmp_path, output)
+    return _lambda_two_slot_argv(case.removeprefix("lambda-").removesuffix("pt"), output)
+
+
+@pytest.mark.parametrize("case", ["lambda-8.5pt", "lambda-8pt", "rotated-tobacco"])
 def test_radial_leaders_run_outside_the_feature_band(
     case: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -391,7 +397,9 @@ def test_radial_leaders_run_outside_the_feature_band(
     Leaders are drawn below the features, so a leader that runs through a block is hidden there. In lambda with
     labels on both sides, the inner leaders ran from an elbow on the band's inner edge, at the label's angle, to the
     middle of the lane at the feature's angle, through up to 14 degrees of neighbouring features; with the elbow off
-    the band they ran side by side along it, and 8.5 pt no longer fit until growth widened the inner room.
+    the band they ran side by side along it, and 8.5 pt no longer fit until growth widened the inner room. In the
+    rotated tobacco plastome (docs recipe H-CLI-14) the CDS of the lane above covers the whole outer edge of the
+    replication origin NitaCp079: a leader at the label's own angle ran under that CDS.
     """
 
     results = []
@@ -404,7 +412,7 @@ def test_radial_leaders_run_outside_the_feature_band(
 
     monkeypatch.setattr(circular_labels_module, "place_radial_labels", captured)
     output = tmp_path / "radial"
-    run_circular_from_namespace(_get_args(_lambda_two_slot_argv(case.removeprefix("lambda-").removesuffix("pt"), output)))
+    run_circular_from_namespace(_get_args(_radial_case_argv(case, tmp_path, output)))
 
     outlines = _block_outlines(output.with_suffix(".svg").read_text(encoding="utf-8"))
     labels = [label for label in results[-1].labels if label.get("placement") == "radial"]
@@ -423,7 +431,7 @@ def test_radial_leaders_run_outside_the_feature_band(
                 if math.dist(point, anchor) > 0.5 and any(_inside(point, outline) for outline in outlines):
                     hidden += length / steps
         if hidden > 0.0:
-            buried[label["label_text"]] = round(hidden, 1)
+            buried[(label["feature_id"], label["label_text"])] = round(hidden, 1)
     assert not buried, buried
 
 
@@ -535,33 +543,48 @@ def test_label_placement_reads_feature_blocks_where_they_are_drawn(
 def test_radial_leader_ends_leave_out_positions_under_another_lane() -> None:
     """A radial leader ends where no feature of another lane lies between its feature and the labels (OV-3841).
 
-    An outer leader that ended under the feature of the lane above ran under it; when such features cover the whole
-    labelled segment, no leader from the labels avoids them, and every point stays.
+    An outer leader that ended under the feature of the lane above ran under it. When such features cover the whole
+    labelled segment, every point stays and the outlines of the other features go to the placer, grown by the
+    leader's clearance.
     """
 
     from gbdraw.features.objects import FeatureLocationPart, FeatureObject
-    from gbdraw.labels.circular import _radial_leader_edge_points
+    from gbdraw.labels.circular import _radial_leader_ends
+    from gbdraw.layout.circular import FeatureRadiusBlock
 
-    feature = FeatureObject(
-        "f", [FeatureLocationPart("block", "1", "positive", 1000, 2000, True)], False, "#000000", "", "", None, "CDS", {}
-    )
-    radii = (100.0, 110.0, 120.0)
-    own_lane = (1000.0, 2000.0, 100.0, 120.0)
-    upper_half = (1000.0, 1500.0, 125.0, 145.0)
-    lower_lane = (0.0, 10_000.0, 70.0, 90.0)
-
-    def angles(lanes, *, outer=True):
-        points = _radial_leader_edge_points(
-            feature, (1000.0, 2000.0), 10_000, 0.0, radii, 1.0, outer=outer, lanes=lanes
+    def feature(name: str) -> FeatureObject:
+        return FeatureObject(
+            name, [FeatureLocationPart("block", "1", "positive", 1000, 2000, True)], False, "#000000", "", "", None, "CDS", {}
         )
+
+    own = feature("own")
+    radii = (100.0, 110.0, 120.0)
+    own_lane = FeatureRadiusBlock(own, 1000.0, 2000.0, 100.0, 120.0)
+    lower_lane = FeatureRadiusBlock(feature("lower"), 0.0, 10_000.0, 70.0, 90.0)
+
+    def ends(blocks, *, outer=True, clearance=0.0):
+        return _radial_leader_ends(
+            own, (1000.0, 2000.0), 10_000, 0.0, radii, 1.0, outer=outer, blocks=blocks, clearance_px=clearance,
+            block_outline=lambda block, _position: (block.inner_px, block.outer_px),
+        )
+
+    def angles(blocks, **kwargs):
+        points = ends(blocks, **kwargs).points
+        outer = kwargs.get("outer", True)
         assert all(math.hypot(*point) == pytest.approx(120.0 if outer else 100.0) for point in points)
         return [(math.degrees(math.atan2(y, x)) + 90.0) % 360.0 for x, y in points]
 
     free = angles([own_lane, lower_lane])
     assert len(free) == 33 and min(free) == pytest.approx(36.0) and max(free) == pytest.approx(72.0)
+    upper_half = FeatureRadiusBlock(feature("upper"), 1000.0, 1500.0, 125.0, 145.0)
     half = angles([own_lane, upper_half, lower_lane])
     assert min(half) >= 54.0 - 1e-9 and max(half) == pytest.approx(72.0)  # 1500 bp is 54 degrees
-    assert angles([own_lane, (0.0, 10_000.0, 125.0, 145.0)]) == free  # covered throughout: nothing to choose from
+    # Covered throughout: nothing to choose from, and the covering outline goes to the placer.
+    covering = FeatureRadiusBlock(feature("cover"), 0.0, 10_000.0, 125.0, 145.0)
+    covered = ends([own_lane, covering, lower_lane], clearance=2.0)
+    assert len(covered.points) == 33 and len(covered.obstacles) == 1
+    assert min(math.hypot(*point) for point in covered.obstacles[0]) == pytest.approx(123.0)
     # An inner label's leader comes from inside: the lane above never blocks it, a lane below over half does.
     assert len(angles([own_lane, upper_half], outer=False)) == 33
-    assert min(angles([own_lane, (1000.0, 1500.0, 70.0, 90.0)], outer=False)) >= 54.0 - 1e-9
+    lower_half = FeatureRadiusBlock(feature("lower-half"), 1000.0, 1500.0, 70.0, 90.0)
+    assert min(angles([own_lane, lower_half], outer=False)) >= 54.0 - 1e-9

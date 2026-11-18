@@ -12,6 +12,7 @@ from ..layout.text_geometry import (
     OrientedTextBox,
     oriented_text_box,
     segment_intersects_polygon,
+    segments_intersect,
 )
 from ..svg.circular_arcs import position_turn_angle, position_turn_rad
 from .circular_leaders import leader_crossing_count, leader_segments
@@ -81,6 +82,60 @@ def _leader_anchor(label: CircularLabel, elbow: tuple[float, float]) -> tuple[fl
     if not points:
         return float(label.get("feature_anchor_x", 0.0)), float(label.get("feature_anchor_y", 0.0))
     return min(points, key=lambda point: math.dist(point, elbow))
+
+
+def _meets_outline(segment: tuple[tuple[float, float], tuple[float, float]], outline: Sequence[tuple[float, float]]) -> bool:
+    """Whether a leader segment crosses or lies inside a feature outline (a simple polygon, not always convex)."""
+    if any(
+        segments_intersect(segment, (outline[index], outline[(index + 1) % len(outline)]), touching=True)
+        for index in range(len(outline))
+    ):
+        return True
+    x_coord, y_coord = segment[0]
+    inside = False
+    for (x1, y1), (x2, y2) in zip(outline, [*outline[1:], outline[0]], strict=True):
+        if (y1 > y_coord) != (y2 > y_coord) and x_coord < x1 + (y_coord - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def _leader_aim_middle(label: CircularLabel, elbow_radius_px: float, total_length: int) -> float:
+    """Where a label whose feature's facing edge lies wholly under other features is aimed (OV-3841): the position
+    nearest its middle, within ``leader_aim_offsets_bp``, from which the leader to its feature's facing edge passes
+    none of ``leader_obstacles``; its middle when none does or it has none. The positions step half a pixel of arc
+    at the elbow."""
+    middle = float(label.get("middle", 0.0))
+    obstacles = label.get("leader_obstacles")
+    if not obstacles or elbow_radius_px <= 0.0:
+        return middle
+    low, high = label.get("leader_aim_offsets_bp", (0.0, 0.0))
+    step_bp = 0.5 * total_length / (_TAU * float(elbow_radius_px))
+    offsets = sorted(
+        (index * step_bp for index in range(int(low / step_bp), int(high / step_bp) + 1)),
+        key=lambda offset: (abs(offset), offset),
+    )
+    for offset in offsets:
+        position = (middle + offset) % total_length
+        angle = position_turn_rad(position, total_length) - (0.5 * math.pi)
+        elbow = (elbow_radius_px * math.cos(angle), elbow_radius_px * math.sin(angle))
+        segment = (_leader_anchor(label, elbow), elbow)
+        if not any(_meets_outline(segment, outline) for outline in obstacles):
+            return position
+    return middle
+
+
+def _aim_side(labels: Sequence[CircularLabel], anchor_radius_px: float, *, is_inner: bool, total_length: int) -> bool:
+    """Aim the labels that carry leader obstacles from the side's elbow radius; whether a preferred position moved."""
+    elbow_radius = anchor_radius_px + (_RADIAL_CLEARANCE_PX if is_inner else -_RADIAL_CLEARANCE_PX)
+    moved = False
+    for label in labels:
+        if not label.get("leader_obstacles"):
+            continue
+        aim = _leader_aim_middle(label, elbow_radius, total_length)
+        if abs(aim - _preferred_middle(label)) > _ANGLE_EPSILON:
+            label["preferred_middle"] = aim
+            moved = True
+    return moved
 
 
 def _leader_room_text_radius(label: CircularLabel, placed_angle_rad: float, *, is_inner: bool) -> float:
@@ -378,8 +433,14 @@ def _place_side(
     density_radius = _required_collision_radius(ordered, spacing_px)
     required_growth = 0.0
     minimum_anchor = 0.0
+
+    def side_base_anchors() -> list[float]:
+        if is_inner:
+            return [_inner_base_anchor(label, total_length) for label in ordered]
+        return [_outer_base_anchor(label, outer_reserved_radius_px, total_length) for label in ordered]
+
+    base_anchors = side_base_anchors()
     if is_inner:
-        base_anchors = [_inner_base_anchor(label, total_length) for label in ordered]
         minimum_anchor = max(
             float(inner_reserved_outer_radius_px) + max_width + _RADIAL_CLEARANCE_PX,
             density_radius + max_width + 1.0,
@@ -387,12 +448,15 @@ def _place_side(
         anchor_radius = max(min(base_anchors), minimum_anchor)
         collision_radius = max(1.0, anchor_radius - max_width)
     else:
-        base_anchors = [_outer_base_anchor(label, outer_reserved_radius_px, total_length) for label in ordered]
         anchor_radius = max(max(base_anchors), density_radius + 1.0)
         collision_radius = anchor_radius
 
     pushed_out = False
     for _ in range(_CONVERGENCE_LIMIT):
+        # A label whose leader must pass other features is aimed from this pass's elbow radius (OV-3841).
+        if _aim_side(ordered, anchor_radius, is_inner=is_inner, total_length=total_length):
+            ordered = _seam_order(ordered, total_length)
+            base_anchors = side_base_anchors()
         angles = _pack_angles(ordered, total_length, collision_radius, spacing_px)
         placed = [
             _make_placed_label(

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NamedTuple, Sequence, TypeAlias
 
 from ._immutable import freeze_layout_mapping
 from .record_coordinates import CirclePlace
@@ -447,20 +447,41 @@ def feature_block_intervals(
     return intervals
 
 
+class FeatureRadiusBlock(NamedTuple):
+    """One drawn block of a feature as the interval it covers, ``feature_block_intervals``, in its lane's radii."""
+
+    feature: FeatureObject
+    start: float
+    end: float
+    inner_px: float
+    outer_px: float
+
+    @property
+    def interval(self) -> tuple[float, float, float, float]:
+        return (self.start, self.end, self.inner_px, self.outer_px)
+
+
+def feature_radius_blocks(
+    feature_dict: Mapping[str, Any],
+    total_length: int,
+    feature_layout: CircularFeatureLayout,
+) -> list[FeatureRadiusBlock]:
+    if total_length <= 0:
+        return []
+    blocks: list[FeatureRadiusBlock] = []
+    for feature_object in feature_dict.values():
+        lane = feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
+        for _block, start, end in feature_block_intervals(feature_object, total_length):
+            blocks.append(FeatureRadiusBlock(feature_object, start, end, lane.inner_px, lane.outer_px))
+    return blocks
+
+
 def feature_radius_intervals(
     feature_dict: Mapping[str, Any],
     total_length: int,
     feature_layout: CircularFeatureLayout,
 ) -> list[tuple[float, float, float, float]]:
-    if total_length <= 0:
-        return []
-
-    intervals: list[tuple[float, float, float, float]] = []
-    for feature_object in feature_dict.values():
-        lane = feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
-        for _block, start, end in feature_block_intervals(feature_object, total_length):
-            intervals.append((start, end, lane.inner_px, lane.outer_px))
-    return intervals
+    return [block.interval for block in feature_radius_blocks(feature_dict, total_length, feature_layout)]
 
 
 def calculate_feature_position_factors_circular(
@@ -577,5 +598,7 @@ __all__ = [
     "feature_band_bounds_px",
     "feature_radii_for_coordinate",
     "feature_radii_for_object",
+    "FeatureRadiusBlock",
+    "feature_radius_blocks",
     "feature_radius_intervals",
 ]

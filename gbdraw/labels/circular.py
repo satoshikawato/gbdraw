@@ -29,7 +29,7 @@ from .circular_types import (
     CircularLabelCandidateCache,
 )
 from .fit import FITS, LabelDefect, LabelFit, LabelKind, LabelShape, Polygon, label_defects, label_fits_by_kind
-from .label_style import CIRCULAR_LABEL_GAP_EM, LabelFontStyle
+from .label_style import CIRCULAR_LABEL_GAP_EM, LabelFontStyle, leader_width_px
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
@@ -47,8 +47,9 @@ from ..layout.circular import (
     CircularTickLayout,
     NO_LABEL_LANES,
     calculate_feature_position_factors_circular,
+    FeatureRadiusBlock,
     feature_block_intervals,
-    feature_radius_intervals,
+    feature_radius_blocks,
 )
 from ..layout.spatial import (
     Aabb,
@@ -61,6 +62,7 @@ from ..layout.spatial import (
     union_aabbs,
 )
 from ..svg.arrows import (
+    ArrowHeadLengthRatio,
     calculate_circular_arrow_length,
     resolve_circular_arrow_head_length_bp,
 )
@@ -2078,11 +2080,33 @@ def _build_feature_radius_intervals(
     track_preset: str | None = None,
 ) -> list[tuple[float, float, float, float]]:
     """Build local genome intervals as (start, end, inner_radius_px, outer_radius_px)."""
+    return [
+        block.interval
+        for block in _build_feature_radius_blocks(
+            feature_dict, total_length, radius, track_ratio, profile,
+            feature_track_ratio_factor_override=feature_track_ratio_factor_override,
+            feature_layout=feature_layout, track_preset=track_preset,
+        )
+    ]
+
+
+def _build_feature_radius_blocks(
+    feature_dict: dict,
+    total_length: int,
+    radius: float,
+    track_ratio: float,
+    profile: CircularRenderProfile,
+    *,
+    feature_track_ratio_factor_override: float | None = None,
+    feature_layout: CircularFeatureLayout | None = None,
+    track_preset: str | None = None,
+) -> list[FeatureRadiusBlock]:
+    """Every drawn block of the features in its lane's radii, with its feature."""
     cfg = profile.config
     if total_length <= 0:
         return []
     if feature_layout is not None:
-        return feature_radius_intervals(feature_dict, total_length, feature_layout)
+        return feature_radius_blocks(feature_dict, total_length, feature_layout)
 
     length_param = determine_length_parameter(total_length, cfg.labels.length_threshold.circular)
     track_ratio_factor = (
@@ -2094,7 +2118,7 @@ def _build_feature_radius_intervals(
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
     strandedness = profile.strandedness
 
-    intervals: list[tuple[float, float, float, float]] = []
+    blocks: list[FeatureRadiusBlock] = []
 
     for feature_object in feature_dict.values():
         track_id = int(getattr(feature_object, "feature_track_id", 0))
@@ -2111,9 +2135,13 @@ def _build_feature_radius_intervals(
             )
             factor_inner = min(float(factors[0]), float(factors[2]))
             factor_outer = max(float(factors[0]), float(factors[2]))
-            intervals.append((start, end, float(radius) * factor_inner, float(radius) * factor_outer))
+            blocks.append(
+                FeatureRadiusBlock(
+                    feature_object, start, end, float(radius) * factor_inner, float(radius) * factor_outer
+                )
+            )
 
-    return intervals
+    return blocks
 
 
 def _build_outer_feature_radius_intervals(
@@ -5720,7 +5748,17 @@ def embedded_glyphs_outline_margin_px(
     return margin
 
 
-def _radial_leader_edge_points(
+class RadialLeaderEnds(NamedTuple):
+    """Where a radial label's leader may end, and what it must pass when its feature's facing edge lies wholly under
+    other features (OV-3841): their outlines grown by the leader's clearance, as polygons, and how far from its
+    middle (bp, before and after) the label may be aimed to pass them."""
+
+    points: tuple[tuple[float, float], ...]
+    obstacles: tuple[tuple[tuple[float, float], ...], ...] = ()
+    aim_offsets_bp: tuple[float, float] = (0.0, 0.0)
+
+
+def _radial_leader_ends(
     feature_object: FeatureObject,
     segment_bp: tuple[float, float],
     total_length: int,
@@ -5729,42 +5767,120 @@ def _radial_leader_edge_points(
     shaft_width_ratio: float,
     *,
     outer: bool,
-    lanes: Sequence[tuple[float, float, float, float]],
-) -> tuple[tuple[float, float], ...]:
+    blocks: Sequence[FeatureRadiusBlock],
+    clearance_px: float,
+    block_outline: Callable[[FeatureRadiusBlock, float], tuple[float, float]],
+) -> RadialLeaderEnds:
     """Where a radial label's leader may end: points of its feature's drawn outline edge that faces the label (the
     outer edge for an ``outer`` label), along the labelled segment ``segment_bp`` in its lane ``radii_px`` (inner,
     centre, outer) (OV-3841).
 
-    Leaders are drawn below the features, so the points leave out the positions where a feature of another lane lies
-    between the edge and the labels (``lanes``: start, end, inner and outer radius of every feature block on the
-    label's side); a leader that ended there ran under that feature. When such features cover the whole segment, no
-    leader from the labels reaches the feature without crossing one, and every point stays.
+    Leaders are drawn below the features, so the points leave out the positions where a block of another feature
+    (``blocks``: every feature's blocks on the label's side) lies beyond the facing edge: a leader that ended there
+    ran under that feature. When such blocks cover the whole segment, no leader rising from the facing edge clears
+    them: every point stays, and the result holds the outlines of the other blocks that reach the facing edge or lie
+    beyond it (``block_outline``, grown by ``clearance_px``) for the radial placer, which aims the label where its
+    leader passes them.
     """
     start_bp, end_bp = segment_bp
     span_bp = (end_bp - start_bp) % total_length
     positions = [
         (start_bp + span_bp * step / _FEATURE_EDGE_SAMPLES) % total_length for step in range(_FEATURE_EDGE_SAMPLES + 1)
     ]
+    edge_px = radii_px[2] if outer else radii_px[0]
+    reaching = [
+        block for block in blocks
+        if block.feature is not feature_object
+        and (block.outer_px >= edge_px - LAYOUT_EPSILON if outer else block.inner_px <= edge_px + LAYOUT_EPSILON)
+    ]
 
-    def covered(position_bp: float) -> bool:
-        return any(
-            lane_start <= position_bp < lane_end
-            and (
-                lane_inner >= radii_px[2] - LAYOUT_EPSILON if outer else lane_outer <= radii_px[0] + LAYOUT_EPSILON
-            )
-            for lane_start, lane_end, lane_inner, lane_outer in lanes
-        )
+    def clearance_bp(radius_px: float) -> float:
+        return float(clearance_px) * total_length / (2.0 * math.pi * max(radius_px, LAYOUT_EPSILON))
 
-    clear = [position_bp for position_bp in positions if not covered(position_bp)] or positions
-    return tuple(
-        circle_point(
+    def covering(position_bp: float) -> list[FeatureRadiusBlock]:
+        return [
+            block for block in reaching
+            if block.start <= position_bp < block.end
+            and (block.inner_px >= edge_px - LAYOUT_EPSILON if outer else block.outer_px <= edge_px + LAYOUT_EPSILON)
+        ]
+
+    covered = [covering(position_bp) for position_bp in positions]
+    clear = [position_bp for position_bp, hits in zip(positions, covered, strict=True) if not hits]
+
+    def edge_point(position_bp: float) -> tuple[float, float]:
+        return circle_point(
             circular_feature_edge_radii_at(
                 feature_object, position_bp, total_length, head_length_bp, radii_px, shaft_width_ratio
             )[1 if outer else 0],
             position_angle(position_bp, total_length),
         )
-        for position_bp in clear
+
+    if clear:
+        return RadialLeaderEnds(tuple(edge_point(position_bp) for position_bp in clear))
+    middle_bp = start_bp + 0.5 * span_bp
+
+    def offset(position_bp: float) -> float:
+        return ((position_bp - middle_bp + 0.5 * total_length) % total_length) - 0.5 * total_length
+
+    over = {id(block): block for hits in covered for block in hits}.values()
+    run_low = min(offset(block.start) for block in over)
+    run_high = max(offset(block.end) for block in over)
+    # The label may move past the covering features by as far again as they extend.
+    aim_low, aim_high = 2.0 * run_low - run_high, 2.0 * run_high - run_low
+    obstacles: list[tuple[tuple[float, float], ...]] = []
+    for block in reaching:
+        if offset(block.end) < aim_low or offset(block.start) > aim_high:
+            continue
+        margin = clearance_bp(block.outer_px)
+        along = [
+            block.start - margin + (block.end - block.start + 2.0 * margin) * step / _FEATURE_EDGE_SAMPLES
+            for step in range(_FEATURE_EDGE_SAMPLES + 1)
+        ]
+        radii = [block_outline(block, position_bp) for position_bp in along]
+        obstacles.append(
+            tuple(
+                circle_point(outer_px + clearance_px, position_angle(position_bp, total_length))
+                for position_bp, (_inner_px, outer_px) in zip(along, radii, strict=True)
+            )
+            + tuple(
+                circle_point(max(0.0, inner_px - clearance_px), position_angle(position_bp, total_length))
+                for position_bp, (inner_px, _outer_px) in reversed(list(zip(along, radii, strict=True)))
+            )
+        )
+    return RadialLeaderEnds(tuple(edge_point(position_bp) for position_bp in positions), tuple(obstacles), (aim_low, aim_high))
+
+
+def _block_outline_radii(
+    block: FeatureRadiusBlock,
+    position_bp: float,
+    *,
+    total_length: int,
+    head_length_ratio: ArrowHeadLengthRatio,
+    automatic_head_length_bp: float,
+    shaft_width_ratio: float,
+) -> tuple[float, float]:
+    """The inner and outer radius of the outline ``block``'s feature is drawn with at a position, with the arrowhead
+    its lane gives it (the head length the feature drawer resolves from the lane's width and centre)."""
+    center_px = 0.5 * (block.inner_px + block.outer_px)
+    return circular_feature_edge_radii_at(
+        block.feature,
+        position_bp,
+        total_length,
+        resolve_circular_arrow_head_length_bp(
+            head_length_ratio, block.outer_px - block.inner_px, automatic_head_length_bp, total_length, center_px,
+            shaft_width_ratio,
+        ),
+        (block.inner_px, center_px, block.outer_px),
+        shaft_width_ratio,
     )
+
+
+def _set_radial_leader_ends(label: CircularLabel, ends: RadialLeaderEnds) -> None:
+    """Write a radial label's leader ends, and the obstacles its placer aims it past when it has them."""
+    label["feature_edge_points"] = ends.points
+    if ends.obstacles:
+        label["leader_obstacles"] = ends.obstacles
+        label["leader_aim_offsets_bp"] = ends.aim_offsets_bp
 
 
 def prepare_label_list(
@@ -5901,10 +6017,10 @@ def prepare_label_list(
         key: feature.feature_hash for key, feature in feature_dict.items()
     }
 
-    # The lanes of each side's features, for the leader ends of radial labels (outer, inner).
-    radial_lanes = (
+    # The blocks of each side's features, for the leader ends of radial labels (outer, inner).
+    radial_blocks = (
         tuple(
-            _build_feature_radius_intervals(
+            _build_feature_radius_blocks(
                 feature_dict, total_length, radius, track_ratio, profile,
                 feature_track_ratio_factor_override=feature_track_ratio_factor_override,
                 feature_layout=layout, track_preset=track_type,
@@ -5914,6 +6030,7 @@ def prepare_label_list(
         if profile.label_placement == "radial"
         else None
     )
+
     for input_order, (stable_id, feature_object) in enumerate(feature_dict.items()):
         candidate = candidates_by_id.get(str(stable_id))
         if candidate is None:
@@ -6077,16 +6194,28 @@ def prepare_label_list(
                     - effective_anchor_clearance_px
                     - OUTER_LABEL_FEATURE_CLEARANCE_SAFETY_PX,
                 )
-            if radial_lanes is not None and not is_embedded:
-                label_entry["feature_edge_points"] = _radial_leader_edge_points(
-                    feature_object,
-                    (longest_segment_start, longest_segment_end),
-                    total_length,
-                    circular_arrow_length_bp,
-                    (feature_inner_radius, feature_center_radius, feature_outer_radius),
-                    arrow_shaft_width_ratio,
-                    outer=is_outer_label,
-                    lanes=radial_lanes[0 if is_outer_label else 1],
+            if radial_blocks is not None and not is_embedded:
+                # A leader that must pass other features keeps its stroke off their outline strokes.
+                _set_radial_leader_ends(
+                    label_entry,
+                    _radial_leader_ends(
+                        feature_object,
+                        (longest_segment_start, longest_segment_end),
+                        total_length,
+                        circular_arrow_length_bp,
+                        (feature_inner_radius, feature_center_radius, feature_outer_radius),
+                        arrow_shaft_width_ratio,
+                        outer=is_outer_label,
+                        blocks=radial_blocks[0 if is_outer_label else 1],
+                        clearance_px=outline_clearance_px + 0.5 * leader_width_px(float(font_size)),
+                        block_outline=partial(
+                            _block_outline_radii,
+                            total_length=total_length,
+                            head_length_ratio=arrow_head_length_ratio,
+                            automatic_head_length_bp=automatic_circular_arrow_length_bp,
+                            shaft_width_ratio=arrow_shaft_width_ratio,
+                        ),
+                    ),
                 )
 
             if is_embedded:

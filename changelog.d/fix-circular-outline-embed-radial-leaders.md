@@ -9,3 +9,6 @@
   circle does not have that room, the figure grows instead of refusing the labels.
 - Fixed: Circular labels drawn from `--display_start_coordinate` (or a cropped record) kept clear of feature
   blocks read where the record's coordinates put them, not where the blocks are drawn.
+- Fixed: Circular radial labels: when the features of another lane cover the whole edge of a labelled feature that
+  faces its label, the label moves along the circle just far enough for its leader to pass them, instead of
+  running under them (for example NitaCp079 in the rotated tobacco plastome of the command-line reference).
