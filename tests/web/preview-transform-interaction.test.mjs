@@ -861,7 +861,11 @@ const state = {
   featurePopupSize: { width: 0, height: 0 },
   featureSelectionDrag: { active: false },
   skipCaptureBaseConfig: ref(false),
-  richFeaturePopup: ref(false)
+  richFeaturePopup: ref(false),
+  layoutRepositionMode: featureInteractionState.layoutRepositionMode,
+  canvasContainerRef: featureInteractionState.canvasContainerRef,
+  featureCatalog: ref(null),
+  errorLog: ref(null)
 };
 const { createFeatureSvgActions, HOVER_HIGHLIGHT_DWELL_MS } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js'))

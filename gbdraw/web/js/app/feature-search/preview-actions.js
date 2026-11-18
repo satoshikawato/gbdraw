@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../../state.js' */
+/** @import { DrawingState, WebState } from '../../state.js' */
 import {
   buildFeatureSearchIndex,
   formatSearchMatchLine,
@@ -30,12 +30,20 @@ import { reactive } from '../../utils/reactivity.js';
 /** @import { FeatureSequenceRead } from '../../services/catalog-sequences.js' */
 /** @import { UserFacingError } from '../../utils/error-normalization.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
+/** @import { VisibilityFeature } from '../../services/feature-visibility.js' */
 /** @import { FeatureElementIndex } from './preview-svg.js' */
 /** @import { EditableLabelEntry } from '../../services/label-override-table.js' */
 
 /**
  * @typedef {object} PreviewFeatureSearchOptions
- * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {Pick<WebState, 'activeDrawing' | 'canvasContainerRef' | 'canvasPan' | 'clickedFeature'
+ *   | 'editableLabels' | 'extractedFeatures' | 'featureCatalog' | 'featureList' | 'featureListState' | 'orthogroups'
+ *   | 'previewFeatureSearchActiveIndex' | 'previewFeatureSearchError' | 'previewFeatureSearchField'
+ *   | 'previewFeatureSearchInput' | 'previewFeatureSearchMatchDetails' | 'previewFeatureSearchMatches'
+ *   | 'previewFeatureSearchQualifierKey' | 'previewFeatureSearchQuery' | 'previewFeatureSearchRenderedCount'
+ *   | 'previewFeatureSearchUseRegex' | 'previewFeatureSearchVisible' | 'richFeaturePopup' | 'selectedResultIndex'
+ *   | 'svgContainer' | 'svgContent'>} state
+ *   the members of the Web state (`state.js`) the search reads
  * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
@@ -252,10 +260,10 @@ export const createPreviewFeatureSearch = ({
   const ensureSearchIndex = (drawing) => {
     if (!searchIndex || searchIndex.sequencesRead !== (searchSequences.current() !== null)) {
       /** @type {Map<string, EditableLabelEntry>} */
-      const labels = new Map((state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry]));
+      const labels = new Map(state.editableLabels.value.map((entry) => [entry.featureId, entry]));
       featuresBySearchId = new Map();
       searchIndex = buildFeatureSearchIndex({
-        features: featureList.value.rows.map((/** @type {FeatureLike} */ feature) => {
+        features: featureList.value.rows.map((/** @type {FeatureLike & VisibilityFeature} */ feature) => {
           const renderedId = featureListState(feature).renderedId;
           const searchId = renderedId || String(feature.id || '');
           featuresBySearchId.set(searchId, feature);
@@ -285,8 +293,8 @@ export const createPreviewFeatureSearch = ({
   };
   const updateRenderedCount = () => {
     previewFeatureSearchRenderedCount.value =
-      state.featureCatalog?.value?.items?.[selectedResultIndex.value]?.features?.length
-      ?? state.extractedFeatures.value?.length ?? 0;
+      state.featureCatalog.value?.items[selectedResultIndex.value]?.features.length
+      ?? state.extractedFeatures.value.length;
   };
   const ensureFeatureElementIndex = (svg = getSvg()) => {
     if (featureElementIndexSvg !== svg || !featureElementIndex) {
@@ -496,7 +504,7 @@ export const createPreviewFeatureSearch = ({
         canvasPan
       });
     }
-    if (clickedFeature?.value) {
+    if (clickedFeature.value) {
       openActiveMatch({ center: false });
     }
   };
@@ -597,7 +605,7 @@ export const createPreviewFeatureSearch = ({
   });
   watch([selectedResultIndex, svgContent], invalidateFeatureElementIndex);
   watch([
-    () => (state.editableLabels?.value || []).map((/** @type {EditableLabelEntry} */ entry) => [entry.featureId, entry.sourceText, entry.text]),
+    () => state.editableLabels.value.map((entry) => [entry.featureId, entry.sourceText, entry.text]),
     () => Object.values(state.activeDrawing().featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
     () => state.activeDrawing().labelTextBulkOverrides,
     () => state.activeDrawing().orthogroupNameOverrides,
