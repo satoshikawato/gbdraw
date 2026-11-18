@@ -4,14 +4,12 @@ import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   dirname,
   extname,
@@ -45,6 +43,7 @@ import {
   literalImportSpecifiers,
   maskJavaScript
 } from '../../tools/web-change-source.mjs';
+import { makeTempDirSync, removeTempDir } from './helpers/temp-dir.cjs';
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const JAVASCRIPT_ROOT = join(REPOSITORY_ROOT, 'gbdraw/web/js');
@@ -2459,7 +2458,7 @@ const writeFixtureFile = (root, path, content) => {
 };
 
 const withChangeBudgetRepository = (runCase) => {
-  const root = mkdtempSync(join(tmpdir(), 'gbdraw-web-budget-'));
+  const root = makeTempDirSync('gbdraw-web-budget-');
   try {
     Object.entries(BUDGET_FIXTURE).forEach(([path, content]) => {
       writeFixtureFile(root, path, content);
@@ -2512,7 +2511,8 @@ const withChangeBudgetRepository = (runCase) => {
       write: (path, content) => writeFixtureFile(root, path, content)
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    // Each fixture repository is removed with its case: together they hold 1.3 GB.
+    removeTempDir(root);
   }
 };
 
@@ -2950,7 +2950,7 @@ const withTrustedArchitectureRepository = (
   baseFiles = {},
   executionEnvironment = {}
 ) => {
-  const root = mkdtempSync(join(tmpdir(), 'gbdraw-architecture-ratchet-'));
+  const root = makeTempDirSync('gbdraw-architecture-ratchet-');
   try {
     const fixtureFiles = { ...TRUSTED_ARCHITECTURE_FIXTURE_FILES, ...baseFiles };
     if (!Object.hasOwn(baseFiles, 'tools/web-product-impact-map.json')) {
@@ -3005,7 +3005,8 @@ const withTrustedArchitectureRepository = (
       output: `${result.stdout || ''}${result.stderr || ''}`
     });
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    // Each fixture repository is removed with its case: together they hold 1.3 GB.
+    removeTempDir(root);
   }
 };
 
@@ -7824,6 +7825,7 @@ test('a count-baseline test keeps its registered literals readable alongside run
 // type ratchets count with) does not change alongside production code either.
 const COUNTING_CODE_PATHS = Object.freeze([
   'tests/web/helpers/count-baseline.mjs',
+  'tests/web/helpers/temp-dir.cjs',
   'tests/web/types/tsconfig.json',
   'tests/web/types/web-globals.d.ts',
   'tools/report-web-owner-graph.mjs'

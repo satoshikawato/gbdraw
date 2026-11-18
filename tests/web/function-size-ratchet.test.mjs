@@ -57,14 +57,14 @@
 // its root function took another name) is reported as removable, whatever its
 // value.
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.mjs';
 import { compareCountBaseline, reportLowerable, typescriptApi } from './helpers/count-baseline.mjs';
+import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 // 150 lines at the median density of the functions of 100 to 200 lines when
 // the limit moved from lines to statements (1.76 lines a statement, 2026-11-10).
@@ -328,7 +328,7 @@ const rootFunctionProblem = (path, roots) => (roots.length === 1 ? null
     + 'a composition root creates its owners in one root function');
 
 test('a function counts the statements in its body and is named by its binding', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'web-function-size-'));
+  const directory = makeTempDirSync('web-function-size-');
   const file = join(directory, 'fixture.js');
   writeFileSync(file, [
     '/** A JSDoc block does not count. */',
@@ -358,33 +358,29 @@ test('a function counts the statements in its body and is named by its binding',
     'export default () => {};',
     ''
   ].join('\n'));
-  try {
-    const functions = (await measure([file])).get(file);
-    assert.deepEqual(functions.map(({ name, line, statements }) => `${line} ${name}: ${statements}`), [
-      '2 outer: 12',
-      '3 outer.inner: 1',
-      '6 outer.forEach(): 1',
-      '9 outer.ready: 1',
-      '12 outer.doubled: 1',
-      '13 outer.actions.run: 1',
-      '13 outer.actions.stop: 1',
-      '17 Store.constructor: 0',
-      '18 Store.size: 1',
-      '19 Store.handler: 0',
-      '21 window.onload: 0',
-      '22 pick: 1',
-      '22 pick.choose: 1',
-      '23 map(): 0',
-      '24 (anonymous): 0',
-      '25 default: 0'
-    ]);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const functions = (await measure([file])).get(file);
+  assert.deepEqual(functions.map(({ name, line, statements }) => `${line} ${name}: ${statements}`), [
+    '2 outer: 12',
+    '3 outer.inner: 1',
+    '6 outer.forEach(): 1',
+    '9 outer.ready: 1',
+    '12 outer.doubled: 1',
+    '13 outer.actions.run: 1',
+    '13 outer.actions.stop: 1',
+    '17 Store.constructor: 0',
+    '18 Store.size: 1',
+    '19 Store.handler: 0',
+    '21 window.onload: 0',
+    '22 pick: 1',
+    '22 pick.choose: 1',
+    '23 map(): 0',
+    '24 (anonymous): 0',
+    '25 default: 0'
+  ]);
 });
 
 test('comments, JSDoc, blank lines and line breaks change no statement count', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'web-function-statements-'));
+  const directory = makeTempDirSync('web-function-statements-');
   const compact = join(directory, 'compact.js');
   const spread = join(directory, 'spread.js');
   writeFileSync(compact, [
@@ -412,16 +408,12 @@ test('comments, JSDoc, blank lines and line breaks change no statement count', a
     '}',
     ''
   ].join('\n'));
-  try {
-    const measured = await measure([compact, spread]);
-    const counts = (file) => measured.get(file).map(({ name, statements }) => `${name}: ${statements}`);
-    // total, the expression body of the reduce() callback, if, its return,
-    // return, and the return of the map() callback.
-    assert.deepEqual(counts(compact), ['sum: 6', 'sum.total: 1', 'sum.map(): 1']);
-    assert.deepEqual(counts(spread), counts(compact));
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const measured = await measure([compact, spread]);
+  const counts = (file) => measured.get(file).map(({ name, statements }) => `${name}: ${statements}`);
+  // total, the expression body of the reduce() callback, if, its return,
+  // return, and the return of the map() callback.
+  assert.deepEqual(counts(compact), ['sum: 6', 'sum.total: 1', 'sum.map(): 1']);
+  assert.deepEqual(counts(spread), counts(compact));
 });
 
 test('no Web function has more statements than MAX_FUNCTION_STATEMENTS or its FUNCTION_STATEMENTS entry', async (t) => {
@@ -462,7 +454,7 @@ test('no Web function has more statements than MAX_FUNCTION_STATEMENTS or its FU
 });
 
 test('the logic of a composition root is every function of two or more statements written directly in its root function', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'web-root-logic-'));
+  const directory = makeTempDirSync('web-root-logic-');
   const file = join(directory, 'fixture.js');
   writeFileSync(file, [
     "import { createOwner } from './owner.js';",
@@ -493,24 +485,20 @@ test('the logic of a composition root is every function of two or more statement
     '};',
     ''
   ].join('\n'));
-  try {
-    const { roots, logic, wiring } = (await measure([file], compositionRootOf)).get(file);
-    assert.deepEqual(roots.map(({ name, line }) => `${line} ${name}`), ['6 createRoot']);
-    assert.deepEqual(logic.map(({ name, line, statements }) => `${line} ${name}: ${statements}`), [
-      '8 createRoot.owner.onPick: 2',
-      '16 createRoot.run: 3',
-      '20 createRoot.reset: 2'
-    ]);
-    // getValue, getNext, the getter and the callback of watch(), steps.first
-    // and size: one statement each.
-    assert.equal(wiring, 6);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const { roots, logic, wiring } = (await measure([file], compositionRootOf)).get(file);
+  assert.deepEqual(roots.map(({ name, line }) => `${line} ${name}`), ['6 createRoot']);
+  assert.deepEqual(logic.map(({ name, line, statements }) => `${line} ${name}: ${statements}`), [
+    '8 createRoot.owner.onPick: 2',
+    '16 createRoot.run: 3',
+    '20 createRoot.reset: 2'
+  ]);
+  // getValue, getNext, the getter and the callback of watch(), steps.first
+  // and size: one statement each.
+  assert.equal(wiring, 6);
 });
 
 test('a composition root module without exactly one root function fails by name', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'web-root-function-'));
+  const directory = makeTempDirSync('web-root-function-');
   const none = join(directory, 'none.js');
   const two = join(directory, 'two.js');
   writeFileSync(none, [
@@ -528,18 +516,14 @@ test('a composition root module without exactly one root function fails by name'
     '};',
     ''
   ].join('\n'));
-  try {
-    const measured = await measure([none, two], compositionRootOf);
-    assert.equal(rootFunctionProblem('app/none.js', measured.get(none).roots),
-      'gbdraw/web/js/app/none.js: 0 top-level functions create owners; '
-      + 'a composition root creates its owners in one root function');
-    assert.equal(rootFunctionProblem('app/two.js', measured.get(two).roots),
-      'gbdraw/web/js/app/two.js: 2 top-level functions create owners (createFirst at line 2, createSecond at line 3); '
-      + 'a composition root creates its owners in one root function');
-    assert.deepEqual(measured.get(two).logic, []);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const measured = await measure([none, two], compositionRootOf);
+  assert.equal(rootFunctionProblem('app/none.js', measured.get(none).roots),
+    'gbdraw/web/js/app/none.js: 0 top-level functions create owners; '
+    + 'a composition root creates its owners in one root function');
+  assert.equal(rootFunctionProblem('app/two.js', measured.get(two).roots),
+    'gbdraw/web/js/app/two.js: 2 top-level functions create owners (createFirst at line 2, createSecond at line 3); '
+    + 'a composition root creates its owners in one root function');
+  assert.deepEqual(measured.get(two).logic, []);
 });
 
 test('the logic written in each composition root does not grow beyond COMPOSITION_ROOT_LOGIC_STATEMENTS', async (t) => {
