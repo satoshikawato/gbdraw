@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { WebState } from '../../state.js' */
 /** @import { ShowNotice } from '../app-messages.js' */
 import { buildFeatureOverrideTable } from '../run-info.js';
 import {
@@ -69,7 +70,8 @@ export const replaceFeatureEdits = (slice, rows, records) => {
 
 /**
  * @typedef {object} FeatureEditTableOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'errorLog' | 'sessionOperationAvailability'>} state
+ *   the members of the Web state (`state.js`) the table actions read
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {() => Record<string, any> | null} getCommittedSession The committed canonical Session (render request and resources).
@@ -122,7 +124,7 @@ export const createFeatureEditTableActions = ({
   const failure = ref(null);
   const keepRetryCopy = createRetryCopyHold();
   const canRetryFeatureEditTableImport = computed(() => Boolean(failure.value
-    && state.errorLog?.value === failure.value.error));
+    && state.errorLog.value === failure.value.error));
   const retryFeatureEditTableImport = () => (canRetryFeatureEditTableImport.value ? failure.value.retry() : false);
   const reselectFeatureEditTable = () => {
     if (canRetryFeatureEditTableImport.value) failure.value.input?.click?.();
@@ -131,7 +133,7 @@ export const createFeatureEditTableActions = ({
   /** @param {{ target: LabelTableInput | null, sourceInput?: LabelTableInput }} event A file input's change event, or the retry's stand-in for it. */
   const loadFeatureEditTable = async (event) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const input = event?.target;
     const file = input?.files?.[0];
@@ -151,11 +153,11 @@ export const createFeatureEditTableActions = ({
         resources: committed.resources
       });
       // A Generate that finished meanwhile names other records.
-      if (getCommittedSession() !== committed || state.sessionOperationAvailability?.()) return false;
+      if (getCommittedSession() !== committed || state.sessionOperationAvailability()) return false;
       const { rows, unmatchedRows } = admitFeatureOverrideTable(response?.result, records);
       replaceFeatureEdits(drawing.slices.featureEdits, rows, records);
       await projectFeatureEdits();
-      if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
+      if (state.errorLog.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
       keepRetryCopy(null);
       showNotice({
@@ -167,7 +169,7 @@ export const createFeatureEditTableActions = ({
       return true;
     } catch (error) {
       const model = normalizeUserFacingError(error, { operation: OPERATION, stage: 'helper' });
-      if (state.errorLog) state.errorLog.value = model;
+      state.errorLog.value = model;
       const sourceInput = event.sourceInput || input;
       failure.value = { error: model, input: sourceInput,
         retry: () => loadFeatureEditTable({ target: { files: [file], value: '' }, sourceInput }) };

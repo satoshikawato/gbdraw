@@ -83,6 +83,8 @@ const state = {
   selectedResultIndex: ref(0),
   svgContent: ref('<svg></svg>'),
   extractedFeatures: ref([feature]),
+  featureCatalog: ref(null),
+  editableLabels: ref([]),
   featureList: ref({ rows: [feature, hidden] }),
   featureListState: (row) => ({ drawn: row === feature, renderedId: row === feature ? row.svg_id : '' }),
   orthogroups: ref([]),

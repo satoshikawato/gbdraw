@@ -91,6 +91,8 @@ const createFixture = () => {
     selectedResultIndex: ref(0),
     svgContent: ref('<svg></svg>'),
     extractedFeatures: ref([kinase, phosphatase]),
+    featureCatalog: ref(null),
+    editableLabels: ref([]),
     featureList: ref({ rows: [kinase, phosphatase] }),
     featureListState: (row) => ({ drawn: true, renderedId: row.svg_id }),
     orthogroups: ref([]),

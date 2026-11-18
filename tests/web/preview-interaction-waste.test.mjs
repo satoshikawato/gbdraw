@@ -388,7 +388,8 @@ const createPreview = ({ features, bands, extraElements = [] }) => {
     extractedFeatures: ref(features), biologicalFeatures: ref([]), featuresBySvgId: ref(featureMap),
     svgContainer: ref(surface), clickedFeature: ref(null), clickedFeaturePos: { x: 0, y: 0 },
     clickedPairwiseMatch: ref(null), clickedPairwiseMatchPos: { x: 0, y: 0 },
-    selectedAnnotation: ref(null), featurePopupSize: { width: 0, height: 0 }, featureSelectionDrag: { active: false }
+    selectedAnnotation: ref(null), featurePopupSize: { width: 0, height: 0 }, featureSelectionDrag: { active: false },
+    layoutRepositionMode: ref(false), canvasContainerRef: ref(canvas), featureCatalog: ref(null), errorLog: ref(null)
   });
   const actions = createFeatureSvgActions({
     state,

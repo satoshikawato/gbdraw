@@ -953,7 +953,7 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     orthogroup_push = feature_catalog.index("context.orthogroups.push(expanded);")
     assert orthogroup_push < feature_catalog.index("context.collinearGroups.push(expanded);")
     for fragment in (
-        "const groupsForMatch = () => orthogroups?.value || [];",
+        "const groupsForMatch = () => orthogroups.value;",
         "orthogroups: groupsForMatch(),",
         "orthogroups: groupsForMatch,",
         "const payload = buildMatchPayload(drawing, matchElement, featureLookup);",
