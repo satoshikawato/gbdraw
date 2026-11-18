@@ -1668,13 +1668,14 @@ def list_gff_fasta_records(gff_path, fasta_path):
     """List the records load_gff_fasta reads: GFF3 records the FASTA names, in FASTA order."""
     try:
         from gbdraw.io.genome import load_gff_fasta
+        from gbdraw.layout.record_transform import detected_topology
         records = load_gff_fasta([gff_path], [fasta_path])
         payload = [
             {
                 "selector": f"#{idx + 1}",
                 "record_id": str(record.id or f"Record_{idx + 1}"),
                 "record_length": len(record.seq),
-                "topology": "unknown",
+                "topology": detected_topology(record, "gff_fasta"),
             }
             for idx, record in enumerate(records)
         ]

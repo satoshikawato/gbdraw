@@ -23,11 +23,12 @@ DetectedTopology = Literal["circular", "linear", "unknown"]
 
 
 def detected_topology(record: SeqRecord, source_kind: str) -> DetectedTopology:
-    """The topology a record's file states; a GFF3/FASTA source states none."""
+    """The topology a record's file states: a GenBank LOCUS line, or a GFF3 landmark's ``Is_circular=true``
+    (circular; a GFF3/FASTA source states nothing else)."""
 
     value = str(record.annotations.get("topology", "")).strip().lower()
     if source_kind == "gff_fasta":
-        return "unknown"
+        return "circular" if value == "circular" else "unknown"
     if value == "circular":
         return "circular"
     if value == "linear":

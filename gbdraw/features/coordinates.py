@@ -4,7 +4,7 @@
 import logging
 from typing import List, NamedTuple, Protocol, Sequence, Tuple, cast
 
-from Bio.SeqFeature import AfterPosition, BeforePosition, CompoundLocation, ExactPosition, SimpleLocation
+from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
 
 from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
 from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval, strand_ordered
@@ -53,16 +53,6 @@ class _Span(Protocol):
     def end(self) -> int: ...
 
 
-def location_parts_text(parts: Sequence[tuple[int, int, int | None]]) -> str:
-    """A location's parts (0-based, half-open, with Biopython strands) as a GenBank file writes them: 1-based, in
-    ``join`` when there are several, in ``complement`` when the first part is on the minus strand. Messages that name
-    a feature write its location this way."""
-
-    text = ",".join(f"{start + 1}..{end}" for start, end, _strand in parts)
-    text = text if len(parts) == 1 else f"join({text})"
-    return f"complement({text})" if parts and parts[0][2] == -1 else text
-
-
 def location_fits_record(parts: Sequence[_Span], length: int, *, over_origin: bool) -> bool:
     """Whether a location fits in a record of ``length`` bases (OV-3678, OV-3724).
 
@@ -76,31 +66,6 @@ def location_fits_record(parts: Sequence[_Span], length: int, *, over_origin: bo
         return 0 <= start and (end <= length or over_origin and start < length and end - start <= length)
 
     return all(fits(int(part.start), int(part.end)) for part in parts)
-
-
-def location_over_origin(
-    location: SimpleLocation | CompoundLocation, length: int
-) -> SimpleLocation | CompoundLocation:
-    """``location`` with each part that runs past the end of a record of ``length`` bases written as the span over
-    the origin it is: the part up to the end, then the part from the start, in the order of the part's strand, as a
-    GenBank file writes ``join(81..100,1..10)`` for GFF3's ``81..110`` on 100 bp. ``location`` itself when no part
-    runs past the end. The location must fit (``location_fits_record`` with ``over_origin``)."""
-
-    if all(int(part.end) <= length for part in location.parts):
-        return location
-    parts: list[SimpleLocation] = []
-    for part in location.parts:
-        if int(part.end) <= length:
-            parts.append(part)
-            continue
-        end = type(part.end)(int(part.end) - length)
-        pieces = [
-            SimpleLocation(part.start, ExactPosition(length), part.strand),
-            SimpleLocation(ExactPosition(0), end, part.strand),
-        ]
-        parts.extend(pieces[::-1] if part.strand == -1 else pieces)
-    operator = location.operator if isinstance(location, CompoundLocation) else "join"
-    return CompoundLocation(parts, operator=operator)
 
 
 class OriginCrossing(NamedTuple):

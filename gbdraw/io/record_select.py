@@ -17,6 +17,7 @@ from Bio.SeqRecord import SeqRecord
 from ..analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, reversed_window_source, window_source
 from ..core.numeric import parse_ascii_nonnegative_integer
 from ..core.record_metadata import (
+    location_over_origin,
     _copy_source_feature_identity,
     _feature_source_index_map,
     _holder_of,
@@ -242,7 +243,12 @@ def reverse_records(
         period = _source_period(rec)
 
         def reverse_feature(feature):
-            reversed_feature = feature._flip(record_length)
+            # A part past the record's end is a span over its origin (fit_features_to_record kept it so): it flips
+            # as the join it is, never to a start below 0 (OV-3724).
+            joined = location_over_origin(feature.location, record_length) if feature.location is not None else None
+            reversed_feature = (
+                feature if joined is feature.location else SeqFeature(joined, type=feature.type, qualifiers=feature.qualifiers, id=feature.id)
+            )._flip(record_length)
             _copy_source_feature_identity(
                 feature,
                 reversed_feature,

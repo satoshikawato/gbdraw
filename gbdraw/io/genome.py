@@ -12,6 +12,7 @@ import string
 from typing import Callable, List, Dict, Literal
 
 from Bio import SeqIO
+from Bio.SeqIO.InsdcIO import _insdc_location_string
 from Bio.Seq import Seq
 from Bio.SeqFeature import CompoundLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -35,7 +36,7 @@ from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationErro
 from gbdraw.core.record_metadata import (
     _copy_source_feature_identity, _feature_source_index_map, _read_coord_map, _source_period,
 )
-from gbdraw.features.coordinates import location_fits_record, location_over_origin, location_parts_text
+from gbdraw.features.coordinates import location_fits_record
 from gbdraw.features.source import SourceFeatureCatalog, capture_source_features
 
 logger = logging.getLogger(__name__)
@@ -508,6 +509,18 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
     return record
 
 
+def _state_gff3_topology(record: SeqRecord) -> None:
+    """Record the topology a GFF3 file states for a sequence: ``Is_circular=true`` on its landmark feature (the
+    ``region`` line) makes it circular, as a GenBank LOCUS line does (``detected_topology`` reads it). GFF3 writes a
+    feature over a circular origin with an end past the sequence's length."""
+
+    for feature in record.features:
+        values = feature.qualifiers.get("Is_circular") or ()
+        if any(str(value).strip().lower() == "true" for value in values):
+            record.annotations["topology"] = "circular"
+            return
+
+
 def scan_features_recursive(
     features: List[SeqFeature], feature_types_to_keep: AbstractSet[str] | None,
     source_indexes: dict[int, int] | None = None,
@@ -580,15 +593,14 @@ class FeatureOutsideRecord:
     feature_type: str
     # Its first ``locus_tag``, ``gene``, ``label`` or ``product``, if it has one.
     name: str | None
-    # Its location as a GenBank file writes it (``location_parts_text``).
+    # Its location as a GenBank file writes it: strands, partial ends and fuzzy positions included.
     location: str
 
 
-def _feature_outside_record(feature: SeqFeature) -> FeatureOutsideRecord:
+def _feature_outside_record(feature: SeqFeature, length: int) -> FeatureOutsideRecord:
     qualifiers = feature.qualifiers or {}
     names = (str(value) for key in _FEATURE_NAME_QUALIFIERS for value in qualifiers.get(key, ())[:1])
-    parts = tuple((int(part.start), int(part.end), part.strand) for part in feature.location.parts)
-    return FeatureOutsideRecord(str(feature.type), next(names, None), location_parts_text(parts))
+    return FeatureOutsideRecord(str(feature.type), next(names, None), _insdc_location_string(feature.location, length))
 
 
 @dataclass(frozen=True)
@@ -598,8 +610,6 @@ class FittedRecord:
     record: SeqRecord
     # The features left out, in source order.
     outside: tuple[FeatureOutsideRecord, ...]
-    # How many kept features had a part past the record's end, now written as a span over the origin.
-    spans_over_origin: int
 
 
 def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRecord:
@@ -608,10 +618,10 @@ def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRec
     The one owner of whether a feature fits its record (``location_fits_record``): a record is planned through it
     before any crop, so no drawing, label, legend or analysis reads a feature outside its record. ``over_origin`` is
     true for a record drawn as a circle: there a part that starts in the record and runs past its end is a span over
-    the origin, written as the join it is (``location_over_origin``), so every drawer reads it as it reads
-    ``join(81..100,1..10)``; on any other record it does not fit. A record whose features all fit as written is
-    returned as it is. Otherwise every kept feature is a copy that carries its source identity (index, location
-    facts and hash), as the GFF3 type filter's copies do, so edits and colors still find each one.
+    the origin (GFF3 writes one so), kept as written; Linear draws it as the join it is (``location_over_origin``).
+    On any other record such a part does not fit. A record whose features all fit is returned as it is. Otherwise
+    the kept features are copies that carry their source identity (index, location facts and hash), as the GFF3 type
+    filter's copies do, so edits and colors still find each one.
     """
 
     length = len(record.seq)
@@ -620,22 +630,15 @@ def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRec
         if feature.location is not None
         and not location_fits_record(feature.location.parts, length, over_origin=over_origin)
     ]
+    if not outside:
+        return FittedRecord(record, ())
     left_out = {id(feature) for feature in outside}
-    rewritten = {
-        id(feature): location
-        for feature in record.features
-        if feature.location is not None and id(feature) not in left_out
-        and (location := location_over_origin(feature.location, length)) is not feature.location
-    }
-    if not outside and not rewritten:
-        return FittedRecord(record, (), 0)
     indexes = _feature_source_index_map(record.features)
     base, step = _read_coord_map(record)
     period = _source_period(record)
 
     def carried(feature: SeqFeature) -> SeqFeature:
         kept = copy.copy(feature)
-        kept.location = rewritten.get(id(feature), feature.location)
         _copy_source_feature_identity(
             feature, kept, index=indexes[id(feature)], coord_base=base, coord_step=step, period=period,
         )
@@ -645,7 +648,7 @@ def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRec
 
     fitted = copy.copy(record)
     fitted.features = [carried(feature) for feature in record.features if id(feature) not in left_out]
-    return FittedRecord(fitted, tuple(_feature_outside_record(feature) for feature in outside), len(rewritten))
+    return FittedRecord(fitted, tuple(_feature_outside_record(feature, length) for feature in outside))
 
 
 @contextmanager
@@ -738,6 +741,7 @@ def parse_gff_fasta(
         for record in gff_records:
             canonicalize_feature_types(record.features)
             _normalize_gff3_multipart_features(record)
+            _state_gff3_topology(record)
         if not gff_records:
             raise ValidationError(f"GFF3 file {gff_file} has no feature lines.", diagnostic=_GFF_WITHOUT_FEATURES)
         catalogs = {

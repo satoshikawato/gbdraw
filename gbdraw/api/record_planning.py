@@ -99,7 +99,6 @@ from .options import (
 )
 from gbdraw.features.source import SourceFeatureCatalog, SourceFeatureIdentity, capture_source_features
 from gbdraw.annotations.models import FeatureSelector
-from gbdraw.features.coordinates import location_parts_text
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
@@ -300,8 +299,6 @@ class ResolvedRecordProvenance:
     # The features left out when the record was planned because they do not fit in it
     # (``fit_features_to_record``); the input summary names them.
     features_outside_record: tuple[FeatureOutsideRecord, ...] = field(default=(), kw_only=True)
-    # How many features had a part past the record's end that planning wrote as a span over the origin.
-    feature_spans_over_origin: int = field(default=0, kw_only=True)
     # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
     window: ResolvedWindow | None = field(default=None, kw_only=True)
     # The record whose window an earlier plan drew this record as, when this plan draws it whole (``RecordOrigin``).
@@ -1325,7 +1322,9 @@ def with_origin_feature_starts(
 def _feature_location_text(feature: SourceFeatureIdentity) -> str:
     """The feature's span in 1-based source coordinates, with ``complement`` for the minus strand."""
 
-    return location_parts_text(feature.location_parts)
+    parts = ",".join(f"{start + 1}..{end}" for start, end, _strand in feature.location_parts)
+    text = parts if len(feature.location_parts) == 1 else f"join({parts})"
+    return f"complement({text})" if feature.location_parts[0][2] == -1 else text
 
 
 @dataclass(frozen=True)
@@ -2242,7 +2241,6 @@ def resolve_record_inputs(
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,
                 features_outside_record=fitted.outside,
-                feature_spans_over_origin=fitted.spans_over_origin,
             )
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)

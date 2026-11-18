@@ -142,7 +142,7 @@ from gbdraw.labels.filtering import (
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
 from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import detected_topology
+from gbdraw.layout.record_transform import detected_topology, drawn_circular
 from gbdraw.layout.record_units import left_off_circle, record_units
 from gbdraw.linear_comparison import auto_orient_reversed_records, search_frame_linear_comparisons
 from gbdraw.mode_profiles import ComparisonThresholds
@@ -1548,8 +1548,17 @@ def _normalize_request_records(
     gff_type_key = None if gff_types is None else tuple(sorted(gff_types))
     input_keys = tuple(_record_input_preparation_key(item) for item in request.records)
     collection_key = _record_collection_preparation_key(request.record_options)
-    # Whether a record is drawn as a circle decides how a feature past its end reads (``fit_features_to_record``).
-    circle_key = (circle_diagram, tuple(item.display.is_circular for item in request.records))
+    # Whether each record is drawn as a circle decides whether a feature part past its end fits
+    # (``fit_features_to_record``); a record read alike in both modes keeps its hit across a mode switch.
+    circle_key = tuple(
+        tuple(
+            circle_diagram or drawn_circular(
+                item.display.is_circular, detected_topology(record, _source_details(item.source)[0]),
+            )
+            for record in load_render_source_records(item.source).records
+        )
+        for item in request.records
+    )
     key = (
         "resolved-records-v1",
         tuple(source_key for source_key, _identities in typed_source_specs),
@@ -1578,11 +1587,8 @@ def _normalize_request_records(
                 gff_type_key if isinstance(request.records[input_index].source, GffFastaInputSource) else None,
                 # Each window of a record is its own drawn record (D-01).
                 *(() if provenance.window is None else (provenance.window.index,)),
-                # The features fitting the record left out or wrote over the origin, which the circle key decides.
-                *(
-                    () if not provenance.features_outside_record and not provenance.feature_spans_over_origin
-                    else (provenance.features_outside_record, provenance.feature_spans_over_origin)
-                ),
+                # The features fitting the record left out, which the circle key decides.
+                *(() if not provenance.features_outside_record else (provenance.features_outside_record,)),
             )
             if default_collection
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)

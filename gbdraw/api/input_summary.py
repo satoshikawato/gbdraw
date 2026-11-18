@@ -112,7 +112,7 @@ class RecordInputSummary:
     # The shortest record one circle draws, when this record is shorter and so not drawn
     # (``gbdraw.layout.record_units.left_off_circle``); ``features`` is then empty.
     left_off_circle_under_bp: int | None = None
-    # The features left out because they do not fit in the source record (``leave_out_features_outside_record``).
+    # The features left out because they do not fit in the source record (``fit_features_to_record``).
     features_outside_record: tuple[FeatureOutsideRecord, ...] = ()
 
     @property
@@ -413,6 +413,12 @@ def input_summary_lines(summary: InputSummary) -> tuple[str, ...]:
 def _no_feature_reason(record: RecordInputSummary) -> str:
     hidden = [(item.feature_type, item.hidden) for item in record.features if item.hidden]
     not_drawn = _types_not_drawn(record)
+    if outside := len(record.features_outside_record):
+        # The features that did not fit are the reason; adding a type would draw none of them.
+        reasons = [f"its {_count(outside, 'feature')} {'does' if outside == 1 else 'do'} not fit in the record"]
+        if hidden:
+            reasons.append(f"its {_type_counts(hidden)} features are hidden by a visibility rule or a feature edit")
+        return "; ".join(reasons)
     if record.region is not None and not hidden and not not_drawn:
         return f"its region {_region_text(record.region)} holds no feature of a type drawn"
     if not record.features:

@@ -473,7 +473,14 @@ comparison table or the table has no rows, and when an explicit track stack
 region annotation set; that line names the set and the `set_id` to add. It also
 follows when a similarity ring's comparison sequence file has a record ID that
 names more than one of its records: the ring draws every record, but the hover
-popup and the span export show the first record with that ID. These runs still
+popup and the span export show the first record with that ID. A `WARNING:` line
+also names the features left out because they do not fit in their record: a
+feature that starts after the record ends or is longer than the record, and in
+a Linear diagram a feature that runs past the end of a record that is not
+circular. A feature written past the end of a circular record (`81..110` on a
+100 bp record, as GFF3 writes a feature over the origin) is drawn over the
+origin; a GFF3 record is circular when its `region` line has
+`Is_circular=true`, or with `--record_topology circular`. These runs still
 write the figure and exit with status 0. A file with no record stops the run
 with an `ERROR:` line and status 1, and nothing is written.
 

@@ -3,14 +3,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Set, Tuple
 
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
 from ..core.record_metadata import (
+    location_over_origin,
     _feature_source_index_map,
 )
 from .ids import compute_source_feature_hash, feature_instances, shared_source_feature_hashes
@@ -36,6 +37,25 @@ if TYPE_CHECKING:
     from .placement import FeaturePlacementSlot, ResolvedRecordFeatureInputs
 
 
+class DrawnParts(NamedTuple):
+    """The parts a feature object draws and the record length over whose origin they may run (None when its spans
+    may not cross the origin)."""
+
+    parts: Sequence[SimpleLocation]
+    origin_length: int | None
+
+
+@dataclass(frozen=True)
+class FeatureLayerMode:
+    """What a diagram mode changes in its feature layers."""
+
+    # Circular: overlapping features of the two strands take tracks apart.
+    split_overlaps_by_strand: bool = False
+    # Linear: a part past the end of a record whose spans may cross its origin is drawn as the join over the origin
+    # (``location_over_origin``, OV-3724); Circular draws it by its angles.
+    past_end_as_join: bool = False
+
+
 def create_repeat_object(
     repeat_id: str,
     feature: SeqFeature,
@@ -48,16 +68,16 @@ def create_repeat_object(
     feature_override: ResolvedFeatureOverride | None = None,
     *,
     instance: Optional[str],
-    origin_length: int | None,
+    drawn: DrawnParts,
 ) -> RepeatObject:
     """
-    Creates a RepeatObject representing a repeat region in a genome.
+    Creates a RepeatObject representing a repeat region in a genome, drawn as ``drawn``.
     """
-    coordinates = feature.location.parts
+    coordinates = list(drawn.parts)
     rpt_family: str = feature.qualifiers.get("rpt_family", ["undefined"])[0]
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates, origin_length=origin_length)
+    location = get_exon_and_intron_coordinates(coordinates, origin_length=drawn.origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -96,14 +116,14 @@ def create_feature_object(
     feature_override: ResolvedFeatureOverride | None = None,
     *,
     instance: Optional[str],
-    origin_length: int | None,
+    drawn: DrawnParts,
 ) -> FeatureObject:
     """
-    Creates a FeatureObject representing a generic genomic feature.
+    Creates a FeatureObject representing a generic genomic feature, drawn as ``drawn``.
     """
-    coordinates = feature.location.parts
+    coordinates = list(drawn.parts)
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates, origin_length=origin_length)
+    location = get_exon_and_intron_coordinates(coordinates, origin_length=drawn.origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -140,18 +160,18 @@ def create_gene_object(
     feature_override: ResolvedFeatureOverride | None = None,
     *,
     instance: Optional[str],
-    origin_length: int | None,
+    drawn: DrawnParts,
 ) -> GeneObject:
     """
-    Creates a GeneObject representing a gene in a genome.
+    Creates a GeneObject representing a gene in a genome, drawn as ``drawn``.
     """
-    coordinates: List[SimpleLocation] = feature.location.parts
+    coordinates: List[SimpleLocation] = list(drawn.parts)
     note: str = feature.qualifiers.get("note", [""])[0]
     product: str = feature.qualifiers.get("product", [""])[0]
     gene: str = feature.qualifiers.get("gene", [""])[0]
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
-    location = get_exon_and_intron_coordinates(coordinates, is_trans_spliced, origin_length=origin_length)
+    location = get_exon_and_intron_coordinates(coordinates, is_trans_spliced, origin_length=drawn.origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
@@ -196,7 +216,7 @@ def _build_feature_layers(
     resolve_overlaps: bool,
     label_filtering,
     rendering_resolver: Callable[[str], FeatureRendering],
-    split_overlaps_by_strand: bool = False,
+    layer_mode: FeatureLayerMode = FeatureLayerMode(),
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
     record_transform: RecordDisplayTransform | None = None,
@@ -250,6 +270,14 @@ def _build_feature_layers(
             "rectangle" if rendering == "underlay" else rendering
         )
         include_label = compute_label_text and rendering != "underlay"
+        # A part past the end of a record whose spans may cross its origin is the join over the origin it is
+        # (OV-3724): a Linear axis and a display projection draw that join; the feature keeps its location, and
+        # Circular draws the part by its angles.
+        joined_parts = location_over_origin(feature.location, genome_length).parts if origin_length is not None else None
+        drawn = DrawnParts(
+            joined_parts if joined_parts is not None and layer_mode.past_end_as_join else feature.location.parts,
+            origin_length,
+        )
 
         feature_id: str
         feature_object: FeatureObject
@@ -267,7 +295,7 @@ def _build_feature_layers(
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
-                origin_length=origin_length,
+                drawn=drawn,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -284,7 +312,7 @@ def _build_feature_layers(
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
-                origin_length=origin_length,
+                drawn=drawn,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
@@ -301,7 +329,7 @@ def _build_feature_layers(
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
-                origin_length=origin_length,
+                drawn=drawn,
             )
         feature_object.source_feature_index = source_indexes[id(feature)]
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
@@ -309,7 +337,8 @@ def _build_feature_layers(
             feature_object.rendered_instance_index = feature_object.source_feature_index
         if record_transform is not None and record_transform.projects:
             feature_object.display_parts = project_feature_parts(
-                feature.location.parts, record_transform, origin_length=origin_length,
+                joined_parts if joined_parts is not None else feature.location.parts, record_transform,
+                origin_length=origin_length,
                 is_trans_spliced="trans_splicing" in feature.qualifiers,
             )
         if rendering == "underlay":
@@ -330,7 +359,7 @@ def _build_feature_layers(
             raise ValidationError("Feature placement requires resolved slot geometry.")
         arrange_feature_tracks(
             foreground_features, separate_strands, resolve_overlaps,
-            split_overlaps_by_strand=split_overlaps_by_strand,
+            split_overlaps_by_strand=layer_mode.split_overlaps_by_strand,
             genome_length=genome_length, tolerance_bp=feature_overlap_tolerance_bp,
         )
     return FeatureBuildResult(
@@ -348,7 +377,7 @@ def create_feature_layers(
     separate_strands: bool,
     resolve_overlaps: bool,
     label_filtering,
-    split_overlaps_by_strand: bool = False,
+    layer_mode: FeatureLayerMode = FeatureLayerMode(),
     feature_shapes: Mapping[str, str] | None = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
@@ -357,7 +386,8 @@ def create_feature_layers(
     placement_slot: FeaturePlacementSlot | None = None,
     feature_overlap_tolerance_bp: int = 0,
 ) -> FeatureBuildResult:
-    """Build visible features using the current rendering contract."""
+    """Build visible features using the current rendering contract; ``layer_mode`` holds what the diagram mode
+    changes (``FeatureLayerMode``)."""
 
     normalized_shapes = normalize_feature_shape_overrides(feature_shapes)
     return _build_feature_layers(
@@ -372,7 +402,7 @@ def create_feature_layers(
             feature_type,
             default_feature_rendering(feature_type),
         ),
-        split_overlaps_by_strand=split_overlaps_by_strand,
+        layer_mode=layer_mode,
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
         record_transform=record_transform,
@@ -418,7 +448,7 @@ def create_feature_dict(
         rendering_resolver=lambda feature_type: (
             "arrow" if feature_type in directional_types else "rectangle"
         ),
-        split_overlaps_by_strand=split_overlaps_by_strand,
+        layer_mode=FeatureLayerMode(split_overlaps_by_strand=split_overlaps_by_strand),
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
     )
@@ -429,6 +459,8 @@ __all__ = [
     "FeatureBuildResult",
     "create_feature_dict",
     "create_feature_layers",
+    "DrawnParts",
+    "FeatureLayerMode",
     "create_feature_object",
     "create_gene_object",
     "create_repeat_object",
