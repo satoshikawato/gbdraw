@@ -517,12 +517,7 @@ test('an object member\'s sample changes every leaf but the ones it names, and i
 // loses there: the guard expects exactly these losses, and the fix of a
 // defect removes its entries.
 /** @type {Record<string, { defect: string, leaves: readonly string[] }>} */
-const KNOWN_LOSSES = {
-  // OV-3705: a History restore merges a stored null under an object and keeps
-  // the object (`mergeStoredSettings`, services/config-field-readers.js), so
-  // the Undo of the step that set `one_circle_left` keeps it.
-  ...Object.fromEntries(MODES.map((mode) => [`${mode} adv history: Undo`, { defect: 'OV-3705', leaves: ['one_circle_left'] }])),
-};
+const KNOWN_LOSSES = {};
 /** The leaves where two captures of a member differ (a leaf under another that differs is in it). */
 const differingLeaves = (member, expected, actual) => {
   const [left, right] = [JSON.parse(expected)[member], JSON.parse(actual)[member]];
@@ -571,23 +566,63 @@ test('the guard reports exactly the member that a broken Duplicate or a broken S
     ['linear annotationSets saveLoad: Save then Load']);
 }));
 
-// Known defects: each case asserts today's outcome, and fails once the
-// defect is fixed; the fix removes the case and the workaround it names.
-// OV-3705: the Undo of choosing one circle leaves what one circle left
-// (`adv.one_circle_left`): a History restore merges the step's null under the
-// object and keeps it (`mergeStoredSettings`, services/config-field-readers.js).
-test('known defect OV-3705: Undo of choosing one circle keeps what one circle left', () => withBootPalettes(state, async () => {
+// OV-3705: a History restore installs the captured settings as they are, so
+// the Undo of choosing one circle gives back the null `adv.one_circle_left` the
+// step's state held (the restore replaces the object with the captured null),
+// and its Redo gives back what one circle left.
+test('Undo of choosing one circle gives back no record of what one circle left, and Redo gives it back', () => withBootPalettes(state, async () => {
   await bootBases();
   assert.equal((await loadSession(bases.plain.blob)).asked, null);
   const { drawingId: id } = app.drawingList.newDrawing('circular');
   assert.equal(captureMember(state.drawingOf(id), 'adv').one_circle_left, null);
   await history.runUndoable('Change setting', () => chooseRecordLayout(state.drawingOf(id), 'one_circle'));
-  assert.equal(captureMember(state.drawingOf(id), 'adv').circular_record_layout, 'one_circle');
+  const chosen = captureMember(state.drawingOf(id), 'adv');
+  assert.equal(chosen.circular_record_layout, 'one_circle');
+  assert.notEqual(chosen.one_circle_left, null, 'choosing one circle keeps what it leaves');
   await app.undoHistory();
-  const adv = captureMember(state.drawingOf(id), 'adv');
-  assert.equal(adv.circular_record_layout, 'grid');
-  assert.notEqual(adv.one_circle_left, null, 'OV-3705 no longer reproduces. Remove this case and the OV-3705 entries of '
-    + 'KNOWN_LOSSES.');
+  const undone = captureMember(state.drawingOf(id), 'adv');
+  assert.deepEqual([undone.circular_record_layout, undone.one_circle_left], ['grid', null]);
+  await app.redoHistory();
+  const redone = captureMember(state.drawingOf(id), 'adv');
+  assert.deepEqual([redone.circular_record_layout, redone.one_circle_left], ['one_circle', chosen.one_circle_left]);
+}));
+
+// OV-3696: Load places a track stack only when the drawing draws it (its Use
+// custom stack is on), as Generate does. A stack the drawing does not draw
+// keeps the unset sides, lane directions and Axis index a new drawing holds,
+// so Track Preset, Add feature density track and Use custom stack act after a
+// Load as on a new drawing (PD-OI-126); a custom stack it draws comes back as
+// saved. In a Circular and a Linear drawing.
+const STACK_FIELDS = ['circular_track_slots_enabled', 'circular_track_slots_axis_index', 'circular_track_slots',
+  'linear_track_slots_enabled', 'linear_track_slots_axis_index', 'linear_track_slots'];
+test('Save then Load gives back each track stack as saved, drawn or not', () => withBootPalettes(state, async () => {
+  await bootBases();
+  for (const mode of MODES) {
+    assert.equal((await loadSession(bases.plain.blob)).asked, null);
+    const { drawingId: id } = app.drawingList.newDrawing(mode);
+    state.drawingOf(id).form.plot_title = 'Stacks';
+    // A drawing with complete inputs, so its Session entry holds a request, whose projection the Load reads.
+    await bindRecords(state.drawingOf(id));
+    const stacks = () => {
+      const adv = captureMember(state.drawingOf(id), 'adv');
+      return Object.fromEntries(STACK_FIELDS.map((field) => [field, adv[field]]));
+    };
+    const saveThenLoadStacks = async () => {
+      if (state.activeDrawingId.value !== id) assert.deepEqual(app.selectDrawing(id), { status: 'ok' });
+      const { blob, refused } = await saveSession();
+      assert.equal(refused, null);
+      assert.equal((await loadSession(blob)).asked, null);
+      return stacks();
+    };
+    const fresh = stacks();
+    assert.equal(fresh[`${mode}_track_slots_axis_index`], null, `${mode}: a new drawing's stack is not placed`);
+    assert.deepEqual(await saveThenLoadStacks(), fresh, `${mode}: Load leaves the stacks the drawing does not draw as saved`);
+    if (mode === 'circular') app.setCircularTrackSlotsEnabled(true);
+    else app.setLinearTrackSlotsEnabled(true);
+    const drawn = stacks();
+    assert.equal(drawn[`${mode}_track_slots_enabled`], true);
+    assert.deepEqual(await saveThenLoadStacks(), drawn, `${mode}: Load gives back the custom stack the drawing draws`);
+  }
 }));
 
 // The 25 Session config domains (`CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`) are

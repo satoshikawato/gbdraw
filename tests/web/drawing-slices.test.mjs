@@ -363,7 +363,8 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
         `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
       // Back to the loaded fixture, which a Save and Load keep as it is (Load
-      // resolves the defaults Reset gives, such as the track placements).
+      // gives back what the file holds: a track stack the drawing does not
+      // draw keeps its unset placements, OV-3696).
       slice.install(modeDrawing(state, mode).slices[name], JSON.parse(loaded));
     }
   }

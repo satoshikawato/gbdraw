@@ -1246,8 +1246,11 @@ const READ_ELSEWHERE = new Set([
  * not used, except in a map of `FREE_KEY_MAPS`, where it is copied; it is
  * returned as a loss unless a gbdraw writer wrote it and later retired or
  * moved it (`RETIRED_STORED_FIELDS`, E-OD03; TB19, TB32). An object merges
- * into an object, and `null` over an object merges nothing; a list replaces
- * a list; a value of `target`'s kind, or `null` on either side, is copied.
+ * into an object, and `null` over an object merges nothing, except in
+ * settings the app captured (`captured`: History Undo and Redo, the Load
+ * rollback), where it is the value the app held and replaces the object
+ * (OV-3705); a list replaces a list; a value of `target`'s kind, or `null`
+ * on either side, is copied.
  * The app holds a blank number field as `null` (`v-blank-null`, OV-3351);
  * files of Session 50 and earlier hold some as the empty text. An empty text
  * where the default is `null`, or in a comparison filter
@@ -1263,9 +1266,10 @@ const READ_ELSEWHERE = new Set([
  * @param {unknown} source
  * @param {string} at
  * @param {Record<string, unknown> | null} defaults The fresh settings of the same place (`defaultSettingsContainers`).
+ * @param {{ captured?: boolean }} [options]
  * @returns {SettingLoss[]}
  */
-const mergeStoredSettings = (target, source, at, defaults) => {
+const mergeStoredSettings = (target, source, at, defaults, { captured = false } = {}) => {
   if (!source || typeof source !== 'object') return [];
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
@@ -1281,9 +1285,10 @@ const mergeStoredSettings = (target, source, at, defaults) => {
     // A blank number field an older file holds as the empty text is `null`, as the app holds it: where the default
     // is `null`, and in a comparison filter, whose kind rule counts a blank text as a number (`kindOf`).
     const sourceValue = stored[key] === '' && (fresh === null || NUMBER_OR_ITS_TEXT_FIELDS.includes(keyAt)) ? null : stored[key];
-    // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06).
-    if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || sourceValue === null)) {
-      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null);
+    // A null over a settings group holds nothing and merges nothing (OV-822, E-OD06); a captured null is the
+    // value the app held (OV-3705).
+    if (isPlainObject(targetValue) && (isPlainObject(sourceValue) || (sourceValue === null && !captured))) {
+      return mergeStoredSettings(targetValue, sourceValue, keyAt, isPlainObject(fresh) ? fresh : null, { captured });
     }
     if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
       targetValue.splice(0, targetValue.length, ...sourceValue);
@@ -1352,7 +1357,8 @@ export const installStoredSettings = (targets, stored, mode, { captured = false 
    * @param {'form' | 'adv' | 'losat' | 'circularConservation'} at
    */
   const merged = (at) => (isPlainObject(config[at]) || isUnsetValue(config[at])
-    ? mergeStoredSettings(targets[at], config[at], at, defaults[at]) : [{ at, stored: config[at], used: targets[at], kept: true }]);
+    ? mergeStoredSettings(targets[at], config[at], at, defaults[at], { captured })
+    : [{ at, stored: config[at], used: targets[at], kept: true }]);
   const losses = [
     ...merged('form'),
     ...merged('adv'),
@@ -1717,11 +1723,22 @@ export const configFieldRepairs = (targets, config, path, {
 };
 
 /**
- * The track stacks a drawing's settings resolve to: each stack with its axis
- * index read and its placements applied (`applyConfigData`'s
- * `resolveTrackPlacements`). Pure: Load reads the stacks it installs with it
- * before the commit, and `losses` collects what the slot readers replace
- * (OV-758; `at` under the settings).
+ * Whether the request draws the drawing's custom track stack of `stack`: its
+ * Use custom stack is on (the request builder reads only such a stack).
+ * @param {Record<string, unknown>} adv
+ * @param {'circular' | 'linear'} stack
+ */
+const drawsTrackStack = (adv, stack) => adv[`${stack}_track_slots_enabled`] === true;
+
+/**
+ * The track stacks a drawing's settings resolve to: each stack read, and a
+ * stack the request draws (`drawsTrackStack`) placed, with its axis index read
+ * or inferred (`applyConfigData`'s `resolveTrackPlacements`). A stack the
+ * request does not draw keeps its sides, lane directions and axis index as
+ * stored, unset ones unset, as a new drawing holds them (OV-3696; resolving
+ * them belongs to the request builder, R11). Pure: Load reads the stacks it
+ * installs with it before the commit, and `losses` collects what the slot
+ * readers replace (OV-758; `at` under the settings).
  * @param {Record<string, unknown>} adv The drawing's settings, read.
  * @param {Record<string, unknown>} form
  * @param {SettingLoss[] | null} [losses]
@@ -1739,16 +1756,17 @@ export const resolvedTrackStacks = (adv, form, losses = null) => {
   const nt = /** @type {string | undefined} */ (adv.nt);
   const trackType = /** @type {string | undefined} */ (form.track_type);
   const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, nt, trackType, circularLosses);
-  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
-  const circularAxis = importedAxis === null
-    ? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType)
-    : importedAxis;
+  const storedAxis = adv.circular_track_slots_axis_index;
+  const importedAxis = clampCircularTrackAxisIndex(storedAxis, normalizedSlots.length, circularAxisLosses);
+  const circularDrawn = drawsTrackStack(adv, 'circular');
+  // The index of a stack not drawn stays unset when it is unset (the clamp reads null as 0).
+  const circularAxis = circularDrawn ? importedAxis ?? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType)
+    : isUnsetValue(storedAxis) ? null : importedAxis;
   const linearStack = /** @type {Parameters<typeof normalizeLinearTrackSlots>[0]} */ (adv.linear_track_slots);
   const normalizedLinearSlots = normalizeLinearTrackSlots(linearStack, nt, form.linear_track_layout, linearLosses);
-  const linearAxis = resolveLinearTrackAxisIndex(
-    normalizedLinearSlots,
-    clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses)
-  );
+  const importedLinearAxis = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses);
+  const linearDrawn = drawsTrackStack(adv, 'linear');
+  const linearAxis = linearDrawn ? resolveLinearTrackAxisIndex(normalizedLinearSlots, importedLinearAxis) : importedLinearAxis;
   losses?.push(...[
     ...circularLosses.map((leaf) => ({ ...leaf, at: `adv.circular_track_slots${leaf.at}` })),
     ...circularAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.circular_track_slots_axis_index' })),
@@ -1757,9 +1775,11 @@ export const resolvedTrackStacks = (adv, form, losses = null) => {
   ]);
   return {
     circularAxis,
-    circularSlots: applyCircularTrackOrderPlacements(adv.circular_track_slots, nt, trackType, circularAxis),
+    circularSlots: circularDrawn
+      ? applyCircularTrackOrderPlacements(adv.circular_track_slots, nt, trackType, circularAxis) : normalizedSlots,
     linearAxis,
-    linearSlots: applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, nt, form.linear_track_layout)
+    linearSlots: linearDrawn
+      ? applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, nt, form.linear_track_layout) : normalizedLinearSlots
   };
 };
 

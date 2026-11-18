@@ -1,6 +1,7 @@
 // @ts-check
 import { drawnLegendRowStroke, legendRowKeys } from '../../services/legend-svg.js';
 import { clearStrokes, legendEntryKey, setLegendStroke } from '../../services/drawing/paint.js';
+import { storedOriginalStroke } from '../../services/style-overrides.js';
 /** @import { PythonLegendKey } from '../../services/legend-svg.js' */
 /** @import { StrokeOverride } from '../../services/style-overrides.js' */
 /** @import { WebState } from '../../state.js' */
@@ -37,8 +38,9 @@ export const createLegendStrokeActions = ({ state }) => {
   };
   const closeLegendStrokeOptions = () => legendStrokeOptionsOpen.clear();
 
+  // The stroke Python drew on the row's swatch, in the form the override stores and Load reads (OV-3702).
   /** @param {PythonLegendKey} key */
-  const drawnSwatchStroke = (key) => drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), key);
+  const drawnSwatchStroke = (key) => storedOriginalStroke(drawnLegendRowStroke(svgContainer.value?.querySelector?.('svg'), key));
 
   // The listed row at `idx`, and the keys of the rows it stands for (D-35:
   // a merged row's edit reaches every row it merges, `legendRowKeys`).

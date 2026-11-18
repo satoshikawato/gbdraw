@@ -123,9 +123,10 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.request.mode).toBe('linear');
     expect(restored.results).toEqual([]);
     // Load restores a drawing that holds a request over its request's
-    // projection, which resolves its track stacks (`resolvedTrackStacks`): an
-    // unset axis index of the draft is installed as the index Generate infers
-    // (OV-1786, OV-1870), and an unset slot placement as the one it resolves.
+    // projection (OV-1786), which reads its track stacks
+    // (`resolvedTrackStacks`): a stack the drawing does not draw keeps the
+    // unset axis index and slot placements of its draft (OV-3696); only a
+    // custom stack the request draws is placed, as Generate places it.
     // The Linear drawing Load added beside the Circular Session is a new
     // drawing at its mode's defaults, whose placements are unset (D-15-120).
     expect(before.config.adv.circular_track_slots_axis_index).toBeNull();
@@ -138,8 +139,8 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
         linear_track_slots_axis_index: stacks.linearAxis, linear_track_slots: stacks.linearSlots
       };
     }, before.config);
-    expect(resolvedStacks.circular_track_slots_axis_index).toBe(0);
-    expect(resolvedStacks.linear_track_slots_axis_index).toBe(0);
+    expect(resolvedStacks.circular_track_slots_axis_index).toBeNull();
+    expect(resolvedStacks.linear_track_slots_axis_index).toBeNull();
     expect(restored.config).toEqual({ ...before.config, adv: { ...before.config.adv, ...resolvedStacks } });
     expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
