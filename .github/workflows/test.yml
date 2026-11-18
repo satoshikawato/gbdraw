@@ -162,7 +162,8 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # About 1.5 times its longest run (9.9 minutes).
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -227,7 +228,8 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # About 1.5 times its longest run: the same Python version took about 12 or 24 minutes, by runner.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +297,8 @@ jobs:
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # About 1.5 times its longest run (23 minutes); its runner speed varies as Core's does.
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -758,7 +761,7 @@ jobs:
           -print0 | xargs -0 node --test
 
       - name: Run non-slow Python browser tests
-        timeout-minutes: 10
+        timeout-minutes: 15
         # The functional shards run the comparison contracts when the plan requires them.
         env:
           GITHUB_TOKEN: ${{ github.token }}
