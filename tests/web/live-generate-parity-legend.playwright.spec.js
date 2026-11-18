@@ -2479,6 +2479,33 @@ test('a Restore all that waits for a rerender restores only the rows deleted whe
   await expectLiveEqualsGenerate(page, { label: 'Restore all after a delete inside its wait' });
 });
 
+// A Session saved while a deleted row is stale holds Results without Python's
+// Legend row facts once loaded: Restore asks Python to draw the drawing again
+// before it reads them, so it lists no row for the stale key, and Generate
+// lists what Restore listed (OV-2412).
+test('a Session saved with a stale deleted row restores it after Load as Generate lists it (OV-2412)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  const row = await STALE_ROWS.stroke(page);
+  await deleteLegendRow(page, row);
+  await generate(page);
+  await STALE_ROUTES['its rule removed'](page, row);
+  const before = await legendEditorState(page);
+  const saved = testInfo.outputPath('stale-deleted-row.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  expect(await legendEditorState(loaded), 'Load keeps the deleted row and its edits').toEqual(before);
+  await evaluateWithRetainedPromise(loaded, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  await settleLive(loaded);
+  const restored = await legendEditorState(loaded);
+  expect(restored, 'Restore lists no row for the stale key and keeps its edits').toEqual({
+    listed: before.listed, deleted: [], edits: before.edits
+  });
+  await expectLiveEqualsGenerate(loaded, { label: 'the Restore after Load of a stale deleted row' });
+  expect((await legendEditorState(loaded)).listed, 'Generate lists the rows Restore listed').toEqual(restored.listed);
+  await loaded.context().close();
+});
+
 // PD-OI-114 scenario revision 2 (issue #1427): a Legend rename, deletion,
 // Restore, Move, and Sort, and Canvas padding, reach Python through the
 // request. On a figure drawn to a requested width the automatic rerender then

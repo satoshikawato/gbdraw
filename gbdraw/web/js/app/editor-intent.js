@@ -233,6 +233,8 @@ export const createEditorIntentShow = ({
  * @property {(options: { domains: readonly string[] }) => unknown} showEditorIntent
  * @property {() => unknown} requestAutomaticRerender Asks Python to draw the Result again (feature editor).
  * @property {() => Promise<void>} whenRedrawn Resolves once no Generate or rerender runs (feature editor).
+ * @property {() => unknown} getCommittedCanonicalRenderRequest The committed render request; none for a Result loaded
+ *   from a Session of versions 27 to 30.
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable One History step (History).
  */
 
@@ -243,7 +245,7 @@ export const createEditorIntentShow = ({
  */
 export const createMountedEditorIntentProjection = ({
   state, svgContainer, projectPaletteAndRules, projectFeatureVisibility, reconcileLabelOverrides, fillDomainsOf,
-  VISIBILITY_DOMAINS, showEditorIntent, requestAutomaticRerender, whenRedrawn, runUndoable
+  VISIBILITY_DOMAINS, showEditorIntent, requestAutomaticRerender, whenRedrawn, getCommittedCanonicalRenderRequest, runUndoable
 }) => {
   // One projection of the canonical editor intent onto the mounted Result,
   // shared by History apply, the display of another batch Result, and Load
@@ -288,7 +290,7 @@ export const createMountedEditorIntentProjection = ({
   // lacks Python's row, so a Restore or Reset that returns the row asks Python
   // to draw it again. A Result Python drew in this session lacks only a row
   // Python did not draw there (its Legend row facts; U3a review M2); a loaded
-  // Result has no facts.
+  // Result has no facts (a Restore asks for them first, `whenLegendFactsCurrent`).
   /** @param {string[]} keys The Python keys of the returning rows. */
   const drawReturningLegendRows = (keys) => {
     const svg = svgContainer.value?.querySelector?.('svg');
@@ -310,8 +312,14 @@ export const createMountedEditorIntentProjection = ({
   };
   // OV-2412: a Restore reads Python's Legend row facts of the committed Results (`legendKeyIsStale`), so it runs
   // once they are the facts of the drawing's current edits: a Restore pressed while a Generate or the rerender of
-  // an edit runs applies after it. Every Restore of deleted rows waits here.
-  const whenLegendFactsCurrent = () => whenRedrawn();
+  // an edit runs applies after it, and one on a Result without facts (loaded from a Session) asks Python to draw
+  // the drawing again first. A Result loaded without its render request (Session versions 27 to 30) cannot be
+  // drawn again before a Generate, so it has no facts until then and Restore lists as before. Every Restore of
+  // deleted rows waits here.
+  const whenLegendFactsCurrent = async () => {
+    if (!state.displayedResultMetadata()?.legendRowFacts && getCommittedCanonicalRenderRequest()) requestAutomaticRerender();
+    await whenRedrawn();
+  };
   /** @param {string} label @param {() => unknown} restore */
   const restoreLegendItems = async (label, restore) => {
     await whenLegendFactsCurrent();

@@ -2512,6 +2512,7 @@ export const createAppSetup = () => {
     showEditorIntent,
     requestAutomaticRerender: featureActions.requestAutomaticRerender,
     whenRedrawn: featureActions.whenRedrawn,
+    getCommittedCanonicalRenderRequest,
     runUndoable: history.runUndoable
   });
 
