@@ -18,7 +18,10 @@
 //   Session and Source recipe as English;
 // - in th: the shown catalog in the header and the icon rail, the Thai font
 //   stack, and the 12 px floor of the session label and the rail names (a rail
-//   name may take two lines and stays inside its entry);
+//   name may take two lines and stays inside its entry); no visible text under
+//   12 px at the start, with a Session and every section and the custom track
+//   stack open, in the History list, the Drawing menu, the feature popup and
+//   the rail (OV-3669);
 // - in every text style (en cased, ja no-caps, th tall-marks): the page's
 //   text style, the figure's English stack, and a truncated text cut at its
 //   sides only;
@@ -467,6 +470,24 @@ test('French and Korean show their catalogs and plural forms, and French changes
   expect(errors).toEqual([]);
 });
 
+// The visible texts under a size: each element outside the figure that shows a
+// text of its own (a text node, a field's value or hint, a select's choice), as
+// "tag.class size", once each. It reads the sizes once the running CSS transitions end: a field's size moves to the
+// floor over the 150 ms transition of .form-input after a language change, and a read inside it saw a size between.
+const textsUnder = (page, floor) => page.evaluate(async (floor) => {
+  await Promise.all(document.getAnimations().filter((animation) => animation instanceof CSSTransition).map((animation) => animation.finished.catch(() => null)));
+  const field = 'input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=hidden]), textarea';
+  const ownText = (element) => [...element.childNodes].some((node) => node.nodeType === 3 && node.data.trim())
+    || (element.matches(field) && Boolean(element.value || element.placeholder)) || element.matches('select');
+  const shown = (element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden' && !element.closest('.sr-only');
+  const under = [...document.querySelectorAll('body *')]
+    .filter((element) => !element.closest('svg, script, style, template') && ownText(element) && shown(element))
+    .map((element) => [element, parseFloat(getComputedStyle(element).fontSize)])
+    .filter(([, size]) => size > 0 && size < floor)
+    .map(([element, size]) => `${element.tagName.toLowerCase()}${[...element.classList].map((name) => `.${name}`).join('')} ${size}px`);
+  return [...new Set(under)].sort();
+}, floor);
+
 test('Thai shows its catalog in the header and the rail, in a Thai font and at 12 px or more', async ({ page }) => {
   const th = await catalogOf('th');
   const errors = [];
@@ -482,6 +503,29 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
     return [style.fontSize, style.textTransform, style.letterSpacing];
   })).toEqual(['12px', 'none', 'normal']);
   expect(await page.locator('body').evaluate((body) => getComputedStyle(body).fontFamily)).toContain('Leelawadee UI');
+  // No visible text under the 12 px floor, at the start and in every state below (OV-3669).
+  expect(await textsUnder(page, 12)).toEqual([]);
+  // With a Session, every section and the Circular custom track stack open.
+  await loadSession(page);
+  await page.evaluate(() => document.querySelectorAll('details:not(.action-menu)').forEach((details) => { details.open = true; }));
+  await page.locator('[aria-controls="circular-custom-track-slots-panel"]').click();
+  await page.locator('[data-setting="track-slots"] label input[type="checkbox"]').first().check();
+  expect(await textsUnder(page, 12)).toEqual([]);
+  // The History list, the Drawing menu and the feature popup.
+  await page.locator('[data-history-list-toggle]:visible').click();
+  await expect(page.locator('.history-list-row').first()).toBeVisible();
+  expect(await textsUnder(page, 12)).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.history-list')).toHaveCount(0);
+  await page.locator('.drawing-bar-menu .action-menu-toggle').click();
+  await expect(page.locator('.drawing-bar-menu .action-menu-item').first()).toBeVisible();
+  expect(await textsUnder(page, 12)).toEqual([]);
+  await page.locator('.drawing-bar-menu .action-menu-toggle').click();
+  await page.locator('.drawer-toggle').click();
+  await page.locator('.right-drawer').getByRole('button', { name: th.Edit, exact: true }).first().click();
+  await expect(page.locator('.feature-popup')).toBeVisible();
+  expect(await textsUnder(page, 12)).toEqual([]);
+  await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: th['Collapse settings to icons'], exact: true }).click();
   const font = page.locator('.settings-index nav > button[data-settings-entry="font"]');
@@ -495,6 +539,7 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
       inside: inner.left >= outer.left - 0.5 && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5
     };
   })).toEqual({ size: '12px', inside: true });
+  expect(await textsUnder(page, 12)).toEqual([]);
   expect(errors).toEqual([]);
 });
 
