@@ -29,7 +29,7 @@ def display_label_segment(
 
     Linear placement uses the longest continuous fragment, breaking ties by
     the earlier row, display start and original part order. Circular placement retains the
-    source part across its artificial cut and the existing origin-part join.
+    source part across its artificial cut and the feature's join over the origin.
     No source or local feature coordinates are rewritten here.
     """
     blocks = [part for part in feature.display_parts or () if part.kind == "block"]
@@ -40,12 +40,8 @@ def display_label_segment(
         by_part: dict[int, list[FeatureDisplayPart]] = {}
         for part in blocks:
             by_part.setdefault(part.fragment.part_index, []).append(part)
-        groups = list(by_part.values())
-        if len(groups) == 2 and len({part.strand for part in blocks}) == 1:
-            spans = [(min(p.fragment.local_start for p in group),
-                      max(p.fragment.local_end for p in group)) for group in groups]
-            if min(start for start, _ in spans) == 0 and max(end for _, end in spans) == length:
-                groups = [groups[0] + groups[1]]
+        # A feature that joins over the origin (``FeatureObject.joins_over_origin``) is one anchor group.
+        groups = [blocks] if feature.joins_over_origin else list(by_part.values())
 
     group = min(groups, key=lambda items: (
         -sum(p.fragment.display_end - p.fragment.display_start for p in items),

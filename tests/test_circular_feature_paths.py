@@ -38,8 +38,10 @@ MOVE_LINE_COMMAND_RE = re.compile(
 )
 
 
-def _make_feature(location: list[FeatureLocationPart], is_directional: bool = False) -> FeatureObject:
-    return FeatureObject(
+def _make_feature(
+    location: list[FeatureLocationPart], is_directional: bool = False, *, joins_over_origin: bool = False
+) -> FeatureObject:
+    feature = FeatureObject(
         feature_id="feature_000000001",
         location=location,
         is_directional=is_directional,
@@ -50,6 +52,9 @@ def _make_feature(location: list[FeatureLocationPart], is_directional: bool = Fa
         type="D-loop",
         qualifiers={},
     )
+    # The feature factory decides it (``origin_join_order``) and builds no connector line for such a feature.
+    feature.joins_over_origin = joins_over_origin
+    return feature
 
 
 def _make_generator(
@@ -75,10 +80,10 @@ def test_origin_spanning_non_directional_two_blocks_are_drawn_as_single_block() 
     feature = _make_feature(
         [
             FeatureLocationPart("block", "001", "negative", 16023, 16569, False),
-            FeatureLocationPart("line", "001", "negative", 577, 16022, False),
             FeatureLocationPart("block", "002", "negative", 0, 576, True),
         ],
         is_directional=False,
+        joins_over_origin=True,
     )
 
     paths = _make_generator(total_length=16569).generate_circular_gene_path(feature)
@@ -91,10 +96,10 @@ def test_origin_spanning_directional_two_blocks_are_drawn_as_single_block() -> N
     feature = _make_feature(
         [
             FeatureLocationPart("block", "001", "negative", 16023, 16569, False),
-            FeatureLocationPart("line", "001", "negative", 577, 16022, False),
             FeatureLocationPart("block", "002", "negative", 0, 576, True),
         ],
         is_directional=True,
+        joins_over_origin=True,
     )
 
     paths = _make_generator(total_length=16569).generate_circular_gene_path(feature)
@@ -107,10 +112,10 @@ def test_origin_spanning_directional_with_undefined_strand_falls_back_to_rectang
     feature = _make_feature(
         [
             FeatureLocationPart("block", "001", "undefined", 16023, 16569, False),
-            FeatureLocationPart("line", "001", "undefined", 577, 16022, False),
             FeatureLocationPart("block", "002", "undefined", 0, 576, True),
         ],
         is_directional=True,
+        joins_over_origin=True,
     )
 
     paths = _make_generator(total_length=16569).generate_circular_gene_path(feature)
@@ -478,7 +483,6 @@ def test_origin_spanning_narrow_arrow_is_coalesced_with_reduced_shaft(
         feature_id="feature_000000001",
         location=[
             FeatureLocationPart("block", "001", strand, 900, 1000, False),
-            FeatureLocationPart("line", "001", strand, 101, 899, False),
             FeatureLocationPart("block", "002", strand, 0, 100, True),
         ],
         is_directional=None,
@@ -490,6 +494,7 @@ def test_origin_spanning_narrow_arrow_is_coalesced_with_reduced_shaft(
         qualifiers={},
         glyph_kind="arrow",
     )
+    feature.joins_over_origin = True
 
     paths = _make_generator(
         total_length=1000,

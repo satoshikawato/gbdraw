@@ -24,7 +24,7 @@ from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
 from gbdraw.features.colors import compute_feature_hash, preprocess_color_tables
-from gbdraw.features.factory import create_feature_dict
+from gbdraw.features.factory import FeatureLayerMode, create_feature_layers
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors
@@ -573,7 +573,8 @@ def test_prepare_label_list_hmmtdna_d_loop_hash_override_survives_feature_object
         )
     )
     selected_features = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region"]
-    feature_dict, _ = create_feature_dict(
+    # Circular feature layers: the D-loop joins over the origin (``FeatureObject.joins_over_origin``).
+    feature_dict = create_feature_layers(
         record,
         color_table,
         selected_features,
@@ -581,8 +582,9 @@ def test_prepare_label_list_hmmtdna_d_loop_hash_override_survives_feature_object
         cfg.canvas.strandedness,
         cfg.canvas.resolve_overlaps,
         label_filtering,
+        layer_mode=FeatureLayerMode(joins_over_origin=True),
         feature_visibility_rules=visibility_rules,
-    )
+    ).foreground_features
 
     labels = prepare_label_list(
         feature_dict,

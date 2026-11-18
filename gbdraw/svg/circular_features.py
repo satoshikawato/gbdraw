@@ -227,13 +227,13 @@ def generate_circular_narrow_arrow_shaft_path_with_radii(
     )
 
 
-def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -> list[tuple[CircularCoordDict, bool]]:
+def circular_feature_parts(feature_object: "FeatureObject") -> list[tuple[CircularCoordDict, bool]]:
     """The parts a Circular feature is drawn with, each with its ``is_last``, in drawing order
     (``in_drawing_order``: lines under blocks): the record's display fragments when it is projected; one block
-    across the origin for a two-block feature that wraps it, so it is drawn without a split; else its location
-    parts. The feature path and the leader anchor (``circular_feature_edge_radii_at``) read these same parts."""
+    across the origin for a feature that joins over it (``FeatureObject.joins_over_origin``), so it is drawn
+    without a split; else its location parts. The feature path and the leader anchor (``circular_feature_edge_radii_at``) read these same parts."""
     if feature_object.display_parts is None:
-        merged = _merged_origin_spanning_block(feature_object, total_length)
+        merged = _merged_origin_spanning_block(feature_object)
         if merged is not None:
             return [merged]
     coords = (feature_object.location if feature_object.display_parts is None
@@ -252,33 +252,21 @@ def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -
     return in_drawing_order(parts, lambda part: str(part[0]["coord_type"]))
 
 
-def _merged_origin_spanning_block(
-    feature_object: "FeatureObject", total_length: int
-) -> tuple[CircularCoordDict, bool] | None:
-    """A two-block feature across the origin (e.g. a D-loop as ``join(end..genome,1..start)``) as one block."""
+def _merged_origin_spanning_block(feature_object: "FeatureObject") -> tuple[CircularCoordDict, bool] | None:
+    """The two blocks of a feature that joins over the origin (``FeatureObject.joins_over_origin``, e.g. a D-loop as
+    ``join(end..genome,1..start)``) as one block: from the start of the block that runs to the record's end to
+    the end of the block from its first base."""
+    if not feature_object.joins_over_origin:
+        return None
     block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
-    if len(block_coords) != 2:
-        return None
-    starts = [int(coord.start) for coord in block_coords]
-    ends = [int(coord.end) for coord in block_coords]
-    if min(starts) > 1 or max(ends) < total_length:
-        return None
-    left_blocks = [coord for coord in block_coords if int(coord.start) <= 1]
-    right_blocks = [coord for coord in block_coords if int(coord.end) >= total_length]
-    if len(left_blocks) != 1 or len(right_blocks) != 1 or left_blocks[0] is right_blocks[0]:
-        return None
-    merged_start = max(starts)
-    merged_end = min(ends)
-    if merged_start <= merged_end:
-        return None
-    # The block that runs to the record end starts the merged block; the one from 1 ends it.
+    right, left = sorted(block_coords, key=lambda coord: int(coord.start), reverse=True)
     merged: CircularCoordDict = {
         "coord_type": "block",
         "coord_strand": block_coords[0].strand,
-        "coord_start": merged_start,
-        "coord_end": merged_end,
-        "open_start": right_blocks[0].open_start,
-        "open_end": left_blocks[0].open_end,
+        "coord_start": int(right.start),
+        "coord_end": int(left.end),
+        "open_start": right.open_start,
+        "open_end": left.open_end,
     }
     return merged, any(coord.is_last for coord in block_coords)
 
@@ -351,7 +339,7 @@ def circular_feature_edge_radii_at(
     ``radii_px`` (inner, centre, outer): read on the drawn block that holds the position, or the nearest one. A
     leader that starts there starts on the feature's ink, also beside an arrowhead that narrows toward its tip."""
     best: tuple[float, CircularCoordDict, bool] | None = None
-    for coord_dict, is_last in circular_feature_parts(feature_object, total_length):
+    for coord_dict, is_last in circular_feature_parts(feature_object):
         if coord_dict["coord_type"] != "block":
             continue
         span_bp = _span_bp(coord_dict, total_length)

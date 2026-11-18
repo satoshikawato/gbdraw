@@ -15,22 +15,17 @@ from .label_style import FeatureLabelStyle, LabelFontStyle
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 def _candidate_segment(feature: Any, total_length: int) -> tuple[float, float, float, float, str]:
-    block_coordinates = [
-        coordinate
-        for coordinate in getattr(feature, "location", ())
-        if getattr(coordinate, "kind", None) == "block"
-    ]
-    if len(block_coordinates) == 2:
-        starts = [int(coordinate.start) for coordinate in block_coordinates]
-        ends = [int(coordinate.end) for coordinate in block_coordinates]
-        left = [coordinate for coordinate in block_coordinates if int(coordinate.start) <= 1]
-        right = [coordinate for coordinate in block_coordinates if int(coordinate.end) >= total_length]
-        if len(left) == 1 and len(right) == 1 and left[0] is not right[0]:
-            start = float(max(starts))
-            end = float(min(ends))
-            span = (float(total_length) - start) + end
-            middle = (start + (0.5 * span)) % float(total_length)
-            return start, end, middle, span, get_strand(block_coordinates[0].strand)
+    if feature.joins_over_origin:
+        # One block over the origin (``FeatureObject.joins_over_origin``): the end-running block starts it.
+        right, left = sorted(
+            (coordinate for coordinate in feature.location if coordinate.kind == "block"),
+            key=lambda coordinate: int(coordinate.start), reverse=True,
+        )
+        start = float(right.start)
+        end = float(left.end)
+        span = (float(total_length) - start) + end
+        middle = (start + (0.5 * span)) % float(total_length)
+        return start, end, middle, span, get_strand(right.strand)
 
     best: tuple[float, float, float, float, str] | None = None
     for coordinate in getattr(feature, "coordinates", ()):

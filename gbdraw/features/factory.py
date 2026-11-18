@@ -20,7 +20,7 @@ from .overrides import feature_override_lookup
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
-from .coordinates import get_exon_and_intron_coordinates, project_feature_parts
+from .coordinates import get_exon_and_intron_coordinates, origin_join_order, project_feature_parts
 from ..layout.record_coordinates import RecordDisplayTransform
 from ..layout.record_transform import spans_may_cross_origin, unset_record_transform
 from .shapes import (
@@ -43,6 +43,13 @@ class DrawnParts(NamedTuple):
 
     parts: Sequence[SimpleLocation]
     origin_length: int | None
+    # The same parts in the order they read over the origin when the view joins them there into one block
+    # (``origin_join_order``), else None; the feature's location is built in this order, its coordinates keep ``parts``.
+    over_origin: Sequence[SimpleLocation] | None = None
+
+    @property
+    def in_drawing_order(self) -> list[SimpleLocation]:
+        return list(self.over_origin if self.over_origin is not None else self.parts)
 
 
 @dataclass(frozen=True)
@@ -54,6 +61,9 @@ class FeatureLayerMode:
     # Linear: a part past the end of a record whose spans may cross its origin is drawn as the join over the origin
     # (``location_over_origin``, OV-3724); Circular draws it by its angles.
     past_end_as_join: bool = False
+    # Circular: two blocks that meet over the origin of a record drawn as a circle are drawn as one block there
+    # (``origin_join_order``).
+    joins_over_origin: bool = False
 
 
 def create_repeat_object(
@@ -77,7 +87,7 @@ def create_repeat_object(
     rpt_family: str = feature.qualifiers.get("rpt_family", ["undefined"])[0]
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates, origin_length=drawn.origin_length)
+    location = get_exon_and_intron_coordinates(drawn.in_drawing_order, origin_length=drawn.origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -123,7 +133,7 @@ def create_feature_object(
     """
     coordinates = list(drawn.parts)
     note: str = feature.qualifiers.get("note", [""])[0]
-    location = get_exon_and_intron_coordinates(coordinates, origin_length=drawn.origin_length)
+    location = get_exon_and_intron_coordinates(drawn.in_drawing_order, origin_length=drawn.origin_length)
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
@@ -171,7 +181,9 @@ def create_gene_object(
     gene: str = feature.qualifiers.get("gene", [""])[0]
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
-    location = get_exon_and_intron_coordinates(coordinates, is_trans_spliced, origin_length=drawn.origin_length)
+    location = get_exon_and_intron_coordinates(
+        drawn.in_drawing_order, is_trans_spliced, origin_length=drawn.origin_length
+    )
     color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
@@ -196,6 +208,44 @@ def create_gene_object(
     )
     gene_object.feature_override = feature_override
     return gene_object
+
+
+class _FeatureGeometry(NamedTuple):
+    """What one feature draws in the view a layer is built for (``_feature_geometry``)."""
+
+    drawn: DrawnParts
+    # The parts the display projection draws, in drawing order; None when the record is not projected.
+    projected: list[SimpleLocation] | None
+    # Its two blocks are drawn as one block over the origin in this view (``FeatureObject.joins_over_origin``).
+    joins_over_origin: bool
+
+
+def _feature_geometry(
+    feature: SeqFeature, genome_length: int, origin_length: int | None, layer_mode: FeatureLayerMode, *, projects: bool
+) -> _FeatureGeometry:
+    """The parts ``feature`` draws on its record, decided once per feature and view.
+
+    A part past the end of a record whose spans may cross its origin is the join over the origin it is (OV-3724): a
+    Linear axis and a display projection draw that join; the feature keeps its location, and Circular draws the
+    part by its angles. A view that joins blocks over the origin draws the parts the contact rule joins
+    (``origin_join_order``) in the order that reads over it; the drawers and the label anchors read the decision.
+    """
+
+    def over_origin(parts: Sequence[SimpleLocation]) -> list[SimpleLocation] | None:
+        return origin_join_order(parts, origin_length) if layer_mode.joins_over_origin else None
+
+    joined_parts = location_over_origin(feature.location, genome_length).parts if origin_length is not None else None
+    parts = joined_parts if joined_parts is not None and layer_mode.past_end_as_join else feature.location.parts
+    drawn = DrawnParts(parts, origin_length, over_origin(parts))
+    if not projects:
+        return _FeatureGeometry(drawn, None, drawn.over_origin is not None)
+    projected = joined_parts if joined_parts is not None else feature.location.parts
+    projected_over_origin = over_origin(projected)
+    return _FeatureGeometry(
+        drawn,
+        projected_over_origin if projected_over_origin is not None else list(projected),
+        projected_over_origin is not None,
+    )
 
 
 @dataclass(frozen=True)
@@ -270,13 +320,9 @@ def _build_feature_layers(
             "rectangle" if rendering == "underlay" else rendering
         )
         include_label = compute_label_text and rendering != "underlay"
-        # A part past the end of a record whose spans may cross its origin is the join over the origin it is
-        # (OV-3724): a Linear axis and a display projection draw that join; the feature keeps its location, and
-        # Circular draws the part by its angles.
-        joined_parts = location_over_origin(feature.location, genome_length).parts if origin_length is not None else None
-        drawn = DrawnParts(
-            joined_parts if joined_parts is not None and layer_mode.past_end_as_join else feature.location.parts,
-            origin_length,
+        geometry = _feature_geometry(
+            feature, genome_length, origin_length, layer_mode,
+            projects=record_transform is not None and record_transform.projects,
         )
 
         feature_id: str
@@ -295,7 +341,7 @@ def _build_feature_layers(
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
-                drawn=drawn,
+                drawn=geometry.drawn,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -312,7 +358,7 @@ def _build_feature_layers(
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
-                drawn=drawn,
+                drawn=geometry.drawn,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
@@ -329,18 +375,19 @@ def _build_feature_layers(
                 glyph_kind=glyph_kind,
                 feature_override=override,
                 instance=instance,
-                drawn=drawn,
+                drawn=geometry.drawn,
             )
         feature_object.source_feature_index = source_indexes[id(feature)]
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if feature_object.feature_hash in shared_hashes:
             feature_object.rendered_instance_index = feature_object.source_feature_index
-        if record_transform is not None and record_transform.projects:
+        if geometry.projected is not None and record_transform is not None:
             feature_object.display_parts = project_feature_parts(
-                joined_parts if joined_parts is not None else feature.location.parts, record_transform,
+                geometry.projected, record_transform,
                 origin_length=origin_length,
                 is_trans_spliced="trans_splicing" in feature.qualifiers,
             )
+        feature_object.joins_over_origin = geometry.joins_over_origin
         if rendering == "underlay":
             underlay_features.append(feature_object)
         else:

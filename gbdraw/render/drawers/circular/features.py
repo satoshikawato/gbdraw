@@ -471,7 +471,7 @@ class FeaturePathGenerator:
                 self.track_id, feature_object.strand, inner, center, outer,
             )
         coordinates_paths: List[List[str]] = []
-        for coord_dict, is_last in circular_feature_parts(feature_object, self.total_length):
+        for coord_dict, is_last in circular_feature_parts(feature_object):
             coord_type: str = str(coord_dict["coord_type"])
             if coord_type == "line":
                 if lane is None:

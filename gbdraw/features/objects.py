@@ -128,6 +128,9 @@ class FeatureObject:
         )
         self.coordinates = coordinates
         self.display_parts: tuple[FeatureDisplayPart, ...] | None = None
+        # Its two blocks meet over the record's origin and are drawn there as one block, in the view it was built
+        # for (``origin_join_order``; set by the feature factory). The Circular drawer and label anchors read it.
+        self.joins_over_origin: bool = False
         self.color: str = color
         self.note: str = note
         self.label_text: str = label_text

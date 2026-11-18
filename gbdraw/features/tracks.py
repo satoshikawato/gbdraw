@@ -16,12 +16,11 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
     A feature's lane covers what it draws from its first drawn base to its last, with half-open, 0-based
     bounds (a part at the first base starts at 0). Only a feature whose drawn parts reach both ends of the
     record is read as running over its origin (a connector line over the origin is drawn in two pieces that
-    reach them). Such a feature takes the shortest arc that covers its blocks and lines (``uncovered_gap``).
-    Where its lines fill that arc (a join written in order over both ends), it takes the shortest arc over its
-    blocks alone, in every mode and on every record: the Circular whole view joins those blocks over the
-    origin, but Linear mode and a linear record draw the join as written, with a connector line across the
-    middle of the record that this span leaves to other features. start > end says the feature occupies
-    [start, length) and [0, end).
+    reach them). Such a feature takes the shortest arc that covers its blocks and lines (``uncovered_gap``),
+    else first to last. A join over the origin that a Circular view draws as one block there is built in the
+    order that reads over it (``origin_join_order``), so it has no line round the record and takes the arc over
+    its blocks; elsewhere a join written in order over both ends keeps its connector line across the record,
+    and its lane covers the line. start > end says the feature occupies [start, length) and [0, end).
 
     Args:
         feature: FeatureObject with location/coordinates
@@ -31,17 +30,14 @@ def get_feature_ends(feature: FeatureObject, genome_length: Optional[int] = None
         (start, end, strand) tuple. If start > end, feature spans the origin.
     """
     strand = feature.strand
-    blocks = [part for part in feature.location if part.kind == "block"]
-    if not blocks:
+    if not any(part.kind == "block" for part in feature.location):
         return 0, 0, strand
     drawn = [part for part in feature.location if part.kind in ("block", "line")]
     start, end = min(int(p.start) for p in drawn), max(int(p.end) for p in drawn)
     if not genome_length:
         return start, end, strand
     length = int(genome_length)
-    gap = None
-    if start == 0 and end >= length:
-        gap = uncovered_gap(drawn, length) or uncovered_gap(blocks, length)
+    gap = uncovered_gap(drawn, length) if start == 0 and end >= length else None
     return (gap[1], gap[0], strand) if gap is not None else (start, end, strand)
 
 

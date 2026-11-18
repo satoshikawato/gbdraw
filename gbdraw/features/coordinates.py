@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import logging
-from typing import List, NamedTuple, Protocol, Sequence, Tuple, cast
+from typing import List, NamedTuple, Protocol, Sequence, Tuple, TypeVar, cast
 
 from Bio.SeqFeature import AfterPosition, BeforePosition, SimpleLocation
 
@@ -81,6 +81,38 @@ def uncovered_gap(parts: Sequence[_Span], length: int) -> tuple[int, int] | None
         reach = max(reach, end)
     over_origin = length - reach + spans[0][0]
     return best if best is not None and best[1] - best[0] > over_origin else None
+
+
+class _StrandedSpan(_Span, Protocol):
+    """A feature part with its Biopython strand."""
+
+    @property
+    def strand(self) -> int | None: ...
+
+
+_P = TypeVar("_P", bound=_StrandedSpan)
+
+
+def origin_join_order(parts: Sequence[_P], origin_length: int | None) -> list[_P] | None:
+    """The two parts of a location in the order they read over the record's origin, when a view that joins blocks
+    over the origin draws them as one block there; else None.
+
+    The one contact rule (OV-3661, OV-3659, OV-3689): on a record whose spans may cross its origin
+    (``origin_length``, its length; ``spans_may_cross_origin``), two parts of one strand, one from the record's
+    first base (start 0) and the other to its last (end ``origin_length``), apart from each other. The contact is
+    exact: a part from base 2 leaves base 1 out, and its connector line is drawn. The parts may be written in
+    either order (a GFF3 reader sorts its rows into join(1..300,2701..3000)); the result reads over the origin
+    (the part to the end, then the part from the start, reversed on the minus strand), so no connector line runs
+    round the record between them. The Circular whole view draws the pair as one block, a display start draws it
+    as two blocks that meet at the origin, and lanes read the arc they cover (``get_feature_ends``).
+    """
+
+    if origin_length is None or len(parts) != 2 or parts[0].strand != parts[1].strand:
+        return None
+    low, high = sorted(parts, key=lambda part: int(part.start))
+    if int(low.start) != 0 or int(high.end) != origin_length or int(low.end) >= int(high.start):
+        return None
+    return [low, high] if parts[0].strand == -1 else [high, low]
 
 
 def origin_crossing(parts: Sequence[_Span], origin_length: int | None) -> OriginCrossing | None:
@@ -292,6 +324,7 @@ __all__ = [
     "OriginCrossing",
     "connector_gaps",
     "origin_crossing",
+    "origin_join_order",
     "uncovered_gap",
     "get_coordinate",
     "get_exon_and_intron_coordinates",

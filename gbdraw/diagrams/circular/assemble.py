@@ -3703,7 +3703,7 @@ def _record_feature_layers(
         profile.strandedness,
         profile.resolve_overlaps,
         label_filtering,
-        layer_mode=FeatureLayerMode(split_overlaps_by_strand=split_overlaps_by_strand),
+        layer_mode=FeatureLayerMode(split_overlaps_by_strand=split_overlaps_by_strand, joins_over_origin=True),
         record_features=record_feature_inputs[position] if position < len(record_feature_inputs) else None,
         placement_slot=placement_slot,
         feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
