@@ -10,7 +10,8 @@ import { LOSAT_GENETIC_CODES, LOSAT_GENETIC_CODE_TEXT } from '../contracts/schem
 import { diagnosticError } from '../utils/error-normalization.js';
 import { losatRecordGencode } from './drawing/inputs.js';
 
-// Two Session resource views of one stored resource are one source (`sourceId`).
+// A ref's File is its `sourceId` (`sessionResourceSourceKey`): the views of one stored resource are one File, except
+// the view of a Linear File card (`fileUid`), which is a File of its own.
 /** @param {InputFileRef | null | undefined} file */
 const sourceFileIdentity = (file) => file?.sourceId || null;
 

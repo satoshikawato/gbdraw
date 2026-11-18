@@ -160,6 +160,7 @@ import {
   createSessionResourceFileView,
   fileBackedDescriptor,
   renamedResourceDescriptor,
+  sessionResourceStoredDescriptor,
   sessionResourceViewReader,
   storedResourceBytes,
   isSessionResourceFileView,
@@ -289,7 +290,7 @@ import {
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 import {
-  getResourcePayloadIdentity, getResourcePayloadOwner, resourceIdOwnedBy, setResourcePayloadOwner, storedPayloadIdentity
+  getResourcePayloadIdentity, resourceIdOwnedBy, setResourcePayloadOwner, storedPayloadIdentity
 } from './resource-payload-owner.js';
 import { migratePersistedWebStateFieldNames, requireCurrentConfigFields } from './current-option-values.js';
 import {
@@ -388,7 +389,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { FeatureCatalog, FeatureCatalogFeatureState, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits, SvgResultCandidate } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
-/** @import { SessionResourceDrawing, SessionResourceSource } from './session-resources.js' */
+/** @import { SessionResourceDrawing } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot, ArtifactSlotStore, LoadedArtifactSlots, ShownSetLegend } from './artifact-slot.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
@@ -3850,21 +3851,20 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
 };
 
 /**
- * The descriptor of a Session resource view, under the name the view shows; null for any other value.
+ * The descriptor of a Session resource view, under the name the view shows; null for any other value. It is the
+ * view's own copy of the stored descriptor, owned by the view whatever its name, so its payload identity is the
+ * view's (`getResourcePayloadIdentity`): one stored resource for views of it, the File a Generate described for its
+ * views (OV-3019), and the card itself for a view of one Linear File card, even when two cards read one stored
+ * resource under one name (OV-3710).
  * @param {unknown} file
  * @returns {RawSessionResourceDescriptor | null}
  */
 const sessionViewDescriptor = (file) => {
-  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
-  if (!source?.descriptor) return null;
+  const stored = sessionResourceStoredDescriptor(file);
+  if (!stored) return null;
   // A view: its name is read as an unvalidated value.
   const visibleName = String(/** @type {UnvalidatedFields<'name'>} */ (file)?.name || '').trim();
-  const descriptor = visibleName && visibleName !== source.descriptor.name
-    ? renamedResourceDescriptor(source.descriptor, visibleName)
-    : source.descriptor;
-  // The view never replaces an owner its descriptor has: the File a Generate described (OV-3019).
-  if (getResourcePayloadOwner(descriptor) === descriptor) setResourcePayloadOwner(descriptor, file);
-  return descriptor;
+  return setResourcePayloadOwner(renamedResourceDescriptor(stored, visibleName || String(stored.name ?? '')), file);
 };
 
 /**

@@ -898,16 +898,14 @@ export const asLinearFileCardView = (view) => {
 };
 
 /**
- * The stored resource whose bytes `file` reads: a clean Session resource view's descriptor, null for any other file.
+ * The stored resource whose bytes `file` reads: the descriptor of its source (`sessionResourceSource`, the one rule
+ * of a clean Session resource view), null for any other file.
  * Every view of one resource reads it, a Linear File card's view too: what the request names the resource by after
  * Load (`resourceIdOwnedBy`) and what the History estimate counts once (`storedPayloadIdentity`).
  * @param {unknown} file
  * @returns {LeafBacking['descriptor'] | null}
  */
-export const sessionResourceStoredDescriptor = (file) => {
-  const backing = fileViewBackings.get(/** @type {FileLike} */ (file));
-  return !backing || backing.dirty ? null : backing.descriptor;
-};
+export const sessionResourceStoredDescriptor = (file) => sessionResourceSource(file)?.descriptor ?? null;
 
 /**
  * The source `file` stands for as a File: its stored resource (`sessionResourceStoredDescriptor`), so the views of
@@ -946,7 +944,11 @@ export const matchesSessionResourceDescriptor = (file, descriptor) => {
     && resourcePayloadKey(backing.descriptor) === resourcePayloadKey(descriptor);
 };
 
-/** @param {unknown} file A file slot's value; only a clean Session resource view has a source. */
+/**
+ * The source of a file slot's value: its resource id, stored descriptor and bytes. Only a clean Session resource
+ * view has one; every reader of a view's stored descriptor reads it here or through `sessionResourceStoredDescriptor`.
+ * @param {unknown} file
+ */
 export const sessionResourceSource = (file) => {
   // The lookup is by identity. A value that is no key (a missing file, a
   // descriptor, a `File`) has no backing: `get` returns undefined for it.
