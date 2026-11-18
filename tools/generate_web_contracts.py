@@ -123,6 +123,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("FEATURE_INSTANCE_SEPARATOR", "gbdraw.features.ids", "FEATURE_INSTANCE_SEPARATOR"),
     # The color of a color rule that draws its features in their type's color (Reset fill color writes it).
     ("TYPE_COLOR_VALUE", "gbdraw.features.colors", "TYPE_COLOR_VALUE"),
+    # The color such a rule draws a type in when the palette has neither the type nor a `default`.
+    ("FALLBACK_TYPE_COLOR", "gbdraw.features.colors", "FALLBACK_TYPE_COLOR"),
     ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
     ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.requests", "EXPANDED_RECORD_KEY_SEPARATOR"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.core.numeric", "UNSET_NUMBER_SPELLINGS"),

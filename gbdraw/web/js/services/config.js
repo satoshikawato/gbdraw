@@ -216,7 +216,9 @@ import { storedLeafKey } from './stored-leaf-readings.js';
 /** @import { LegacySessionUpgrade } from './legacy-session-upgrade.js' */
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
-import { NO_DRAWN_FEATURES, applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
+import {
+  NO_DRAWN_FEATURES, applySpecificRuleProvenance, savedFeatureColorEdits, savedResetTypeColors, savedRuleRowRekeys, savedSpecificRules
+} from './specific-color-rules.js';
 import { recordedLegendColor, rekeyLegendRecords } from './legend-svg.js';
 import { editorStateOfLegendEditLeaves, readLegendEditLeaves } from './legend-draft-rows.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, legendEntryKey } from './drawing/paint.js';
@@ -530,15 +532,17 @@ const paletteColorsFromDefinitions = (paletteName) => {
   return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
 
-// The type colors a stored drawing's config draws with (`appliedFeatureColors`):
-// its palette's colors with its own Default colors over them. Load reads a
+// The type colors a stored drawing's config may have written a reset rule in
+// (`savedResetTypeColors`): the colors it draws with (`appliedFeatureColors`:
+// its palette's colors with its own Default colors over them), and those with
+// the rows its palette held in the release that wrote such rules. Load reads a
 // rule an older Reset fill color wrote by them (`savedSpecificRules`).
-/** @param {Readonly<Record<string, unknown>> | null | undefined} config @returns {() => Readonly<Record<string, string>>} */
-const storedTypeColors = (config) => () => appliedFeatureColors({
+/** @param {Readonly<Record<string, unknown>> | null | undefined} config @returns {() => readonly Readonly<Record<string, string>>[]} */
+const storedTypeColors = (config) => () => savedResetTypeColors(appliedFeatureColors({
   paletteDefinitions: state.paletteDefinitions,
   appliedPaletteName: { value: String(config?.palette || 'default') },
   appliedPaletteColors: { value: isPlainObject(config?.colors) ? /** @type {Record<string, string | null>} */ (config?.colors) : null }
-});
+}), config?.palette);
 
 /** @param {unknown} source */
 const cloneStringMap = (source) => readStringMap(source).value;
@@ -3393,8 +3397,8 @@ const openedCommittedSession = (committed, openedWebFiles, sessionWebFiles) => {
  * @param {number} sessionVersion The version of the Session `data` (the shape Load reads it in).
  * @param {SourceFacts} sourceFacts The source facts of the file `data` came from.
  * @param {unknown} [storedRules]
- * @param {() => Readonly<Record<string, string>>} [typeColors] The type colors of the drawing the rules are of
- *   (`storedTypeColors`), which read an older Reset fill color rule (`savedSpecificRules`).
+ * @param {() => readonly Readonly<Record<string, string>>[]} [typeColors] The type colors of the drawing the rules
+ *   are of (`storedTypeColors`), which read an older Reset fill color rule (`savedSpecificRules`).
  * @returns {SavedResultEdits}
  */
 export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sourceFacts, storedRules, typeColors) => {

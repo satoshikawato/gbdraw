@@ -47,8 +47,13 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
     return build_specific_color_rules(color_table), build_default_color_map(default_colors)
 
 
+# The color of a feature type whose palette has neither the type nor a ``default``.
+FALLBACK_TYPE_COLOR = "#d3d3d3"
+
+
 def feature_type_color(default_color_map: Mapping[str, str], feature_type: str) -> str:
-    """The color of a feature type: its palette entry, else the palette's ``default``.
+    """The color of a feature type: its palette entry, else the palette's ``default``, else
+    ``FALLBACK_TYPE_COLOR``.
 
     The one owner of this color: drawn features without a matching rule and
     the Legend row of their type both read it (OV-3114).
@@ -56,7 +61,7 @@ def feature_type_color(default_color_map: Mapping[str, str], feature_type: str) 
 
     if feature_type in default_color_map:
         return default_color_map[feature_type]
-    return default_color_map.get("default", "#d3d3d3")
+    return default_color_map.get("default", FALLBACK_TYPE_COLOR)
 
 
 # The value of a color rule's color that draws the features it matches in

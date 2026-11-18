@@ -160,7 +160,7 @@ const ONE = [[['A', 'CDS'], ['R', 'repeat_region'], ['B', 'CDS']]];
 // Whether the displayed Result shows the rows the rules regroup (`before`
 // rules to `after` rules), with Python's rule order of the rules before.
 const showable = (rows, before, after, options) => legendRowsShowable(
-  rowKeysOf(rows, before), rowKeysOf(rows, after), { displayed: 0, firstRule: legendRuleOrder(before), ...options }
+  rowKeysOf(rows, before), rowKeysOf(rows, after), { displayed: 0, firstRule: legendRuleOrder(before, { palette: {}, types: [] }), ...options }
 );
 
 test('a whole-row relabel, a merge into a shown row and a recolor are shown live', () => {
@@ -274,8 +274,8 @@ test('a caption written in several colors keys each color\'s row as Python does 
   // D-15-38: a History restore reads the rows by caption (accepted residual OV-357).
   assert.deepEqual(rowKeysOf(ONE, shared, { byColor: false }).map((keys) => [...keys.values()]),
     [['alpha', 'repeat_region', 'alpha']], 'a History restore');
-  assert.equal(legendRuleOrder(shared, { byColor: false })('alpha'), 0);
-  assert.equal(legendRuleOrder(shared)('alpha [#00ff00]'), 1);
+  assert.equal(legendRuleOrder(shared, { palette: {}, types: [] }, { byColor: false })('alpha'), 0);
+  assert.equal(legendRuleOrder(shared, { palette: {}, types: [] })('alpha [#00ff00]'), 1);
 });
 
 test('a rule color that splits the row of its caption asks Python; a row re-keyed in its place does not (OV-1235)', () => {

@@ -821,6 +821,19 @@ def _mode_slice_defaults() -> ModeSliceDefaults:
     return cast(ModeSliceDefaults, json.loads(text))
 
 
+def saved_reset_type_colors(type_colors: Mapping[str, str], palette: str) -> tuple[Mapping[str, str], ...]:
+    """The type colors a reset rule of a Session drawn in ``type_colors`` with the palette ``palette`` may have
+    been written in (``gbdraw.legend.table.is_saved_reset_rule``): ``type_colors``, and ``type_colors`` with the
+    rows the palette held in the release that wrote such rules (``earlierPaletteRows``, OV-3259). The Web's twin is
+    ``savedResetTypeColors`` (gbdraw/web/js/services/specific-color-rules.js); both answer
+    tests/fixtures/saved_rule_captions.json (``rules``)."""
+
+    from gbdraw.io.colors import current_palette_name
+
+    earlier = _mode_slice_defaults()["earlierPaletteRows"]["palettes"].get(current_palette_name(palette or "default"))
+    return (type_colors,) if not earlier else (type_colors, {**type_colors, **earlier})
+
+
 def _normalized(row: ModeScopedSetting, value: object) -> object:
     """``value`` without the run-time identities the packaged rules name for ``row``."""
 

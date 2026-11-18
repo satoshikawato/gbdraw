@@ -86,18 +86,30 @@ def test_rule_row_keys_answer_the_shared_fixture(case):
     def swatch(fill, stroke="none", width=0):
         return legend_swatch({"type": "solid", "fill": fill, "stroke": stroke, "width": width})
 
-    rules = [(rule["cap"], rule["color"]) for rule in case["rules"]]
+    from gbdraw.features.colors import is_type_color_value, rule_color
+    from gbdraw.legend.table import FeatureLegendRows
+
     renderer = {row[0]: swatch(*row[1:]) for row in case["renderer_rows"]}
     rule_stroke = case.get("rule_stroke", [])
+    palette = case.get("palette", {})
+    types = case.get("types", [])
 
-    def allocate(table):
-        return rule_legend_keys(table, renderer, lambda fill: swatch(fill, *rule_stroke))
+    def allocate(rules):
+        # The rows the table can draw, as prepare_legend_table reads them: a rule of the type color value in its
+        # type's color, one for every type in the color of each drawn type.
+        rows = FeatureLegendRows.of([(rule["feat"], rule["cap"], rule["color"]) for rule in rules],
+                                    [(feature_type, None) for feature_type in types], palette)
+        return rule_legend_keys(rows.rule_fills(), renderer, lambda fill: swatch(fill, *rule_stroke))
 
-    keys = allocate(rules)
-    assert [
-        keys.get((caption, _legend_fill_identity(color)), "") for caption, color in rules
-    ] == case["keys"]
-    assert allocate(rules[::-1]) == keys
+    def key_of(keys, rule):
+        each = types if rule["feat"] == "*" and is_type_color_value(rule["color"]) else [rule["feat"]]
+        found = [keys.get((rule["cap"], _legend_fill_identity(rule_color(feature_type, rule["color"], palette))), "")
+                 for feature_type in each]
+        return found if len(each) > 1 or rule["feat"] == "*" and is_type_color_value(rule["color"]) else found[0]
+
+    keys = allocate(case["rules"])
+    assert [key_of(keys, rule) for rule in case["rules"]] == case["keys"]
+    assert allocate(case["rules"][::-1]) == keys
 
 
 @pytest.mark.parametrize("mode", ["circular", "grid", "batch", "linear"])
@@ -418,12 +430,15 @@ SAVED_RULES = json.loads(
 
 @pytest.mark.parametrize("case", SAVED_RULES, ids=[case["name"] for case in SAVED_RULES])
 def test_a_saved_rule_answers_the_shared_fixture(case):
-    """A saved Session's rule read with its drawing's type colors: an older Reset fill color rule is read as the
-    type color value without a caption (the Web's `savedSpecificRules`); a color table file, as written."""
+    """A saved Session's rule read with its drawing's type colors and palette: an older Reset fill color rule is
+    read as the type color value without a caption (the Web's `savedSpecificRules`); a color table file, as
+    written."""
+    from gbdraw.session_drawings import saved_reset_type_colors
+
     rule = case["rule"]
     table = pd.DataFrame([[rule["feat"], rule["qual"], rule["val"], rule["color"], rule["cap"]]],
                          columns=["feature_type", "qualifier_key", "value", "color", "caption"])
-    read = saved_rule_captions(table, lambda: case["type_colors"])
+    read = saved_rule_captions(table, lambda: saved_reset_type_colors(case["type_colors"], case["palette"]))
     assert read[["color", "caption"]].values.tolist() == [[case["read"]["color"], case["read"]["cap"]]]
     assert saved_rule_captions(table)["color"].tolist() == [rule["color"]]
 
@@ -483,10 +498,12 @@ def test_the_downloaded_color_table_of_an_older_build_draws_numbered_names(tmp_p
 
 
 def test_the_session_of_an_older_build_replays_with_numbered_names(tmp_path):
-    with materialize_session(load_session_document(SAVED_SESSION), output_directory=tmp_path) as materialized:
+    document = load_session_document(SAVED_SESSION)
+    # The Web app saves its rule list as a color table file; the replay holds it as the table it reads.
+    assert '"colorTableFile": {"resourceId"' in json.dumps(document.to_dict())
+    with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        # The Web app saves its rule list as a color table file.
-        assert request.options.colors.color_table_file is not None
+        assert request.options.colors.color_table_file is None
         output = RenderOutputRequest(
             formats=("interactive_svg",), output_directory=tmp_path, output_prefix="replay", overwrite=True
         )
@@ -696,16 +713,17 @@ def test_a_palette_rule_for_every_type_draws_a_row_in_each_type_color():
         ("Ribosomal", "#71ee7d"): "Ribosomal [#71ee7d]", ("Ribosomal", "#54bcf8"): "Ribosomal [#54bcf8]"}
 
 
-RESET_SESSION = SAVED_SESSION.with_name("HmmtDNA-reset-fill-color.v50-api0145.gbdraw-session.json.gz")
+RESET_SESSION = SAVED_SESSION.with_name("HmmtDNA-reset-fill-color.v50-web0145.gbdraw-session.json.gz")
 # s-rRNA of HmmtDNA, as the fixture's reset rule names it (`^f24a47546@record-1$`).
 RESET_FEATURE = "f24a47546"
 
 
 @pytest.mark.parametrize("palette", ["default", "mint"])
 def test_a_reset_rule_of_a_0_14_5_session_replays_as_the_type_color(tmp_path, palette):
-    """v0.14.5's Reset fill color wrote s-rRNA's rule in the palette's rRNA color, named `other rRNAs`; the replay
-    reads it as a rule of the type color value without a caption, so s-rRNA takes the rRNA color of the palette it
-    is drawn with, and the Legend draws one rRNA row (HmmtDNA-reset-fill-color.v50-api0145.provenance.json)."""
+    """v0.14.5's Reset fill color wrote s-rRNA's rule in the palette's rRNA color, named `other rRNAs`, and its Save
+    Session stored the rules as a color table file; the replay reads it as a rule of the type color value without a
+    caption, so s-rRNA takes the rRNA color of the palette it is drawn with, and the Legend draws one rRNA row, as
+    Web Load reads it (tests/web/mode-scoped-session.test.mjs; HmmtDNA-reset-fill-color.v50-web0145.provenance.json)."""
     from gbdraw.api.request_render import request_type_colors
     from gbdraw.features.colors import TYPE_COLOR_VALUE
 

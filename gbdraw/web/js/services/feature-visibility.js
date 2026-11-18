@@ -20,7 +20,7 @@ import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from '.
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
 import { replaceAnnotationTarget } from './drawing/annotation-sets.js';
 import { featureOverrideKey } from './feature-override-identity.js';
-import { createRuleLegendCaptions, featureLegendRows } from './specific-color-rules.js';
+import { createRuleLegendCaptions, featureLegendRows, ruleFillsOf, ruleRowFills } from './specific-color-rules.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
@@ -28,7 +28,7 @@ import { createRuleLegendCaptions, featureLegendRows } from './specific-color-ru
 /** @import { AnnotationTarget } from './annotation-state.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
-/** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { LegendRowContext, RuleFills, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { WebState } from '../state.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
@@ -859,6 +859,18 @@ export const displayedLegendRowContext = (state, drawing) => ({
     ?? NO_LEGEND_KEYS
 });
 
+// The type colors and drawn types of the shown drawing a rule of the type
+// color value is read with (`RuleFills`): the part of
+// `displayedLegendRowContext` that needs no Result's rows.
+/**
+ * @param {DisplayedLegendState} state
+ * @param {Parameters<typeof displayedDrawnFeatures>[1]} drawing
+ * @returns {RuleFills}
+ */
+export const displayedRuleFills = (state, drawing) => ruleFillsOf({
+  features: displayedDrawnFeatures(state, drawing), palette: appliedFeatureColors(state)
+});
+
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else
 // (unknown) whether the Result's catalog (`resultCatalogFeatures`) renders it,
 // which Python decided when it last rendered the Result; null without one.
@@ -1059,7 +1071,9 @@ const legendRowKeysOf = (catalogFeatures, context, { byColor }) => {
   // A feature whose match was not read is of a type no captioned rule is for: its row is its type's.
   const rows = featureLegendRows(context.colorRules, drawn.map(({ type, winner }) => ({ type, winner: winner ?? null })),
     context.palette);
-  const ruleRowKey = byColor ? createRuleLegendCaptions(context.colorRules) : legendRuleCaption;
+  // A row of `rows.rowOf` comes in the fill its rule draws the type in, as the key function reads it.
+  const fills = { palette: context.palette, types: [...new Set(drawn.map(({ type }) => type))] };
+  const ruleRowKey = byColor ? createRuleLegendCaptions(context.colorRules, fills) : legendRuleCaption;
   /** @type {Map<string, string | null>} */
   const keys = new Map();
   const generated = new Set();
@@ -1093,15 +1107,20 @@ export const resultLegendRowKeys = (state, mode, context, { byColor = true } = {
 // The place of each rule row in Python's Legend: the index of the first rule
 // drawn in the row of the key, by the key the rule table allocates to its
 // rule rows (`legendRowKeysOf`; prepare_legend_table walks the rules in table
-// order and skips a row it has drawn); -1 for a row no rule names.
-// `byColor`: as `legendRowKeysOf`.
+// order and skips a row it has drawn); -1 for a row no rule names. A rule
+// names each row it can draw in the type colors and drawn types `fills` give
+// (`ruleRowFills`). `byColor`: as `legendRowKeysOf`.
 /**
- * @param {readonly Partial<SpecificColorRule>[]} rules @param {{ byColor?: boolean }} [options]
+ * @param {readonly Partial<SpecificColorRule>[]} rules
+ * @param {import('./specific-color-rules.js').RuleFills} fills
+ * @param {{ byColor?: boolean }} [options]
  * @returns {(key: string) => number}
  */
-export const legendRuleOrder = (rules, { byColor = true } = {}) => {
-  const ruleRowKey = byColor ? createRuleLegendCaptions(rules) : legendRuleCaption;
-  return (key) => rules.findIndex((rule) => Boolean(legendRuleCaption(rule)) && ruleRowKey(rule) === key);
+export const legendRuleOrder = (rules, fills, { byColor = true } = {}) => {
+  const ruleRowKey = createRuleLegendCaptions(rules, fills);
+  /** @param {Partial<SpecificColorRule>} rule @param {string} key */
+  const names = (rule, key) => (byColor ? ruleRowFills(rule, fills).some((row) => ruleRowKey(row) === key) : legendRuleCaption(rule) === key);
+  return (key) => rules.findIndex((rule) => Boolean(legendRuleCaption(rule)) && names(rule, key));
 };
 
 // Whether the displayed Result shows the Legend rows a change of the row keys

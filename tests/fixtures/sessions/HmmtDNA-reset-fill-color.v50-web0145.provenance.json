@@ -1,0 +1,12 @@
+{
+  "purpose": "Positive fixture of a reset rule as the v0.14.5 Web app wrote it: Reset fill color, \"This feature only\", on a feature another rule still colored wrote a `hash` rule for the feature in its type's palette color, named like the type's other Legend row (`other rRNAs`), and Save Session stored the drawing's rules as a color table file. Web Load (gbdraw/web/js/services/config.js, savedSpecificRules) and CLI replay (gbdraw/session.py, saved_rule_captions) read it as a rule of the type color value (`palette`) without a caption, so the feature follows a later palette change and the Legend draws one `rRNA` row.",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main)",
+  "route": "The v0.14.5 Web app (its own browser wheel, served by its tools/serve_web_tests.py) in Playwright: load the HMMT Gallery Session (HMMT_SESSION, tests/web/helpers/audit-browser.cjs:7 of the tag, through `load`, tests/web/helpers/mode-transition.cjs:11); add the rule rRNA product ^s-rRNA$ #ff00ff `small rRNA` (`addSpecificRule`, gbdraw/web/js/app/feature-editor/rule-actions.js:850); open s-rRNA (`openFeatureEditorFromList`, gbdraw/web/js/app/app-setup.js:6207) and Reset fill color (`resetClickedFeatureFillColor`, gbdraw/web/js/app/feature-editor/color-actions.js:1571; \"This feature only\" if the dialog asks, `handleResetColorChoice`, :1604); Generate (`generate`, mode-transition.cjs:35); set the title `reset-fill-color-v0145`; Save Session (`download`, mode-transition.cjs:73). The journey follows the tag's tests/web/gui-audit-20260930-editor.playwright.spec.js:175.",
+  "webWriter": "color-actions.js:1612-1628 of the tag (`doResetFillColor`: the type's palette color, caption `other rRNAs`, scope \"reset\"); the Session's color table is written as a file resource (`addColorTableResources`, gbdraw/web/js/services/session-request.js of the tag: `colorTableFile`, `representation: 'file'`).",
+  "values": "renderRequest.diagramOptions.colors.colorTableFile {resourceId: colors-color-table-file, representation: file}, defaultColorsPalette `default`; the resource holds rRNA product ^s-rRNA$ #ff00ff `small rRNA` and rRNA hash ^f24a47546@record-1$ #71ee7d `other rRNAs`; modes.circular.config.rules holds the same two rules. Before saving, the app drew s-rRNA in #71ee7d (the default palette's rRNA color).",
+  "decompressedSha256": "afe24036c9bc47923870ab95169ac23dab23a3a8e2d18329cf7ad9005024acc7",
+  "compression": "gzip -n -9 of the file Save Session downloaded (decompressed)",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

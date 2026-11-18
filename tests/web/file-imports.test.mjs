@@ -27,6 +27,12 @@ await writeFile(
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
   'utf8'
 );
+// specific-color-rules.js reads the earlier palette rows a saved reset rule may be written in.
+await writeFile(
+  join(tempRoot, 'mode-slice-defaults.generated.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-slice-defaults.generated.js'), 'utf8'),
+  'utf8'
+);
 // error-normalization.js reads Python's figure length units from the generated mode profiles.
 await writeFile(
   join(tempRoot, 'mode-profiles.generated.js'),
@@ -210,7 +216,7 @@ assert.equal(applySpecificRuleProvenance(canonicalRules, [
 assert.equal(applySpecificRuleProvenance(canonicalRules, [
   { ...canonicalRules[0], color: '#ffffff', fromFile: true }
 ])[0].fromFile, undefined);
-assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
+assert.deepEqual(buildLegendIntents(canonicalRules, { palette: {}, types: [] }).intents, [
   { caption: 'Alpha', color: '#112233' }
 ]);
 

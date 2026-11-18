@@ -486,7 +486,7 @@ def test_each_drawn_feature_is_in_a_row_generate_draws(case):
     # A rule row by the first rule written as its rule is (rules of one caption and color are one row).
     assert [rules.index(rules[row.rule]) if isinstance(row, LegendRuleRow) else row for row in drawn_rows] == case["rows"]
     grouped = {row for row in (rows.row_of(*feature) for feature in drawn) if row is not None}
-    assert grouped == {row[1:] if isinstance(row, LegendRuleRow) else row for row in drawn_rows}
+    assert grouped == {(row.caption, row.fill) if isinstance(row, LegendRuleRow) else row for row in drawn_rows}
 
 
 # No feature drawn: the rows of the tracks alone.

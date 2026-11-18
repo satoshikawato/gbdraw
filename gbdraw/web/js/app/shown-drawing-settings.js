@@ -9,7 +9,7 @@ import { linearAxisRulerApplies } from '../mode-profiles.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedLegendRowContext } from '../services/feature-visibility.js';
-import { colorRuleLegendGroups, groupLegendRowKeys } from '../services/specific-color-rules.js';
+import { colorRuleLegendGroups, groupLegendRowKeys, ruleFillsOf } from '../services/specific-color-rules.js';
 import { COMPARISON_COLOR_KEYS } from '../utils/color-utils.js';
 import { toRaw } from '../utils/vue-raw.js';
 /** @import { DrawingState, WebState } from '../state.js' */
@@ -71,8 +71,9 @@ export const createFeatureChoiceReaders = ({ state, shownLegendName }) => {
     const type = clickedFeature.value?.feat.type;
     if (type === undefined) return [];
     const drawing = state.activeDrawing();
-    const rowKeyOf = groupLegendRowKeys(displayedLegendRowContext(state, drawing));
-    return colorRuleLegendGroups(drawing.manualSpecificRules, String(type))
+    const context = displayedLegendRowContext(state, drawing);
+    const rowKeyOf = groupLegendRowKeys(context);
+    return colorRuleLegendGroups(drawing.manualSpecificRules, ruleFillsOf(context), String(type))
       .map((group) => ({ group, shownName: shownLegendName(rowKeyOf(group)) }))
       .sort((left, right) => left.group.name.localeCompare(right.group.name) || left.shownName.localeCompare(right.shownName));
   });

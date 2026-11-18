@@ -1,7 +1,7 @@
 // @ts-check
 import { namedColorHex } from './named-colors.js';
 import { t } from './i18n.js';
-import { PALETTE_NAME_ALIASES, TYPE_COLOR_VALUE } from '../contracts/schema.generated.js';
+import { FALLBACK_TYPE_COLOR, PALETTE_NAME_ALIASES, TYPE_COLOR_VALUE } from '../contracts/schema.generated.js';
 /**
  * @param {string} hex
  * @returns {{ r: number, g: number, b: number }}
@@ -391,18 +391,19 @@ export const paletteFeatureColor = (colors, type) => {
 };
 
 // The color a rule of `color` draws a feature of the type in: the type's
-// color in `colors` (`paletteFeatureColor`) for the type color value, else
-// `color` itself, as Python draws it (gbdraw/features/colors.py
-// `rule_color`; twin `concern:color-precedence`). Undefined for the type
-// color value when the palette has neither the type nor a `default`.
+// color in `colors` (`paletteFeatureColor`, else `FALLBACK_TYPE_COLOR` when
+// the palette has neither the type nor a `default`) for the type color value,
+// else `color` itself, as Python draws it (gbdraw/features/colors.py
+// `rule_color`; twin `concern:color-precedence`). Never the type color value
+// itself: it is no paint.
 /**
  * @param {unknown} color
  * @param {unknown} type
  * @param {Readonly<Record<string, string>>} colors
- * @returns {string | undefined}
+ * @returns {string}
  */
 export const ruleFill = (color, type, colors) => (
-  isTypeColorValue(color) ? paletteFeatureColor(colors, type) : String(color ?? '')
+  isTypeColorValue(color) ? paletteFeatureColor(colors, type) ?? FALLBACK_TYPE_COLOR : String(color ?? '')
 );
 
 // The applied palette's color of a feature type (`paletteFeatureColor`).
@@ -417,14 +418,14 @@ export const appliedFeatureColorOf = (state, type) => (
 
 // The fill a rule color draws a feature of the type in with the applied
 // palette (`ruleFill`): the type color value draws the type's color; any
-// other color, or the type color value of a type without one, as written.
+// other color as written.
 /**
  * @param {Parameters<typeof appliedFeatureColors>[0]} state
  * @param {string} color
  * @param {unknown} type
  * @returns {string}
  */
-export const appliedRuleFill = (state, color, type) => ruleFill(color, type, appliedFeatureColors(state)) ?? color;
+export const appliedRuleFill = (state, color, type) => ruleFill(color, type, appliedFeatureColors(state));
 
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
 /** @param {unknown} colorValue */

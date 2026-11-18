@@ -36,7 +36,7 @@ const evaluateRules = async ({ features: payloads, rules, kind }) => {
 
 const setup = ({
   siblings, features = featuresOf(['p', 'p', 'p', 'p']), savedRules = [savedRule], commit = async () => true,
-  userColors = {}, queued = false, appliedColors = { CDS: '#cccccc' }
+  userColors = {}, queued = false, appliedColors = { CDS: '#cccccc' }, existing = null
 }) => {
   /** @type {string[]} */
   const stages = [];
@@ -122,7 +122,7 @@ const setup = ({
       manualSpecificRules.splice(0, manualSpecificRules.length, ...await built);
       return true;
     },
-    countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
+    countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => existing,
     findFeaturesWithSameDisplayedLabel: () => [], findFeaturesWithSameIndividualLabel: () => [],
     findFeaturesWithSameLegendItem: (feature) => (siblings ? features.filter((other) => other !== feature) : []),
     findMatchingRegexRule: () => null, getDisplayedFeatureLabel: () => '',
@@ -187,6 +187,26 @@ test('Use existing color offers the palette color a palette row shows after a pa
   assert.equal(setup_.featureStyleScopeDialog.existingCaptionColor, '#228b22');
   assert.deepEqual(setup_.state.legendEntries.value, [{ caption: 'CDS', color: '#cccccc' }], 'the row keeps its record');
 });
+
+// Review finding 4 and bug C: "Use existing" into the row a rule of the type
+// color value draws shows the row's color; a feature of the rule's type keeps
+// the value, so it stays in that row after a palette change, and a feature of
+// another type takes the color the row shows.
+for (const [name, ruleType, shown, written] of [
+  ['of its type keeps the palette value', 'CDS', '#cccccc', TYPE_COLOR_VALUE],
+  ['of every type keeps the palette value', '*', '#cccccc', TYPE_COLOR_VALUE],
+  ['of another type takes the row\'s color', 'rRNA', '#71ee7d', '#71ee7d']
+]) {
+  test(`Use existing into a palette rule's row: a feature ${name}`, async () => {
+    const rule = { feat: ruleType, qual: 'product', val: '^p9$', color: TYPE_COLOR_VALUE, cap: 'Ribosomal' };
+    const setup_ = setup({ siblings: true, savedRules: [rule], appliedColors: { CDS: '#cccccc', rRNA: '#71ee7d' }, existing: { rule, color: rule.color } });
+    assert.equal(await setup_.preparation.prepare([rule]), true);
+    await setup_.pick('#123456');
+    assert.equal(setup_.featureStyleScopeDialog.existingCaptionColor, shown, 'the swatch is the row\'s color, never the value');
+    await setup_.choices.scope('useExisting');
+    assert.deepEqual(setup_.manualSpecificRules.filter((row) => row.qual === 'hash').map(({ color }) => color), [written]);
+  });
+}
 
 test('a popup color pick without a dialog prepares the rules it commits', async () => {
   const { stages, preparation, pick, dialogStages } = setup({ siblings: false });

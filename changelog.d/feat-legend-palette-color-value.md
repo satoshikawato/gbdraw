@@ -7,7 +7,8 @@
   **Reset fill color** kept the old color after a palette or Default colors
   change, and its legend row split in two; the reset now writes a `palette`
   rule without a caption, which the rule table shows with the tag
-  **Palette color**. A Session saved by 0.14.5 reads its reset rules so.
+  **Palette color**. A Session saved by 0.14.5 reads its reset rules so, in
+  the Web app and with `gbdraw render --session`.
 - Fixed: a rule a user named `other rRNAs` (or `other proteins`) in the
   type's palette color was drawn in the type's own legend row; it draws its
   own row again, as in 0.14.5.

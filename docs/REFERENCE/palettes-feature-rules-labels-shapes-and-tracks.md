@@ -260,8 +260,10 @@ caption. In the rule table, such a rule shows its type's color and the tag
 **Palette color**; picking a color there gives the rule that color instead.
 A Session saved by gbdraw 0.14.5 or earlier holds such a reset as a rule named
 like the remainder row (`other proteins` for CDS, `other <feature type>s` for
-other types) in the type's color; loading the Session reads it as a `palette`
-rule without a caption. A color table file is read as written.
+other types) in the type's color, as the Session's palette had it then;
+loading the Session in the Web app, or drawing it with
+`gbdraw render --session`, reads it as a `palette` rule without a caption. A
+color table file given with `-t` is read as written.
 
 Legend rows that have one name follow one rule in the CLI, the Python API, and
 the Web app:

@@ -523,6 +523,14 @@ const identityTargets = (catalogAdmission, row) => (
 );
 
 
+// The keys of the rows the captioned rules draw (`rowOf`, a rule's row key).
+/**
+ * @param {readonly Partial<SpecificColorRule>[]} rules
+ * @param {(rule: Partial<SpecificColorRule>) => string} rowOf
+ * @returns {Set<string>}
+ */
+const captionedRuleRowKeys = (rules, rowOf) => new Set(rules.filter((rule) => text(rule?.cap)).map((rule) => rowOf(rule)));
+
 /** @param {EditorPlanOptions} options */
 const compilePlanBundle = ({
   catalogAdmission,
@@ -695,7 +703,7 @@ const compilePlanBundle = ({
     // A listed row is a rule's row by its key, never by the rule's name: a
     // caption written in several colors is the key of none of its rows (OV-643).
     /** @type {Set<string>} */
-    const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map(ruleRowOf));
+    const ruleRowKeys = captionedRuleRowKeys(rules, ruleRowOf);
     /** @param {NormalizedLegendEntry} entry */
     const isRuleRow = (entry) => ruleRowKeys.has(entry.originalCaption);
     // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's

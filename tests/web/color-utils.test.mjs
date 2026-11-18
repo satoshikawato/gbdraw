@@ -9,6 +9,7 @@ import {
   normalizePaletteColors,
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys,
+  ruleFill,
   toNativeColorInputValue
 } from '../../gbdraw/web/js/utils/color-utils.js';
 
@@ -127,3 +128,12 @@ for (const [low, high, factor, expected] of [
 ]) {
   assert.equal(interpolateColor(low, high, factor), expected, `${low} to ${high} at ${factor}`);
 }
+
+// Review finding 10: a rule of the type color value draws its type's color,
+// else the palette's `default`, else Python's fallback (gbdraw/features/colors.py
+// `feature_type_color`); never the value itself, which is no paint.
+assert.equal(ruleFill('palette', 'CDS', { CDS: '#54bcf8', default: '#d3d3d3' }), '#54bcf8');
+assert.equal(ruleFill('Palette', 'gap', { CDS: '#54bcf8', default: '#aaaaaa' }), '#aaaaaa');
+assert.equal(ruleFill('palette', 'gap', { CDS: '#54bcf8' }), '#d3d3d3');
+assert.equal(ruleFill('palette', 'constructor', {}), '#d3d3d3');
+assert.equal(ruleFill('#123456', 'gap', {}), '#123456');

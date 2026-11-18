@@ -15,6 +15,8 @@ await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts'), join(tempRoot, 'con
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'config.js'), join(tempRoot, 'config.js'));
 // track-slot-display.js reads the generated size-class boundaries.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempRoot, 'mode-profiles.generated.js'));
+// specific-color-rules.js reads the earlier palette rows a saved reset rule may be written in.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-slice-defaults.generated.js'), join(tempRoot, 'mode-slice-defaults.generated.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 
 const {
@@ -131,7 +133,7 @@ const rules = [
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },
   { feat: 'CDS', qual: 'product', val: 'b', color: '#112233', cap: 'Shared' }
 ];
-const desired = buildLegendIntents(rules).intents;
+const desired = buildLegendIntents(rules, { palette: {}, types: [] }).intents;
 assert.deepEqual(desired, [{ caption: 'Shared', color: '#112233' }]);
 
 const first = diffLegendIntents([], desired);
@@ -152,7 +154,7 @@ assert.deepEqual(second, {
 assert.deepEqual(buildLegendIntents([
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical [#112233]' },
   { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical [#445566]' }
-]).intents, [
+], { palette: {}, types: [] }).intents, [
   { caption: 'Historical [#112233]', color: '#112233' },
   { caption: 'Historical [#445566]', color: '#445566' }
 ]);

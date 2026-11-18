@@ -501,14 +501,19 @@ def saved_rule_caption(caption: str, color: object) -> str:
     return name if name.strip() else caption
 
 
+# The type colors a Session's drawing may have written a reset rule in: its type colors now, and as the release
+# that wrote such rules held its palette (``gbdraw.session_drawings.saved_reset_type_colors``).
+SavedTypeColors = Callable[[], Sequence[Mapping[str, str]]]
+
+
 def is_saved_reset_rule(
-    feature_type: str, qualifier_key: str, caption: str, color: object, type_colors: Callable[[], Mapping[str, str]]
+    feature_type: str, qualifier_key: str, caption: str, color: object, type_colors: SavedTypeColors
 ) -> bool:
     """Whether a rule of a saved Session is one Reset fill color wrote before it
     wrote ``TYPE_COLOR_VALUE``: a ``hash`` rule named like its type's "other"
-    Legend row (``other_feature_row_name``) in the type's color of the
-    Session's drawing (``feature_type_color`` of ``type_colors()``, called
-    only for a rule so named). The Web of
+    Legend row (``other_feature_row_name``) in the type's color in one of the
+    type colors of the Session's drawing (``feature_type_color`` of each of
+    ``type_colors()``, called only for a rule so named). The Web of
     first-parent ``main`` since a6aa233f3 (0.14.5: color-actions.js
     ``doResetFillColor``) wrote it for a feature another rule still colored.
     The color must match: "This feature only" with the scope dialog's default
@@ -517,16 +522,17 @@ def is_saved_reset_rule(
     return (
         qualifier_key.strip().lower() == "hash"
         and caption == other_feature_row_name(feature_type)
-        and color_identity(color) == color_identity(feature_type_color(type_colors(), feature_type))
+        and any(
+            color_identity(color) == color_identity(feature_type_color(colors, feature_type))
+            for colors in type_colors()
+        )
     )
 
 
-def saved_rule_captions(
-    color_table: DataFrame, type_colors: Callable[[], Mapping[str, str]] | None = None
-) -> DataFrame:
+def saved_rule_captions(color_table: DataFrame, type_colors: SavedTypeColors | None = None) -> DataFrame:
     """A saved color table with each caption read by ``saved_rule_caption``,
     and, given the type colors of the saved drawing (a Session; a color table
-    file gives none), each rule ``is_saved_reset_rule`` names read as
+    file of the CLI gives none), each rule ``is_saved_reset_rule`` names read as
     ``TYPE_COLOR_VALUE`` without a caption.
 
     Returns ``color_table`` itself when no rule changes.
@@ -709,12 +715,13 @@ LegendRule = tuple[str, str, str]
 
 class LegendRuleRow(NamedTuple):
     """A rule row of the feature rows of a Legend, for one drawn type: the
-    index of its rule in the table, its caption, and the fill the rule draws
-    features of that type in (``rule_color``)."""
+    index of its rule in the table, its caption, the fill the rule draws
+    features of that type in (``rule_color``), and that type."""
 
     rule: int
     caption: str
     fill: str
+    feature_type: str
 
 
 @dataclass(frozen=True)
@@ -766,7 +773,7 @@ class FeatureLegendRows:
         draws the type in."""
 
         return [
-            LegendRuleRow(index, rule[1], rule_color(feature_type, rule[2], self.palette))
+            LegendRuleRow(index, rule[1], rule_color(feature_type, rule[2], self.palette), feature_type)
             for index, rule in enumerate(self.rules)
             if rule[0] in (feature_type, "*") and str(rule[1] or "").strip()
         ]

@@ -7,6 +7,9 @@ import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { makeTempDir } from './helpers/temp-dir.cjs';
 
+// No type colors and no drawn types: rules of literal colors only (`RuleFills`).
+const NO_FILLS = Object.freeze({ palette: Object.freeze({}), types: Object.freeze([]) });
+
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
 /** @param {unknown[]} write */
@@ -182,7 +185,7 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
     const candidate = await preparation.prepareCandidate(rules);
     if (!candidate) return false;
     const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
-    const { intents } = buildLegendIntents(candidate.rules, [], rule => drawn.has(rule));
+    const { intents } = buildLegendIntents(candidate.rules, { palette: {}, types: [] }, [], rule => drawn.has(rule));
     manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
     legendEntries.value = intents.map(entry=>({...entry}));
     for (const feature of extractedFeatures.value) {
@@ -1765,18 +1768,18 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // and color, with the feature types of its rules. The popup lists those of
   // the clicked feature's type.
   assert.deepEqual(colorRuleLegendGroups([specialRule, connectorRule, cdsRule, { ...specialRule, val: '^NOMATCH4$' },
-    { ...cdsRule, feat: 'tRNA' }, { ...cdsRule, cap: '' }]), [
+    { ...cdsRule, feat: 'tRNA' }, { ...cdsRule, cap: '' }], NO_FILLS), [
     { name: 'Special', color: '#ff0000', types: ['tRNA'] },
     { name: 'Connector', color: '#5a5a5a', types: ['tRNA'] },
     { name: 'Tail', color: '#00aa00', types: ['CDS', 'tRNA'] }
   ]);
-  assert.deepEqual(colorRuleLegendGroups([specialRule, connectorRule, cdsRule], 'tRNA').map(({ name }) => name), ['Special', 'Connector'],
+  assert.deepEqual(colorRuleLegendGroups([specialRule, connectorRule, cdsRule], NO_FILLS, 'tRNA').map(({ name }) => name), ['Special', 'Connector'],
     'a rule of another feature type is not offered');
-  assert.deepEqual(colorRuleLegendGroups([specialRule, { ...specialRule, color: '#F00' }, { ...specialRule, color: '#0000ff' }], 'tRNA'),
+  assert.deepEqual(colorRuleLegendGroups([specialRule, { ...specialRule, color: '#F00' }, { ...specialRule, color: '#0000ff' }], NO_FILLS, 'tRNA'),
     [{ name: 'Special', color: '#ff0000', types: ['tRNA'] }, { name: 'Special', color: '#0000ff', types: ['tRNA'] }],
     'one group per name and color');
-  const [special, connector] = colorRuleLegendGroups([specialRule, connectorRule], 'tRNA');
-  const [tail] = colorRuleLegendGroups([cdsRule], 'CDS');
+  const [special, connector] = colorRuleLegendGroups([specialRule, connectorRule], NO_FILLS, 'tRNA');
+  const [tail] = colorRuleLegendGroups([cdsRule], NO_FILLS, 'CDS');
   const t1 = { ...trna, legendCaption: 'tRNA' };
   const t2 = { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Special' };
   const t3 = { ...trna, id: 't3', svg_id: 't3', legendCaption: 'tRNA' };
@@ -1853,7 +1856,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // rule's of that name.
   const twins = [{ ...connectorRule, cap: 'Twin', color: '#111111' }, { ...connectorRule, cap: 'Twin', color: '#222222' }];
   const twinPick = ruleRows({ rules: twins });
-  await twinPick.renameActions.joinLegendGroup(colorRuleLegendGroups(twins, 'tRNA')[1]);
+  await twinPick.renameActions.joinLegendGroup(colorRuleLegendGroups(twins, NO_FILLS, 'tRNA')[1]);
   assert.deepEqual(committedFor(twinPick, 't1'), [['t1', 'Twin', '#222222']]);
   // A typed name that two groups carry is the group in the renamed row's
   // color (one name and one color share a Legend row), not the first group of
@@ -1894,7 +1897,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // and a group whose row draws only features of another type.
   const everyRule = { feat: '*', qual: 'note', val: '^NOMATCH5$', color: '#123456', cap: 'Everything' };
   const mixedRules = [{ ...cdsRule, cap: 'Mixed' }, { ...cdsRule, cap: 'Mixed', feat: 'tRNA', val: '^NOMATCH6$' }];
-  assert.deepEqual(colorRuleLegendGroups([everyRule, cdsRule, ...mixedRules], 'tRNA').map(({ name, types }) => [name, types]),
+  assert.deepEqual(colorRuleLegendGroups([everyRule, cdsRule, ...mixedRules], NO_FILLS, 'tRNA').map(({ name, types }) => [name, types]),
     [['Everything', ['*']], ['Mixed', ['CDS', 'tRNA']]], 'the list offers the group of a rule for every type');
   const c1 = { id: 'c1', svg_id: 'c1', type: 'CDS', product: 'p', qualifiers: { product: ['p'] }, start: 100, end: 190, legendCaption: 'Mixed' };
   // OV-244: where t1 is the only tRNA, Python writes the exact product rule that colors only it.
@@ -1907,7 +1910,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     }, '^tRNA-Leu$']
   ]) {
     const picked = ruleRows({ rules, ...options });
-    await picked.renameActions.joinLegendGroup(colorRuleLegendGroups(rules, 'tRNA')[0]);
+    await picked.renameActions.joinLegendGroup(colorRuleLegendGroups(rules, NO_FILLS, 'tRNA')[0]);
     assert.notEqual(picked.legendRenameDialog.show, true, `a pick of ${name} asks nothing`);
     assert.deepEqual(committedFor(picked, ruleValue), [[ruleValue, name, color]]);
     // A typed rename keeps the Merge rule of rows of one same feature type.

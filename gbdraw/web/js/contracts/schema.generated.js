@@ -191,6 +191,9 @@ export const FEATURE_INSTANCE_SEPARATOR = '@';
 // gbdraw/features/colors.py: TYPE_COLOR_VALUE
 export const TYPE_COLOR_VALUE = 'palette';
 
+// gbdraw/features/colors.py: FALLBACK_TYPE_COLOR
+export const FALLBACK_TYPE_COLOR = '#d3d3d3';
+
 // gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
 export const CLI_RECORD_KEY_PREFIX = 'record-';
 

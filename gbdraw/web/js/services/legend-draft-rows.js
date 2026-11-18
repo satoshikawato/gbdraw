@@ -236,7 +236,7 @@ export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ..
   const ruleRowOf = ruleLegendCaptions({
     rules: [...rules], pythonRows: new Map(), ...NO_DRAWN_FEATURES, originalLegendOrder: [...rows.originalCaptions]
   });
-  const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map(ruleRowOf));
+  const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map((rule) => ruleRowOf(rule)));
   const pythonRows = rows.currentEntries.filter((entry) => rows.originalCaptions.has(entry.originalCaption));
   const key = (/** @type {NormalizedLegendEntry} */ entry) => /** @type {PythonLegendKey} */ (entry.originalCaption);
   // A dormant rename (OV-120) is sent too: Python names the row when it draws it, and a type's name names its

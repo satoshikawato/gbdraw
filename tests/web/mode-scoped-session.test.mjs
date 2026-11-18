@@ -1225,6 +1225,24 @@ test('a v0.14.5 Session that stores "5kb" in its draft and request loads wrapped
   }
 });
 
+// A v0.14.5 Web Save holding a Reset fill color rule (tests/fixtures/sessions/HmmtDNA-reset-fill-color.v50-web0145
+// .provenance.json): s-rRNA's `hash` rule in the palette's rRNA color, named `other rRNAs`. Load reads it as a rule
+// of the type color value without a caption, as `gbdraw render --session` replays the same file
+// (tests/test_specific_color_captions.py), so the Legend draws one `rRNA` row; the product rule stays.
+test('a v0.14.5 Session with a Reset fill color rule loads it as a palette rule without a caption', async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/HmmtDNA-reset-fill-color.v50-web0145.gbdraw-session.json.gz', import.meta.url))));
+  const reset = { feat: 'rRNA', qual: 'hash', val: '^f24a47546@record-1$' };
+  assert.deepEqual(fixture.modes.circular.config.rules[1], { ...reset, color: '#71ee7d', cap: 'other rRNAs' });
+  resetDrawings();
+  loadDialogs.length = 0;
+  const loaded = await load(fixture);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.activeDrawing().manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })), [
+    { feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' },
+    { ...reset, color: 'palette', cap: '' }
+  ]);
+});
+
 // Issue #1427: a Web Save of a Circular drawing sized 180 x 180 mm
 // (tests/fixtures/sessions/HmmtDNA-figure-size-180mm.v51-web.provenance.json) keeps both sides as typed in the
 // form and in the committed request; Load reads them back with no repair row, and its Save keeps them.

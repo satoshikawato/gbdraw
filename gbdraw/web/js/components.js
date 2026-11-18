@@ -1270,7 +1270,7 @@ export const SpecificRuleRows = {
   /** @param {{ typeColors?: Readonly<Record<string, string>> | null }} props */
   setup(props) {
     /** @param {{ feat?: unknown, color?: unknown }} rule @returns {string} */
-    const ruleSwatch = (rule) => toNativeColorInputValue(ruleFill(rule.color, rule.feat, props.typeColors || {}) ?? null);
+    const ruleSwatch = (rule) => toNativeColorInputValue(ruleFill(rule.color, rule.feat, props.typeColors || {}));
     return { specificRuleHasQualifier, ruleSwatch, followsTypeColor: (/** @type {{ color?: unknown }} */ rule) => isTypeColorValue(rule.color) };
   }
 };

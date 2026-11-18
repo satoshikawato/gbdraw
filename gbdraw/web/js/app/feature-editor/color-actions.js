@@ -30,8 +30,8 @@ import {
   setLegendColor,
   setLegendStroke
 } from '../../services/drawing/paint.js';
-import { displayedLegendRowContext } from '../../services/feature-visibility.js';
-import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys, otherFeatureRowKey } from '../../services/specific-color-rules.js';
+import { displayedLegendRowContext, displayedRuleFills } from '../../services/feature-visibility.js';
+import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys, joinedRuleColor, otherFeatureRowKey } from '../../services/specific-color-rules.js';
 import { drawnBlockStrokeElement, featureStrokeElements } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -600,9 +600,9 @@ export const createFeatureColorActions = ({
    * @returns {string | null}
    */
   const findExistingCaptionColor = (drawing, feat, caption) => {
-    // A rule of the type color value gives the color it draws its row in (`appliedRuleFill`).
-    const existing = findExistingColorForCaption(feat, caption);
-    if (existing?.color) return appliedRuleFill(state, existing.color, existing.rule.feat === '*' ? feat.type : existing.rule.feat);
+    // A rule of the type color value gives the color it draws the feature's row in (`joinedRuleColor`).
+    const joined = joinedRuleColor(findExistingColorForCaption(feat, caption)?.rule, feat.type, appliedFeatureColors(state));
+    if (joined) return joined.shown;
 
     const legendEntry = findScopeLegendRow(drawing, caption);
     const legendColor = listedRowColor(drawing, legendEntry);
@@ -772,10 +772,9 @@ export const createFeatureColorActions = ({
     }
     // The figure and the Legend show the fill the color draws (the type color value: the type's color).
     const fill = appliedRuleFill(state, color, feature.type);
-    if (!liveFeatureColorMatches(feature, fill)) return false;
-    if (!requireLegend) return true;
-    const legendEntry = findLegendRowOfName(drawing, /** @type {LegendRowName} */ (caption), fill);
-    return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), fill));
+    const legendEntry = requireLegend ? findLegendRowOfName(drawing, /** @type {LegendRowName} */ (caption), fill) : null;
+    return liveFeatureColorMatches(feature, fill)
+      && (!requireLegend || Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), fill)));
   };
 
   // The popup shows the fill an edit gave its feature; scope dialogs leave it open (OV-1278).
@@ -926,7 +925,7 @@ export const createFeatureColorActions = ({
     // of a row of one feature takes the whole row, whichever scope it has.
     const namesRowOnly = !request.joins && takesWholeRow(request.sourceKey, features)
       && paletteRowType(drawing, request.sourceKey, features) !== null
-      && !colorRuleLegendGroups(drawing.manualSpecificRules).some((group) => captionsMatch(group.name, caption) && colorsMatch(group.color, color));
+      && !colorRuleLegendGroups(drawing.manualSpecificRules, displayedRuleFills(state, drawing)).some((group) => captionsMatch(group.name, caption) && colorsMatch(group.color, color));
     if ((sourceRules.length || features.length) && !namesRowOnly) {
       const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
       // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
@@ -1072,7 +1071,8 @@ export const createFeatureColorActions = ({
     // of that name, the one in the renamed row's color (one name and one
     // color share a Legend row), else the first.
     const namedGroups = group || targetRow ? []
-      : colorRuleLegendGroups(drawing.manualSpecificRules).filter((candidate) => captionsMatch(candidate.name, newCaption));
+      : colorRuleLegendGroups(drawing.manualSpecificRules, displayedRuleFills(state, drawing))
+        .filter((candidate) => captionsMatch(candidate.name, newCaption));
     const targetGroup = group || namedGroups.find((candidate) => colorsMatch(candidate.color, currentColor)) || namedGroups[0] || null;
     /** @param {readonly ColorFeature[]} rowFeatures */
     const featureTypes = (rowFeatures) => new Set(rowFeatures.map((feature) => feature?.type));
@@ -1526,7 +1526,10 @@ export const createFeatureColorActions = ({
     } else if (choice === 'useExisting') {
       if (existingCaptionColor) {
         const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
-        await setFeatureColor(drawing, feat, existingCaptionColor, legendRowName(targetLegendName));
+        // A row a rule of the type color value draws for the feature's type keeps that value, so the feature
+        // stays in it after a palette change (`joinedRuleColor`); any other row, the color it shows.
+        const joined = joinedRuleColor(findExistingColorForCaption(feat, legendName ?? '')?.rule, feat.type, appliedFeatureColors(state));
+        await setFeatureColor(drawing, feat, joined?.written ?? existingCaptionColor, legendRowName(targetLegendName));
       }
     }
 

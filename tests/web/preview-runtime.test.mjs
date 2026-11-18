@@ -58,6 +58,8 @@ await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.j
 }));
 // error-normalization.js reads Python's figure length units from the generated mode profiles.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'), join(tempDir, 'mode-profiles.generated.js'));
+// specific-color-rules.js reads the earlier palette rows a saved reset rule may be written in.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'mode-slice-defaults.generated.js'), join(tempDir, 'mode-slice-defaults.generated.js'));
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 

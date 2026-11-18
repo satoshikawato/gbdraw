@@ -757,19 +757,32 @@ def _with_saved_rule_captions(request: DiagramRequest) -> DiagramRequest:
     """The request of a saved Session with the rules of its color table read as saved: their captions, and the
     rules an older Reset fill color wrote, by the type colors of the request (``saved_rule_captions``).
 
-    A color table file of the request is read by ``read_color_table``, as written.
+    The color table is the Session's in either form: a table, or a file of the Session (the v0.14.5 Web app saved
+    its rules so), which the request then holds as the table read. A color table file given on the CLI is no
+    Session's: it is read as written (``read_color_table``).
     """
 
     from gbdraw.api.request_render import request_type_colors
+    from gbdraw.io.colors import read_color_table, rule_captions_as_written
     from gbdraw.legend.table import saved_rule_captions
+    from gbdraw.session_drawings import saved_reset_type_colors
 
     colors = request.options.colors
-    if colors is None or colors.color_table is None:
+    if colors is None or (colors.color_table is None and colors.color_table_file is None):
         return request
-    color_table = saved_rule_captions(colors.color_table, lambda: request_type_colors(colors))
+    saved = colors.color_table
+    if saved is None:
+        # Read as written here, so the reading below reads each caption once.
+        with rule_captions_as_written():
+            saved = read_color_table(str(colors.color_table_file))
+    if saved is None:
+        return request
+    color_table = saved_rule_captions(
+        saved, lambda: saved_reset_type_colors(request_type_colors(colors), colors.default_colors_palette)
+    )
     if color_table is colors.color_table:
         return request
-    options = replace(request.options, colors=replace(colors, color_table=color_table))
+    options = replace(request.options, colors=replace(colors, color_table=color_table, color_table_file=None))
     # Each request type takes its own options type, which mypy cannot pair.
     return cast("DiagramRequest", replace(cast(Any, request), options=options))
 

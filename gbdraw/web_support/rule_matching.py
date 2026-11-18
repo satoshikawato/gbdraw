@@ -213,19 +213,28 @@ class RetargetedColorRule(TypedDict):
     val: str
 
 
+class LegendOrderRuleRow(TypedDict):
+    """A rule row of a Legend order: the index in the next table of a rule that
+    draws it (its first of that caption and color among the rules of its
+    feature type), and the feature type it is drawn for, whose color a rule of
+    ``TYPE_COLOR_VALUE`` draws it in (a rule for every type draws a row per type)."""
+
+    rule: int
+    type: str
+
+
 class SynthesizedColorRules(TypedDict):
     """The next rule table: a number keeps that row of the request's `rules`, a
     row with `row` copies that row under another pattern, any other object is a
     new row. A selected feature without a hash and without an exact condition
     takes no rule. `legend` is the order of the feature rows in the Legend of
     the Result the request's `drawn` names, as Generate draws it from the next
-    table (``FeatureLegendRows.rows``): a number is a rule row, by the index
-    in `table` of a rule that draws it (its first of that caption and color
-    among the rules of its feature type); a text is the key of the renderer's
-    own row of a feature type ("CDS", "other proteins"). None without `drawn`."""
+    table (``FeatureLegendRows.rows``): a rule row (`LegendOrderRuleRow`), or
+    the key of the renderer's own row of a feature type ("CDS", "other
+    proteins"). None without `drawn`."""
 
     table: list[int | ColorRuleRow | RetargetedColorRule]
-    legend: list[int | str] | None
+    legend: list[LegendOrderRuleRow | str] | None
 
 
 def describe_rule_helpers() -> dict[str, dict[str, Shape]]:
@@ -505,7 +514,7 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
 
 
 def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeature], winners: Sequence[int],
-                  drawn: Sequence[int], palette: dict[str, str]) -> list[int | str]:
+                  drawn: Sequence[int], palette: dict[str, str]) -> list[LegendOrderRuleRow | str]:
     """The feature rows of the Legend of the Result that draws the features
     `drawn`, in Generate's order (``FeatureLegendRows.rows``, the order
     ``prepare_legend_table`` adds them), from what ``feature_legend_presence``
@@ -513,8 +522,8 @@ def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeatur
     caption and color each drawn feature takes from its winning rule (none
     from an uncaptioned one), and the types of the drawn features no rule
     colors. A rule row is the index of its first rule of its type, caption and
-    color (a rule of ``TYPE_COLOR_VALUE`` draws in its type's color,
-    ``rule_color``). Rows of one name and one fill are one row, at the first, as
+    color with the type it is drawn for (``LegendOrderRuleRow``; a rule of
+    ``TYPE_COLOR_VALUE`` draws in that type's color, ``rule_color``). Rows of one name and one fill are one row, at the first, as
     the Legend table adds them: a rule named like a renderer row in its color
     is that row. `winners` are the rules of `rules` that color each feature of
     `features` (-1 for none), and `palette` the type colors."""
@@ -528,10 +537,11 @@ def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeatur
     for index, rule in enumerate(rules):
         first.setdefault((rule["feat"], str(rule["cap"]), rule["color"]), index)
     renderer_type = {rows.type_row(feature_type): feature_type for feature_type in rows.present}
-    order: dict[tuple[str, str], int | str] = {}
+    order: dict[tuple[str, str], LegendOrderRuleRow | str] = {}
     for row in rows.rows():
         if isinstance(row, LegendRuleRow):
-            entry: int | str = first[(rules[row.rule]["feat"], str(row.caption), rules[row.rule]["color"])]
+            entry: LegendOrderRuleRow | str = LegendOrderRuleRow(
+                rule=first[(rules[row.rule]["feat"], str(row.caption), rules[row.rule]["color"])], type=row.feature_type)
             name, fill = str(row.caption), row.fill
         else:
             entry, name, fill = row, row, feature_type_color(palette, renderer_type[row])

@@ -49,12 +49,17 @@
 /**
  * @typedef {object} SynthesizedColorRules
  * @property {(number | ColorRuleRow | RetargetedColorRule)[]} table
- * @property {(number | string)[] | null} legend
+ * @property {(LegendOrderRuleRow | string)[] | null} legend
  */
 /**
  * @typedef {object} RetargetedColorRule
  * @property {number} row
  * @property {string} val
+ */
+/**
+ * @typedef {object} LegendOrderRuleRow
+ * @property {number} rule
+ * @property {string} type
  */
 /**
  * @typedef {object} SynthesisQualifiersRequest

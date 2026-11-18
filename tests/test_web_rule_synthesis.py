@@ -586,7 +586,12 @@ def _generate_legend(seqs: list[SeqFeature], table: list[dict]) -> list[str]:
 
 def _answer_legend(answer: dict, table: list[dict]) -> list[str]:
     """The answer's Legend order by name: a rule row by its rule's caption."""
-    return [table[row]["cap"] if isinstance(row, int) else row for row in answer["legend"]]
+    return [table[row["rule"]]["cap"] if isinstance(row, dict) else row for row in answer["legend"]]
+
+
+def _rule_rows(answer: dict) -> list:
+    """The answer's Legend order with each rule row by the index of its rule."""
+    return [row["rule"] if isinstance(row, dict) else row for row in answer["legend"]]
 
 
 def test_the_answer_gives_the_legend_order_of_the_next_table_where_the_old_row_moves():
@@ -602,7 +607,7 @@ def test_the_answer_gives_the_legend_order_of_the_next_table_where_the_old_row_m
     answer = _synthesize(features, [1], rules=current, color=TEAL, caption="gamma", drawn=[0, 1, 2, 3])
     table = _next_table(answer, current)
     assert [rule["cap"] for rule in table] == ["gamma", "alpha", "beta"]
-    assert answer["legend"] == [0, 1, 2, "other proteins"]
+    assert _rule_rows(answer) == [0, 1, 2, "other proteins"]
     assert _answer_legend(answer, table) == _generate_legend(seqs, table)
 
 
@@ -615,7 +620,7 @@ def test_the_answer_gives_the_old_order_when_the_join_is_refused():
     answer = _synthesize(features, [], rules=renamed, color=TEAL, caption="alpha", joins=dict(at=2, rows=[0]),
                          drawn=[0, 1, 2, 3])
     assert answer["table"] == [0, 1, 2]
-    assert answer["legend"] == [0, 1]
+    assert _rule_rows(answer) == [0, 1]
     assert _answer_legend(answer, renamed) == _generate_legend(_join_seqs(), renamed) == ["alpha", "delta"]
 
 
@@ -631,7 +636,7 @@ def test_the_answer_groups_the_legend_rows_by_feature_type_in_drawing_order():
                dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha")]
     answer = _synthesize(features, [2], rules=current, color=TEAL, caption="gamma", drawn=[0, 1, 2])
     table = _next_table(answer, current)
-    assert answer["legend"] == [1, 2, 0]
+    assert _rule_rows(answer) == [1, 2, 0]
     assert _answer_legend(answer, table) == _generate_legend(seqs, table) == ["beta", "alpha", "gamma"]
 
 
@@ -810,7 +815,7 @@ def test_a_rule_named_like_the_other_row_in_the_type_color_keeps_its_own_row():
     seqs = [_rrna(0, "s-rRNA"), _rrna(1, "l-rRNA")]
     palette_rrna = dict(feat="rRNA", qual="product", val="^s-rRNA$", color=PALETTE_DEFAULT, cap="other rRNAs")
     answer = _synthesize([_payload(f, "rec") for f in seqs], [], rules=[palette_rrna], caption="", drawn=[0, 1])
-    assert answer["legend"] == [0]
+    assert _rule_rows(answer) == [0]
     assert _answer_legend(answer, [palette_rrna]) == _generate_legend(seqs, [palette_rrna]) == ["other rRNAs"]
 
 
@@ -821,6 +826,19 @@ def test_a_rule_named_like_the_other_row_in_another_color_keeps_its_own_row():
     red = dict(feat="rRNA", qual="product", val="^s-rRNA$", color="#ff0000", cap="other rRNAs")
     answer = _synthesize([_payload(f, "rec") for f in seqs], [], rules=[red], caption="", drawn=[0, 1])
     assert _answer_legend(answer, [red]) == _generate_legend(seqs, [red]) == ["other rRNAs", "other rRNAs"]
+
+
+def test_the_legend_order_names_the_type_of_each_row_a_palette_rule_for_every_type_draws():
+    # OV-3801: a `*` rule of the type color value draws a row per drawn type,
+    # each in its type's color; the order names each row's type, so the Web
+    # keys each row as Python does (`Ribosomal [#71ee7d]`, `Ribosomal [#54bcf8]`).
+    from gbdraw.web_support.rule_matching import _legend_order
+
+    rules = [dict(feat="*", qual="product", val="x", color=TYPE_COLOR_VALUE, cap="Ribosomal")]
+    features = [{"type": "rRNA"}, {"type": "CDS"}, {"type": "tRNA"}]
+    order = _legend_order(rules, features, [0, 0, -1], [0, 1, 2],  # type: ignore[arg-type]
+                          {"rRNA": "#71ee7d", "CDS": "#54bcf8", "default": "#d3d3d3"})
+    assert order == [{"rule": 0, "type": "rRNA"}, {"rule": 0, "type": "CDS"}, "tRNA"]
 
 
 def test_a_reset_of_features_of_two_types_is_refused():
