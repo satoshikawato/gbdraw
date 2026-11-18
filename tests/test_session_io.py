@@ -33,6 +33,7 @@ from gbdraw.linear import (
 )
 from gbdraw.cli_utils.session import (
     DiagramRunResult,
+    SessionBuildArtifacts,
     collect_embedded_files_from_cli_args,
     make_rendered_svg,
     parse_session_pre_args,
@@ -302,17 +303,19 @@ def _current_derived_session(
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 7, 21),
-        losat_derived_cache_entries=(
-            {
-                "schema": LOSAT_DERIVED_CACHE_SCHEMA,
-                "kind": "derived-losatp-payload",
-                "idEncoding": "runtime-handle-v1",
-                "key": "derived-key",
-                "mode": mode,
-                "payload": derived_payload,
-            },
+        artifacts=SessionBuildArtifacts(
+            losat_derived_cache_entries=(
+                {
+                    "schema": LOSAT_DERIVED_CACHE_SCHEMA,
+                    "kind": "derived-losatp-payload",
+                    "idEncoding": "runtime-handle-v1",
+                    "key": "derived-key",
+                    "mode": mode,
+                    "payload": derived_payload,
+                },
+            ),
+            protein_identity_manifest=manifest,
         ),
-        protein_identity_manifest=manifest,
         canonical_request=_canonical_request("linear"),
     )
 
@@ -741,7 +744,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 7, 24),
-        feature_catalog=catalog,
+        artifacts=SessionBuildArtifacts(feature_catalog=catalog),
         canonical_request=_canonical_request("linear"),
     )
     payload["modes"] = {"linear": {"config": {"palette": "default"}}}
@@ -903,32 +906,34 @@ def test_current_session_validates_mixed_protein_and_nucleotide_raw_cache() -> N
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 7, 21),
-        losat_cache_entries=(
-            _current_protein_cache_entry(),
-            {
-                "schema": NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
-                "kind": "raw-losat",
-                "identityKind": "nucleotide",
-                "key": "nucleotide-key",
-                "text": "",
-                "program": "blastn",
-                "outfmt": "6",
-                "args": [],
-                "queryCanonicalHash": "query",
-                "subjectCanonicalHash": "subject",
-            },
+        artifacts=SessionBuildArtifacts(
+            losat_cache_entries=(
+                _current_protein_cache_entry(),
+                {
+                    "schema": NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+                    "kind": "raw-losat",
+                    "identityKind": "nucleotide",
+                    "key": "nucleotide-key",
+                    "text": "",
+                    "program": "blastn",
+                    "outfmt": "6",
+                    "args": [],
+                    "queryCanonicalHash": "query",
+                    "subjectCanonicalHash": "subject",
+                },
+            ),
+            losat_derived_cache_entries=(
+                {
+                    "schema": LOSAT_DERIVED_CACHE_SCHEMA,
+                    "kind": "derived-losatp-payload",
+                    "idEncoding": "runtime-handle-v1",
+                    "key": "derived-key",
+                    "mode": "orthogroup",
+                    "payload": {},
+                },
+            ),
+            protein_identity_manifest=_protein_identity_manifest(),
         ),
-        losat_derived_cache_entries=(
-            {
-                "schema": LOSAT_DERIVED_CACHE_SCHEMA,
-                "kind": "derived-losatp-payload",
-                "idEncoding": "runtime-handle-v1",
-                "key": "derived-key",
-                "mode": "orthogroup",
-                "payload": {},
-            },
-        ),
-        protein_identity_manifest=_protein_identity_manifest(),
         canonical_request=_canonical_request("linear"),
     )
 
@@ -1471,39 +1476,41 @@ def test_current_derived_cache_accepts_compound_collinear_runtime_references() -
         svg_results=(("out", "<svg></svg>"),),
         embedded_files={"linearSeqs": []},
         generated_at=datetime(2026, 7, 21),
-        losat_derived_cache_entries=(
-            {
-                "schema": LOSAT_DERIVED_CACHE_SCHEMA,
-                "kind": "derived-losatp-payload",
-                "idEncoding": "runtime-handle-v1",
-                "key": "collinear-derived-key",
-                "mode": "collinear",
-                "payload": {
-                    "pairs": [
-                        {
-                            "rows": [
-                                {
-                                    "query_protein_id": ";".join(runtime_handles),
-                                    "subject_protein_id": runtime_handles[-1],
-                                    "supportingEdges": [
-                                        f"{runtime_handles[0]}->"
-                                        f"{runtime_handles[-1]}:rbh"
-                                    ],
-                                    "edgeIds": [
-                                        f"og_1:0:{runtime_handles[0]}->"
-                                        f"1:{runtime_handles[-1]}:coortholog"
-                                    ],
-                                    "description": (
-                                        "The p_r_ prefix is documentation, not an ID."
-                                    ),
-                                }
-                            ]
-                        }
-                    ]
+        artifacts=SessionBuildArtifacts(
+            losat_derived_cache_entries=(
+                {
+                    "schema": LOSAT_DERIVED_CACHE_SCHEMA,
+                    "kind": "derived-losatp-payload",
+                    "idEncoding": "runtime-handle-v1",
+                    "key": "collinear-derived-key",
+                    "mode": "collinear",
+                    "payload": {
+                        "pairs": [
+                            {
+                                "rows": [
+                                    {
+                                        "query_protein_id": ";".join(runtime_handles),
+                                        "subject_protein_id": runtime_handles[-1],
+                                        "supportingEdges": [
+                                            f"{runtime_handles[0]}->"
+                                            f"{runtime_handles[-1]}:rbh"
+                                        ],
+                                        "edgeIds": [
+                                            f"og_1:0:{runtime_handles[0]}->"
+                                            f"1:{runtime_handles[-1]}:coortholog"
+                                        ],
+                                        "description": (
+                                            "The p_r_ prefix is documentation, not an ID."
+                                        ),
+                                    }
+                                ]
+                            }
+                        ]
+                    },
                 },
-            },
+            ),
+            protein_identity_manifest=manifest,
         ),
-        protein_identity_manifest=manifest,
         canonical_request=_canonical_request("linear"),
     )
 

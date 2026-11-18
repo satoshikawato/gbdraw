@@ -65,7 +65,9 @@ from gbdraw.session_io import (
 )
 from gbdraw.session_contract import SessionRunMetadata
 from gbdraw.session_migration import (
+    log_session_draft_migration,
     project_session_adjunct_for_current_write,
+    read_request_less_source_features,
     replace_current_derived_feature_state,
     with_current_artifacts,
 )
@@ -501,54 +503,34 @@ def _canonical_session_document(
     return document.to_dict(), dict(document.resources.sources)
 
 
+@dataclass(frozen=True)
+class SessionBuildArtifacts:
+    """What a CLI run hands :func:`build_session_json` beside its Results: the feature catalog of its results, and its
+    LOSAT cache entries and protein identity evidence (read by
+    :func:`gbdraw.session_io.normalize_current_session_artifacts`)."""
+
+    feature_catalog: Mapping[str, object] | None = None
+    losat_cache_entries: Sequence[Mapping[str, object]] | None = None
+    losat_derived_cache_entries: Sequence[Mapping[str, object]] | None = None
+    protein_identity_manifest: Mapping[str, object] | None = None
+    legacy_protein_raw_candidates: Sequence[Mapping[str, object]] | None = None
+    legacy_protein_derived_evidence: Sequence[Mapping[str, object]] | None = None
+
+
 def build_session_json(
     context: SessionBuildContext,
     *,
     svg_results: Sequence[tuple[str, str]],
     embedded_files: Mapping[str, object],
     generated_at: datetime,
-    feature_catalog: Mapping[str, object] | None = None,
-    losat_cache_entries: Sequence[Mapping[str, object]] | None = None,
-    losat_derived_cache_entries: Sequence[Mapping[str, object]] | None = None,
-    protein_identity_manifest: Mapping[str, object] | None = None,
-    legacy_protein_raw_candidates: Sequence[Mapping[str, object]] | None = None,
-    legacy_protein_derived_evidence: Sequence[Mapping[str, object]] | None = None,
+    artifacts: SessionBuildArtifacts = SessionBuildArtifacts(),
     canonical_request: DiagramRequest | None = None,
     _canonical_request_is_resolved: bool = False,
 ) -> tuple[dict[str, object], dict[str, SessionResourceSource]]:
     """Build a GUI-loadable Session document from a CLI run, and the sources of its resources' bytes."""
 
-    source_version: int | None = None
-    if context.source_session is not None:
-        validate_session(context.source_session, resource_sources=dict(context.source_resources or {}))
-        source_version = int(context.source_session["version"])
-        payload: dict[str, Any] = json_clone(context.source_session)
-    else:
-        payload = {}
-
-    payload["format"] = SESSION_FORMAT
-    # The payload is built in the mode-scoped layout and moved to drawings last.
-    payload["version"] = MODE_SCOPED_SESSION_MAX_VERSION
-    payload["createdAt"] = generated_at.isoformat()
-    if context.output_prefix:
-        payload["title"] = Path(str(context.output_prefix)).name
-    else:
-        payload.setdefault("title", "gbdraw")
-
-    if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
-        from gbdraw.session_migration import (
-            log_session_draft_migration,
-            read_request_less_source_features,
-        )
-
-        # The migrations read the version of the Session they migrate; the
-        # hash rules of a Session 27-30 read its sources again (OV-2043).
-        source = {**payload, "version": source_version}
-        migration = migrate_session_flat_draft(
-            source, source_features=read_request_less_source_features(source)
-        )
-        log_session_draft_migration(migration, source_version)
-        payload = {**migration.session, "version": MODE_SCOPED_SESSION_MAX_VERSION}
+    payload, source_version = _source_session_payload(context)
+    payload = _session_payload_head(payload, context, generated_at=generated_at, source_version=source_version)
     config = payload.get("config")
     if not isinstance(config, dict):
         config = dict(config) if isinstance(config, Mapping) else {}
@@ -576,8 +558,8 @@ def build_session_json(
         dict(editor_state) if isinstance(editor_state, Mapping) else {}
     )
     editor_state["featureCatalog"] = json_clone(
-        feature_catalog
-        if feature_catalog is not None
+        artifacts.feature_catalog
+        if artifacts.feature_catalog is not None
         else {
             "schema": CURRENT_FEATURE_CATALOG_SCHEMA,
             "items": [
@@ -651,11 +633,11 @@ def build_session_json(
     payload.pop("files", None)
     normalize_current_session_artifacts(
         payload,
-        losat_cache_entries=losat_cache_entries,
-        losat_derived_cache_entries=losat_derived_cache_entries,
-        protein_identity_manifest=protein_identity_manifest,
-        legacy_protein_raw_candidates=legacy_protein_raw_candidates,
-        legacy_protein_derived_evidence=legacy_protein_derived_evidence,
+        losat_cache_entries=artifacts.losat_cache_entries,
+        losat_derived_cache_entries=artifacts.losat_derived_cache_entries,
+        protein_identity_manifest=artifacts.protein_identity_manifest,
+        legacy_protein_raw_candidates=artifacts.legacy_protein_raw_candidates,
+        legacy_protein_derived_evidence=artifacts.legacy_protein_derived_evidence,
     )
     # One check, of the Session 51 returned (OV-1815): the mode-scoped payload
     # is this builder's own and moves unchecked.
@@ -663,6 +645,46 @@ def build_session_json(
     sources = {resource_id: sources[resource_id] for resource_id in drawings["resources"]}
     validate_session(drawings, resource_sources=sources)
     return dict(drawings), sources
+
+
+def _source_session_payload(context: SessionBuildContext) -> tuple[dict[str, Any], int | None]:
+    """A copy of the Session a run replays, checked first, and its version; an empty payload for a new run."""
+
+    source_version: int | None = None
+    if context.source_session is not None:
+        validate_session(context.source_session, resource_sources=dict(context.source_resources or {}))
+        source_version = int(context.source_session["version"])
+        payload: dict[str, Any] = json_clone(context.source_session)
+    else:
+        payload = {}
+    return payload, source_version
+
+
+def _session_payload_head(
+    payload: dict[str, Any], context: SessionBuildContext, *, generated_at: datetime, source_version: int | None
+) -> dict[str, Any]:
+    """``payload`` with its format, version, creation time and title, and with the flat draft of a source older than
+    ``MODE_SCOPED_SESSION_MIN_VERSION`` migrated."""
+
+    payload["format"] = SESSION_FORMAT
+    # The payload is built in the mode-scoped layout and moved to drawings last.
+    payload["version"] = MODE_SCOPED_SESSION_MAX_VERSION
+    payload["createdAt"] = generated_at.isoformat()
+    if context.output_prefix:
+        payload["title"] = Path(str(context.output_prefix)).name
+    else:
+        payload.setdefault("title", "gbdraw")
+
+    if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
+        # The migrations read the version of the Session they migrate; the
+        # hash rules of a Session 27-30 read its sources again (OV-2043).
+        source = {**payload, "version": source_version}
+        migration = migrate_session_flat_draft(
+            source, source_features=read_request_less_source_features(source)
+        )
+        log_session_draft_migration(migration, source_version)
+        payload = {**migration.session, "version": MODE_SCOPED_SESSION_MAX_VERSION}
+    return payload
 
 
 def save_session_sidecar_if_requested(
@@ -757,12 +779,14 @@ def save_session_sidecar_if_requested(
         svg_results=svg_results,
         embedded_files=session_files,
         generated_at=datetime.now(timezone.utc),
-        feature_catalog=feature_catalog,
-        losat_cache_entries=run_result.losat_cache_entries,
-        losat_derived_cache_entries=(),
-        protein_identity_manifest=run_result.protein_identity_manifest,
-        legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
-        legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
+        artifacts=SessionBuildArtifacts(
+            feature_catalog=feature_catalog,
+            losat_cache_entries=run_result.losat_cache_entries,
+            losat_derived_cache_entries=(),
+            protein_identity_manifest=run_result.protein_identity_manifest,
+            legacy_protein_raw_candidates=run_result.legacy_protein_raw_candidates,
+            legacy_protein_derived_evidence=run_result.legacy_protein_derived_evidence,
+        ),
         canonical_request=run_result.canonical_request,
         _canonical_request_is_resolved=True,
     )
@@ -1652,4 +1676,5 @@ __all__ = [
     "save_session_sidecar_if_requested",
     "strip_session_output_args",
     "build_session_json",
+    "SessionBuildArtifacts",
 ]
