@@ -45,6 +45,7 @@ from gbdraw.core.record_metadata import (
     _SourceFeatureAnchorProfile,
     _read_coord_map,
     _source_period,
+    location_over_origin,
 )
 from gbdraw.io.cli_tables import (
     ConservationTable,
@@ -459,8 +460,11 @@ def comparison_record_binding(
         if feature.location is None:
             continue
         index = indexes[id(feature)]
-        for target, spans, location in ((current, current_spans, feature.location),
-                                        (opposite, opposite_spans, feature.location._flip(len(record)))):
+        # Each frame's location as the Linear drawing draws it and protein extraction reads it: a part past the
+        # origin is the join over it (``location_over_origin``, OV-3863).
+        for target, spans, written in ((current, current_spans, feature.location),
+                                       (opposite, opposite_spans, feature.location._flip(len(record)))):
+            location = location_over_origin(written, len(record))
             target[index] = compute_feature_hash_from_location_parts(
                 feature.type,
                 [(int(part.start), int(part.end), part.strand) for part in location.parts],

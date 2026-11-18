@@ -37,7 +37,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
-from Bio.SeqFeature import SeqFeature
+from Bio.SeqFeature import Location, SeqFeature
 from pandas import DataFrame
 
 from gbdraw.analysis.origin_arcs import Arc, LinkSide, directed_arc, location_origin_arc, rows_inside_records
@@ -200,8 +200,10 @@ _RECORD_LOCAL_CORE_COMPETITION_RATIO = 1.10
 class CdsProtein:
     """A protein sequence and its genomic CDS coordinates.
 
-    ``start`` and ``end`` are the location's linear extent, which identity and
-    order keys read. ``origin_arc`` is set only for a location across the
+    ``start`` and ``end`` are the linear extent of the location as the Linear
+    drawing draws it (a part past the origin as its join,
+    ``location_over_origin``), which identity and order keys read.
+    ``origin_arc`` is set only for a location across the
     record origin: its arc ``(start, end)`` with ``start > end``
     (``gbdraw.analysis.origin_arcs``). ``record_length`` is the length of the
     record the coordinates belong to. ``record_index`` is the drawn unit;
@@ -3299,10 +3301,7 @@ def _translate_cds_feature(record: SeqRecord, feature: SeqFeature) -> str | None
     return _clean_protein_sequence(protein)
 
 
-def _cds_span(feature: SeqFeature) -> tuple[int, int, int | None] | None:
-    location = feature.location
-    if location is None:
-        return None
+def _cds_span(location: Location) -> tuple[int, int, int | None] | None:
     start = int(location.start)
     end = int(location.end)
     if start < 0 or end <= start:
@@ -3311,14 +3310,9 @@ def _cds_span(feature: SeqFeature) -> tuple[int, int, int | None] | None:
     return start, end, strand
 
 
-def _view_feature_hash_parts(
-    feature: SeqFeature,
-) -> tuple[tuple[int, int, int | None], ...]:
-    """Return location parts in the currently rendered record view."""
+def _location_parts(location: Location) -> tuple[tuple[int, int, int | None], ...]:
+    """The ``(start, end, strand)`` parts of ``location`` in the currently rendered record view."""
 
-    location = feature.location
-    if location is None:
-        return ()
     raw_parts = location.parts if hasattr(location, "parts") and location.parts else [location]
     return tuple(
         (
@@ -3367,7 +3361,13 @@ def extract_cds_proteins(
             ):
                 continue
 
-            span = _cds_span(feature)
+            if feature.location is None:
+                continue
+            # The CDS as the Linear drawing draws it: a part past the origin of a record drawn circular is the join it
+            # is (``location_over_origin``, OV-3863), so its span, arc and drawn-location hash are those of the
+            # written join; the source hash keeps the location as written.
+            drawn_location = location_over_origin(feature.location, len(record.seq))
+            span = _cds_span(drawn_location)
             if span is None:
                 continue
             start, end, strand = span
@@ -3381,7 +3381,7 @@ def extract_cds_proteins(
                 continue
 
             feature_svg_id, hash_parts = source_feature_hash_and_parts(feature, record)
-            view_hash_parts = _view_feature_hash_parts(feature)
+            view_hash_parts = _location_parts(drawn_location)
             view_feature_svg_id = (
                 compute_feature_hash_from_location_parts(
                     str(feature.type or ""),

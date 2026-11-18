@@ -66,13 +66,20 @@ def _cds(location, name: str) -> SeqFeature:
     )
 
 
-def _origin_cds(name: str, strand: int) -> SeqFeature:
+# The two ways a file writes a CDS over the origin: GenBank's join ``join(661..720,1..30)`` and GFF3's one part
+# past the record's end, ``661..750`` (OV-3863).
+ORIGIN_FORMS = ["join", "past_end"]
+
+
+def _origin_cds(name: str, strand: int, form: str = "join") -> SeqFeature:
+    if form == "past_end":
+        return _cds(FeatureLocation(660, LENGTH + 30, strand), name)
     tail, head = FeatureLocation(660, LENGTH, strand), FeatureLocation(0, 30, strand)
     parts = [tail, head] if strand == 1 else [head, tail]
     return _cds(CompoundLocation(parts), name)
 
 
-def _records(strand: int) -> list[SeqRecord]:
+def _records(strand: int, form: str = "join") -> list[SeqRecord]:
     query = _record(
         "query",
         [_cds(FeatureLocation(start, start + 90, 1), f"a{index}") for index, start in enumerate((100, 200, 300))],
@@ -82,7 +89,7 @@ def _records(strand: int) -> list[SeqRecord]:
         _cds(FeatureLocation(40, 130, strand), "b1"),
         _cds(FeatureLocation(140, 230, strand), "b2"),
     ]
-    subject = _record("subject", [_origin_cds("b0", strand), *others])
+    subject = _record("subject", [_origin_cds("b0", strand, form), *others])
     return [query, subject]
 
 
@@ -100,8 +107,8 @@ def _pairs(strand: int) -> list[tuple[str, str]]:
     return [("a0", "b2"), ("a1", "b1"), ("a2", "b0")]
 
 
-def _blocks(strand: int):
-    records = _records(strand)
+def _blocks(strand: int, form: str = "join"):
+    records = _records(strand, form)
     extraction = extract_cds_proteins(records)
     forward = pd.DataFrame.from_records([_hit(q, s) for q, s in _pairs(strand)], columns=COMPARISON_COLUMNS)
     reverse = pd.DataFrame.from_records([_hit(s, q) for q, s in _pairs(strand)], columns=COMPARISON_COLUMNS)
@@ -118,9 +125,10 @@ def _spans(frame: pd.DataFrame) -> list[tuple[int, int, int, int]]:
     return [tuple(int(value) for value in row) for row in frame[["qstart", "qend", "sstart", "send"]].itertuples(index=False)]
 
 
+@pytest.mark.parametrize("form", ORIGIN_FORMS)
 @pytest.mark.parametrize("strand", [1, -1])
-def test_protein_and_unit_cover_only_their_arc(strand: int) -> None:
-    records = _records(strand)
+def test_protein_and_unit_cover_only_their_arc(strand: int, form: str) -> None:
+    records = _records(strand, form)
     extraction = extract_cds_proteins(records)
     protein = extraction.protein_map["b0"]
     assert protein.origin_arc == (660, 30)
@@ -131,9 +139,10 @@ def test_protein_and_unit_cover_only_their_arc(strand: int) -> None:
     assert unit.order == 0
 
 
+@pytest.mark.parametrize("form", ORIGIN_FORMS)
 @pytest.mark.parametrize("strand", [1, -1])
-def test_block_across_the_origin_is_cut_into_rows_inside_the_record(strand: int) -> None:
-    records, _extraction, result = _blocks(strand)
+def test_block_across_the_origin_is_cut_into_rows_inside_the_record(strand: int, form: str) -> None:
+    records, _extraction, result = _blocks(strand, form)
     assert len(result.blocks) == 1
     assert result.blocks[0].orientation == ("plus" if strand == 1 else "minus")
     frame = convert_collinearity_blocks_to_comparisons(result, records=records)[0]
@@ -147,9 +156,10 @@ def test_block_across_the_origin_is_cut_into_rows_inside_the_record(strand: int)
     assert set(frame["collinearity_anchor_count"]) == {3}
 
 
+@pytest.mark.parametrize("form", ORIGIN_FORMS)
 @pytest.mark.parametrize("strand", [1, -1])
-def test_pairwise_link_of_an_origin_cds_is_cut_at_the_origin(strand: int) -> None:
-    extraction = extract_cds_proteins(_records(strand))
+def test_pairwise_link_of_an_origin_cds_is_cut_at_the_origin(strand: int, form: str) -> None:
+    extraction = extract_cds_proteins(_records(strand, form))
     hits = pd.DataFrame.from_records([_hit("a0", "b0")], columns=COMPARISON_COLUMNS)
     frame = convert_protein_hits_to_genomic_links(hits, extraction.protein_map)
     if strand == 1:
@@ -190,6 +200,7 @@ def _linear_svg(records, result, starts, reverses) -> ET.Element:
     return ET.fromstring(drawing.tostring())
 
 
+@pytest.mark.parametrize("form", ORIGIN_FORMS)
 @pytest.mark.parametrize("strand", [1, -1])
 @pytest.mark.parametrize("starts,reverses", [
     ((None, None), (False, False)),
@@ -197,8 +208,8 @@ def _linear_svg(records, result, starts, reverses) -> ET.Element:
     ((None, None), (False, True)),
     ((51, 361), (True, True)),
 ])
-def test_drawn_block_never_spans_the_whole_record(strand, starts, reverses) -> None:
-    records, _extraction, result = _blocks(strand)
+def test_drawn_block_never_spans_the_whole_record(strand, starts, reverses, form) -> None:
+    records, _extraction, result = _blocks(strand, form)
     root = _linear_svg(records, result, starts, reverses)
     paths = [node for node in root.iter() if node.get("data-collinearity-block-id")]
     assert paths
@@ -313,20 +324,33 @@ def _web_helpers() -> dict[str, object]:
     return namespace
 
 
-def _web_records(strand: int, reverse: bool) -> list[SeqRecord]:
-    """``_records``, whose subject a reversed view draws in the order that forms a block."""
+def _past_end(feature: SeqFeature, length: int) -> SeqFeature:
+    """``feature``, whose join over the origin is written as GFF3 writes it: one part past the record's end."""
+    low, high = sorted(feature.location.parts, key=lambda part: int(part.start))
+    return _cds(FeatureLocation(int(high.start), length + int(low.end), feature.location.strand), feature.qualifiers["locus_tag"][0])
+
+
+def _web_records(strand: int, reverse: bool, form: str = "join") -> list[SeqRecord]:
+    """``_records``, whose subject a reversed view draws in the order that forms a block; its origin CDS in
+    ``form`` as the file the Web reads writes it (a file holds no part before the origin)."""
     query, subject = _records(strand)
-    return [query, crop_then_reverse_records([subject], [], [reverse], **IN_MEMORY)[0][0][0]]
+    subject = crop_then_reverse_records([subject], [], [reverse], **IN_MEMORY)[0][0][0]
+    if form == "past_end":
+        subject.features = [
+            _past_end(feature, len(subject)) if len(feature.location.parts) == 2 else feature for feature in subject.features
+        ]
+    return [query, subject]
 
 
 def _web_conversion(
     tmp_path: Path, stage, mode: str, strand: int, *, reverse: bool = False, subject_region: str | None = None,
+    form: str = "join",
 ) -> list[tuple[int, int, int, int]]:
     """The rows the Web converter stores (search frame), from a real extraction of written files."""
     helpers = _web_helpers()
     locus_to_id: dict[str, str] = {}
     payload_records = []
-    for index, record in enumerate(_web_records(strand, reverse)):
+    for index, record in enumerate(_web_records(strand, reverse, form)):
         path = tmp_path / f"{record.id}.gb"
         SeqIO.write([record], path, "genbank")
         extracted = json.loads(json.dumps(json.loads(helpers["extract_cds_protein_fasta"](
@@ -381,13 +405,15 @@ def _web_conversion(
     ]
 
 
-def _cli_conversion(mode: str, strand: int, *, reverse: bool = False, region: str | None = None) -> list[tuple[int, int, int, int]]:
+def _cli_conversion(
+    mode: str, strand: int, *, reverse: bool = False, region: str | None = None, form: str = "join",
+) -> list[tuple[int, int, int, int]]:
     """The rows of the CLI's path for the same records, written in the search frame.
 
     The CLI extracts from the drawn record, so a reversed subject's rows are mapped
     back with x -> L + 1 - x, the rule of the planner's search-frame projection.
     """
-    query, subject = _web_records(strand, reverse)
+    query, subject = _web_records(strand, reverse, form)
     subject = crop_then_reverse_records([subject], parse_region_specs([region] if region else []), [False], **IN_MEMORY)[0][0][0]
     drawn = crop_then_reverse_records([subject], [], [reverse], **IN_MEMORY)[0][0][0]
     records = [query, drawn]
@@ -429,12 +455,15 @@ def _cli_conversion(mode: str, strand: int, *, reverse: bool = False, region: st
 MODES = ["collinear", "pairwise", "orthogroup"]
 
 
+@pytest.mark.parametrize("form", ORIGIN_FORMS)
 @pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize("strand", [1, -1])
 @pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
-def test_web_rows_of_an_origin_cds_equal_the_cli_rows(tmp_path, stage_web_losatp_transport, mode, strand, reverse) -> None:
-    rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, strand, reverse=reverse)
-    assert rows and sorted(rows) == sorted(_cli_conversion(mode, strand, reverse=reverse))
+def test_web_rows_of_an_origin_cds_equal_the_cli_rows(
+    tmp_path, stage_web_losatp_transport, mode, strand, reverse, form,
+) -> None:
+    rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, strand, reverse=reverse, form=form)
+    assert rows and sorted(rows) == sorted(_cli_conversion(mode, strand, reverse=reverse, form=form))
     # The origin CDS (61 + 30 bp arc) never reads as the whole 720 bp record.
     assert all(abs(sstart - send) < LENGTH / 2 for _, _, sstart, send in rows)
 
