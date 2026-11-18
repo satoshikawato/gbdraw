@@ -125,12 +125,23 @@ const pairRow = (key) => ({ key, filename: `${key}.tsv`, display: true, edgeKey:
 /** The shown drawing's LOSAT evidence: its six values. */
 const shownValues = () => Object.fromEntries(LOSAT_EVIDENCE_KEYS.map((key) => [key, state[key].value]));
 /**
+ * The kept slots of the drawings not shown, read through the Load rollback port, the one the app exposes. Its
+ * `capture` holds the History members for a Load until `release` (OV-3509), so the read releases its capture at once:
+ * a capture never released keeps every History step it names and makes each budget pass walk all of them (OV-3890).
+ * @param {ReturnType<typeof createAppSetup>} app
+ */
+const keptSlots = (app) => {
+  const snapshot = app.sessionImportRollbackState.capture();
+  app.sessionImportRollbackState.release(snapshot);
+  return snapshot.artifactSlots;
+};
+/**
  * Every drawing's LOSAT evidence, by drawing ID: the shown drawing's from the state, another's from its kept slot (the
- * empty values for a drawing that has no slot yet). Reads only.
+ * empty values for a drawing that has no slot yet).
  * @param {ReturnType<typeof createAppSetup>} app
  */
 const projectValues = (app) => {
-  const kept = new Map(app.sessionImportRollbackState.capture().artifactSlots.map((slot) => [slot.drawingId, slot.values]));
+  const kept = new Map(keptSlots(app).map((slot) => [slot.drawingId, slot.values]));
   return Object.fromEntries(state.drawingTabs.value.map(({ id }) => [id, id === state.activeDrawingId.value
     ? shownValues()
     : Object.fromEntries(LOSAT_EVIDENCE_KEYS.map((key) => [key, kept.get(id)?.[key] ?? null]))]));
