@@ -1741,13 +1741,16 @@ test('Save Raw LOSAT TSV and both Clear buttons read the shown drawing\'s result
   assert.equal(html.includes('clearableLosatResultCount'), false);
   // OV-3768 (D-259): both Clear buttons are off during a run, as Reset Settings is (OV-2446).
   assert.equal(html.match(/@click="clearLosatCache"[^>]*:disabled="Boolean\(sessionOperationAvailability\('not-during-run'\)\) \|\| \(losatResultRows\.length === 0\)"/g)?.length, 2);
-  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" :aria-describedby="losatResultRows\.length === 0 \? 'circular-losat-cache-reason' : null"/);
+  assert.match(html, /@click="downloadLosatCache"[^>]*:disabled="losatResultRows\.length === 0" aria-describedby="circular-losat-cache-reason"/);
   // Each reason is true (round 13, OV-3206): while the shown drawing has no results, Save Raw and Clear are disabled
-  // and point at one hint, dev's while the project has none, else that the shown drawing has none.
+  // and point at one hint, dev's while the project has none, else that the shown drawing has none. The hint is always
+  // there and empty while the drawing has results, so a fixed aria-describedby names it (a hidden element it names
+  // still describes); each Clear also names its run's reason (`<run-blocked-reason>`, run-blocked-reasons.test.mjs).
   for (const panel of ['circular', 'linear']) {
-    assert.ok(html.includes(`<p v-if="losatResultRows.length === 0" id="${panel}-losat-cache-reason" class="ui-hint">{{ projectHasLosatResults ? t('No LOSAT results in this drawing') : t('No LOSAT results yet') }}</p>`), panel);
+    assert.ok(html.includes(`<p v-show="losatResultRows.length === 0" id="${panel}-losat-cache-reason" class="ui-hint">{{ losatResultRows.length === 0 ? (projectHasLosatResults ? t('No LOSAT results in this drawing') : t('No LOSAT results yet')) : '' }}</p>`), panel);
+    assert.match(html, new RegExp(`@click="clearLosatCache"[^>]*aria-describedby="${panel}-losat-cache-run-reason ${panel}-losat-cache-reason"`), panel);
   }
-  assert.equal(html.match(/:aria-describedby="losatResultRows\.length === 0 \? '(circular|linear)-losat-cache-reason' : null"/g)?.length, 3);
+  assert.equal(html.includes(':aria-describedby="losatResultRows'), false);
 });
 
 test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
