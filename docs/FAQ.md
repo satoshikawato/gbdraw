@@ -277,10 +277,10 @@ limits](./REFERENCE/comparison-programs-thresholds-and-results.md#result-meaning
 
 ## Depth, content, and skew
 
-### What if one record has no Depth TSV for a sample?
+### What if one record has no numeric series file for a sample?
 
 Keep an explicit missing entry for that record. gbdraw does not use another
-file in its place and does not draw zero coverage. See [tracks, axes, and
+file in its place and does not draw zero values. See [tracks, axes, and
 annotations](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
 and the [CLI depth input](./REFERENCE/command-line.md#tracks-annotations-and-presentation).
 
