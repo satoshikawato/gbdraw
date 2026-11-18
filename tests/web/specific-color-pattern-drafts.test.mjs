@@ -32,7 +32,7 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
     results: { value: [{ name: 'figure', content: '<svg>accepted</svg>' }] },
     svgResultIdentity: { value: 'accepted' }, mode: { value: 'circular' },
     addedLegendCaptions: { value: new Set() },
-    legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
+    legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {}, legendStrokeOverrides: {}, featureOverrides: {},
     svgContainer: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }, displayedResultMetadata: () => null,
     selectedResultIndex: { value: 0 }, labelReflowProcessing: { value: false },
     biologicalFeatures: { value: [] }, svgContent: { value: null }
