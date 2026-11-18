@@ -798,24 +798,27 @@ const onLabelMissing = (drawing, drawn, labelled, catalogOf, hidden) => {
 
 // Resolves once `busy` (a Generate or the label rerender) is false; at once when it is, or without `watch`.
 /** @param {FeatureLabelActionsOptions['watch']} watch @param {{ readonly value: boolean }} busy */
-const untilIdle = (watch, busy) => (busy.value && watch ? /** @type {Promise<void>} */ (new Promise((resolve) => {
+export const untilIdle = (watch, busy) => (busy.value && watch ? /** @type {Promise<void>} */ (new Promise((resolve) => {
   const stop = watch(busy, (running) => { if (!running) { stop(); resolve(); } });
 })) : Promise.resolve());
 
-// Resolves once no Generate or rerender runs (`busy`), so the committed Results, and Python's facts about them, are
-// those of the run that drew the edits made before it. A redraw owed when nothing runs (its rerender failed) is asked
-// for once on entry (OV-2412).
+// Waits until no Generate or rerender runs (`busy`), then tells whether the shown drawing's committed Results carry
+// Python's facts of its edits (`owed` is false). Facts still owed then (the run failed or was canceled) are asked for
+// once more and waited for; false when that run did not draw them either (OV-2412).
 /**
  * @param {{ busy: { readonly value: boolean }, owed: () => boolean, requestAutomaticRerender: () => boolean,
  *   watch: FeatureLabelActionsOptions['watch'], nextTick: () => Promise<unknown> }} ports
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
-const untilRedrawn = async ({ busy, owed, requestAutomaticRerender, watch, nextTick }) => {
-  await nextTick();
-  if (!busy.value && owed() && requestAutomaticRerender()) await nextTick();
-  while (busy.value && watch) {
-    await untilIdle(watch, busy);
+const untilLegendFactsDrawn = async ({ busy, owed, requestAutomaticRerender, watch, nextTick }) => {
+  for (let asked = false; ; asked = true) {
     await nextTick();
+    while (busy.value && watch) {
+      await untilIdle(watch, busy);
+      await nextTick();
+    }
+    if (!owed()) return true;
+    if (asked || !requestAutomaticRerender()) return false;
   }
 };
 
@@ -942,12 +945,28 @@ export const createFeatureLabelActions = ({
   // (`redrawRestored`, D-174).
   /** @type {WeakSet<DrawingState>} */
   const redrawOwed = new WeakSet();
+  // OV-2412: the Legend row facts a drawing owes: the number of the last request (`labelReflowForceRequestSeq`)
+  // whose edits only Python can draw, until a run whose request was built at or after it commits
+  // (`startLegendFactsDraw`). Unlike `redrawOwed`, a live paint edit during that run owes no facts.
+  /** @type {WeakMap<DrawingState, number>} */
+  const legendFactsOwedAt = new WeakMap();
   const requestAutomaticRerender = () => {
     if (!svgContainer.value?.querySelector('svg')) return false;
-    redrawOwed.add(state.activeDrawing());
+    const drawing = state.activeDrawing();
+    redrawOwed.add(drawing);
     labelReflowLastError.value = null;
     labelReflowForceRequestSeq.value += 1;
+    legendFactsOwedAt.set(drawing, labelReflowForceRequestSeq.value);
     return true;
+  };
+  // A run (Generate, a rerender, a run of the committed request) builds its request from `drawing`'s edits now; the
+  // function it returns is called once its Results are committed.
+  /** @param {DrawingState} drawing @returns {() => void} */
+  const startLegendFactsDraw = (drawing) => {
+    const builtAt = labelReflowForceRequestSeq.value;
+    return () => {
+      if ((legendFactsOwedAt.get(drawing) ?? 0) <= builtAt) legendFactsOwedAt.delete(drawing);
+    };
   };
   const isRedrawOwed = (/** @type {DrawingState} */ drawing) => redrawOwed.has(drawing);
   const redrawShown = (/** @type {DrawingState} */ drawing) => { redrawOwed.delete(drawing); };
@@ -1852,9 +1871,10 @@ export const createFeatureLabelActions = ({
     isRedrawOwed,
     redrawShown,
     redrawRestored,
-    whenRedrawn: () => untilRedrawn({
+    startLegendFactsDraw,
+    whenLegendFactsDrawn: () => untilLegendFactsDrawn({
       busy: computed(() => state.processing.value || labelReflowProcessing.value),
-      owed: () => redrawOwed.has(state.activeDrawing()), requestAutomaticRerender, watch, nextTick
+      owed: () => legendFactsOwedAt.has(state.activeDrawing()), requestAutomaticRerender, watch, nextTick
     }),
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,

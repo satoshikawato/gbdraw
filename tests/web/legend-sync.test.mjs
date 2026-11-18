@@ -101,7 +101,7 @@ assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
     `${name} writes no Legend row`
   ));
 assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\(msg\('Delete legend item'\), deleteLegendEntry, \{ domains: \[\.\.\.LEGEND_STRUCTURE_DOMAINS, \.\.\.STROKE_DOMAINS\] \}\)/);
-assert.match(editorIntentSource, /const restoreLegendItems = async \(label, restore\) => \{\n    await whenLegendFactsCurrent\(\);\n    return runUndoable\(label,/);
+assert.match(editorIntentSource, /const restoreLegendItems = async \(label, restore\) => \{\n    if \(!await whenLegendFactsCurrent\(\)\) return false;\n    return runUndoable\(label,/);
 [appSetupSource, editorIntentSource, resultBinderSource].forEach((source) => assert.doesNotMatch(
   source, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/
 ));

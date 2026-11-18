@@ -238,8 +238,9 @@ export const createFeatureEditor = ({
     // D-36: the root says when a shown rerender drew the current paint; History reads and restores it (D-174).
     redrawShown: labelActions.redrawShown,
     isRedrawOwed: labelActions.isRedrawOwed,
-    // OV-2412: a Restore reads Python's Legend row facts once the drawing is drawn from its current edits.
-    whenRedrawn: labelActions.whenRedrawn,
+    // OV-2412: a Restore reads Python's Legend row facts once the committed Results carry those of the drawing's edits.
+    whenLegendFactsDrawn: labelActions.whenLegendFactsDrawn,
+    startLegendFactsDraw: labelActions.startLegendFactsDraw,
     redrawRestored: labelActions.redrawRestored,
     specificRulePattern: ruleActions.specificRulePattern,
     specificRulePatternDraft: ruleActions.specificRulePatternDraft,
