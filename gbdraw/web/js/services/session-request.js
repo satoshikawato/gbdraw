@@ -4502,8 +4502,7 @@ const buildComparisons = ({
     }
     if (edge.source === 'upload') {
       const upload = uploadsByEdgeId.get(String(edge.id || ''));
-      const file = upload?.file;
-      if (!upload || !file) {
+      if (!upload?.file) {
         throw diagnosticError('COMPARISON_INPUT', {
           reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: edge.queryIndex, subjectRecordIndex: edge.subjectIndex
         });
@@ -4511,12 +4510,10 @@ const buildComparisons = ({
       const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
       comparisons.push({
         kind: 'nucleotideBlast',
-        resourceId: resources.addFile(resourceId, 'nucleotide-blast', file),
+        resourceId: resources.addFile(resourceId, 'nucleotide-blast', upload.file),
         queryRecordIndex: edge.queryIndex,
         subjectRecordIndex: edge.subjectIndex,
-        // The name of the file the user chose, which the CLI replay and the Web show (OV-3557), or what the loaded
-        // request stored for the comparison while its edge keeps that file (OV-3592).
-        ...(upload.loadedSourceName ?? { sourceName: normalizeOriginalResourceName(file.name) || null })
+        ...uploadedComparisonSourceName(upload.file, upload.loadedSourceName)
       });
       continue;
     }
@@ -5618,6 +5615,18 @@ const loadedComparisonSourceName = (comparison) => {
   if (typeof comparison.sourceName === 'string') return { sourceName: comparison.sourceName };
   return Object.hasOwn(comparison, 'sourceName') ? { sourceName: null } : {};
 };
+
+/**
+ * The `sourceName` a nucleotide comparison of an uploaded table stores: what the loaded request stored for the
+ * comparison while its draft row keeps that table (`LoadedSourceName`, OV-3592), else the name of the file the user
+ * chose, which the CLI replay and the Web show (OV-3557).
+ * @param {{ name?: unknown }} file The table the comparison's draft row holds.
+ * @param {LoadedSourceName | undefined} loadedSourceName What the row holds from a loaded request.
+ * @returns {LoadedSourceName}
+ */
+const uploadedComparisonSourceName = (file, loadedSourceName) => (
+  loadedSourceName ?? { sourceName: normalizeOriginalResourceName(file.name) || null }
+);
 
 /**
  * The name a stored request holds for the table a Web file binding binds to a comparison-plan edge (`LoadedSourceName`),
