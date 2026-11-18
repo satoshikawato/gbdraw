@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 // The fixture as both drawings (PD-OI-090: one History per drawing), with a
 // Linear view whose own `mode` is 'linear', so each drawing's intent holds the
@@ -16,7 +16,7 @@ const withTwoDrawings = (state) => withModeDrawings(state, {
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
 const webSourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
+const tempDir = await makeTempDir('gbdraw-history-');
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
   join(tempDir, 'web-ux-profile.js'),

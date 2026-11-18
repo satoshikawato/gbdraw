@@ -4,16 +4,16 @@
 // Hide GC Skew reaches only the GC rows, Reset follows the loaded Depth
 // series, and Duplicate is unavailable while a Session operation runs.
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { loadPageVue } from './helpers/vue-runtime.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-track-slot-row-edits-'));
+const tempRoot = await makeTempDir('gbdraw-track-slot-row-edits-');
 for (const directory of ['app', 'utils', 'contracts']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }

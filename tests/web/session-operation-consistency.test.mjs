@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
-const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
+const root = await makeTempDir('gbdraw-session-operations-');
 await cp(join(process.cwd(), 'gbdraw/web/js'), join(root, 'js'), { recursive: true });
 await writeFile(join(root, 'package.json'), '{"type":"module"}');
 globalThis.window = { Vue: {

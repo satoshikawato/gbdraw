@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { MATCH_SPAN_REASON_TEXTS } from '../../gbdraw/web/js/services/drawn-attributes.generated.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-'));
+const tempDir = await makeTempDir('gbdraw-orthogroup-stable-identity-');
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');

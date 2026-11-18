@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
+const tempRoot = await makeTempDir('gbdraw-file-imports-');
 const tempDir = join(tempRoot, 'services');
 await mkdir(tempDir);
 await mkdir(join(tempRoot, 'utils'));

@@ -4,8 +4,7 @@
 // the hosted-build markup, or a changed component rule, fails here until the
 // stylesheet is regenerated.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -17,6 +16,7 @@ import {
   TAILWIND_COMPILER_PATH,
   TAILWIND_OUTPUT_PATH
 } from '../../tools/generate_web_tailwind_css.mjs';
+import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 const repositoryFile = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 
@@ -51,15 +51,11 @@ test('the inventory reads every class source and keeps class tokens whole', () =
   for (const path of ['gbdraw/web/index.html', 'gbdraw/web/js/app/app-setup.js', 'tools/prepare_cloudflare_pages.py', 'tools/stamp_web_build.py']) {
     assert.ok(sources.includes(path), path);
   }
-  const root = mkdtempSync(join(tmpdir(), 'gbdraw-tailwind-sources-'));
-  try {
-    mkdirSync(join(root, 'gbdraw/web/js/app'), { recursive: true });
-    for (const name of ['a.js', 'b.mjs', 'c.html', 'package.json']) writeFileSync(join(root, 'gbdraw/web/js/app', name), '');
-    const modules = classSourcePaths(root).filter((path) => path.startsWith('gbdraw/web/js/'));
-    assert.deepEqual(modules, ['gbdraw/web/js/app/a.js', 'gbdraw/web/js/app/b.mjs', 'gbdraw/web/js/app/c.html']);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  const root = makeTempDirSync('gbdraw-tailwind-sources-');
+  mkdirSync(join(root, 'gbdraw/web/js/app'), { recursive: true });
+  for (const name of ['a.js', 'b.mjs', 'c.html', 'package.json']) writeFileSync(join(root, 'gbdraw/web/js/app', name), '');
+  const modules = classSourcePaths(root).filter((path) => path.startsWith('gbdraw/web/js/'));
+  assert.deepEqual(modules, ['gbdraw/web/js/app/a.js', 'gbdraw/web/js/app/b.mjs', 'gbdraw/web/js/app/c.html']);
   const tokens = extractClassCandidates(
     `<div class="grid-cols-[minmax(0,1fr)_auto] hover:bg-blue-700" :class="{ hidden: !open, 'bg-slate-50/50': on }">`
     + "el.classList.toggle('is-active', on); const c = `px-2 ${on ? 'font-bold' : ''}`;"

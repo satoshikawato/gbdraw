@@ -8,13 +8,13 @@
 import { createTestInputStore } from './helpers/input-files.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import { prepareLosatSourceBatches } from '../../gbdraw/web/js/services/linear-sources.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const keyOf = (identity) => createHash('sha256').update(JSON.stringify(identity)).digest('hex');
 
@@ -48,7 +48,7 @@ const loadRawIdentityBuilder = async () => {
   const source = (await readFile(runAnalysisPath, 'utf8'))
     .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => `from '${new URL(specifier, runAnalysisUrl).href}'`);
   assert.match(source, /export const buildLosatCachePayload = \(\{/, 'the raw identity builder is still named buildLosatCachePayload');
-  const probePath = join(await mkdtemp(join(tmpdir(), 'gbdraw-key-sensitivity-')), 'run-analysis-probe.mjs');
+  const probePath = join(await makeTempDir('gbdraw-key-sensitivity-'), 'run-analysis-probe.mjs');
   await writeFile(probePath, source, 'utf8');
   return (await import(pathToFileURL(probePath))).buildLosatCachePayload;
 };

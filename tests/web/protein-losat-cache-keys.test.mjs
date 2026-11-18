@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import { requireProteinLosatCacheKeys } from '../../gbdraw/web/js/app/run-analysis.js';
 import { emptyProteinIdentityManifest, mergeProteinIdentityManifests } from '../../gbdraw/web/js/services/losat-cache.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const refused = { name: 'Error', message: 'Protein cache key generation failed.' };
 
@@ -67,7 +67,7 @@ test('Generate asks for protein cache keys once per manifest and key request (OV
   const end = source.indexOf('\n\n          // ', start);
   assert.ok(start > 0 && end > start);
   // The module's own cache and its readers, exported from a copy of the module.
-  const probeDir = await mkdtemp(join(tmpdir(), 'gbdraw-protein-keys-'));
+  const probeDir = await makeTempDir('gbdraw-protein-keys-');
   const probePath = join(probeDir, 'run-analysis-keys-probe.mjs');
   const exported = ['getCachedFileRead', 'setCachedFileRead', 'proteinCacheKeysCache']
     .filter((name) => source.includes(`const ${name} =`));

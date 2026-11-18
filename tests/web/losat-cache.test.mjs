@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const { pythonLinearUnitPlan } = await import(pathToFileURL(join(repoRoot, 'tests', 'web', 'helpers', 'linear-unit-plan.mjs')));
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-losat-cache-'));
+const tempRoot = await makeTempDir('gbdraw-losat-cache-');
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 // losat-cache.js reads the generated schema constants, the typed-result shapes (checked with contract-shape.js),
 // and the shipped LOSAT build.

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { addCircularSource, bindCircularSourceFile, createCircularSource } from '../../gbdraw/web/js/services/drawing/inputs.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const semanticParity = JSON.parse(await readFile(
@@ -12,7 +12,7 @@ const semanticParity = JSON.parse(await readFile(
   'utf8'
 ));
 const expectedModes = semanticParity.modes;
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-mode-profiles-'));
+const tempDir = await makeTempDir('gbdraw-mode-profiles-');
 await cp(join(repoRoot, 'gbdraw', 'web', 'js'), join(tempDir, 'js'), { recursive: true });
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
 

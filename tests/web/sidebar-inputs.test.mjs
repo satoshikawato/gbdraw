@@ -1,12 +1,12 @@
 // Sidebar input cards: record readouts before the source records are read.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-sidebar-inputs-'));
+const tempRoot = await makeTempDir('gbdraw-sidebar-inputs-');
 await cp(join(process.cwd(), 'gbdraw', 'web', 'js'), join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));

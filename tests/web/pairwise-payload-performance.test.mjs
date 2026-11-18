@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { readSavedSession } from './helpers/session-documents.mjs';
 import { renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = new URL('../..', import.meta.url);
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-pairwise-payload-'));
+const tempRoot = await makeTempDir('gbdraw-pairwise-payload-');
 
 const modulePaths = [
   'gbdraw/web/js/services/pairwise-match-popup.js',

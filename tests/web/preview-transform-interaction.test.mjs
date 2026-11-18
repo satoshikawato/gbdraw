@@ -1,10 +1,10 @@
 import nodeAssert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { loadPageVue } from './helpers/vue-runtime.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const ref = (value) => ({ value });
@@ -37,7 +37,7 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
   }
 };
 
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-transform-'));
+const tempDir = await makeTempDir('gbdraw-preview-transform-');
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
 await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });

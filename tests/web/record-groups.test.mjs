@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-record-groups-'));
+const tempDir = await makeTempDir('gbdraw-record-groups-');
 const modulePath = join(tempDir, 'record-groups.mjs');
 await writeFile(
   modulePath,

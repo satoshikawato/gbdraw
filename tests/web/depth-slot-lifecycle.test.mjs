@@ -3,15 +3,15 @@
 // only transition that adds or removes managed rows; manual rows are never
 // changed and report a row issue when their series has no source (PD-OI-083).
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-depth-slot-lifecycle-'));
+const tempRoot = await makeTempDir('gbdraw-depth-slot-lifecycle-');
 for (const directory of ['app', 'utils', 'contracts']) {
   await cp(join(repoRoot, 'gbdraw', 'web', 'js', directory), join(tempRoot, directory), { recursive: true });
 }

@@ -1,10 +1,10 @@
 import { evaluatePythonRules, groupColorRulesOver, reviseColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
@@ -13,7 +13,7 @@ const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); }
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-color-actions-'));
+const tempDir = await makeTempDir('gbdraw-feature-color-actions-');
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await cp(sourceDir, tempDir, { recursive: true });
 const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8');

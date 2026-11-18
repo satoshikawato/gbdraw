@@ -1,8 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { mkdtempSync, writeFileSync } = require('node:fs');
-const { tmpdir } = require('node:os');
+const { writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const {
   CURRENT_REQUEST_SCHEMA,
@@ -13,9 +12,10 @@ const {
 } = require('../helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 const { readSessionFile, readSessionFileEntries } = require('../helpers/session-file.cjs');
+const { makeTempDirSync } = require('../helpers/temp-dir.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
-const svgComparisonRoot = mkdtempSync(join(tmpdir(), 'gbdraw-svg-compare-'));
+const svgComparisonRoot = makeTempDirSync('gbdraw-svg-compare-');
 let svgComparisonIndex = 0;
 const sourceSessionPath = join(
   repoRoot,

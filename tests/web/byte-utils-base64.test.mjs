@@ -1,18 +1,15 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
-const root = await mkdtemp(join(process.cwd(), '.gbdraw-base64-test-'));
+const root = await makeTempDir('.gbdraw-base64-test-');
 let codec;
-try {
-  await cp(join(process.cwd(), 'gbdraw/web/js/services/byte-utils.js'), join(root, 'byte-utils.js'));
-  await writeFile(join(root, 'package.json'), '{"type":"module"}');
-  codec = await import(pathToFileURL(join(root, 'byte-utils.js')));
-} finally {
-  await rm(root, { recursive: true, force: true });
-}
+await cp(join(process.cwd(), 'gbdraw/web/js/services/byte-utils.js'), join(root, 'byte-utils.js'));
+await writeFile(join(root, 'package.json'), '{"type":"module"}');
+codec = await import(pathToFileURL(join(root, 'byte-utils.js')));
 const { bytesToBase64, base64ToBytes, base64ToBytesInTasks, textToBase64 } = codec;
 
 test('base64 preserves every byte and padding across chunk boundaries', () => {

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { buildNormsIndex, citedAnchors, headingsOf } from '../../tools/generate_norms_index.mjs';
+import { makeTempDirSync } from '../web/helpers/temp-dir.cjs';
 
 // docs/internal/NORMS_INDEX.md is generated from the guard registry, the rule
 // headings, the CI routing policy, the Product Contract, and the tests that cite
@@ -80,19 +80,15 @@ test('pull requests that make tests cite two neighbouring records change the ind
   const cited = new Set(read(spec).match(new RegExp(RECORD('\\d+'), 'g')) ?? []);
   const index = ids.findIndex((id, at) => at > 0 && !cited.has(id) && !cited.has(ids[at - 1]));
   const citing = (id) => buildNormsIndex({ read: (file) => read(file) + (file === spec ? `\n// ${id}\n` : '') }).text;
-  const directory = mkdtempSync(join(tmpdir(), 'norms-index-'));
-  try {
-    const [ours, original, theirs] = ['ours', 'base', 'theirs'].map((name) => join(directory, name));
-    writeFileSync(ours, citing(ids[index - 1]));
-    writeFileSync(original, base.text);
-    writeFileSync(theirs, citing(ids[index]));
-    const merged = spawnSync('git', ['merge-file', '-p', ours, original, theirs], { encoding: 'utf8' });
-    assert.equal(merged.status, 0, `conflicting hunks: ${merged.status}`);
-    const listings = (text) => text.split(`\`${spec}\``).length - 1;
-    assert.equal(listings(merged.stdout), listings(base.text) + 2);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const directory = makeTempDirSync('norms-index-');
+  const [ours, original, theirs] = ['ours', 'base', 'theirs'].map((name) => join(directory, name));
+  writeFileSync(ours, citing(ids[index - 1]));
+  writeFileSync(original, base.text);
+  writeFileSync(theirs, citing(ids[index]));
+  const merged = spawnSync('git', ['merge-file', '-p', ours, original, theirs], { encoding: 'utf8' });
+  assert.equal(merged.status, 0, `conflicting hunks: ${merged.status}`);
+  const listings = (text) => text.split(`\`${spec}\``).length - 1;
+  assert.equal(listings(merged.stdout), listings(base.text) + 2);
 });
 
 test('heading anchors follow GitHub: rendered text, no punctuation, numbered repeats, no fenced code', () => {

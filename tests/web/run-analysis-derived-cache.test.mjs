@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import * as runAnalysis from '../../gbdraw/web/js/app/run-analysis.js';
 import { bindCanonicalTypedResource } from '../../gbdraw/web/js/services/session-request.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const { hasRequiredCanonicalAnalysisResource, resolveProteinBlastpCandidateLimit } = runAnalysis;
 
@@ -18,7 +18,7 @@ assert.throws(() => resolveProteinBlastpCandidateLimit('invalid'), /Max target s
 
 const runAnalysisPath = resolve('gbdraw/web/js/app/run-analysis.js');
 const runAnalysisUrl = pathToFileURL(runAnalysisPath);
-const identityProbeDir = await mkdtemp(join(tmpdir(), 'gbdraw-raw-identity-'));
+const identityProbeDir = await makeTempDir('gbdraw-raw-identity-');
 const identityProbePath = join(identityProbeDir, 'run-analysis-identity-probe.mjs');
 const identityProbeSource = (await readFile(runAnalysisPath, 'utf8'))
   .replace('const stripRuntimeCacheStats =', 'export const stripRuntimeCacheStats =')

@@ -3,6 +3,7 @@
 // per evaluation made the Web JavaScript tests spend minutes on start-up.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { makeTempDirSync } from './temp-dir.cjs';
 import { joinedLegendRow, synthesizedRuleTable } from '../../../gbdraw/web/js/app/rule-matching.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -38,8 +39,10 @@ const setHeld = (child, held) => {
 };
 
 const startServer = () => {
+  // Python's tempfile writes under TMPDIR: a folder of this process, removed when it exits.
   const child = spawn(process.env.PYTHON || 'python', ['-c', SERVER], {
     cwd: REPO_ROOT,
+    env: { ...process.env, TMPDIR: makeTempDirSync('gbdraw-python-evaluator-') },
     stdio: ['pipe', 'pipe', 'pipe']
   });
   const current = { child, buffer: '', stderr: '', pending: null };

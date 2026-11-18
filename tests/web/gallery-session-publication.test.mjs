@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
 import { readSavedSession } from './helpers/session-documents.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -743,37 +743,33 @@ assert.rejects(
 // uses the output format of the Gallery commands (interactive_svg).
 {
   const { cases } = JSON.parse(await readFile('tests/fixtures/cli_session_cross_surface/cases.json', 'utf8'));
-  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-'));
-  try {
-    for (const id of ['circular_records_tables', 'linear_tables', 'linear_blast']) {
-      const { mode, args } = cases.find((entry) => entry.id === id);
-      const file = path.join(directory, `${id}.gbdraw`);
-      execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
-        '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
-        '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-      const source = await loadSessionFile(file);
-      const { session, equivalence } = await prepareGallerySessionForPublication(source);
-      assert.deepEqual(equivalence.differences, [], id);
-      assert.equal((await validateGalleryPublicationReadiness(session)).equivalence.equivalent, true, id);
-      // Load reads a stored draft's per-feature edits from the draft, so the
-      // published slice holds the CLI's visibility and label rows (OV-299).
-      const rows = async (option) => (args.includes(option) ? (await readFile(args[args.indexOf(option) + 1], 'utf8'))
-        .split(/\r?\n/).filter((line) => line.trim()).length : 0);
-      const { features } = session.modes[mode];
-      assert.equal(features.featureVisibilityManualRules.length, await rows('--feature_visibility_table'), id);
-      assert.equal(features.labelOverrideRows.length, await rows('--label_table'), id);
-      if (mode === 'circular') {
-        assert.deepEqual([source.renderRequest.grouping, session.renderRequest.grouping], ['single', 'single'], id);
-        assert.equal(session.renderRequest.output.interactiveMetadataPolicy,
-          source.renderRequest.output.interactiveMetadataPolicy, id);
-      }
-      if (id === 'linear_blast') {
-        assert.deepEqual(session.renderRequest.comparisons, source.renderRequest.comparisons, id);
-        assert.deepEqual(session.modes.linear.config.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] }, id);
-      }
+  const directory = await makeTempDir('gbdraw-gallery-cli-');
+  for (const id of ['circular_records_tables', 'linear_tables', 'linear_blast']) {
+    const { mode, args } = cases.find((entry) => entry.id === id);
+    const file = path.join(directory, `${id}.gbdraw`);
+    execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
+      '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
+      '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+    const source = await loadSessionFile(file);
+    const { session, equivalence } = await prepareGallerySessionForPublication(source);
+    assert.deepEqual(equivalence.differences, [], id);
+    assert.equal((await validateGalleryPublicationReadiness(session)).equivalence.equivalent, true, id);
+    // Load reads a stored draft's per-feature edits from the draft, so the
+    // published slice holds the CLI's visibility and label rows (OV-299).
+    const rows = async (option) => (args.includes(option) ? (await readFile(args[args.indexOf(option) + 1], 'utf8'))
+      .split(/\r?\n/).filter((line) => line.trim()).length : 0);
+    const { features } = session.modes[mode];
+    assert.equal(features.featureVisibilityManualRules.length, await rows('--feature_visibility_table'), id);
+    assert.equal(features.labelOverrideRows.length, await rows('--label_table'), id);
+    if (mode === 'circular') {
+      assert.deepEqual([source.renderRequest.grouping, session.renderRequest.grouping], ['single', 'single'], id);
+      assert.equal(session.renderRequest.output.interactiveMetadataPolicy,
+        source.renderRequest.output.interactiveMetadataPolicy, id);
     }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
+    if (id === 'linear_blast') {
+      assert.deepEqual(session.renderRequest.comparisons, source.renderRequest.comparisons, id);
+      assert.deepEqual(session.modes.linear.config.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] }, id);
+    }
   }
 }
 
@@ -782,50 +778,46 @@ assert.rejects(
 // files the projection bound, as Load binds them. The command states no Depth
 // style, and the styles it leaves unstated compare as absent (OV-2819).
 {
-  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-depth-'));
-  try {
-    const depth = path.join(directory, 'lambda.depth.tsv');
-    await writeFile(depth, Array.from({ length: 48502 }, (_, index) => `NC_001416.1\t${index + 1}\t${10 + (index % 50)}\n`).join(''));
-    const file = path.join(directory, 'depth.gbdraw');
-    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
-      '--depth_track', depth, '-o', path.join(directory, 'depth'), '-f', 'interactive_svg', '--session_output', file],
-    { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-    const source = await loadSessionFile(file);
-    assert.equal(source.renderRequest.diagramOptions.depthTracks.length, 1);
-    const { session, equivalence } = await prepareGallerySessionForPublication(source);
-    assert.deepEqual(equivalence.differences, [], 'CLI depth');
-    assert.equal(session.modes.circular.config.form.show_depth, true);
-    // A Session with the Web draft (a published or Web-saved one) publishes again with Depth shown.
-    const again = await prepareGallerySessionForPublication(session);
-    assert.equal(again.session.modes.circular.config.form.show_depth, true);
-    const readiness = await validateGalleryPublicationReadiness(again.session);
-    assert.deepEqual(readiness.equivalence.differences, [], 'published depth');
-    // A style the command states still compares: a rebuild that draws another
-    // color is refused (OV-2819 drops only the fields the command left unstated).
-    const stated = path.join(directory, 'stated.gbdraw');
-    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
-      '--depth_track', depth, '--depth_track_color', '#123456', '-o', path.join(directory, 'stated'), '-f', 'interactive_svg',
-      '--session_output', stated], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-    const recolored = createGallerySessionPublication({
-      assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
-      /** @param {Parameters<typeof buildCanonicalRenderRequest>} args */
-      buildRequest: (...args) => {
-        const built = buildCanonicalRenderRequest(...args);
-        built.renderRequest.diagramOptions.depthTracks[0].color = '#654321';
-        return built;
-      },
-      buildRequestState: buildCanonicalRequestState,
-      readRequest: readPublishedRenderRequest,
-      projectRequest: projectCanonicalSessionRequest,
-      resolveComparisonPlan: resolveLinearComparisonPlan,
-      planLinearUnits,
-      splitDraft
-    });
-    await assert.rejects(recolored.prepareGallerySessionForPublication(await loadSessionFile(stated)),
-      /depthTracks\[0\]\.color/);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+  const directory = await makeTempDir('gbdraw-gallery-cli-depth-');
+  const depth = path.join(directory, 'lambda.depth.tsv');
+  await writeFile(depth, Array.from({ length: 48502 }, (_, index) => `NC_001416.1\t${index + 1}\t${10 + (index % 50)}\n`).join(''));
+  const file = path.join(directory, 'depth.gbdraw');
+  execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
+    '--depth_track', depth, '-o', path.join(directory, 'depth'), '-f', 'interactive_svg', '--session_output', file],
+  { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+  const source = await loadSessionFile(file);
+  assert.equal(source.renderRequest.diagramOptions.depthTracks.length, 1);
+  const { session, equivalence } = await prepareGallerySessionForPublication(source);
+  assert.deepEqual(equivalence.differences, [], 'CLI depth');
+  assert.equal(session.modes.circular.config.form.show_depth, true);
+  // A Session with the Web draft (a published or Web-saved one) publishes again with Depth shown.
+  const again = await prepareGallerySessionForPublication(session);
+  assert.equal(again.session.modes.circular.config.form.show_depth, true);
+  const readiness = await validateGalleryPublicationReadiness(again.session);
+  assert.deepEqual(readiness.equivalence.differences, [], 'published depth');
+  // A style the command states still compares: a rebuild that draws another
+  // color is refused (OV-2819 drops only the fields the command left unstated).
+  const stated = path.join(directory, 'stated.gbdraw');
+  execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', 'tests/test_inputs/NC_001416.gb',
+    '--depth_track', depth, '--depth_track_color', '#123456', '-o', path.join(directory, 'stated'), '-f', 'interactive_svg',
+    '--session_output', stated], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+  const recolored = createGallerySessionPublication({
+    assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
+    /** @param {Parameters<typeof buildCanonicalRenderRequest>} args */
+    buildRequest: (...args) => {
+      const built = buildCanonicalRenderRequest(...args);
+      built.renderRequest.diagramOptions.depthTracks[0].color = '#654321';
+      return built;
+    },
+    buildRequestState: buildCanonicalRequestState,
+    readRequest: readPublishedRenderRequest,
+    projectRequest: projectCanonicalSessionRequest,
+    resolveComparisonPlan: resolveLinearComparisonPlan,
+    planLinearUnits,
+    splitDraft
+  });
+  await assert.rejects(recolored.prepareGallerySessionForPublication(await loadSessionFile(stated)),
+    /depthTracks\[0\]\.color/);
 }
 
 // A CLI Session's wrap length publishes in the Web's request and the drawing's
@@ -842,51 +834,47 @@ assert.rejects(
 // leaves an Axis index it was not given unstated; the published request compares
 // them as Load reads them (OV-1299). A real difference in either still fails.
 {
-  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-gallery-cli-slots-'));
-  try {
-    const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions';
-    const file = path.join(directory, 'slots.gbdraw');
-    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', `${data}/NC_001879.gbk`,
-      '--annotation_table', `${data}/nicotiana-tabacum-regions.tsv`,
-      '--circular_track_slot', 'features:features@side=overlay,lane_direction=split',
-      '--circular_track_slot', 'names:annotations@set_id=plastome_regions,side=inside,r=0.75,w=12px,'
-        + 'padding_px=0,show_labels=false,overflow=compress',
-      '--circular_track_slot', 'regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,'
-        + 'show_labels=true,padding_px=1,overflow=compress',
-      '--circular_track_slot', 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08',
-      '-o', path.join(directory, 'slots'), '-f', 'interactive_svg', '--session_output', file],
-    { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-    const source = await loadSessionFile(file);
-    const { tracks } = source.renderRequest.diagramOptions;
-    assert.deepEqual([tracks.circularTrackSlots[1].params.padding_px, tracks.circularTrackSlots[1].params.show_labels,
-      tracks.circularTrackSlots[2].params.padding_px, tracks.circularTrackAxisIndex ?? null], ['0', 'false', '1', null]);
-    const { session, equivalence } = await prepareGallerySessionForPublication(source);
-    assert.deepEqual(equivalence.differences, [], 'CLI slot params');
-    assert.deepEqual(session.renderRequest.diagramOptions.tracks.circularTrackSlots[1].params.padding_px, 0);
-    assert.equal(session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, 0);
-    // A rebuild that reads a param or the Axis index differently is a difference.
-    for (const [change, at] of [
-      [(rebuilt) => { rebuilt.circularTrackSlots[2].params.padding_px = 3; }, /circularTrackSlots\[2\]\.params\.padding_px/],
-      [(rebuilt) => { rebuilt.circularTrackAxisIndex = 1; }, /circularTrackAxisIndex/]
-    ]) {
-      const tampered = createGallerySessionPublication({
-        assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
-        buildRequest: (input) => {
-          const built = buildCanonicalRenderRequest(input);
-          change(built.renderRequest.diagramOptions.tracks);
-          return built;
-        },
-        buildRequestState: buildCanonicalRequestState,
-        readRequest: readPublishedRenderRequest,
-        projectRequest: projectCanonicalSessionRequest,
-        resolveComparisonPlan: resolveLinearComparisonPlan,
-        planLinearUnits,
-        splitDraft
-      });
-      await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
-        (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);
-    }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
+  const directory = await makeTempDir('gbdraw-gallery-cli-slots-');
+  const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions';
+  const file = path.join(directory, 'slots.gbdraw');
+  execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', `${data}/NC_001879.gbk`,
+    '--annotation_table', `${data}/nicotiana-tabacum-regions.tsv`,
+    '--circular_track_slot', 'features:features@side=overlay,lane_direction=split',
+    '--circular_track_slot', 'names:annotations@set_id=plastome_regions,side=inside,r=0.75,w=12px,'
+      + 'padding_px=0,show_labels=false,overflow=compress',
+    '--circular_track_slot', 'regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,'
+      + 'show_labels=true,padding_px=1,overflow=compress',
+    '--circular_track_slot', 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08',
+    '-o', path.join(directory, 'slots'), '-f', 'interactive_svg', '--session_output', file],
+  { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
+  const source = await loadSessionFile(file);
+  const { tracks } = source.renderRequest.diagramOptions;
+  assert.deepEqual([tracks.circularTrackSlots[1].params.padding_px, tracks.circularTrackSlots[1].params.show_labels,
+    tracks.circularTrackSlots[2].params.padding_px, tracks.circularTrackAxisIndex ?? null], ['0', 'false', '1', null]);
+  const { session, equivalence } = await prepareGallerySessionForPublication(source);
+  assert.deepEqual(equivalence.differences, [], 'CLI slot params');
+  assert.deepEqual(session.renderRequest.diagramOptions.tracks.circularTrackSlots[1].params.padding_px, 0);
+  assert.equal(session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex, 0);
+  // A rebuild that reads a param or the Axis index differently is a difference.
+  for (const [change, at] of [
+    [(rebuilt) => { rebuilt.circularTrackSlots[2].params.padding_px = 3; }, /circularTrackSlots\[2\]\.params\.padding_px/],
+    [(rebuilt) => { rebuilt.circularTrackAxisIndex = 1; }, /circularTrackAxisIndex/]
+  ]) {
+    const tampered = createGallerySessionPublication({
+      assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
+      buildRequest: (input) => {
+        const built = buildCanonicalRenderRequest(input);
+        change(built.renderRequest.diagramOptions.tracks);
+        return built;
+      },
+      buildRequestState: buildCanonicalRequestState,
+      readRequest: readPublishedRenderRequest,
+      projectRequest: projectCanonicalSessionRequest,
+      resolveComparisonPlan: resolveLinearComparisonPlan,
+      planLinearUnits,
+      splitDraft
+    });
+    await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
+      (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);
   }
 }

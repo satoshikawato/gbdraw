@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
@@ -34,7 +34,7 @@ const serviceNames = [
   'preview-affordances.js',
   'svg-transform.js'
 ];
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
+const tempDir = await makeTempDir('gbdraw-preview-runtime-');
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 // svg-result-ingestion reads the mode-scoped Session version from the generated schema.

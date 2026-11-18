@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test, { after } from 'node:test';
 
@@ -13,6 +12,7 @@ import {
   validateProposal,
   validateTitle
 } from '../../tools/check-pr-language.mjs';
+import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 const CHECKER = resolve('tools/check-pr-language.mjs');
 const ORIGINAL_TITLE = 'Promote steady-state CI topology and finalize main admission';
@@ -24,11 +24,9 @@ const CLEAR_BODY = `This PR removes CI jobs that existed only while the new main
 
 - [x] GOVERNANCE`;
 
-const temporaryDirectory = mkdtempSync(join(tmpdir(), 'gbdraw-pr-language-'));
+const temporaryDirectory = makeTempDirSync('gbdraw-pr-language-');
 const clearBodyFile = join(temporaryDirectory, 'clear-body.md');
 writeFileSync(clearBodyFile, CLEAR_BODY);
-
-after(() => rmSync(temporaryDirectory, { recursive: true, force: true }));
 
 const hookEvent = (command) => JSON.stringify({
   hook_event_name: 'PreToolUse',
