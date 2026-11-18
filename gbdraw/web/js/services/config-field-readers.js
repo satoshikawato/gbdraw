@@ -27,7 +27,7 @@ import {
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { isPlainObject } from './losat-cache.js';
-import { placesTrackStack } from './track-slot-validation.js';
+import { clampTrackAxisIndex, placesTrackStack } from './track-slot-validation.js';
 import {
   readCollinearAnchorMode, readCollinearColorMode, readCollinearMergeOrientation, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
 } from './losat-normalization.js';
@@ -39,10 +39,10 @@ import {
   createDefaultLosat, createDefaultLosatpHitLimits, readImportedTrackSlots, readLinearTypographyLinked
 } from './session-active-config-contract.js';
 import {
-  applyCircularTrackOrderPlacements, clampCircularTrackAxisIndex, inferLegacyAxisIndexFromFeature, normalizeCircularTrackSlots
+  applyCircularTrackOrderPlacements, inferLegacyAxisIndexFromFeature, normalizeCircularTrackSlots
 } from './circular-track-slot-model.js';
 import {
-  LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
+  LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { MODE_SLICE_CONTAINERS, OTHER_MODE_OWN_FIELDS, unscopedDraftRows } from './mode-scoped-migration.js';
@@ -1749,13 +1749,13 @@ export const resolvedTrackStacks = (adv, form, losses = null) => {
   const nt = /** @type {string | undefined} */ (adv.nt);
   const trackType = /** @type {string | undefined} */ (form.track_type);
   const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, nt, trackType, circularLosses);
-  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
+  const importedAxis = clampTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
   const circularPlaced = placesTrackStack(adv, 'circular');
-  // The clamp reads an unset index as 0; the index of a stack nobody placed stays unset.
+  // An unset index reads from the features row; the index of a stack nobody placed stays unset.
   const circularAxis = circularPlaced ? importedAxis ?? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType) : null;
   const linearStack = /** @type {Parameters<typeof normalizeLinearTrackSlots>[0]} */ (adv.linear_track_slots);
   const normalizedLinearSlots = normalizeLinearTrackSlots(linearStack, nt, form.linear_track_layout, linearLosses);
-  const importedLinearAxis = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses);
+  const importedLinearAxis = clampTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses);
   const linearPlaced = placesTrackStack(adv, 'linear');
   const linearAxis = linearPlaced ? resolveLinearTrackAxisIndex(normalizedLinearSlots, importedLinearAxis) : null;
   losses?.push(...[

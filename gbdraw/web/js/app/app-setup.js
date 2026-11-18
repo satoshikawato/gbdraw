@@ -295,19 +295,13 @@ import { importedComparisonExecution } from '../services/imported-comparison-int
 import {
   activeDepthTrackIndices,
   compactDepthFileSlots,
-  depthSlotTrackIndex,
-  isDefaultManagedDepthSlot,
   representativeDepthFiles,
-  reindexDepthSlots,
   removeDepthTrackColumnAt,
   depthSeriesRemovalLoss
 } from '../services/depth-track-state.js';
 /** @import { HistoryIntentChange, HistoryManagerOptions } from '../services/history.js' */
 /** @import { RulePreparationOptions } from './rule-matching.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { ReindexDepthSlotsOptions } from '../services/depth-track-state.js' */
-/** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
-/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentOrientationCheckpoint, TargetDraftCheckpoint } from './record-display-options.js' */
 
@@ -1741,23 +1735,7 @@ export const createAppSetup = () => {
         if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
         refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(drawing), idx);
         ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
-        // The removed series' rows before the Axis lower its index, as in Linear,
-        // so no other row crosses the Axis (R10).
-        const axis = drawing.adv.circular_track_slots_axis_index;
-        const removedBeforeAxis = Number.isInteger(axis)
-          ? drawing.adv.circular_track_slots.slice(0, axis)
-            .filter((/** @type {CircularTrackSlot} */ slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
-          : 0;
-        drawing.adv.circular_track_slots.splice(
-          0,
-          drawing.adv.circular_track_slots.length,
-          ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
-            slots: drawing.adv.circular_track_slots,
-            removedIndex: idx,
-            activeCount: keptSeries
-          }))
-        );
-        if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
+        circularTrackSlotEditor.removeCircularDepthSeriesRows(drawing, idx, keptSeries);
         turnOffReaching?.();
         syncDepthTrackSlotLabelsForTrack(drawing, idx);
         circularTrackSlotEditor.normalizeCircularTrackSlots(drawing);
@@ -1795,28 +1773,7 @@ export const createAppSetup = () => {
         });
         if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
         ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
-        const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
-        const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
-          ? drawing.adv.linear_track_slots.reduce((/** @type {number} */ count, /** @type {LinearTrackSlot} */ slot, /** @type {number} */ slotIndex) => {
-              if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
-              return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
-            }, 0)
-          : 0;
-        drawing.adv.linear_track_slots.splice(
-          0,
-          drawing.adv.linear_track_slots.length,
-          ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
-            slots: drawing.adv.linear_track_slots,
-            removedIndex: idx,
-            activeCount: keptSeries
-          }))
-        );
-        if (Number.isInteger(previousAxisIndex)) {
-          drawing.adv.linear_track_slots_axis_index = Math.max(
-            0,
-            previousAxisIndex - removedManagedSlotCountBeforeAxis
-          );
-        }
+        linearTrackSlotEditor.removeLinearDepthSeriesRows(drawing, idx, keptSeries);
         turnOffReaching?.();
         syncDepthTrackSlotLabelsForTrack(drawing, 0);
         linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();

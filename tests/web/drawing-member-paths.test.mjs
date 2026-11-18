@@ -638,6 +638,59 @@ test('Save then Load gives back each track stack as saved, drawn or not', () => 
   }
 }));
 
+// OV-3696, OV-3712: a Depth file, the removal of its Depth series and Hide GC
+// Content are no edit of the stack, so they leave a stack nobody placed
+// unplaced, and Use custom stack afterwards places it from its features row:
+// in Circular Spreadout the features outside the Axis, where the Track layout
+// draws them. A fresh drawing for each change, in each mode; the test lists
+// every case that differs.
+const STACK_CHANGES = {
+  circular: { layout: ['track_type', 'spreadout'], changes: ['depth file', 'depth series removed', 'Hide GC Content'] },
+  linear: { layout: ['linear_track_layout', 'above'], changes: ['depth file', 'depth series removed'] }
+};
+test('a Depth file, Remove Depth series and Hide GC Content leave a stack nobody placed unplaced', () => withBootPalettes(state, async () => {
+  await bootBases();
+  const differences = [];
+  for (const mode of MODES) {
+    const { layout: [field, layout], changes } = STACK_CHANGES[mode];
+    for (const change of changes) {
+      const where = `${mode}, ${change}`;
+      assert.equal((await loadSession(bases.plain.blob)).asked, null);
+      const { drawingId: id } = app.drawingList.newDrawing(mode);
+      const drawing = state.drawingOf(id);
+      await bindRecords(drawing);
+      await app.featurePlacementActions.changeLayoutSetting({ target: { type: 'select', value: layout } }, field, layout);
+      assert.equal(drawing.form[field], layout);
+      const unplaced = structuredClone(drawing.adv[`${mode}_track_slots`]);
+      const depth = new File(['REC_A\t1\t5\n'], `${mode}.depth.tsv`, { lastModified: 1 });
+      const depthRows = () => drawing.adv[`${mode}_track_slots`].filter((slot) => slot.renderer === 'depth').length;
+      if (change === 'Hide GC Content') await app.setCircularGcSuppressed(true);
+      else if (mode === 'circular') await app.setCircularDepthFile(0, depth);
+      else await app.setLinearDepthFile(drawing.linearSeqs[0], 0, depth);
+      if (change !== 'Hide GC Content') assert.equal(depthRows(), 1, `${where}: the Depth file adds its row`);
+      if (change === 'depth series removed') {
+        await (mode === 'circular' ? app.removeCircularDepthTrack(0) : app.removeLinearDepthTrack(0));
+        assert.equal(depthRows(), 0, `${where}: the removal takes the row out`);
+      }
+      const axis = drawing.adv[`${mode}_track_slots_axis_index`];
+      if (axis !== null) differences.push(`${where}: the change placed the stack (Axis index ${axis})`);
+      const sides = (slots) => slots.filter(({ renderer }) => renderer !== 'depth').map(({ id: row, side, params }) => [row, side ?? null, params?.lane_direction ?? null]);
+      if (JSON.stringify(sides(drawing.adv[`${mode}_track_slots`])) !== JSON.stringify(sides(unplaced))) {
+        differences.push(`${where}: the change set sides ${JSON.stringify(sides(drawing.adv[`${mode}_track_slots`]))}`);
+      }
+      await (mode === 'circular' ? app.setCircularTrackSlotsEnabled(true) : app.setLinearTrackSlotsEnabled(true));
+      if (mode !== 'circular') continue;
+      const slots = drawing.adv.circular_track_slots;
+      const features = slots.findIndex((slot) => slot.renderer === 'features');
+      if (slots[features].params.lane_direction !== 'outside' || drawing.adv.circular_track_slots_axis_index !== features + 1) {
+        differences.push(`${where}: Use custom stack drew the features ${slots[features].params.lane_direction} (Axis index `
+          + `${drawing.adv.circular_track_slots_axis_index}), not outside as Spreadout does`);
+      }
+    }
+  }
+  assert.deepEqual(differences, []);
+}));
+
 // The 25 Session config domains (`CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`) are
 // the config domains of a drawing entry (`MODE_SLICE_CONTAINERS.config`, the
 // registry's) and three others: the palette's Instant Preview is app UI

@@ -10,6 +10,7 @@ import {
   depthTrackMatrixWidth,
   nextDepthSlotTrackIndex,
   reconcileManagedDepthSlots,
+  reindexDepthSlots,
   shownAfterSourceChange
 } from '../services/depth-track-state.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -25,12 +26,11 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
-import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
   applyLinearTrackOrderPlacements,
-  clampLinearTrackAxisIndex,
   cloneParams,
   createDefaultLinearTrackSlots,
   DEFAULT_SLOT_IDS,
@@ -216,7 +216,7 @@ const replaceObjectContents = (target, source) => {
 // The Axis index the stack reads as; a read writes nothing, so it places no stack (OV-3696).
 /** @param {DrawingState} drawing @param {LinearSlotPlacementInput[]} slots */
 const currentLinearAxisIndex = (drawing, slots) => (
-  clampLinearTrackAxisIndex(drawing.adv.linear_track_slots_axis_index, slots.length) ?? inferLinearTrackAxisIndexFromSlots(slots)
+  clampTrackAxisIndex(drawing.adv.linear_track_slots_axis_index, slots.length) ?? inferLinearTrackAxisIndexFromSlots(slots)
 );
 
 // An edit of the stack pins the index it reads, which places the stack.
@@ -248,6 +248,34 @@ export const editLinearFeatureDensityRows = (changeTrackLayout, drawing, edit, n
  * @property {ChangeTrackVisibility} [changeTrackVisibility] The Legend port every stack edit runs in: a drawn track
  *   the edit hides or shows again takes its Legend rows with it (OV-1198; default: apply directly).
  */
+
+/**
+ * The stack after managed rows left it or joined it: `nextSlots` are the rows that stay, by their ids, and `newSlots`
+ * go after them. A placed Axis index is lowered by the rows that leave before it, so no other row crosses the Axis
+ * (R10); an unset one stays unset, so a stack nobody placed stays unplaced (OV-3696). The caller normalizes the stack
+ * after it.
+ * @param {DrawingState} drawing @param {LinearTrackSlot[]} nextSlots @param {LinearTrackSlot[]} [newSlots]
+ */
+const commitManagedLinearSlots = (drawing, nextSlots, newSlots = []) => {
+  /** @type {LinearTrackSlot[]} */
+  const slots = drawing.adv.linear_track_slots;
+  const axis = clampTrackAxisIndex(drawing.adv.linear_track_slots_axis_index, slots.length);
+  if (axis !== null) {
+    const staying = new Set(nextSlots.map((slot) => String(slot.id)));
+    drawing.adv.linear_track_slots_axis_index = axis - slots.slice(0, axis).filter((slot) => !staying.has(String(slot.id))).length;
+  }
+  slots.splice(0, slots.length, ...nextSlots, ...newSlots);
+};
+
+// Removing Depth series `removedIndex` takes its managed rows out of the stack and gives the rows of the later series
+// their new index (`reindexDepthSlots`), committed as a reconcile commits its rows (`commitManagedLinearSlots`); the
+// Depth source change that removes the series normalizes the stack after it.
+/** @param {DrawingState} drawing @param {number} removedIndex @param {number} keptSeries */
+const removeLinearDepthSeriesRows = (drawing, removedIndex, keptSeries) => commitManagedLinearSlots(
+  drawing,
+  // The reindexed rows are the drawing's own rows, copied (R13: the service types them as DepthSlotRow).
+  /** @type {LinearTrackSlot[]} */ (reindexDepthSlots({ slots: drawing.adv.linear_track_slots, removedIndex, activeCount: keptSeries }))
+);
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
 // a port (R10, Q3, R13): every stack edit that can change the feature slot
@@ -929,15 +957,11 @@ export const createLinearTrackSlotEditor = ({
   const reconcileLinearDepthSlots = (drawing, previousSourced) => {
     const slots = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
     if (slots.length === 0 && !drawing.adv.linear_track_slots_enabled) return;
-    const { slots: nextSlots, additions } = reconcileManagedDepthSlots({ slots, previousSourced, sourced: linearSourcedDepthTrackIndexesForDrawing(drawing) });
+    // The reconciled rows are the drawing's own rows (R13: the service types them as DepthSlotRow).
+    const { slots: nextSlots, additions } = /** @type {{ slots: LinearTrackSlot[], additions: number[] }} */ (
+      reconcileManagedDepthSlots({ slots, previousSourced, sourced: linearSourcedDepthTrackIndexesForDrawing(drawing) })
+    );
     if (additions.length === 0 && nextSlots.length === slots.length) return;
-    const previousAxisIndex = clampLinearTrackAxisIndex(drawing.adv.linear_track_slots_axis_index, slots.length);
-    if (previousAxisIndex !== null) {
-      const removedBeforeAxis = slots
-        .slice(0, previousAxisIndex)
-        .filter((/** @type {typeof nextSlots[number]} */ slot) => !nextSlots.includes(slot)).length;
-      drawing.adv.linear_track_slots_axis_index = previousAxisIndex - removedBeforeAxis;
-    }
     const seriesCount = linearAvailableDepthTrackCountForDrawing(drawing);
     /** @type {{ id?: unknown }[]} */
     const takenSlots = [...nextSlots];
@@ -947,9 +971,10 @@ export const createLinearTrackSlotEditor = ({
       takenSlots.push(slot);
       return slot;
     });
-    drawing.adv.linear_track_slots.splice(0, slots.length, ...nextSlots, ...newSlots);
+    commitManagedLinearSlots(drawing, nextSlots, newSlots);
     refreshCurrentSlots(drawing);
   };
+
 
   // The only entry for Depth source changes: run the change, then reconcile.
   // It alone sets the drawing's Show Depth from its Depth sources: on with
@@ -1229,6 +1254,7 @@ export const createLinearTrackSlotEditor = ({
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: () => refreshCurrentSlots(state.activeDrawing()),
     changeLinearDepthSources,
+    removeLinearDepthSeriesRows,
     linearDepthSourceLoss,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetLinearTrackSlotsFromSimpleControls,

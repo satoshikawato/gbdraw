@@ -21,6 +21,7 @@ import {
   depthSourceLoss,
   nextDepthSlotTrackIndex,
   reconcileManagedDepthSlots,
+  reindexDepthSlots,
   representativeDepthFiles,
   shownAfterSourceChange
 } from '../services/depth-track-state.js';
@@ -59,6 +60,7 @@ import {
   annotationSetForNewRow,
   annotationSetIdsOf,
   automaticAnnotationTrackSlots,
+  clampTrackAxisIndex,
   nextCopyId,
   nextNumberedId,
   overlayAnnotationZ,
@@ -75,7 +77,6 @@ import {
 import {
   applyCircularGeometryShortcuts,
   applyCircularTrackOrderPlacements,
-  clampCircularTrackAxisIndex,
   cloneParams,
   createDefaultCircularTrackSlots,
   circularStacksNoSessionSaved,
@@ -276,7 +277,7 @@ export const circularTrackAxisIndexForEnabledSlots = (
 ) => {
   const source = Array.isArray(slots) ? slots : [];
   const resolvedAxis = (
-    clampCircularTrackAxisIndex(axisIndex, source.length) ??
+    clampTrackAxisIndex(axisIndex, source.length) ??
     inferLegacyAxisIndexFromFeature(source, preset)
   );
   return source
@@ -532,7 +533,7 @@ const projectCircularSuppressControls = (drawing) => {
 // The Axis index the stack reads as; a read writes nothing, so it places no stack (OV-3696).
 /** @param {DrawingState} drawing @param {CircularTrackSlot[]} slots */
 const currentAxisIndex = (drawing, slots) => (
-  clampCircularTrackAxisIndex(drawing.adv.circular_track_slots_axis_index, slots.length)
+  clampTrackAxisIndex(drawing.adv.circular_track_slots_axis_index, slots.length)
     ?? inferLegacyAxisIndexFromFeature(slots, drawing.form.track_type)
 );
 
@@ -619,6 +620,82 @@ const reassigningRingColors = (move, sync) => (drawing, ...args) => {
   if (!answer && reassignRingColorsOnReorder(drawing)) sync(drawing);
   return answer;
 };
+
+/**
+ * The stack after managed rows left it or joined it: `nextSlots` are the rows that stay (the managed ones by their ids),
+ * and `newSlots` go in at `preferredInsertIndex`, inside the Axis. A placed Axis index is lowered by the managed rows
+ * that leave before it, so no other row crosses the Axis (R10); an unset one stays unset, so a stack nobody placed
+ * stays unplaced (OV-3696). The caller normalizes the stack after it.
+ * @param {DrawingState} drawing
+ * @param {{ nextSlots: CircularTrackSlot[], newSlots?: CircularTrackSlot[], managedPredicate: (slot: CircularTrackSlot | null | undefined) => boolean, preferredInsertIndex?: number | null }} mutation
+ */
+const commitManagedSlotMutation = (drawing, {
+  nextSlots,
+  newSlots = [],
+  managedPredicate,
+  preferredInsertIndex = null
+}) => {
+  /** @type {CircularTrackSlot[]} */
+  const currentSlots = Array.isArray(drawing.adv.circular_track_slots)
+    ? drawing.adv.circular_track_slots
+    : [];
+  const currentAxis = currentAxisIndex(drawing, currentSlots);
+  const retainedManagedIds = new Set(
+    (Array.isArray(nextSlots) ? nextSlots : [])
+      .filter((slot) => managedPredicate(slot))
+      .map((slot) => String(slot?.id || '').trim())
+      .filter(Boolean)
+  );
+  const removedBeforeAxis = currentSlots
+    .slice(0, currentAxis)
+    .filter((slot) => (
+      managedPredicate(slot) &&
+      !retainedManagedIds.has(String(slot?.id || '').trim())
+    )).length;
+  const committed = Array.isArray(nextSlots) ? nextSlots.slice() : [];
+  const axis = Math.max(0, currentAxis - removedBeforeAxis);
+  const additions = (Array.isArray(newSlots) ? newSlots : []).map((slot) => {
+    applyPlacementDefaults(slot, 'inside');
+    return slot;
+  });
+  if (additions.length > 0) {
+    const preferred = Number.isInteger(preferredInsertIndex)
+      // Number.isInteger is true only for a number, so it is not null here.
+      ? /** @type {number} */ (preferredInsertIndex)
+      : axis;
+    const insideFloor = committed.reduce((floor, slot, index) => {
+      if (index < axis || !isOnAxisSlot(slot, drawing.form.track_type)) return floor;
+      return Math.max(floor, index + 1);
+    }, axis);
+    const insertIndex = Math.max(
+      insideFloor,
+      Math.min(preferred, committed.length)
+    );
+    committed.splice(insertIndex, 0, ...additions);
+  }
+  // Only a placed stack has its index written; a stack nobody placed keeps it unset, read from its features row.
+  if (placesTrackStack(drawing.adv, 'circular')) {
+    drawing.adv.circular_track_slots_axis_index = Math.min(axis, committed.length);
+  }
+  drawing.adv.circular_track_slots.splice(
+    0,
+    drawing.adv.circular_track_slots.length,
+    ...committed
+  );
+};
+
+// Removing Depth series `removedIndex` takes its managed rows out of the stack and gives the rows of the later series
+// their new index (`reindexDepthSlots`); the managed-row commit lowers a placed Axis by the rows that leave before it,
+// so no other row crosses the Axis (R10), and leaves a stack nobody placed unplaced (OV-3696). The Depth source change
+// that removes the series normalizes the stack after it.
+/** @param {DrawingState} drawing @param {number} removedIndex @param {number} keptSeries */
+const removeCircularDepthSeriesRows = (drawing, removedIndex, keptSeries) => commitManagedSlotMutation(drawing, {
+  // The reindexed rows are the drawing's own rows, copied (R13: the service types them as DepthSlotRow).
+  nextSlots: /** @type {CircularTrackSlot[]} */ (reindexDepthSlots({
+    slots: drawing.adv.circular_track_slots, removedIndex, activeCount: keptSeries
+  })),
+  managedPredicate: isDefaultManagedDepthSlot
+});
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
 // a port (R10, Q3, R13): every stack edit that can change the feature slot
@@ -958,67 +1035,6 @@ export const createCircularTrackSlotEditor = ({
   /** @param {DrawingState} drawing */
   const refreshSlots = (drawing) => normalizeSlots(drawing, placesTrackStack(drawing.adv, 'circular'));
 
-  /**
-   * @param {DrawingState} drawing
-   * @param {{ nextSlots: CircularTrackSlot[], newSlots?: CircularTrackSlot[], managedPredicate: (slot: CircularTrackSlot | null | undefined) => boolean, preferredInsertIndex?: number | null }} mutation
-   */
-  const commitManagedSlotMutation = (drawing, {
-    nextSlots,
-    newSlots = [],
-    managedPredicate,
-    preferredInsertIndex = null
-  }) => {
-    /** @type {CircularTrackSlot[]} */
-    const currentSlots = Array.isArray(drawing.adv.circular_track_slots)
-      ? drawing.adv.circular_track_slots
-      : [];
-    const currentAxis = currentAxisIndex(drawing, currentSlots);
-    const retainedManagedIds = new Set(
-      (Array.isArray(nextSlots) ? nextSlots : [])
-        .filter((slot) => managedPredicate(slot))
-        .map((slot) => String(slot?.id || '').trim())
-        .filter(Boolean)
-    );
-    const removedBeforeAxis = currentSlots
-      .slice(0, currentAxis)
-      .filter((slot) => (
-        managedPredicate(slot) &&
-        !retainedManagedIds.has(String(slot?.id || '').trim())
-      )).length;
-    const committed = Array.isArray(nextSlots) ? nextSlots.slice() : [];
-    const axis = Math.max(0, currentAxis - removedBeforeAxis);
-    const additions = (Array.isArray(newSlots) ? newSlots : []).map((slot) => {
-      applyPlacementDefaults(slot, 'inside');
-      return slot;
-    });
-    if (additions.length > 0) {
-      const preferred = Number.isInteger(preferredInsertIndex)
-        // Number.isInteger is true only for a number, so it is not null here.
-        ? /** @type {number} */ (preferredInsertIndex)
-        : axis;
-      const insideFloor = committed.reduce((floor, slot, index) => {
-        if (index < axis || !isOnAxisSlot(slot, drawing.form.track_type)) return floor;
-        return Math.max(floor, index + 1);
-      }, axis);
-      const insertIndex = Math.max(
-        insideFloor,
-        Math.min(preferred, committed.length)
-      );
-      committed.splice(insertIndex, 0, ...additions);
-    }
-    // A stack nobody placed keeps its index unset while the unset index reads as the one the rows need.
-    const nextAxis = Math.min(axis, committed.length);
-    if (placesTrackStack(drawing.adv, 'circular') || nextAxis !== currentAxisIndex(drawing, committed)) {
-      drawing.adv.circular_track_slots_axis_index = nextAxis;
-    }
-    drawing.adv.circular_track_slots.splice(
-      0,
-      drawing.adv.circular_track_slots.length,
-      ...committed
-    );
-    refreshSlots(drawing);
-  };
-
   // Reset is the preset reset for the current Track layout.
   const resetCircularTrackSlotsFromSimpleControls = () => {
     const drawing = state.activeDrawing();
@@ -1074,6 +1090,7 @@ export const createCircularTrackSlotEditor = ({
       managedPredicate: isDefaultManagedDepthSlot,
       preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
     });
+    refreshSlots(drawing);
   };
 
   // The only entry for Depth source changes: run the change, then reconcile.
@@ -1163,6 +1180,7 @@ export const createCircularTrackSlotEditor = ({
       managedPredicate: isManagedConservationSlot,
       preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
     });
+    refreshSlots(drawing);
   };
 
   /** @param {DrawingState} drawing @param {unknown} preset */
@@ -1974,6 +1992,7 @@ export const createCircularTrackSlotEditor = ({
     normalizeCircularTrackSlots: refreshSlots,
     syncCircularConservationSlots: syncConservationSlots,
     changeCircularDepthSources,
+    removeCircularDepthSeriesRows,
     circularDepthSourceLoss,
     circularConservationRowsLeaving,
     rekeyCircularConservationRows,

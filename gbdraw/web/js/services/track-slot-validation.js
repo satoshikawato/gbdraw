@@ -1334,6 +1334,23 @@ export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntri
 );
 
 /**
+ * The Axis index of a Circular or Linear custom stack as its rows read it: an integer, held within the stack, or null
+ * for an unset index (null, absent or empty), which the stack reads from its features row; a value no integer is
+ * replaced by null. One rule for both modes, as `placesTrackStack` reads the index.
+ * @param {unknown} value
+ * @param {unknown} slotCount
+ * @param {FieldLeaf[] | null} [losses] Where a value it replaces is recorded (OV-758; `at` '').
+ * @returns {number | null}
+ */
+export const clampTrackAxisIndex = (value, slotCount, losses = null) => {
+  if (isUnsetValue(value)) return null;
+  const numeric = Number(value);
+  const read = Number.isInteger(numeric) ? Math.max(0, Math.min(Number(slotCount) || 0, numeric)) : null;
+  noteReplacedLeaf(losses, '', value, read);
+  return read;
+};
+
+/**
  * Whether a drawing's custom track stack of `stack` is placed: the request draws it (its Use custom stack is on), or an
  * edit of the stack placed it (its Axis index is set). A stack neither placed is the stack a new drawing holds, with
  * its sides and lane directions unset; the Load and every change that is no edit of the stack keep it so, and the
