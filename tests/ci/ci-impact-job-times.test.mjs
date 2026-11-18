@@ -51,13 +51,13 @@ test('every job of the Tests workflow has its limit, and each run name finds its
   const ids = [...workflow.split('\njobs:\n')[1].matchAll(/^ {2}([a-z0-9-]+):\n/gm)].map(([, id]) => id);
   assert.deepEqual(limits.map(({ id }) => id), ids);
   for (const [name, id, minutes] of [
-    ['Core PR (Python 3.10)', 'core-pr', 25],
-    ['Core (Python 3.12)', 'core', 25],
+    ['Core PR (Python 3.10)', 'core-pr', 35],
+    ['Core (Python 3.12)', 'core', 40],
     ['Playwright functional (shard 2/8)', 'playwright-functional', 45],
     ['recipe acceptance (Python 3.10)', 'acceptance-supported-main', 20],
     ['Promotion audit / sweep-labels', 'promotion-audit-sweeps', 120],
     ['Promotion audit / summary', 'promotion-audit-summary', 10],
-    ['Web change budget', 'web-change-budget', 10],
+    ['Web change budget', 'web-change-budget', 15],
     ['Fail fast (Core PR)', 'fail-fast-core-pr', 2],
     ['PR / gate', 'pr-gate', 10],
     // A job without timeout-minutes has GitHub's 360-minute limit.
@@ -108,15 +108,15 @@ test('the report lists finished jobs at or over the share of their limit', () =>
   const times = jobTimes({
     limits,
     jobs: [
-      job('Core (Python 3.12)', 21),
+      job('Core (Python 3.12)', 33.6),
       // A step with its own limit counts against it; steps without one, and skipped steps, do not.
       job('Browser (Python 3.11)', 16, { steps: [
         ['Set up job', 0.5], ['Run Web JavaScript tests', 12.3], ['Run Python browser tests', 3],
         ['Run package build integration', 0, 'skipped'], ['Post Run Web JavaScript tests', 0.2]
       ] }),
       job('Web contracts (Python 3.11)', 28, { steps: [['Set up job', 0.5], ['Run fast Web JavaScript contracts', 14.5]] }),
-      job('Core (Python 3.10)', 25 * WARNING_SHARE),
-      job('Core (Python 3.11)', 19.9),
+      job('Core (Python 3.10)', 40 * WARNING_SHARE),
+      job('Core (Python 3.11)', 31.9),
       job('Playwright functional (shard 1/8)', 45, { conclusion: 'cancelled' }),
       job('Core PR (Python 3.10)', 0, { conclusion: 'skipped' }),
       job('PR / gate', 0, { status: 'in_progress', conclusion: null }),
@@ -135,20 +135,20 @@ test('the report lists finished jobs at or over the share of their limit', () =>
     '::warning title=Job near its time limit::Playwright functional (shard 1/8) took 45.0 of its 45 minutes (100%25).',
     '::warning title=Step near its time limit::Web contracts (Python 3.11) / Run fast Web JavaScript contracts took 14.5 of its 15 minutes (96%25).',
     '::warning title=Job near its time limit::Web contracts (Python 3.11) took 28.0 of its 30 minutes (93%25).',
-    '::warning title=Job near its time limit::Core (Python 3.12) took 21.0 of its 25 minutes (84%25).',
+    '::warning title=Job near its time limit::Core (Python 3.12) took 33.6 of its 40 minutes (84%25).',
     '::warning title=Step near its time limit::Browser (Python 3.11) / Run Web JavaScript tests took 12.3 of its 15 minutes (82%25).',
-    '::warning title=Job near its time limit::Core (Python 3.10) took 20.0 of its 25 minutes (80%25).'
+    '::warning title=Job near its time limit::Core (Python 3.10) took 32.0 of its 40 minutes (80%25).'
   ]);
   assert.match(summary, /^## Job times against their limits\n\nJobs and steps that used 80% or more of their `timeout-minutes`:\n\n- \[Playwright functional \(shard 1\/8\)\]\(https:[^)]+\): 45\.0 of 45 min \(100%\)\n/);
   assert.match(summary, /\n- \[Browser \(Python 3\.11\) \/ Run Web JavaScript tests\]\([^)]+#step:2:1\): 12\.3 of 15 min \(82%\)\n/);
   assert.doesNotMatch(summary, /Run Python browser tests/);
-  assert.match(summary, /\n- \[Core \(Python 3\.10\)\]\([^)]+\): 20\.0 of 25 min \(80%\)\n/);
+  assert.match(summary, /\n- \[Core \(Python 3\.10\)\]\([^)]+\): 32\.0 of 40 min \(80%\)\n/);
   assert.doesNotMatch(summary, /Core \(Python 3\.11\)/);
   assert.match(summary, /\n- No workflow job matches: Renamed job\n/);
 
-  const quiet = formatJobTimeReport({ times: jobTimes({ limits, jobs: [job('Core (Python 3.11)', 19.9), job('Lint', 1)] }) });
+  const quiet = formatJobTimeReport({ times: jobTimes({ limits, jobs: [job('Core (Python 3.11)', 31.9), job('Lint', 1)] }) });
   assert.deepEqual(quiet.annotations, []);
-  assert.match(quiet.summary, /- No job or step used 80% or more of its `timeout-minutes`; the highest share: Core \(Python 3\.11\) took 19\.9 of its 25 minutes \(79%\)\./);
+  assert.match(quiet.summary, /- No job or step used 80% or more of its `timeout-minutes`; the highest share: Core \(Python 3\.11\) took 31\.9 of its 40 minutes \(79%\)\./);
 });
 
 const gatePlan = (profile) => createImpactPlan({
@@ -203,16 +203,16 @@ const runGate = async ({ jobs = [], status = 200, needsResult = 'success' } = {}
 };
 
 test('the dev gate reports its run attempt\'s jobs near their limits before it validates them', async () => {
-  const passed = await runGate({ jobs: [job('Core (Python 3.12)', 22), job('Lint', 1)] });
+  const passed = await runGate({ jobs: [job('Core (Python 3.12)', 35.2), job('Lint', 1)] });
   assert.equal(passed.exitCode, 0, passed.stderr);
   assert.equal(passed.calls.length, 1);
-  assert.match(passed.stdout, /^::warning title=Job near its time limit::Core \(Python 3\.12\) took 22\.0 of its 25 minutes \(88%25\)\.\n\{/);
+  assert.match(passed.stdout, /^::warning title=Job near its time limit::Core \(Python 3\.12\) took 35\.2 of its 40 minutes \(88%25\)\.\n\{/);
   assert.ok(passed.summary.indexOf('## Job times against their limits') < passed.summary.indexOf('## CI impact aggregate validation'));
   // A gate that fails still reports the job that ran out of time.
-  const failed = await runGate({ jobs: [job('Core (Python 3.12)', 25, { conclusion: 'cancelled' })], needsResult: 'cancelled' });
+  const failed = await runGate({ jobs: [job('Core (Python 3.12)', 40, { conclusion: 'cancelled' })], needsResult: 'cancelled' });
   assert.equal(failed.exitCode, 1);
   assert.match(failed.stderr, /REQUIRED_JOB_NOT_SUCCESSFUL/);
-  assert.match(failed.summary, /Core \(Python 3\.12\)\]\([^)]+\): 25\.0 of 25 min \(100%\)/);
+  assert.match(failed.summary, /Core \(Python 3\.12\)\]\([^)]+\): 40\.0 of 40 min \(100%\)/);
 });
 
 test('a job-time read failure is a warning, not a gate failure, and redacts the token', async () => {

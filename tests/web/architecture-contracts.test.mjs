@@ -2074,7 +2074,7 @@ test('normal CI uses only dev as the staging push branch', () => {
 test('dev staging Web checks scope only the newly integrated change', () => {
   const job = TEST_WORKFLOW.match(/\n  web-change-budget:\n[\s\S]*?(?=\n  [a-z0-9-]+:\n|$)/)?.[0];
   assert.ok(job, 'Web change-budget job must exist');
-  assert.match(job, /\n    timeout-minutes: 10\n/);
+  assert.match(job, /\n    timeout-minutes: 15\n/);
 
   const step = TEST_WORKFLOW.match(
     /      - name: Check Web change budget\n[\s\S]*?(?=\n      - name: Check Web architecture contracts)/
