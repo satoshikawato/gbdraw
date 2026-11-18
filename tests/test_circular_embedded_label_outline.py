@@ -19,6 +19,7 @@ from gbdraw.core.text import text_ink
 from tests.utils.cli_in_process import run_gbdraw
 
 INPUTS = Path(__file__).parent / "test_inputs"
+SESSIONS = Path(__file__).parent.parent / "gbdraw" / "web" / "gallery" / "sessions"
 QUALIFIER_PRIORITY = Path(__file__).parent.parent / "examples" / "qualifier_priority.tsv"
 SVG = "{http://www.w3.org/2000/svg}"
 XLINK = "{http://www.w3.org/1999/xlink}"
@@ -32,7 +33,11 @@ HMMTDNA_ND6 = "f6b2a293e"
 
 
 def _draw(tmp_path: Path, gbk: str, *options: str) -> ET.Element:
-    result = run_gbdraw(["circular", "--gbk", str(INPUTS / gbk), *options, "-o", "out", "-f", "svg"], cwd=tmp_path)
+    return _draw_args(tmp_path, "--gbk", str(INPUTS / gbk), *options)
+
+
+def _draw_args(tmp_path: Path, *args: str) -> ET.Element:
+    result = run_gbdraw(["circular", *args, "-o", "out", "-f", "svg"], cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     return ET.parse(tmp_path / "out.svg").getroot()
 
@@ -167,6 +172,16 @@ def test_embedded_labels_keep_their_glyphs_inside_the_drawn_outline(
     assert {feature_id: round(gap, 2) for feature_id, gap in gaps.items() if gap < 0.0} == {}
 
 
+def test_the_tobacco_gallery_figure_keeps_embedded_glyphs_inside_the_drawn_outline(tmp_path: Path) -> None:
+    """OV-3649: in the Gallery tobacco plastome ndhD touched its arrowhead's stroke, and psbC ran into its head once
+    its length was read at the lane centre without the outline."""
+
+    gaps = _embedded_glyph_gaps(_draw_args(tmp_path, "--session", str(SESSIONS / "tobacco-chloroplast.gbdraw")))
+
+    assert len(gaps) >= 10
+    assert {feature_id: round(gap, 2) for feature_id, gap in gaps.items() if gap < 0.0} == {}
+
+
 def test_a_label_whose_glyphs_clear_its_outline_is_drawn_inside_an_outer_lane(tmp_path: Path) -> None:
     """OV-3649: the embed length was read at the axis radius as well as the lane centre, so on a lane outside the
     axis ND4L went outside although its glyphs clear its outline; it is read at the lane centre alone now."""
@@ -182,24 +197,27 @@ def test_a_label_whose_glyphs_clear_its_outline_is_drawn_inside_an_outer_lane(tm
     assert gaps[HMMTDNA_ND4L] > 0.0
 
 
-def test_a_long_label_on_the_minus_strand_lane_stays_outside(tmp_path: Path) -> None:
-    """OV-3646: on the minus-strand lane of ``--separate_strands``, inside the axis, "ND6 prot" ran past ND6 when its
-    length was read at the axis; it stays outside."""
+def test_a_label_whose_glyphs_clear_its_outline_is_drawn_inside_a_lane_inside_the_axis(tmp_path: Path) -> None:
+    """OV-3649: on the minus-strand lane of ``--separate_strands``, inside the axis, "ND6 prot" fits inside ND6's
+    drawn outline; the 1.1x span test at the lane centre put it outside although its glyphs clear the outline."""
 
     label_table = tmp_path / "labels.tsv"
     label_table.write_text(
-        "record_id\tfeature_type\tqualifier\tvalue\tlabel_text\nNC_012920.1\tCDS\tlabel\t^ND6$\tND6 prot\n",
+        "record_id\tfeature_type\tqualifier\tvalue\tlabel_text\n*\t*\tlabel\t^NADH dehydrogenase subunit 6$\tND6 prot\n",
         encoding="utf-8",
     )
     root = _draw(
-        tmp_path, "HmmtDNA.gbk", "--qualifier_priority", str(_gene_labels(tmp_path)), "--label_table",
-        str(label_table), "--separate_strands", "--track_type", "tuckin", "--labels", "out",
+        tmp_path, "HmmtDNA.gbk", "--label_table", str(label_table), "--separate_strands", "--track_type", "tuckin",
+        "--labels", "out",
     )
     labels = {
         text.get("data-label-feature-id"): "".join(text.itertext())
         for text in root.iter(f"{SVG}text")
         if text.get("data-label-feature-id")
     }
+    gaps = _embedded_glyph_gaps(root)
 
     assert labels[HMMTDNA_ND6] == "ND6 prot"
-    assert HMMTDNA_ND6 not in _embedded_glyph_gaps(root)
+    assert HMMTDNA_ND6 in gaps
+    assert gaps[HMMTDNA_ND6] > 0.0
+    assert min(gaps.values()) > 0.0

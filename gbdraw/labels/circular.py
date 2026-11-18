@@ -5664,15 +5664,18 @@ def embedded_glyphs_outline_margin_px(
     middle_bp: float,
     total_length: int,
     outline_radii_at: Callable[[float], tuple[float, float]],
+    block_bp: tuple[float, float],
 ) -> float:
-    """The least distance from an embedded label's glyphs to the inner and outer edge of its feature's drawn
-    outline; negative where the glyphs cross it.
+    """The least distance from an embedded label's glyphs to its feature's drawn outline; negative where the glyphs
+    cross it.
 
     ``outline_radii_at`` gives the outline's inner and outer radius at a position (``circular_feature_edge_radii_at``):
     beside an arrowhead or on a narrowed shaft it lies inside the lane's edges. The glyphs are read at their two ends
     and at points between them (``EMBEDDED_OUTLINE_SAMPLE_PARTS``), each across the band from their bottom to their
     top at the baseline of ``path``. The gap along the ray from the centre is taken across the edge: an arrowhead's
-    slanted edge comes nearer the glyphs than the ray shows.
+    slanted edge comes nearer the glyphs than the ray shows. Along the text, the glyphs' two ends stay inside the
+    block they are drawn on (``block_bp``, its start and end, clockwise), whose ends are radial edges; the gap there
+    is read at the band's inner radius, where it is least.
     """
 
     baseline = path.baseline_radius_px
@@ -5700,35 +5703,17 @@ def embedded_glyphs_outline_margin_px(
             (outer_px - band[1], outer_px, (after[1] - before[1]) / step_rad),
         ):
             margin = min(margin, gap / math.hypot(1.0, slope / edge_px) if edge_px > 0.0 else gap)
+    block_start, block_end = float(block_bp[0]), float(block_bp[1])
+    block_span = (block_end - block_start) % float(total_length)
+    px_per_bp_inner = 2 * math.pi * band[0] / float(total_length)
+    for along in along_bp:
+        offset = (float(middle_bp) + along * bp_per_px - block_start) % float(total_length)
+        if offset <= block_span:
+            gap_bp = min(offset, block_span - offset)
+        else:
+            gap_bp = -min(offset - block_span, float(total_length) - offset)
+        margin = min(margin, gap_bp * px_per_bp_inner)
     return margin
-
-
-def _is_label_embedded_in_segment(
-    label_start: float,
-    label_end: float,
-    segment_start: int,
-    segment_end: int,
-    total_length: int,
-) -> bool:
-    """Return True when label interval is strictly contained in the target segment."""
-    label_span = float(label_end) - float(label_start)
-    if label_span <= 0.0:
-        return False
-
-    if segment_start <= segment_end:
-        return (label_start > float(segment_start)) and (label_end < float(segment_end))
-
-    if total_length <= 0:
-        return False
-
-    feature_span = (float(total_length) - float(segment_start)) + float(segment_end)
-    if feature_span <= 0.0:
-        return False
-
-    start_offset = (float(label_start) - float(segment_start)) % float(total_length)
-    end_offset = start_offset + label_span
-    eps = 1e-9
-    return (start_offset > eps) and (end_offset < (feature_span - eps))
 
 
 def prepare_label_list(
@@ -5899,10 +5884,9 @@ def prepare_label_list(
                 feature_inner_radius = float(lane.inner_px)
                 feature_center_radius = float(lane.center_px)
                 feature_outer_radius = float(lane.outer_px)
-            # The laid-out box, ``CIRCULAR_LABEL_GAP_EM`` included: the 1.1x span test reads the same width as
-            # the placer and the fit count, so the gap is part of deciding which labels go inside their feature.
-            # It holds at the lane centre the label is drawn on (``feature_center_radius_px``, OV-3646); the
-            # glyphs also stay inside the feature's drawn outline (arrowhead, narrowed shaft), tested below (OV-3649).
+            # The text path of an embedded label: 1.1 times its laid-out box at the lane centre it is drawn on
+            # (``feature_center_radius_px``), longer than its text, so no glyph falls off the path's end. Whether the
+            # label goes inside its feature is decided by its glyphs against the drawn outline, below (OV-3649).
             bbox_width_px = candidate.width_px
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle
@@ -5955,13 +5939,7 @@ def prepare_label_list(
                     # do not cross over raised feature bodies.
                     feature_anchor_x, feature_anchor_y = circle_point(ink_inner_radius, feature_angle_deg)
                 middle_x, middle_y = circle_point(inner_radius_factor * radius, feature_angle_deg)
-            is_embedded = _is_label_embedded_in_segment(
-                label_start,
-                label_end,
-                longest_segment_start,
-                longest_segment_end,
-                total_length,
-            ) and embedded_glyphs_outline_margin_px(
+            is_embedded = embedded_glyphs_outline_margin_px(
                 embedded_text_path(feature_center_radius, bbox_height_px, label_middle, total_length),
                 embedded_glyph_box(
                     feature_label_text, font_family, font_size, candidate.font_style, bbox_width_px, bbox_height_px
@@ -5976,6 +5954,7 @@ def prepare_label_list(
                     radii_px=(feature_inner_radius, feature_center_radius, feature_outer_radius),
                     shaft_width_ratio=arrow_shaft_width_ratio,
                 ),
+                (longest_segment_start, longest_segment_end),
             ) >= outline_clearance_px
             if label_rendering == "external_only":
                 is_embedded = False
