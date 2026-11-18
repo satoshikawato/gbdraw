@@ -498,6 +498,19 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
 };
 
 /**
+ * The Axis index a drawn Circular stack is checked and its request built about: the stored one, or for an unset one
+ * the index its rows read as (`inferLegacyAxisIndexFromFeature`), the one reading of an unset index that the Load, the
+ * stack editor and Generate's placement also use. The stack checks (`validateCustomTrackPlan`) take it from here.
+ * @param {(SlotPlacementSource | null | undefined)[]} slots
+ * @param {unknown} axisIndex
+ * @param {unknown} [preset]
+ * @returns {unknown}
+ */
+export const circularTrackAxisIndexOf = (slots, axisIndex, preset = 'tuckin') => (
+  isUnsetValue(axisIndex) ? inferLegacyAxisIndexFromFeature(slots, preset) : axisIndex
+);
+
+/**
  * The slots of a request with an Axis index as Python reads them: a features slot that names neither a side nor a
  * lane takes the lane of its place, outward before the index and inward past it, under every track type
  * (`_slot_with_axis_derived_side` in gbdraw/tracks/circular.py; OV-3186). The Web writes both, so only the requests of

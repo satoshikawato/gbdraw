@@ -9,8 +9,8 @@ import {
   featureIdentityKeyOf,
   parseFeatureIdentityKey
 } from '../../services/feature-placement.js';
-import { resolveCircularTrackFeaturePlacement } from '../../services/circular-track-slot-model.js';
-import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../../services/linear-track-slot-model.js';
+import { circularTrackAxisIndexOf, resolveCircularTrackFeaturePlacement } from '../../services/circular-track-slot-model.js';
+import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement, linearTrackAxisIndexOf } from '../../services/linear-track-slot-model.js';
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
 import { setFeaturePlacementRow } from '../../services/drawing/feature-edits.js';
 import { LINEAR_WRAP_FORM_FIELDS, linearWrapFormPatch } from '../../services/linear-wrap-form.js';
@@ -55,7 +55,10 @@ export const draftFeatureSlot = ({ mode, form, adv }) => {
   return adv[`${mode}_track_slots_enabled`]
     ? validateCustomTrackPlan({
       mode, slots: adv[`${mode}_track_slots`],
-      axisIndex: adv[`${mode}_track_slots_axis_index`], trackType
+      axisIndex: mode === 'circular'
+        ? circularTrackAxisIndexOf(adv.circular_track_slots, adv.circular_track_slots_axis_index, trackType)
+        : linearTrackAxisIndexOf(adv.linear_track_slots, adv.linear_track_slots_axis_index),
+      trackType
     }).enabledSlots.find((entry) => entry.renderer === 'features')
     : (mode === 'circular' ? {} : createDefaultLinearTrackSlots({ trackLayout: trackType })[0]);
 };

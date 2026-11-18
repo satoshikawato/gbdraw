@@ -84,7 +84,7 @@ const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
 const {
-  buildCircularTrackSlotPayload, effectiveSlotPlacement, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack
+  buildCircularTrackSlotPayload, circularTrackAxisIndexOf, effectiveSlotPlacement, normalizeCircularTrackSlot, parseCircularTrackSlotSpec, placeCircularTrackStack
 } = await import(
   pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
@@ -456,6 +456,8 @@ test('derives omitted Circular sides while keeping Feature lanes authoritative',
   );
 });
 
+// The slot model reads an unset Axis index from the rows (`circularTrackAxisIndexOf`, as the Load, the editor and
+// Generate read it); the checks take that index, and check no row against an Axis without one.
 test('infers an omitted Circular Axis from a side-less Feature lane', () => {
   for (const { trackType, lane, expectedSide, expectedAxis } of [
     { trackType: 'spreadout', lane: 'inside', expectedSide: 'inside', expectedAxis: 0 },
@@ -469,9 +471,10 @@ test('infers an omitted Circular Axis from a side-less Feature lane', () => {
     const plan = validate({
       mode: 'circular',
       slots: [laneOnlyFeature],
-      axisIndex: null,
+      axisIndex: circularTrackAxisIndexOf([laneOnlyFeature], null, trackType),
       trackType
     });
+    assert.equal(validate({ mode: 'circular', slots: [laneOnlyFeature], axisIndex: null, trackType }).emittedAxisIndex, null);
 
     assert.equal(plan.rowIssues.size, 0, `${trackType} + ${lane}`);
     assert.deepEqual(plan.globalIssues, [], `${trackType} + ${lane}`);

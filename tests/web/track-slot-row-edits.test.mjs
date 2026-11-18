@@ -38,7 +38,8 @@ const { createLinearTrackSlotEditor } = await import(pathToFileURL(join(tempRoot
 const { paramsKeptOnRendererChange } = await import(pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js')));
 const { askTrackSourceRemoval, askingAnnotationTrackAdd, askingTrackRowRemoval, askingTrackRowSwitch } = await import(pathToFileURL(join(tempRoot, 'app', 'track-slot-edits.js')));
 const { depthSeriesRemovalLoss, depthSourceLoss, dropInvalidManagedDepthSlots, isDefaultManagedDepthSlot, reconcileManagedDepthSlots } = await import(pathToFileURL(join(tempRoot, 'services', 'depth-track-state.js')));
-const { normalizeLinearTrackSlots, placeLinearStackForGenerate } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js')));
+const { applyLinearTrackOrderPlacements, normalizeLinearTrackSlots, placeLinearStackForGenerate, resolveLinearTrackAxisIndex } = await import(pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js')));
+const { placeCircularTrackStack } = await import(pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js')));
 const { createDefaultAdv } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 
 const depthFile = { name: 'a.depth.tsv', size: 1, lastModified: 1 };
@@ -1470,3 +1471,41 @@ for (const mode of ['circular', 'linear']) {
     assert.equal(opened.slots()[1].side, features().side);
   });
 }
+
+// A drawn stack whose Axis index is unset (a Session that saved none; the Load keeps it unset) is checked about the
+// index Generate places it about, read from its features row as the slot model reads it: the stack panel shows the
+// issues it shows with that index pinned, and none here. A disabled features row before the drawn one is where a
+// second reading of the unset index (one that skips disabled rows) placed the Axis elsewhere, in both modes.
+test('the stack panel checks a drawn stack with an unset Axis index about the index Generate places it about', () => {
+  const placedAxis = {
+    circular: () => placeCircularTrackStack([
+      { id: 'old_features', renderer: 'features', enabled: false, params: { lane_direction: 'split' } },
+      { id: 'gc_content', renderer: 'gc_content', enabled: true, params: {} },
+      { id: 'features', renderer: 'features', enabled: true, params: { lane_direction: 'inside' } },
+      { id: 'gc_skew', renderer: 'gc_skew', enabled: true, params: {} }
+    ], 'GC', 'tuckin', null),
+    linear: () => {
+      const slots = applyLinearTrackOrderPlacements([
+        { ...linearRow('old_features', 'features', {}, 'below'), enabled: false },
+        linearRow('gc_content', 'gc_content', {}, 'above'),
+        linearRow('features', 'features', {}, 'overlay'),
+        linearRow('gc_skew', 'gc_skew', {}, 'below')
+      ], null, 'GC', 'middle');
+      return { slots, axisIndex: resolveLinearTrackAxisIndex(slots, null) };
+    }
+  };
+  const differences = [];
+  for (const mode of ['circular', 'linear']) {
+    const { slots, axisIndex } = placedAxis[mode]();
+    const issuesWith = (axis) => {
+      const editor = MODES[mode](slots);
+      editor.state.adv[`${mode}_track_slots_axis_index`] = axis;
+      return editor.slots().map((_slot, index) => editor.issue(index));
+    };
+    const pinned = issuesWith(axisIndex);
+    assert.deepEqual(pinned.filter(Boolean), [], `${mode}: no issue about the placed index ${axisIndex}`);
+    const unset = issuesWith(null);
+    if (JSON.stringify(unset) !== JSON.stringify(pinned)) differences.push(`${mode}: ${JSON.stringify(unset.filter(Boolean))}`);
+  }
+  assert.deepEqual(differences, []);
+});

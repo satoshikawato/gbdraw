@@ -10,7 +10,7 @@ import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 import { canonicalAnnotationParams, clampTrackAxisIndex, normalizeAnnotationSlotParams, parseOptionalPixel } from './track-slot-validation.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
-import { noteReplacedLeaf } from '../utils/field-reading.js';
+import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { featureDensitySlotId, insertFeatureDensitySlots, normalizeFeatureDensitySlotParams } from './feature-density-tracks.js';
 
@@ -354,6 +354,18 @@ export const effectiveLinearSlotPlacement = (slot) => {
   if ((renderer === 'features' || renderer === 'annotations') && side === 'overlay') return 'overlay';
   return side === 'above' ? 'above' : 'below';
 };
+
+/**
+ * The Axis index a drawn Linear stack is checked and its request built about: the stored one, or for an unset one the
+ * index its rows read as (`inferLinearTrackAxisIndexFromSlots`), the one reading of an unset index that the Load, the
+ * stack editor and Generate's placement also use. The stack checks (`validateCustomTrackPlan`) take it from here.
+ * @param {(LinearSlotPlacementInput | null | undefined)[] | null | undefined} slots
+ * @param {unknown} axisIndex
+ * @returns {unknown}
+ */
+export const linearTrackAxisIndexOf = (slots, axisIndex) => (
+  isUnsetValue(axisIndex) ? inferLinearTrackAxisIndexFromSlots(slots) : axisIndex
+);
 
 /** @param {(LinearSlotPlacementInput | null | undefined)[] | null | undefined} slots */
 export const inferLinearTrackAxisIndexFromSlots = (slots) => {
