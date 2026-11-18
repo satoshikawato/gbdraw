@@ -5798,10 +5798,16 @@ def prepare_label_list(
                 feature_outer_radius = float(lane.outer_px)
             # The laid-out box, ``CIRCULAR_LABEL_GAP_EM`` included: the 1.1x embed test reads the same width as
             # the placer and the fit count, so the gap is part of deciding which labels go inside their feature.
+            # It holds at the lane centre the label is drawn on (``feature_center_radius_px``): measured at the
+            # axis alone, a label on a lane well inside the axis ran past its feature (OV-3646). It also holds at
+            # the axis radius, where the 1.1x margin was set: the margin leaves no room for an arrowhead, and the
+            # longer arc of a lane outside the axis would put labels into their heads (OV-3649).
             bbox_width_px = candidate.width_px
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle
-            label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * radius)
+            label_as_feature_length = (
+                total_length * (1.1 * bbox_width_px) / (2 * math.pi * min(float(radius), feature_center_radius))
+            )
             label_start = label_middle - (label_as_feature_length / 2)
             label_end = label_middle + (label_as_feature_length / 2)
             feature_angle_deg = position_angle(label_middle, total_length)

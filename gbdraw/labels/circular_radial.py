@@ -136,9 +136,15 @@ def _pack_angles(
     total_length: int,
     collision_radius_px: float,
     spacing_px: float,
-    *,
-    balance: bool = False,
 ) -> list[float]:
+    """The placed angles of ``labels``: the midpoint of the clockwise and the counterclockwise packing.
+
+    Clockwise packing alone keeps a crowded cluster's first label on its feature and pushes the others clockwise;
+    counterclockwise packing does the mirror. Both obey the same cyclic gap constraints, so their midpoint does too
+    and keeps the text order, and it spreads a cluster to both sides of its features. It is the one rule for every
+    cluster: packing that ran clockwise alone unless its leaders crossed turned a whole cluster by degrees when a
+    leader end moved by a pixel (OV-3648).
+    """
     if not labels:
         return []
     if len(labels) == 1:
@@ -172,25 +178,20 @@ def _pack_angles(
     else:  # pragma: no cover - arithmetic guard for non-finite input
         raise LabelLayoutError("radial label cyclic relaxation did not converge")
 
-    if balance:
-        # The clockwise sweep can cross leaders from different feature radii.
-        # Average it with the counterclockwise solution: both obey the same
-        # cyclic gap constraints, so their midpoint also preserves text order.
-        end_angle = preferred[-1]
-        for _ in range((4 * len(labels)) + 4):
-            backward = [end_angle]
-            for index in range(len(labels) - 2, -1, -1):
-                backward.append(min(preferred[index], backward[-1] - gaps[index + 1]))
-            backward.reverse()
-            overflow = backward[-1] + gaps[0] - backward[0] - _TAU
-            if overflow <= _ANGLE_EPSILON:
-                break
-            end_angle -= overflow
-        else:
-            raise LabelLayoutError("radial label cyclic relaxation did not converge")
-        placed = [(first + second) / 2.0 for first, second in zip(placed, backward, strict=True)]
+    end_angle = preferred[-1]
+    for _ in range((4 * len(labels)) + 4):
+        backward = [end_angle]
+        for index in range(len(labels) - 2, -1, -1):
+            backward.append(min(preferred[index], backward[-1] - gaps[index + 1]))
+        backward.reverse()
+        overflow = backward[-1] + gaps[0] - backward[0] - _TAU
+        if overflow <= _ANGLE_EPSILON:
+            break
+        end_angle -= overflow
+    else:  # pragma: no cover - arithmetic guard for non-finite input
+        raise LabelLayoutError("radial label cyclic relaxation did not converge")
 
-    return [angle % _TAU for angle in placed]
+    return [((first + second) / 2.0) % _TAU for first, second in zip(placed, backward, strict=True)]
 
 
 def _make_placed_label(
@@ -350,9 +351,8 @@ def _place_side(
         anchor_radius = max(max(base_anchors), density_radius + 1.0)
         collision_radius = anchor_radius
 
-    balance = False
     for _ in range(_CONVERGENCE_LIMIT):
-        angles = _pack_angles(ordered, total_length, collision_radius, spacing_px, balance=balance)
+        angles = _pack_angles(ordered, total_length, collision_radius, spacing_px)
         placed = [
             _make_placed_label(
                 label,
@@ -366,9 +366,6 @@ def _place_side(
         leader_text_collisions = _leader_text_collision_count(placed)
         leader_crossings = leader_crossing_count(placed)
         order_violations = _order_violation_count(placed)
-        if not balance and (leader_text_collisions or leader_crossings):
-            balance = True
-            continue
         awaiting_inner_preflight = is_inner and required_growth > RADIAL_GROWTH_TOLERANCE_PX
         if not collisions and (
             awaiting_inner_preflight

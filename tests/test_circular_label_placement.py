@@ -4033,7 +4033,7 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
     override_df = pd.DataFrame(
         [
             ["*", "*", "label", "^NADH dehydrogenase subunit 4$", "ND4"],
-            ["*", "*", "label", "^s-rRNA$", "12S ribosomal RNA"],
+            ["*", "*", "label", "^s-rRNA$", "12S rRNA"],
         ],
         columns=["record_id", "feature_type", "qualifier", "value", "label_text"],
     )
@@ -4059,7 +4059,8 @@ def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
     )
 
     nd4_override = next(label for label in override_labels if label.get("label_text") == "ND4")
-    srna_override = next(label for label in override_labels if label.get("label_text") == "12S ribosomal RNA")
+    # "12S ribosomal RNA" does not fit s-rRNA at the lane centre it is drawn on, inside the axis (OV-3646).
+    srna_override = next(label for label in override_labels if label.get("label_text") == "12S rRNA")
     assert bool(nd4_override["is_embedded"])
     assert bool(srna_override["is_embedded"])
 
