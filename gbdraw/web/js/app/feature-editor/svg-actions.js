@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState, PopupPosition } from '../../state.js' */
+/** @import { DrawingState, PopupPosition, WebState } from '../../state.js' */
 /** @import { PopupAnchor, PopupBounds, PopupOrigin } from '../../utils/popup-bounds.js' */
 /** @import { AliasSource, FeatureIdentity } from '../../services/feature-identity.js' */
 /** @import { FeatureLike } from '../../services/feature-utils.js' */
@@ -185,7 +185,12 @@ export {
 
 /**
  * @typedef {object} FeatureSvgActionsOptions
- * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {Pick<WebState, 'activeDrawing' | 'biologicalFeatures' | 'canvasContainerRef' | 'clickedFeature'
+ *   | 'clickedFeaturePos' | 'clickedPairwiseMatch' | 'clickedPairwiseMatchPos' | 'errorLog' | 'extractedFeatures'
+ *   | 'featureCatalog' | 'featurePopupSize' | 'featureSelectionDrag' | 'featuresBySvgId' | 'layoutRepositionMode'
+ *   | 'orthogroups' | 'richFeaturePopup' | 'selectedAnnotation' | 'selectedResultIndex' | 'sessionOperationAvailability'
+ *   | 'svgContainer'>} state
+ *   the members of the Web state (`state.js`) the Result handlers read
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
  * @property {(feature: Record<string, any>) => string} getEffectiveLegendCaption The rule owner's Legend row of a feature,
  *   by its key; '' for a feature that no Legend row draws (D-26).
@@ -529,18 +534,7 @@ export const createFeatureSvgActions = ({
     return rows;
   };
 
-  /** @returns {Map<string, Record<string, any>>} */
-  const buildFeatureLookup = () => {
-    if (featuresBySvgId?.value instanceof Map) return featuresBySvgId.value;
-    const indexed = new Map();
-    const features = Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [];
-    for (const feat of features) {
-      const svgId = renderedFeatureSvgId(feat);
-      if (!svgId || indexed.has(svgId)) continue;
-      indexed.set(svgId, feat);
-    }
-    return indexed;
-  };
+  const buildFeatureLookup = () => featuresBySvgId.value;
 
   /** @param {MaybeElementTarget | null | undefined} target @param {Element} svg */
   const getFeatureTarget = (target, svg) => {
@@ -624,7 +618,7 @@ export const createFeatureSvgActions = ({
     ) {
       return false;
     }
-    if (state.layoutRepositionMode?.value && target.closest?.('g[id]')) return false;
+    if (state.layoutRepositionMode.value && target.closest?.('g[id]')) return false;
     return true;
   };
 
@@ -723,7 +717,7 @@ export const createFeatureSvgActions = ({
   // Result rests in the view it returned to, the popup opens again beside its feature.
   const showFeaturePopupAtFeature = async () => {
     const shown = clickedFeature.value;
-    const surface = /** @type {HTMLElement | null} */ (svgContainer.value);
+    const surface = svgContainer.value;
     if (!shown || !surface) return;
     await new Promise((resolve) => { window.requestAnimationFrame(resolve); });
     await Promise.allSettled(surface.getAnimations().map(({ finished }) => finished));
@@ -739,7 +733,7 @@ export const createFeatureSvgActions = ({
 
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;
-    if (clickedPairwiseMatch?.value) return false;
+    if (clickedPairwiseMatch.value) return false;
     if (isPreviewTransformActive()) return false;
     if (finePointerQuery === undefined) {
       finePointerQuery = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
@@ -916,14 +910,14 @@ export const createFeatureSvgActions = ({
   // `orthogroups`; the popup's scoped lookup picks the one a ribbon names. A
   // collinear ribbon without a collinear group scope names ordinary similarity
   // groups, which the presentation subset lacks (OV-370).
-  const groupsForMatch = () => orthogroups?.value || [];
+  const groupsForMatch = () => orthogroups.value;
 
   /** @param {DrawingState} drawing @param {Element} matchElement @param {Map<string, FeatureLike>} featureLookup */
   const buildMatchPayload = (drawing, matchElement, featureLookup) => buildMatchPopupPayload(/** @type {SVGElement} */ (matchElement), {
     featureLookup,
-    sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
+    sourceFeatures: biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
-      : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
+      : extractedFeatures.value,
     orthogroups: groupsForMatch(),
     orthogroupNameOverrides: drawing.orthogroupNameOverrides,
     orthogroupDescriptionOverrides: drawing.orthogroupDescriptionOverrides,
@@ -940,7 +934,7 @@ export const createFeatureSvgActions = ({
   /** @param {Element | null} matchElement @param {PopupOrigin | null} eventLike @param {Map<string, FeatureLike>} featureLookup */
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
     const drawing = state.activeDrawing();
-    if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos || previewPopupsHeld()) return null;
+    if (!matchElement || previewPopupsHeld()) return null;
     const payload = buildMatchPayload(drawing, matchElement, featureLookup);
     if (!payload) return null;
     closeOtherPopups('match');
@@ -955,10 +949,9 @@ export const createFeatureSvgActions = ({
   // selected region (`app/region-select.js`) opens there beside its band.
   /** @param {{ element: Element, item: PreviewItem }} target @param {PopupOrigin} eventLike */
   const openPreviewItemPopup = ({ element, item }, eventLike) => {
-    if (!clickedPairwiseMatch || !clickedPairwiseMatchPos || state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
+    if (state.layoutRepositionMode.value || previewPopupsHeld()) return false;
     if (item.kind === 'legend-entry') {
-      /** @type {import('../../services/drawing/paint.js').LegendEntry[]} */
-      const entries = state.activeDrawing().legendEntries.value || [];
+      const entries = state.activeDrawing().legendEntries.value;
       const { key } = item;
       const entry = entries.find((row) => legendEntryKey(row) === key || String(row.caption) === key);
       if (!entry) return false;
@@ -996,7 +989,7 @@ export const createFeatureSvgActions = ({
     rootGeneration = 0
   } = {}) => {
     /** @type {SVGSVGElement | null} */
-    const svg = root || svgContainer.value?.querySelector?.('svg') || null;
+    const svg = root || svgContainer.value?.querySelector('svg') || null;
     if (!svg) return false;
 
     if (delegatedFeatureHandlers && delegatedFeatureHandlers.svg !== svg) {
@@ -1457,9 +1450,10 @@ export const createFeatureSvgActions = ({
         const focusedKeys = focused instanceof HTMLElement && handlerState.alignmentOverlay?.element.contains(focused)
           ? { ...focused.dataset } : null;
         clearAlignmentOverlay();
-        const scrollRoot = svgContainer.value?.parentElement;
+        const container = svgContainer.value;
+        const scrollRoot = container?.parentElement;
         const viewport = scrollRoot?.parentElement;
-        if (!scrollRoot || !viewport || !svg.isConnected) return null;
+        if (!container || !scrollRoot || !viewport || !svg.isConnected) return null;
         const referenceFeature = uniqueRenderedFeature(reference.anchor);
 
         const element = document.createElement('div');
@@ -1573,7 +1567,7 @@ export const createFeatureSvgActions = ({
           // Hidden while the preview pans or zooms; the end of the gesture places it again (OV-936).
           if (isPreviewTransformActive()) return;
           const frame = viewport.getBoundingClientRect();
-          const paper = svgContainer.value.getBoundingClientRect();
+          const paper = container.getBoundingClientRect();
           const referenceBox = boxIn(referenceFeature?.blocks, frame);
           const lineX = referenceBox?.x ?? null;
           placeRing(referenceRing, referenceBox);
@@ -1608,7 +1602,7 @@ export const createFeatureSvgActions = ({
           drawing.innerHTML = shapes;
           // A zoom or a fit moves the Result through a transition: follow it until it rests.
           const position = [paper.left, paper.top, paper.width, frame.width, frame.height].join(',');
-          if (position !== settled || svgContainer.value.getAnimations().length > 0) {
+          if (position !== settled || container.getAnimations().length > 0) {
             settled = position;
             overlay.schedule();
           }
@@ -1618,10 +1612,10 @@ export const createFeatureSvgActions = ({
         if (window.ResizeObserver) {
           overlay.resizeObserver = new ResizeObserver(overlay.schedule);
           overlay.resizeObserver.observe(viewport);
-          overlay.resizeObserver.observe(svgContainer.value);
+          overlay.resizeObserver.observe(container);
         }
         // Zoom and pan are the surface's transform.
-        overlay.transformObserver.observe(svgContainer.value, { attributes: true, attributeFilter: ['style'] });
+        overlay.transformObserver.observe(container, { attributes: true, attributeFilter: ['style'] });
         handlerState.alignmentOverlay = overlay;
         overlay.stopText = renderAlignmentOverlayText(flag, reference.name, rings, overlay.schedule);
         if (focusedKeys) {
@@ -1806,7 +1800,7 @@ export const createFeatureSvgActions = ({
         if (followTransformPointer(e)) return;
         if (
           clickedFeature.value ||
-          clickedPairwiseMatch?.value ||
+          clickedPairwiseMatch.value ||
           featureSelectionDrag?.active
         ) {
           hideHoverSummary();
@@ -1931,7 +1925,7 @@ export const createFeatureSvgActions = ({
           clearFeatureSelection({ clearStatus: true });
           if (previewPopupsHeld()) return;
           if (clickedFeature.value) clickedFeature.value = null;
-          if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
+          if (clickedPairwiseMatch.value) clickedPairwiseMatch.value = null;
         }
       };
 
@@ -1944,9 +1938,9 @@ export const createFeatureSvgActions = ({
       // popups; `handleClick` has already dropped a press that moved.
       /** @param {MouseEvent} e */
       const openDrawnElementSettings = (e) => {
-        if (state.layoutRepositionMode?.value || previewPopupsHeld()) return false;
+        if (state.layoutRepositionMode.value || previewPopupsHeld()) return false;
         const section = drawnElementSection(e.target);
-        const canvas = /** @type {Element | null} */ (state.canvasContainerRef?.value);
+        const canvas = state.canvasContainerRef.value;
         if (!section || !canvas) return false;
         const { left, top, right, bottom } = /** @type {Element} */ (e.target).getBoundingClientRect();
         const anchor = { x: e.clientX, y: e.clientY, avoid: { left, top, right, bottom } };
@@ -2035,7 +2029,7 @@ export const createFeatureSvgActions = ({
       const detachRingHover = attachRingHover({
         svg, isPreviewTransformActive,
         axisRecords: shownAxisRecords,
-        held: () => Boolean(clickedFeature.value || clickedPairwiseMatch?.value || featureSelectionDrag?.active || previewPopupsHeld())
+        held: () => Boolean(clickedFeature.value || clickedPairwiseMatch.value || featureSelectionDrag?.active || previewPopupsHeld())
       });
       handlerState.cleanup = () => {
         detachRingHover();

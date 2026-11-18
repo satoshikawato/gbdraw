@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, WebState } from '../state.js' */
 /** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 import {
   DEPTH_FILES_CHANGE,
@@ -229,7 +229,9 @@ export const editLinearFeatureDensityRows = (changeTrackLayout, drawing, edit, n
 
 /**
  * @typedef {object} LinearTrackSlotEditorOptions
- * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {Pick<WebState, 'activeDrawing' | 'paletteDefinitions' | 'selectedResultIndex'
+ *   | 'sessionOperationAvailability' | 'trackSlotResolvedGeometry'>} state
+ *   the members of the Web state (`state.js`) the Linear slot editor reads
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
  * @property {ChangeTrackVisibility} [changeTrackVisibility] The Legend port every stack edit runs in: a drawn track
  *   the edit hides or shows again takes its Legend rows with it (OV-1198; default: apply directly).
@@ -366,7 +368,7 @@ export const createLinearTrackSlotEditor = ({
    */
   const setLinearOverlayAnnotationParam = (slot, key, value) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     setOverlayAnnotationParam(slot, drawing.adv.linear_track_slots, key, value);
@@ -401,7 +403,7 @@ export const createLinearTrackSlotEditor = ({
   // Duplicate shares the availability of the other row controls (GX-01).
   /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot */
   const duplicableSlotOf = (drawing, slot) => {
-    if (!slot || state.sessionOperationAvailability?.()) return false;
+    if (!slot || state.sessionOperationAvailability()) return false;
     if (slot.enabled === false) return true;
     const renderer = normalizeRenderer(slot.renderer);
     if (renderer === 'features') return false;
@@ -427,7 +429,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {string} mark @param {unknown} checked */
   const setLinearAnnotationMarkSelected = (slot, mark, checked) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
     slot.params = cloneParams(slot.params);
@@ -449,7 +451,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {string} field @param {unknown} value @param {number} defaultValue */
   const setLinearAnnotationNumber = (slot, field, value, defaultValue) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
@@ -467,7 +469,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {unknown} checked */
   const setLinearAnnotationCoverAnchor = (slot, checked) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
@@ -516,7 +518,7 @@ export const createLinearTrackSlotEditor = ({
 
   const resetLinearTrackSlotsFromSimpleControls = () => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const normalized = normalizeLinearTrackSlots(defaultLinearStackSlots(drawing), drawing.adv.nt, drawing.form.linear_track_layout);
     drawing.adv.linear_track_slots_axis_index = inferLinearTrackAxisIndexFromSlots(normalized);
@@ -531,7 +533,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {unknown} enabled */
   const setLinearTrackSlotsEnabled = (enabled) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     drawing.adv.linear_track_slots_enabled = Boolean(enabled);
     if (!drawing.adv.linear_track_slots_enabled) return;
@@ -553,7 +555,7 @@ export const createLinearTrackSlotEditor = ({
    */
   const addLinearTrackSlot = (renderer = 'spacer', setId = null) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
     if (addBlockReasonOf(drawing, normalizedRenderer) !== '') return;
@@ -583,7 +585,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {unknown} index */
   const duplicateLinearTrackSlot = (index) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     normalizeCurrentSlots(drawing);
     const idx = Number(index);
@@ -607,7 +609,7 @@ export const createLinearTrackSlotEditor = ({
    *   (`askTrackHide`); a template's trailing event never arrives (`featureSlotEdits` takes it).
    */
   const setLinearTrackSlotEnabled = (slot, enabled, turnOffReaching) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     slot.enabled = Boolean(enabled);
@@ -621,7 +623,7 @@ export const createLinearTrackSlotEditor = ({
    */
   const removeLinearTrackSlot = (index, turnOffReaching) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     normalizeCurrentSlots(drawing);
     const idx = Number(index);
@@ -671,7 +673,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {unknown} fromIndex @param {unknown} toIndex */
   const moveLinearTrackSlot = (fromIndex, toIndex) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (wouldLinearTrackSlotMoveCrossAxis(drawing, fromIndex, toIndex)) return;
     normalizeCurrentSlots(drawing);
@@ -743,7 +745,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {DrawingState} drawing @param {unknown} index @param {unknown} placement */
   const moveLinearTrackSlotToPlacement = (drawing, index, placement) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.linear_track_slots.length) return;
@@ -844,7 +846,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {OptionalLinearSlot} slot @param {unknown} [renderer] */
   const updateLinearTrackSlotRenderer = (slot, renderer = slot?.renderer) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const nextRenderer = normalizeRenderer(renderer);
@@ -876,7 +878,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {OptionalLinearSlot} slot @param {unknown} placement */
   const updateLinearTrackSlotPlacement = (slot, placement) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const index = drawing.adv.linear_track_slots.findIndex((/** @type {unknown} */ candidate) => candidate === slot);
@@ -1072,11 +1074,11 @@ export const createLinearTrackSlotEditor = ({
     return '';
   };
 
-  const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
+  const selectedResultIndexValue = () => state.selectedResultIndex.value;
 
   /** @param {unknown} slotId */
   const resolvedLinearSlotGeometry = (slotId) => findTrackSlotGeometry(/** @type {any} */ ({
-    geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'linear'
+    geometry: String(state.trackSlotResolvedGeometry.value?.mode || '') === 'linear'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
@@ -1149,7 +1151,7 @@ export const createLinearTrackSlotEditor = ({
   /** @param {OptionalLinearSlot} slot @param {unknown} value */
   const setLinearTrackSlotHeight = (slot, value) => {
     const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const text = String(value ?? '').trim();
@@ -1190,7 +1192,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {string} key @param {unknown} value */
   const setLinearTrackSlotSkewColor = (slot, key, value) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
     slot.params = cloneParams(slot.params);
@@ -1201,7 +1203,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {string} key */
   const clearLinearTrackSlotSkewColor = (slot, key) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = state.sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'dinucleotide_skew' || !['positive_color', 'negative_color'].includes(key)) return;
     slot.params = cloneParams(slot.params);

@@ -208,17 +208,17 @@ export const joinedLegendRow = (drawn, current, rows) => {
 // the one shown when it started. Every owner that runs through the rule
 // preparation reports a failure this way.
 /**
- * @param {Partial<Pick<WebState, 'errorLog'>>} state The error log (optional while svg-actions.js passes an untyped state).
+ * @param {Pick<WebState, 'errorLog'>} state The error log.
  * @param {string} operation
  * @param {() => unknown} run
  * @returns {unknown} What `run` returned; a promise it returned, with the failure reported.
  */
 export const reportRuleRunFailure = (state, operation, run) => {
-  const previousAlert = state.errorLog?.value;
+  const previousAlert = state.errorLog.value;
   // Every value but null and undefined reads `catch` (a promise's method, or undefined), and `?.` covers those two.
   const result = /** @type {{ catch?: Promise<unknown>['catch'] } | null | undefined} */ (run());
   return result?.catch ? result.catch((error) => {
-    if (state.errorLog && state.errorLog.value === previousAlert) {
+    if (state.errorLog.value === previousAlert) {
       state.errorLog.value = normalizeUserFacingError(error, { operation, stage: 'helper' });
     }
   }) : result;
@@ -229,17 +229,18 @@ export const reportRuleRunFailure = (state, operation, run) => {
 // matches are still current (else `stale` answers), and not while a session
 // operation runs. A failed color preparation rejects (`reportRuleRunFailure`).
 /**
- * @param {Partial<Pick<WebState, 'sessionOperationAvailability'>>} state Optional while svg-actions.js passes an untyped state.
+ * @param {Pick<WebState, 'sessionOperationAvailability'>} state
  * @param {() => (boolean | Promise<unknown>)[]} preparations
  * @param {() => unknown} commit
  * @param {() => unknown} [stale]
  */
 export const runWhenPrepared = (state, preparations, commit, stale = () => undefined) => {
-  if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
+  const busy = state.sessionOperationAvailability();
+  if (busy) return busy;
   const prepared = preparations();
   if (prepared.every((value) => value === true)) return commit();
   return Promise.all(prepared).then(([current]) =>
-    state.sessionOperationAvailability?.() || (current ? commit() : stale()));
+    state.sessionOperationAvailability() || (current ? commit() : stale()));
 };
 
 /**
@@ -447,11 +448,11 @@ export const createRulePreparation = ({
   /** @type {Record<string, (drawing: DrawingState) => unknown>} */
   const drawingInputReaders = {
     rules: (drawing) => drawing.manualSpecificRules,
-    legend: (drawing) => drawing.legendEntries?.value || [],
-    legendColors: (drawing) => drawing.legendColorOverrides || {},
-    legendStrokes: (drawing) => drawing.legendStrokeOverrides || {},
-    featureColors: (drawing) => drawing.featureColorOverrides || {},
-    featureVisibility: (drawing) => featureVisibilityRows(Object.values(drawing.featureOverrides || {}))
+    legend: (drawing) => drawing.legendEntries.value,
+    legendColors: (drawing) => drawing.legendColorOverrides,
+    legendStrokes: (drawing) => drawing.legendStrokeOverrides,
+    featureColors: (drawing) => drawing.featureColorOverrides,
+    featureVisibility: (drawing) => featureVisibilityRows(Object.values(drawing.featureOverrides))
   };
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])
@@ -574,7 +575,7 @@ export const createRulePreparation = ({
   /** @type {RulePreparation['prepareDrawn']} */
   const prepareDrawn = ({ strict = false, view = false } = {}) => {
     const drawing = state.activeDrawing();
-    const colors = prepare(drawing.manualSpecificRules || [], { view });
+    const colors = prepare(drawing.manualSpecificRules, { view });
     const visibility = prepareVisibility(view);
     if (colors === true && visibility === true) return true;
     return Promise.all([strict ? colors : Promise.resolve(colors).catch(() => false), visibility])
