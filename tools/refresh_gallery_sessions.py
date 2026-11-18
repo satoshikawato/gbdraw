@@ -42,7 +42,6 @@ from gbdraw.session_io import (  # noqa: E402
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     SessionFileBinding,
     _write_validated_session_file,
-    canonicalize_cli_invocation,
     classify_raw_losat_cache_entry,
     expand_session_feature_catalog,
     load_session,
@@ -51,6 +50,7 @@ from gbdraw.session_io import (  # noqa: E402
     validate_session,
     written_file_metadata,
 )
+from gbdraw.cli_utils.legacy_session_args import canonicalize_cli_invocation  # noqa: E402
 from gbdraw.session_container import is_session_container, read_session_container, write_session_container  # noqa: E402
 from gbdraw.session import _keep_resources  # noqa: E402
 from gbdraw.session_drawings import (  # noqa: E402

@@ -148,7 +148,7 @@ from .cli_utils.session import (
 )
 from .api.run_metadata import RenderedResult, build_run_metadata
 from .session import SessionDocument, load_session_document, noting_session_png_dpi
-from .session_io import session_to_cli_args
+from .cli_utils.legacy_session_args import session_to_cli_args
 
 # Setup for the logging system
 logger = logging.getLogger()

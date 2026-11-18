@@ -427,7 +427,7 @@ def _add_retired_option_args(
 ) -> None:
     """Register the retired flags of one mode from the shared retired table."""
 
-    from gbdraw.session_io import RETIRED_CLI_OPTIONS
+    from gbdraw.cli_utils.legacy_session_args import RETIRED_CLI_OPTIONS
 
     for retired in RETIRED_CLI_OPTIONS.values():
         if mode not in retired.modes:

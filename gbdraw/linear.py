@@ -165,7 +165,7 @@ from .session import (
     session_drawing_artifacts,
 )
 from .session_drawings import SessionDrawingArtifacts
-from .session_io import session_to_cli_args
+from .cli_utils.legacy_session_args import session_to_cli_args
 from .session_request_codec import protein_setting_defaults
 from .cli_utils.losat_output import (
     add_losat_runtime_args,
