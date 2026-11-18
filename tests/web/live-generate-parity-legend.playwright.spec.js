@@ -2443,6 +2443,36 @@ test('a Restore pressed inside the rerender of a stale row\'s rule removal lists
   expect((await legendEditorState(page)).listed, 'Generate lists the rows Restore listed').toEqual(restored.listed);
 });
 
+// Restore all restores the rows deleted when it was pressed: a row deleted
+// while it waits for the rerender stays deleted, and one Undo returns the
+// state after that delete (OV-2412 review).
+test('a Restore all that waits for a rerender restores only the rows deleted when it was pressed', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await holdNextRerender(page);
+  await page.evaluate(() => { void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0); });
+  await insideHeldRerender(page);
+  await page.evaluate(() => { window.__heldRestore = window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'));
+  });
+  const deletedDuring = (await legendEditorState(page)).deleted;
+  expect([...deletedDuring].sort(), 'both rows are deleted while the Restore waits').toEqual(['CDS', 'repeat_region']);
+  await releaseRerender(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__heldRestore; delete window.__heldRestore; });
+  await settleLive(page);
+  const restored = await legendEditorState(page);
+  expect({ listed: restored.listed, deleted: restored.deleted }, 'only the row deleted when Restore all was pressed returns')
+    .toEqual({ listed: ['repeat_region'], deleted: ['CDS'] });
+  await history(page, 'undo');
+  expect([...(await legendEditorState(page)).deleted].sort(), 'one Undo deletes the restored row again').toEqual(['CDS', 'repeat_region']);
+  await history(page, 'redo');
+  await expectLiveEqualsGenerate(page, { label: 'Restore all after a delete inside its wait' });
+});
+
 // PD-OI-114 scenario revision 2 (issue #1427): a Legend rename, deletion,
 // Restore, Move, and Sort, and Canvas padding, reach Python through the
 // request. On a figure drawn to a requested width the automatic rerender then

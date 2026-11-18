@@ -576,16 +576,18 @@ const alignmentPortsBeforeOwner = (state) => ({
   endReviewOutside: () => {}
 });
 
-// The Restore of the shown drawing's deleted Legend row at `index` when clicked, by that row wherever it stands once
-// the Restore runs (a Restore may wait, `restoreLegendItems`); a row that left the list restores nothing.
+// The Restore of the shown drawing's deleted Legend rows at `indexes` (every row when null) when clicked, by those
+// rows wherever they stand once the Restore runs (a Restore may wait, `restoreLegendItems`): a row deleted during
+// the wait stays deleted, and a row that left the list restores nothing.
 /**
  * @param {Pick<WebState, 'activeDrawing'>} state
- * @param {number} index
+ * @param {number[] | null} indexes
  * @param {(indexes: number[]) => unknown} restore
  */
-const restoreOfDeletedRow = (state, index, restore) => {
-  const row = state.activeDrawing().deletedLegendEntries.value[index];
-  return () => restore([state.activeDrawing().deletedLegendEntries.value.indexOf(row)]);
+const restoreOfDeletedRows = (state, indexes, restore) => {
+  const rows = state.activeDrawing().deletedLegendEntries.value.filter((/** @type {unknown} */ _, /** @type {number} */ index) => (
+    !indexes || indexes.includes(index)));
+  return () => restore(rows.map((row) => state.activeDrawing().deletedLegendEntries.value.indexOf(row)).filter((index) => index >= 0));
 };
 
 export const createAppSetup = () => {
@@ -4375,8 +4377,9 @@ export const createAppSetup = () => {
     // removes them; the palette then reaches the returned rows.
     deletedLegendEntries: drawingMember('deletedLegendEntries'),
     restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems(msg('Restore legend item'),
-      restoreOfDeletedRow(state, index, restoreDeletedLegendEntries)),
-    restoreAllDeletedLegendEntries: () => restoreLegendItems(msg('Restore legend items'), () => restoreDeletedLegendEntries(null)),
+      restoreOfDeletedRows(state, [index], restoreDeletedLegendEntries)),
+    restoreAllDeletedLegendEntries: () => restoreLegendItems(msg('Restore legend items'),
+      restoreOfDeletedRows(state, null, restoreDeletedLegendEntries)),
     moveLegendEntry,
     legendReorder,
     handleLegendReorderKey,

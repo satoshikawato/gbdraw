@@ -748,9 +748,15 @@ const onLabelMissing = (drawing, drawn, labelled, catalogOf, hidden) => {
   });
 };
 
-// Resolves once no Generate or rerender runs (`busy`) and, as far as one can draw it, the shown drawing owes no
-// redraw: its committed Results, and Python's facts about them, are then those of its current edits. An owed redraw
-// that no run draws (its rerender failed) is asked for once more (OV-2412).
+// Resolves once `busy` (a Generate or the label rerender) is false; at once when it is, or without `watch`.
+/** @param {FeatureLabelActionsOptions['watch']} watch @param {{ readonly value: boolean }} busy */
+const untilIdle = (watch, busy) => (busy.value && watch ? /** @type {Promise<void>} */ (new Promise((resolve) => {
+  const stop = watch(busy, (running) => { if (!running) { stop(); resolve(); } });
+})) : Promise.resolve());
+
+// Resolves once no Generate or rerender runs (`busy`), so the committed Results, and Python's facts about them, are
+// those of the run that drew the edits made before it. A redraw owed when nothing runs (its rerender failed) is asked
+// for once on entry (OV-2412).
 /**
  * @param {{ busy: { readonly value: boolean }, owed: () => boolean, requestAutomaticRerender: () => boolean,
  *   watch: FeatureLabelActionsOptions['watch'], nextTick: () => Promise<unknown> }} ports
@@ -760,9 +766,7 @@ const untilRedrawn = async ({ busy, owed, requestAutomaticRerender, watch, nextT
   await nextTick();
   if (!busy.value && owed() && requestAutomaticRerender()) await nextTick();
   while (busy.value && watch) {
-    await /** @type {Promise<void>} */ (new Promise((resolve) => {
-      const stop = watch(busy, (running) => { if (!running) { stop(); resolve(); } });
-    }));
+    await untilIdle(watch, busy);
     await nextTick();
   }
 };
@@ -1540,15 +1544,7 @@ export const createFeatureLabelActions = ({
     const shownIdentity = () => getResultIdentity(state.results.value[selectedResultIndex.value]);
     const before = shownIdentity();
     await nextTick();
-    if (labelReflowProcessing.value && typeof watch === 'function') {
-      await /** @type {Promise<void>} */ (new Promise((resolve) => {
-        const stop = watch(labelReflowProcessing, (busy) => {
-          if (busy) return;
-          stop();
-          resolve();
-        });
-      }));
-    }
+    await untilIdle(watch, labelReflowProcessing);
     if (shownIdentity() === before) return null;
     const result = currentResults()[selectedResultIndex.value];
     if (!result || labelReflowLastError.value || state.processing.value

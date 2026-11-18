@@ -232,7 +232,7 @@ export const createEditorIntentShow = ({
  * @property {readonly string[]} VISIBILITY_DOMAINS
  * @property {(options: { domains: readonly string[] }) => unknown} showEditorIntent
  * @property {() => unknown} requestAutomaticRerender Asks Python to draw the Result again (feature editor).
- * @property {() => Promise<void>} whenRedrawn Resolves once the shown drawing is drawn from its current edits (feature editor).
+ * @property {() => Promise<void>} whenRedrawn Resolves once no Generate or rerender runs (feature editor).
  * @property {(label: string, fn: () => unknown) => Promise<unknown>} runUndoable One History step (History).
  */
 
