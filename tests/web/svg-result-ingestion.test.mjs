@@ -1795,6 +1795,26 @@ test('Load gives each kind of feature part the stroke Python drew for it in this
   assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f__line1, 'lightgray 5.0');
 });
 
+// OV-3726: a Result saved before the fix shows a stroke edit on a partial
+// block's fill path as well as on its outline. Load reads Python's stroke of
+// the fill path from the unedited blocks drawn under an outline (none), not
+// from the outlined ones, so Reset opens the partial end again.
+test('Load returns a partial block\'s fill path to no stroke and its outline to the block stroke', () => {
+  const part = (id, stroke) => new FakeElement('path', {
+    id, 'data-gbdraw-feature-id': id.replace(/__outline$/, ''), 'data-gbdraw-feature-part': 'block',
+    fill: id.endsWith('__outline') ? 'none' : '#54bcf8', stroke, 'stroke-width': '2.0'
+  });
+  const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES), {
+    patch: (root) => {
+      root.appendChild(part('f38ba7c3f__outline', '#2a9d8f'));
+      root.appendChild(part('fpartial', 'none'));
+      root.appendChild(part('fpartial__outline', 'gray'));
+    }
+  });
+  const reset = partStrokes(resetPaint(svg));
+  assert.deepEqual([reset.f38ba7c3f, reset.f38ba7c3f__outline], ['none 2.0', 'gray 2.0']);
+});
+
 // A kind of part every one of which shows a stroke edit has no known Python
 // stroke: its parts get no record, so Reset and Undo leave the saved stroke
 // on them until Generate.
