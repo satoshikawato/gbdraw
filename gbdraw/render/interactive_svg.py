@@ -10,7 +10,7 @@ import math
 import re
 import string
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Callable, Literal, TypeGuard, cast, overload
+from typing import TYPE_CHECKING, Callable, Literal, NamedTuple, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
 
 if TYPE_CHECKING:
@@ -1157,14 +1157,18 @@ def _resolve_rendered_features(
         )
 
 
+def _popup_mode(context: InteractiveSvgContext) -> Literal["rich", "simple"]:
+    """The popup mode of the export: ``simple`` when the context asks for it, otherwise ``rich``."""
+
+    return "simple" if context.popup_mode == "simple" else "rich"
+
+
 def _feature_payloads_from_rendered(
     rendered: Mapping[str, _RenderedFeatureEntry],
     context: InteractiveSvgContext,
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
-    popup_mode: Literal["rich", "simple"] = (
-        "simple" if context.popup_mode == "simple" else "rich"
-    )
+    popup_mode = _popup_mode(context)
     for resolved in _resolve_rendered_features(rendered, context.features):
         feature = resolved.feature
         if feature is None:
@@ -1680,17 +1684,20 @@ def _validate_catalog_feature_bindings(
     return rendered_entries
 
 
-def enrich_svg(
-    svg_source: str,
-    context: InteractiveSvgContext | None = None,
-    *,
-    result_index: int = 0,
-    result_name: str = "interactive.svg",
-    feature_catalog: Mapping[str, object] | None = None,
-) -> str:
-    """Return a standalone interactive SVG source string."""
+class _OriginalGeometry(NamedTuple):
+    """The drawing's own view box and size.
 
-    context = context or InteractiveSvgContext()
+    As an earlier enrichment recorded them, else as the root states them, else 900 x 650.
+    """
+
+    viewbox: str
+    width: str
+    height: str
+
+
+def _interactive_svg_root(svg_source: str) -> ET.Element:
+    """Parse ``svg_source``, require an ``<svg>`` root, and rename the legacy attributes it carries."""
+
     try:
         root = ET.fromstring(svg_source)
     except ET.ParseError as exc:
@@ -1698,15 +1705,22 @@ def enrich_svg(
     if _local_name(root.tag) != "svg":
         raise GbdrawError("Interactive SVG export expected an SVG root element.")
     migrate_legacy_svg_attributes(root)
+    return root
 
-    popup_mode: Literal["rich", "simple"] = (
-        "simple" if context.popup_mode == "simple" else "rich"
+
+def _original_geometry(root: ET.Element) -> _OriginalGeometry:
+    """Read the geometry before the viewport attributes replace the root's own."""
+
+    return _OriginalGeometry(
+        viewbox=_original_viewbox(root),
+        width=root.get("data-gbdraw-original-width") or root.get("width") or "900px",
+        height=root.get("data-gbdraw-original-height") or root.get("height") or "650px",
     )
-    original_viewbox = _original_viewbox(root)
-    original_width = root.get("data-gbdraw-original-width") or root.get("width") or "900px"
-    original_height = root.get("data-gbdraw-original-height") or root.get("height") or "650px"
 
-    style_source, script_source = _load_standalone_assets()
+
+def _clear_interactive_state(root: ET.Element) -> None:
+    """Remove the assets an earlier enrichment added and the search and highlight classes its viewer left."""
+
     _remove_existing_assets(root)
     _remove_class_token(root, "gbdraw-feature-search-active")
     _remove_class_token(root, "gbdraw-feature-search-updating")
@@ -1714,10 +1728,59 @@ def enrich_svg(
         _remove_class_token(element, "gbdraw-interactive-feature--dimmed")
         _remove_class_token(element, "gbdraw-interactive-feature--match")
         _remove_class_token(element, "gbdraw-interactive-feature--active-match")
+
+
+def _fallback_catalog_context(root: ET.Element, context: InteractiveSvgContext) -> InteractiveSvgContext:
+    """The context to build a catalog from when the caller gave no biological features.
+
+    The rendered features (the caller's, or else those read from the SVG) are the biological features too. When the
+    caller gave neither features nor record keys and no feature names a record, every feature belongs to one local
+    record, ``record-1``.
+    """
+
+    metadata_free_features = not context.features and not context.record_keys
+    fallback_features = [
+        dict(feature)
+        for feature in (
+            context.features
+            if context.features
+            else _feature_payloads(root, context)
+        )
+    ]
+    synthesize_local_record = (
+        metadata_free_features
+        and bool(fallback_features)
+        and all(
+            _feature_record_index(feature) is None
+            for feature in fallback_features
+        )
+    )
+    if synthesize_local_record:
+        for feature in fallback_features:
+            feature["record_idx"] = 0
+            feature["rendered_feature_svg_id"] = _first_text(
+                feature.get("svg_id")
+            )
+    return replace(
+        context,
+        features=fallback_features,
+        biological_features=fallback_features,
+        record_keys=("record-1",) if synthesize_local_record else context.record_keys,
+    )
+
+
+def _interactive_catalog_item(
+    root: ET.Element,
+    context: InteractiveSvgContext,
+    feature_catalog: Mapping[str, object] | None,
+    *,
+    result_index: int,
+    result_name: str,
+) -> Mapping[str, object]:
+    """The catalog item of this result: the stored one, bound to the SVG's features, or one built from ``context``."""
+
     from gbdraw.web_support.feature_catalog import (
         build_feature_catalog_item,
-        embed_json_text,
-        interactive_embed_catalog,
         select_feature_catalog_item,
     )
 
@@ -1728,44 +1791,19 @@ def enrich_svg(
             result_name=result_name,
         )
         _validate_catalog_feature_bindings(root, catalog_item)
-    else:
-        if not context.biological_features:
-            metadata_free_features = not context.features and not context.record_keys
-            fallback_features = [
-                dict(feature)
-                for feature in (
-                    context.features
-                    if context.features
-                    else _feature_payloads(root, context)
-                )
-            ]
-            synthesize_local_record = (
-                metadata_free_features
-                and bool(fallback_features)
-                and all(
-                    _feature_record_index(feature) is None
-                    for feature in fallback_features
-                )
-            )
-            if synthesize_local_record:
-                for feature in fallback_features:
-                    feature["record_idx"] = 0
-                    feature["rendered_feature_svg_id"] = _first_text(
-                        feature.get("svg_id")
-                    )
-            context = replace(
-                context,
-                features=fallback_features,
-                biological_features=fallback_features,
-                record_keys=("record-1",) if synthesize_local_record else context.record_keys,
-            )
-        catalog_item = build_feature_catalog_item(
-            ET.tostring(root, encoding="unicode"),
-            context,
-            result_index=result_index,
-            result_name=result_name,
-        )
-    catalog = interactive_embed_catalog(catalog_item, context.sequence_records)
+        return catalog_item
+    if not context.biological_features:
+        context = _fallback_catalog_context(root, context)
+    return build_feature_catalog_item(
+        ET.tostring(root, encoding="unicode"),
+        context,
+        result_index=result_index,
+        result_name=result_name,
+    )
+
+
+def _mark_interactive_features(root: ET.Element, catalog_item: Mapping[str, object]) -> None:
+    """Mark each feature element that the catalog item draws as interactive, with its biological feature's stable ID."""
 
     biological_by_key = {
         (
@@ -1806,6 +1844,15 @@ def enrich_svg(
         element.set("data-gbdraw-interactive-feature", "true")
         _add_class_token(element, "gbdraw-interactive-feature")
 
+
+def _mark_interactive_matches(root: ET.Element, catalog_item: Mapping[str, object]) -> None:
+    """Bind the match elements to the catalog item's comparison matches by match ID and mark them as interactive.
+
+    Refuses, in this order: a catalog match whose ID is invalid or repeated, a match element without an ID, the
+    fragments of one match that disagree (`_validate_match_fragments`), and match IDs that differ between the catalog
+    and the SVG.
+    """
+
     matches = [
         match
         for match in _catalog_array(catalog_item, "comparisonMatches")
@@ -1840,10 +1887,25 @@ def enrich_svg(
             element.set("data-gbdraw-interactive-match", "true")
             _add_class_token(element, "gbdraw-interactive-pairwise-match")
 
+
+def _append_interactive_assets(
+    root: ET.Element,
+    catalog: Mapping[str, object],
+    assets: tuple[str, str],
+    *,
+    popup_mode: Literal["rich", "simple"],
+    result_index: int,
+    result_name: str,
+) -> None:
+    """Append the glow filters, the metadata that embeds ``catalog``, and the viewer's style and script (``assets``)."""
+
+    from gbdraw.web_support.feature_catalog import embed_json_text
+
     try:
         metadata_payload = embed_json_text(catalog)
     except (TypeError, ValueError) as exc:
         raise GbdrawError("Interactive SVG metadata payload could not be serialized.") from exc
+    style_source, script_source = assets
 
     _ensure_glow_filters(root)
 
@@ -1865,11 +1927,55 @@ def enrich_svg(
     script.set("type", "application/ecmascript")
     script.text = script_source
 
-    root.set("data-gbdraw-original-viewbox", original_viewbox)
-    root.set("data-gbdraw-original-width", original_width)
-    root.set("data-gbdraw-original-height", original_height)
+
+def _set_interactive_root(root: ET.Element, geometry: _OriginalGeometry) -> None:
+    """Record the original geometry on the root, mark it interactive, and make it fill the viewport."""
+
+    root.set("data-gbdraw-original-viewbox", geometry.viewbox)
+    root.set("data-gbdraw-original-width", geometry.width)
+    root.set("data-gbdraw-original-height", geometry.height)
     root.set("data-gbdraw-interactive-svg", "true")
     _apply_viewport_root(root)
+
+
+def enrich_svg(
+    svg_source: str,
+    context: InteractiveSvgContext | None = None,
+    *,
+    result_index: int = 0,
+    result_name: str = "interactive.svg",
+    feature_catalog: Mapping[str, object] | None = None,
+) -> str:
+    """Return a standalone interactive SVG source string."""
+
+    context = context or InteractiveSvgContext()
+    root = _interactive_svg_root(svg_source)
+    geometry = _original_geometry(root)
+    assets = _load_standalone_assets()
+    _clear_interactive_state(root)
+    catalog_item = _interactive_catalog_item(
+        root,
+        context,
+        feature_catalog,
+        result_index=result_index,
+        result_name=result_name,
+    )
+    from gbdraw.web_support.feature_catalog import interactive_embed_catalog
+
+    # The caller's records: a fallback context (`_fallback_catalog_context`) replaces only the features, the
+    # biological features and the record keys.
+    catalog = interactive_embed_catalog(catalog_item, context.sequence_records)
+    _mark_interactive_features(root, catalog_item)
+    _mark_interactive_matches(root, catalog_item)
+    _append_interactive_assets(
+        root,
+        catalog,
+        assets,
+        popup_mode=_popup_mode(context),
+        result_index=result_index,
+        result_name=result_name,
+    )
+    _set_interactive_root(root, geometry)
     return ET.tostring(root, encoding="unicode")
 
 
