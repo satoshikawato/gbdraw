@@ -99,7 +99,6 @@ RenderStageName = Literal[
     "label_text_content",
     "record_part",
     "record_merge",
-    "record_gc_percent",
 ]
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
@@ -216,7 +215,6 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     ),
     "record_part": frozenset(),
     "record_merge": frozenset(),
-    "record_gc_percent": frozenset(),
 }
 
 _TOP_SECTIONS = ("canvas", "labels", "objects")

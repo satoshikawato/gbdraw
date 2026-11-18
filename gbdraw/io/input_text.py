@@ -7,11 +7,13 @@ spelling after they read it. A line that needs no repair reaches the parser as
 written, so the text is streamed, never held twice. An input file may be
 gzip-compressed, whatever its name: ``open_input_text`` and ``read_input_bytes``
 expand one, told by its first two bytes, and every reader opens its file there;
-the record sequence reader opens its files with ``open_input_bytes``, a gzip one
-expanded first with ``expand_input_copy``.
-A gzip input expands to at most ``MAX_EXPANDED_INPUT_BYTES``: a small file can
-hold gigabytes, so reading stops past the cap and names the file. A plain file
-has no cap.
+the record sequence reader opens its files with ``open_input_bytes``, and reads a
+gzip one at offsets through the points :class:`GzipExpansion` gives.
+:class:`GzipExpansion` is the one expansion of a gzip input: its members, its
+trailers, the zeros that may follow a member, and what it refuses, as Python's
+``gzip`` module reads them. A gzip input expands to at most
+``MAX_EXPANDED_INPUT_BYTES``: a small file can hold gigabytes, so reading stops
+past the cap and names the file. A plain file has no cap.
 """
 
 from __future__ import annotations
@@ -19,15 +21,15 @@ from __future__ import annotations
 import codecs
 import gzip
 import io
+import itertools
 import locale
 import os
 import re
-import shutil
-import tempfile
+import struct
 import zlib
 from collections.abc import Callable, Iterator
 from os import PathLike
-from typing import IO, TYPE_CHECKING, Literal, TextIO, TypeVar
+from typing import IO, TYPE_CHECKING, Literal, NamedTuple, TextIO, TypeVar
 
 from Bio.SeqFeature import SeqFeature
 
@@ -52,6 +54,8 @@ _FEATURE_KEY_AND_LOCATION = re.compile(r"^(\S+)[ \t]+(.*)$", re.DOTALL)
 # EMBL: every feature-table line starts with FT.
 _GENBANK_FEATURES = "FEATURES"
 _EMBL_FEATURE_LINE = "FT"
+# A line of text whose lines end in "\n" (the last may have no ending).
+_LINE = re.compile(r"[^\n]*\n|[^\n]+\Z")
 
 # INSDC feature keys (Feature Table Definition, section 7.2). GFF3 writers and some
 # GenBank writers spell them in another case (`cds`, `trna`); the readers give each
@@ -81,83 +85,213 @@ MAX_EXPANDED_INPUT_BYTES = 2 * 1024 * 1024 * 1024
 _MIB = 1024 * 1024
 # Expanded bytes are buffered 128 KiB at a time: with the default 8 KiB, lines read slower than gzip.open's.
 _READ_CHUNK = 128 * 1024
+# Compressed bytes are read 64 KiB at a time: a read that stops inside them passes the rest to zlib again.
+_COMPRESSED_CHUNK = 64 * 1024
+# The header flags of a gzip member (RFC 1952) whose fields Python's gzip module reads past.
+_FEXTRA, _FNAME, _FCOMMENT, _FHCRC = 4, 8, 16, 2
+_CUT_OFF = "Compressed file ended before the end-of-stream marker was reached"
 
 _Read = TypeVar("_Read")
 
 
-class _CappedExpansion(io.RawIOBase):
-    """The expanded bytes of a gzip file, refused once they pass ``limit``.
+class GzipPoint(NamedTuple):
+    """A place in a gzip file's expansion where reading may start again (:meth:`GzipExpansion.point`).
 
-    The one place a gzip input is expanded: ``open_input_text`` and
-    ``read_input_bytes`` read through it, so both stop at the same count.
+    ``compressed`` is the offset of the next compressed byte to read, counted by the
+    expansion, never asked of the file; ``expanded`` the bytes expanded before it.
+    Within a member, ``inflate`` is the state of its deflate stream there (a copy of
+    about 37 KiB), ``crc`` and ``member_bytes`` its check so far; at a member's start
+    ``inflate`` is ``None``.
     """
 
-    def __init__(self, path: str | PathLike[str], limit: int) -> None:
-        super().__init__()
-        self._gzip = gzip.open(path, "rb")
-        self._path = os.fspath(path)
+    compressed: int
+    expanded: int
+    inflate: zlib._Decompress | None
+    crc: int
+    member_bytes: int
+
+
+GZIP_START = GzipPoint(0, 0, None, 0, 0)
+
+
+def _expanded_size_error(path: str, limit: int) -> InputFileError:
+    return InputFileError(
+        f"{path}: this gzip file expands to more than {limit / _MIB:g} MiB "
+        f"({limit:,} bytes), the most gbdraw reads. Decompress it and give the plain file.",
+        diagnostic={
+            "code": "INPUT_UNREADABLE", "reason": "GZIP_EXPANDED_SIZE", "limit": limit // _MIB,
+            # The file's name, as the Web names it (PD-OI-116); the Worker's render names
+            # the file the user chose in place of the one it staged (request_render), and
+            # the Web error context cuts it (error_adapter.INPUT_NAME_CHARACTERS).
+            "inputName": os.path.basename(path),
+        },
+    )
+
+
+class GzipExpansion:
+    """The expanded bytes of a gzip file, in order, from a point of its expansion: the one gzip expansion.
+
+    ``read`` gives the compressed bytes from ``start.compressed`` on, in order. Members,
+    trailers, zero padding and refusals are those of Python's ``gzip`` module: a file cut
+    off raises ``EOFError``, a damaged stream ``zlib.error``, a wrong check or a member
+    that is not gzip ``gzip.BadGzipFile``, with the module's messages. ``limit``
+    (``MAX_EXPANDED_INPUT_BYTES``, or ``None``) refuses only a byte past it that a reader
+    asks for (``_expanded_size_error``). ``verify`` False skips the trailer checks, for a
+    read of bytes an earlier expansion of the same file checked.
+    """
+
+    def __init__(
+        self, read: Callable[[int], bytes], path: str, *, start: GzipPoint = GZIP_START,
+        limit: int | None = None, verify: bool = True,
+    ) -> None:
+        self._read = read
+        self._path = path
         self._limit = limit
-        self._expanded = 0
+        self._verify = verify
+        self._pushed = b""  # compressed bytes read past the end of a member, read again before the file
+        self._compressed = start.compressed  # the offset of the next compressed byte the file gives
+        self.expanded = start.expanded
+        self._inflate = None if start.inflate is None else start.inflate.copy()
+        self._crc = start.crc
+        self._member_bytes = start.member_bytes
+        self._clean = True  # all compressed bytes given to zlib were taken and it holds no output back
+
+    def point(self) -> GzipPoint | None:
+        """Where the expansion is, when it can start again there (else ``None``): a copy of its state."""
+
+        if self._pushed or not self._clean or (self._inflate is not None and self._inflate.eof):
+            return None
+        return GzipPoint(
+            self._compressed, self.expanded, None if self._inflate is None else self._inflate.copy(),
+            self._crc, self._member_bytes,
+        )
+
+    def read(self, size: int) -> bytes:
+        """The next expanded bytes, at least one and at most ``size`` (``b""`` at the end)."""
+
+        if self._limit is not None:
+            room = self._limit - self.expanded
+            if room <= 0:  # a read at the limit asks for one more byte and refuses when it exists
+                if self._next(1):
+                    raise _expanded_size_error(self._path, self._limit)
+                return b""
+            size = min(size, room)
+        return self._next(size)
+
+    def _take(self, size: int) -> bytes:
+        """Up to ``size`` compressed bytes: those read past a member's end first, as ``gzip``'s padded file gives them."""
+
+        data, self._pushed = self._pushed[:size], self._pushed[size:]
+        if len(data) < size:
+            more = self._read(size - len(data))
+            self._compressed += len(more)
+            data += more
+        return data
+
+    def _exact(self, size: int) -> bytes:
+        data = self._take(size)
+        while len(data) < size:
+            more = self._take(size - len(data))
+            if not more:
+                raise EOFError(_CUT_OFF)
+            data += more
+        return data
+
+    def _header(self) -> bool:
+        """Read past a member's header (``gzip``'s rule); ``False`` at the end of the file."""
+
+        magic = self._take(2)
+        if magic == b"":
+            return False
+        if magic != GZIP_SIGNATURE:
+            raise gzip.BadGzipFile("Not a gzipped file (%r)" % magic)
+        method, flag = struct.unpack("<BBIxx", self._exact(8))[:2]
+        if method != 8:
+            raise gzip.BadGzipFile("Unknown compression method")
+        if flag & _FEXTRA:
+            self._exact(struct.unpack("<H", self._exact(2))[0])
+        for field in (_FNAME, _FCOMMENT):
+            if flag & field:
+                while (byte := self._take(1)) and byte != b"\0":
+                    pass
+        if flag & _FHCRC:
+            self._exact(2)
+        return True
+
+    def _end_member(self) -> None:
+        """Check a member's trailer and pass over the zeros after it (``gzip``'s rule)."""
+
+        crc, size = struct.unpack("<II", self._exact(8))
+        if self._verify and crc != self._crc:
+            raise gzip.BadGzipFile("CRC check failed %s != %s" % (hex(crc), hex(self._crc)))
+        if self._verify and size != (self._member_bytes & 0xFFFFFFFF):
+            raise gzip.BadGzipFile("Incorrect length of data produced")
+        while (byte := self._take(1)) == b"\0":
+            pass
+        self._pushed = byte + self._pushed
+        self._inflate = None
+
+    def _next(self, size: int) -> bytes:
+        while True:
+            if self._inflate is not None and self._inflate.eof:
+                self._end_member()
+            if self._inflate is None:
+                self._crc, self._member_bytes = 0, 0
+                if not self._header():
+                    return b""
+                self._inflate = zlib.decompressobj(wbits=-zlib.MAX_WBITS)
+            compressed = self._inflate.unconsumed_tail or self._take(_COMPRESSED_CHUNK)
+            data = self._inflate.decompress(compressed, size)
+            self._clean = not self._inflate.unconsumed_tail and len(data) < size
+            if self._inflate.eof:
+                self._pushed = self._inflate.unused_data + self._pushed
+            if data:
+                break
+            if not compressed:
+                raise EOFError(_CUT_OFF)
+        if self._verify:
+            self._crc = zlib.crc32(data, self._crc)
+        self._member_bytes += len(data)
+        self.expanded += len(data)
+        return data
+
+
+class _CappedExpansion(io.RawIOBase):
+    """A gzip file's expansion (:class:`GzipExpansion`) as a raw file: ``open_input_text`` and ``read_input_bytes``
+    read through it, so both stop at the same count."""
+
+    def __init__(self, path: str | PathLike[str], limit: int | None) -> None:
+        super().__init__()
+        self._file = open(path, "rb")
+        self._expansion = GzipExpansion(self._file.read, os.fspath(path), limit=limit)
 
     def readable(self) -> bool:
         return True
 
     def readinto(self, buffer: WriteableBuffer) -> int:
-        count = self._gzip.readinto(buffer)
-        self._expanded += count
-        if self._expanded > self._limit:
-            raise InputFileError(
-                f"{self._path}: this gzip file expands to more than {self._limit / _MIB:g} MiB "
-                f"({self._limit:,} bytes), the most gbdraw reads. Decompress it and give the plain file.",
-                diagnostic={
-                    "code": "INPUT_UNREADABLE", "reason": "GZIP_EXPANDED_SIZE", "limit": self._limit // _MIB,
-                    # The file's name, as the Web names it (PD-OI-116); the Worker's render names
-                    # the file the user chose in place of the one it staged (request_render), and
-                    # the Web error context cuts it (error_adapter.INPUT_NAME_CHARACTERS).
-                    "inputName": os.path.basename(self._path),
-                },
-            )
-        return count
+        view = memoryview(buffer).cast("B")
+        data = self._expansion.read(len(view))
+        view[: len(data)] = data
+        return len(data)
 
     def close(self) -> None:
         if not self.closed:
-            self._gzip.close()
+            self._file.close()
         super().close()
 
 
-def _expanded_gzip(path: str | PathLike[str], capped: bool) -> io.BufferedReader | gzip.GzipFile:
-    if not capped:
-        return gzip.open(path, "rb")
-    return io.BufferedReader(_CappedExpansion(path, MAX_EXPANDED_INPUT_BYTES), buffer_size=_READ_CHUNK)
+def _expanded_gzip(path: str | PathLike[str], capped: bool) -> io.BufferedReader:
+    return io.BufferedReader(_CappedExpansion(path, MAX_EXPANDED_INPUT_BYTES if capped else None), buffer_size=_READ_CHUNK)
 
 
 def open_input_bytes(path: str | PathLike[str]) -> IO[bytes]:
-    """A plain input file opened for its bytes, unbuffered: read in order, or at offsets.
+    """An input file opened for its bytes, unbuffered: read in order, or at offsets.
 
     The record sequence reader (:mod:`gbdraw.io.record_sequences`) opens its files
-    here; a gzip input is first expanded with :func:`expand_input_copy`.
+    here, and expands a gzip one with :class:`GzipExpansion`.
     """
 
     return open(path, "rb", buffering=0)
-
-
-def expand_input_copy(path: str | PathLike[str], directory: str) -> str:
-    """Expand a gzip input file into a new file in ``directory``, and return its path.
-
-    The expansion stops past ``MAX_EXPANDED_INPUT_BYTES`` as ``open_input_text``
-    stops, and leaves no file behind when it fails. Removing the copy is the
-    caller's.
-    """
-
-    with tempfile.NamedTemporaryFile(dir=directory, prefix="input-", delete=False) as copy:
-        try:
-            with _expanded_gzip(path, capped=True) as expanded:
-                shutil.copyfileobj(expanded, copy, 8 * _MIB)
-        except BaseException:
-            copy.close()
-            os.unlink(copy.name)
-            raise
-    return copy.name
 
 
 def is_gzip_file(path: str | PathLike[str]) -> bool:
@@ -285,23 +419,34 @@ def _locus_line(line: str) -> str:
     return prefix + "_".join(name.split()) + rest
 
 
-def _normalized_flat_lines(lines: Iterator[str], fmt: FlatFileFormat) -> Iterator[str]:
+def _normalized_flat_lines(pieces: Iterator[str], fmt: FlatFileFormat) -> Iterator[str]:
+    """The flat-file text of ``pieces`` (each a line, or whole lines), lines repaired as Biopython needs them.
+
+    Lines that start with a space and hold no tab are left as they are and leave the
+    state as it is, so a piece of only such lines (a feature table read as one
+    block) passes whole; the lines of any other piece are repaired one by one.
+    """
+
     in_genbank_features = False
-    for line in lines:
-        if fmt == "embl":
-            if "\t" in line and line.startswith(_EMBL_FEATURE_LINE):
-                line = _EMBL_FEATURE_LINE + _feature_table_line("  " + line[2:])[2:]
-        elif line.startswith("LOCUS"):
-            in_genbank_features = False
-            line = _locus_line(line)
-        elif line.startswith(_GENBANK_FEATURES):
-            in_genbank_features = True
-        elif in_genbank_features:
-            if line[:1] not in (" ", "\t"):
+    for piece in pieces:
+        if piece[:1] == " " and "\t" not in piece and piece.count("\n ") + 1 >= piece.count("\n"):
+            yield piece
+            continue
+        for line in _LINE.findall(piece) if piece.count("\n") > 1 else (piece,):
+            if fmt == "embl":
+                if "\t" in line and line.startswith(_EMBL_FEATURE_LINE):
+                    line = _EMBL_FEATURE_LINE + _feature_table_line("  " + line[2:])[2:]
+            elif line.startswith("LOCUS"):
                 in_genbank_features = False
-            elif "\t" in line:
-                line = _feature_table_line(line)
-        yield line
+                line = _locus_line(line)
+            elif line.startswith(_GENBANK_FEATURES):
+                in_genbank_features = True
+            elif in_genbank_features:
+                if line[:1] not in (" ", "\t"):
+                    in_genbank_features = False
+                elif "\t" in line:
+                    line = _feature_table_line(line)
+            yield line
 
 
 def _gff3_attributes(column: str) -> str:
@@ -350,32 +495,56 @@ def text_lines(handle: TextIO) -> Iterator[str]:
 
 
 class LineStream:
-    """A read-only text handle over a line iterator, as Biopython and BCBio-GFF read one."""
+    """A read-only text handle over pieces of text, as Biopython and BCBio-GFF read one.
 
-    def __init__(self, lines: Iterator[str]) -> None:
-        self._lines = lines
+    A piece is a line, or whole lines (each ending in ``\\n``): the lines of a piece
+    are split at once, so a reader takes each of them from a list.
+    """
+
+    def __init__(self, pieces: Iterator[str]) -> None:
+        self._pieces = iter(pieces)
+        self._lines: Iterator[str] = iter(())
 
     def __iter__(self) -> Iterator[str]:
-        return self._lines
+        yield from self._lines
+        for piece in self._pieces:
+            if piece.count("\n") > 1:
+                self._lines = iter(_LINE.findall(piece))
+                yield from self._lines
+            elif piece:
+                yield piece
 
     def __next__(self) -> str:
-        return next(self._lines)
+        line = self.readline()
+        if not line:
+            raise StopIteration
+        return line
 
     def readline(self) -> str:
-        return next(self._lines, "")
+        line = next(self._lines, "")
+        if line:
+            return line
+        for piece in self._pieces:
+            if piece.count("\n") > 1:
+                self._lines = iter(_LINE.findall(piece))
+                return next(self._lines)
+            if piece:
+                return piece
+        return ""
 
     def read(self, size: int = -1) -> str:
         if size == 0:  # Biopython reads nothing to tell a text handle from a binary one.
             return ""
         if size < 0:
-            return "".join(self._lines)
+            return "".join(itertools.chain(self._lines, self._pieces))
         raise io.UnsupportedOperation("read(size) of a line stream")
 
 
-def flat_file_stream(lines: Iterator[str], fmt: FlatFileFormat) -> LineStream:
-    """The flat-file text Biopython reads from ``lines``: tab layout and spaced LOCUS names repaired."""
+def flat_file_stream(pieces: Iterator[str], fmt: FlatFileFormat) -> LineStream:
+    """The flat-file text Biopython reads from ``pieces`` (lines, or whole lines): tab layout and spaced LOCUS names
+    repaired."""
 
-    return LineStream(_normalized_flat_lines(lines, fmt))
+    return LineStream(_normalized_flat_lines(pieces, fmt))
 
 
 def gff3_stream(lines: Iterator[str]) -> LineStream:
@@ -389,11 +558,13 @@ __all__ = [
     "FlatFileFormat",
     "GZIP_ERRORS",
     "GZIP_SIGNATURE",
+    "GZIP_START",
+    "GzipExpansion",
+    "GzipPoint",
     "LineStream",
     "MAX_EXPANDED_INPUT_BYTES",
     "canonical_feature_type",
     "canonicalize_feature_types",
-    "expand_input_copy",
     "flat_file_format",
     "flat_file_stream",
     "gff3_stream",

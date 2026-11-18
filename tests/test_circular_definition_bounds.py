@@ -14,7 +14,12 @@ from gbdraw.config.toml import load_config_toml
 from gbdraw.layout.spatial import Aabb
 from gbdraw.diagrams.circular.positioning import place_definition_group_on_canvas
 from gbdraw.core.record_metadata import infer_record_source_metadata
-from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup, DefinitionNameLines
+from gbdraw.render.groups.circular.definition import (
+    CircularDefinitionStyle,
+    DefinitionGroup,
+    DefinitionNameLines,
+    definition_record_facts,
+)
 from svgwrite.container import Group
 
 
@@ -31,7 +36,7 @@ def _definition(
     canvas = CircularCanvasConfigurator("test", render_profile, "none", record)
     style = CircularDefinitionStyle.of(cfg, profile)
     return DefinitionGroup(
-        record,
+        definition_record_facts(record),
         canvas.geometry(),
         style=style,
         names=DefinitionNameLines.of(
@@ -128,7 +133,7 @@ def _k12_definition(
     record.annotations["taxonomy"] = list(taxonomy)
     canvas = CircularCanvasConfigurator("test", CircularRenderProfile(cfg), "none", record)
     return DefinitionGroup(
-        record,
+        definition_record_facts(record),
         canvas.geometry(),
         style=CircularDefinitionStyle.of(cfg, "full"),
         names=DefinitionNameLines.of(

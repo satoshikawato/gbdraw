@@ -9,13 +9,16 @@ the number of inputs is not bounded by the files a process may hold open.
 
 from __future__ import annotations
 
-import gc
 import gzip
+import io
 import os
+import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import textwrap
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -34,7 +37,8 @@ GENBANK = INPUTS / "NC_001416.gb"
 
 
 def _reads_its_file(record) -> bool:
-    return isinstance(getattr(record.seq, "_data", None), RecordSequence)
+    data = getattr(record.seq, "_data", None)
+    return isinstance(data, RecordSequence) and isinstance(data._bases, record_sequences._SequenceTable)
 
 
 def _sequence(path: Path) -> str:
@@ -61,6 +65,139 @@ def test_records_given_to_callers_hold_their_sequences(tmp_path: Path) -> None:
     assert not any(_reads_its_file(record) for record in gbdraw.read_fasta(_fasta(tmp_path)))
     gff = INPUTS / "NC_013668.gff3"
     assert not any(_reads_its_file(record) for record in gbdraw.read_gff(gff, INPUTS / "NC_013668.fasta"))
+
+
+def _cached_files() -> set[int]:
+    """The keys of the input files whose decoded chunks the block cache holds."""
+
+    return {key[0] for key in record_sequences._CACHE._blocks}
+
+
+def test_a_whole_sequence_read_keeps_nothing_in_the_block_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A read of a whole record sequence is a pass over it (a copy handed to a caller, a digest), so it is decoded
+    around the block cache however short the record: 100,000 small entries read by ``gbdraw.read_fasta`` left
+    about 98 MiB of decoded bases there, while each caller's record held its own copy (finishing round 5, N-B).
+    The cache is asked for the blocks of the file read here, by its key, whatever earlier reads left there."""
+
+    files: list[int] = []
+    opened = record_sequences._SequenceFile.__init__
+
+    def opening(self: record_sequences._SequenceFile, path: str) -> None:
+        opened(self, path)
+        files.append(self.key)
+
+    monkeypatch.setattr(record_sequences._SequenceFile, "__init__", opening)
+    rng = random.Random(41)
+    bases = ["".join(rng.choice("ACGT") for _ in range(1_000)) for _ in range(200)]
+    path = tmp_path / "many.fasta"
+    path.write_text("".join(f">e{i}\n{seq[:600]}\n{seq[600:]}\n" for i, seq in enumerate(bases)), encoding="ascii")
+    records = gbdraw.read_fasta(path)
+    assert files and not _cached_files() & set(files)
+    assert [str(record.seq) for record in records] == bases
+    [record] = read_flat_file_records(str(GENBANK))
+    key = record.seq._data._bases.source.key
+    whole = bytes(record.seq)
+    assert key not in _cached_files()
+    assert bytes(record.seq[100:200]) == whole[100:200]  # a part reads through the cache
+    assert key in _cached_files()
+
+
+def test_an_indented_block_ends_at_the_first_line_end_an_unindented_line_follows() -> None:
+    """The end of an indented block (a feature table) is found by two searches that each start at one byte, a
+    "\\n" and a "\\r" alone, as fast as ``bytes.find``; they end it where one alternation of every line end did (13
+    times slower), for every string of line ends, spaces and letters up to 7 bytes and every start."""
+
+    import itertools
+    import re
+
+    one_pattern = re.compile(rb"(?:\r\n|\r(?!\n)|\n)(?! )")
+    for size in range(8):
+        for letters in itertools.product(b"\r\n a", repeat=size):
+            buf = bytes(letters)
+            for pos in range(size + 1):
+                found = one_pattern.search(buf, pos)
+                assert record_sequences._next_unindented(buf, pos) == (-1 if found is None else found.end()), (buf, pos)
+
+
+def _genbank_with_a_line_end_at(where: str, position: int) -> str:
+    """A GenBank record (lines ending in ``\\n``) whose CRLF form has a ``\\r`` at ``position`` and its ``\\n`` after it,
+    on a line of the COMMENT continuations or of the feature table (``where``)."""
+
+    rng = random.Random(53)
+    bases = "".join(rng.choice("acgt") for _ in range(600))
+
+    def lines(pad: int) -> list[str]:
+        comment_pad, note_pad = (pad, 0) if where == "comment" else (0, pad)
+        comments = 15_000 if where == "comment" else 2
+        features = 1_300 if where == "features" else 3
+        text = [
+            "LOCUS       SPLIT1                   600 bp    DNA     linear   UNK 01-JAN-1980",
+            "DEFINITION  A record whose CRLF line end falls between two blocks.",
+            "ACCESSION   SPLIT1",
+            "VERSION     SPLIT1.1",
+            "COMMENT     " + "c" * comment_pad + " first comment line",
+            *(f"            continuation {i:07d} of the comment, long enough to fill lines" for i in range(comments)),
+            "FEATURES             Location/Qualifiers",
+            "     source          1..600",
+            '                     /mol_type="genomic DNA"',
+        ]
+        for i in range(features):
+            start = i % 500 + 1
+            text += [f"     CDS             complement({start}..{start + 59})" if i % 2 else f"     CDS             {start}..{start + 59}",
+                     f'                     /locus_tag="T{i:06d}"',
+                     '                     /note="' + ("n" * note_pad if i == 0 else "a note"),
+                     *(f"                     line {j:02d} of a note long enough to fill its lines" for j in range(11)),
+                     '                     ends here"']
+        text.append("ORIGIN")
+        text += [f"{i + 1:>9} " + " ".join(bases[j: j + 10] for j in range(i, i + 60, 10)) for i in range(0, 600, 60)]
+        return [*text, "//"]
+
+    def carriages(pad: int) -> list[int]:
+        ends, at = [], -1
+        for line in lines(pad):
+            at += len(line) + 2
+            ends.append(at - 1)
+        return ends
+
+    first = [end for end in carriages(0) if end <= position][-1]
+    text = "\n".join(lines(position - first)) + "\n"
+    crlf = text.replace("\n", "\r\n")
+    assert crlf[position: position + 2] == "\r\n"
+    assert crlf[crlf.rfind("\n", 0, position) + 1: position].startswith(" ")  # inside an indented block
+    return text
+
+
+@pytest.mark.parametrize("compressed", [False, True], ids=["plain", "gzip"])
+@pytest.mark.parametrize("where", ["comment", "features"])
+def test_a_crlf_line_end_split_between_two_blocks_reads_as_biopython_reads_it(
+    where: str, compressed: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A CRLF file read by the parse pass in blocks of ``_BLOCK_BYTES``, with a ``\\r`` ending one block and its
+    ``\\n`` starting the next inside an indented block (COMMENT continuations, the feature table): the record's
+    comment, features and bases equal Biopython's of the same text (review of the finishing round, N1)."""
+
+    size = record_sequences._BLOCK_BYTES
+    text = _genbank_with_a_line_end_at(where, size - 1)
+    data = text.replace("\n", "\r\n").encode("ascii")
+    path = tmp_path / ("split.gb.gz" if compressed else "split.gb")
+    # A gzip input expands in blocks of at most ``size``: two members, split there, end a block at the "\r".
+    path.write_bytes(gzip.compress(data[:size]) + gzip.compress(data[size:]) if compressed else data)
+    edges: list[tuple[bytes, bytes]] = []
+    blocks = record_sequences._SequenceFile.blocks
+
+    def seen(self: record_sequences._SequenceFile) -> Iterator[bytes]:
+        for block in blocks(self):
+            edges.append((block[:1], block[-1:]))
+            yield block
+
+    monkeypatch.setattr(record_sequences._SequenceFile, "blocks", seen)
+    [record] = read_flat_file_records(str(path))
+    assert any(last == b"\r" and first == b"\n" for (_, last), (first, _) in zip(edges, edges[1:])), edges
+    expected = SeqIO.read(io.StringIO(text), "genbank")
+    assert (record.id, record.annotations["comment"]) == (expected.id, expected.annotations["comment"])
+    assert [(f.type, str(f.location), f.qualifiers) for f in record.features] == [
+        (f.type, str(f.location), f.qualifiers) for f in expected.features]
+    assert bytes(record.seq) == bytes(expected.seq)
 
 
 def test_the_render_path_reads_sequences_from_the_file() -> None:
@@ -150,8 +287,8 @@ def test_more_inputs_than_open_files_allowed(tmp_path: Path) -> None:
 def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path: Path) -> None:
     """Records may be freed at any allocation, inside the reader's locked sections too (by a cyclic collection).
 
-    Their release (closing the file, dropping its cached blocks, removing a gzip
-    copy) must not wait on those locks. The records of two inputs are released
+    Their release (closing the file, dropping its cached blocks) must not wait on
+    those locks. The records of two inputs are released
     here while every lock of the reader is held, once by reference count and once
     by a collection run from inside a read. A subprocess with a timeout turns a
     hang into a failure.
@@ -171,7 +308,7 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
             records = read_flat_file_records(path)
             assert str(records[0].seq)  # its file is open, its blocks cached
             return records
-        locks = [record_sequences._OPEN._lock, record_sequences._CACHE._lock, record_sequences._EXPANSIONS_LOCK]
+        locks = [record_sequences._OPEN._lock, record_sequences._CACHE._lock]
         for compressed in (False, True):
             records = records_of(f"held{{compressed}}.gb", compressed)
             for lock in locks:
@@ -188,10 +325,10 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
             return real_open(path)
         record_sequences.open_input_bytes = collecting_open
         records = read_flat_file_records(source)
-        record_sequences._OPEN.read(records[0].seq._data._table.source, 0, 10)
+        record_sequences._OPEN.read(records[0].seq._data._bases.source, 0, 10)
         assert str(records[0].seq) == str(read_flat_file_records(source)[0].seq)
-        record_sequences._OPEN.read(records[0].seq._data._table.source, 0, 10)  # releases what is queued
-        assert os.listdir(record_sequences._expansion_directory()) == []  # every gzip copy removed
+        record_sequences._OPEN.read(records[0].seq._data._bases.source, 0, 10)  # releases what is queued
+        assert not record_sequences._RELEASED
         print("ok")
         """
     )
@@ -204,18 +341,72 @@ def test_records_released_while_the_reader_is_locked_do_not_wait_on_it(tmp_path:
     assert result.stdout.split() == ["ok"]
 
 
-def test_a_gzip_input_is_expanded_once_into_a_file_removed_after_its_records(tmp_path: Path) -> None:
-    path = tmp_path / "a.gb.gz"
-    path.write_bytes(gzip.compress(GENBANK.read_bytes()))
+def test_a_gzip_input_is_read_where_it_is_and_nothing_of_it_is_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The records of a gzip input read the input itself, at offsets through points of its expansion; neither a
+    pass nor a read nor a refusal writes a file (the Web would pay for one in the browser's storage)."""
+
+    from gbdraw.io import input_text
+
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setenv("TMPDIR", str(scratch))
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    path, _ = _first_of_many(tmp_path)
     records = read_flat_file_records(str(path))
-    copies = [Path(table.source.path) for table in (record.seq._data._table for record in records)]
-    assert copies[0].parent == Path(record_sequences._expansion_directory())
-    assert copies[0].exists() and copies[0] != path
-    assert str(records[0].seq) == _sequence(GENBANK)
-    del records
-    gc.collect()  # the copy is queued for removal; the next read of any input removes it
-    read_flat_file_records(str(GENBANK))
-    assert not copies[0].exists()
+    assert {record.seq._data._bases.source.path for record in records} == {str(path)}
+    assert [str(record.seq) for record in records] == [_sequence(GENBANK)] * 13
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
+    assert list(scratch.iterdir()) == []
+
+
+def test_reads_at_offsets_give_the_bases_of_the_plain_file_in_any_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read starts from the point before it, or goes on from the last read; every base equals the plain file's."""
+
+    monkeypatch.setattr(record_sequences, "_POINT_BYTES", 96 << 10)
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(record_sequences, "_CACHE", record_sequences._BlockCache())
+    path, _ = _first_of_many(tmp_path)
+    (tmp_path / "many.gb").write_bytes(GENBANK.read_bytes() * 13)
+    records = read_flat_file_records(str(path))
+    plain = [str(record.seq) for record in read_flat_file_records(str(tmp_path / "many.gb"))]
+    assert len(records[0].seq._data._bases.source.points) > 5
+    chooser = random.Random(3)
+    for _ in range(400):
+        index = chooser.randrange(13)
+        start = chooser.randrange(len(plain[index]))
+        stop = min(len(plain[index]), start + chooser.choice((1, 900, 70_000)))
+        assert str(records[index].seq[start:stop]) == plain[index][start:stop]
+
+
+def test_reads_in_order_expand_each_byte_of_a_gzip_input_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Short reads in order (the edges of windows) go on from the last read: the input is expanded once more, not
+    once from a point per read."""
+
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_CACHE", record_sequences._BlockCache())
+    path, expanded = _first_of_many(tmp_path)
+    records = read_flat_file_records(str(path))
+    counted = [0]
+    real_read = input_text.GzipExpansion.read
+
+    def read(self, size):
+        data = real_read(self, size)
+        counted[0] += len(data)
+        return data
+
+    monkeypatch.setattr(input_text.GzipExpansion, "read", read)
+    for record in records:
+        table = record.seq._data._bases
+        for row in range(0, len(table.rows().counts), 7):
+            table.row_bases(row, record_sequences.ROW_BASES - 1)
+    assert counted[0] <= expanded + record_sequences._BLOCK_BYTES
 
 
 def test_the_parse_pass_reads_each_file_once_in_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -236,3 +427,178 @@ def test_the_parse_pass_reads_each_file_once_in_order(tmp_path: Path, monkeypatc
     read_flat_file_records(str(GENBANK))
     _read_fasta_records(str(_fasta(tmp_path)))
     assert opened == [str(GENBANK), str(tmp_path / "a.fasta")]
+
+
+def _first_of_many(tmp_path: Path) -> tuple[Path, int]:
+    """A gzip file of lambda (177 kB of text) followed by twelve more records: 2.3 MB expanded."""
+
+    text = GENBANK.read_bytes()
+    path = tmp_path / "many.gb.gz"
+    path.write_bytes(gzip.compress(text * 13))
+    return path, len(text) * 13
+
+
+def test_a_reader_that_stops_after_the_first_record_expands_only_what_it_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The parse pass expands a gzip input as it reads it, so a first-record read expands no more of the file."""
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(record_sequences, "_POINT_BYTES", 64 << 10)
+    path, expanded = _first_of_many(tmp_path)
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    assert str(first.seq) == _sequence(GENBANK)
+    assert first.seq._data._bases.source.points[-1].expanded < expanded // 4
+
+
+@pytest.mark.parametrize("threads", [True, False], ids=["thread", "no-thread"])
+def test_a_gzip_input_expands_ahead_of_its_parse_pass_and_stops_with_it(
+    threads: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The expansion runs on a thread of its own beside the pass (in turn where no thread can start, as in
+    Pyodide); a pass that stops early or is refused stops it."""
+
+    import threading
+
+    from gbdraw.io import input_text
+
+    if not threads:
+        def no_thread(self):
+            raise RuntimeError("can't start new thread")
+
+        monkeypatch.setattr(threading.Thread, "start", no_thread)
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, _ = _first_of_many(tmp_path)
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    assert [str(record.seq) for record in [first, *read_flat_file_records(str(path))]] == [_sequence(GENBANK)] * 14
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
+    assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
+
+
+def test_a_parse_that_fails_stops_the_expansion_ahead_of_it_while_its_error_is_held(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parser error ends the pass at once: the expansion ahead of it stops and lets the file go, even while the
+    error, and the frames its traceback holds, are kept."""
+
+    import threading
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, _ = _first_of_many(tmp_path)
+
+    def parse(lines, fmt):
+        for _ in zip(range(100), lines):
+            pass
+        raise ValueError("a record the parser refuses")
+
+    with pytest.raises(ValueError, match="parser refuses") as refused:
+        record_sequences.read_flat_records(str(path), parse, lambda first: "genbank")
+    assert refused.traceback
+    assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
+
+
+@pytest.mark.parametrize("slow", ["reader", "maker"])
+def test_blocks_made_ahead_come_in_order_at_most_the_bound_ahead_with_an_error_after_them(slow: str) -> None:
+    """The thread makes blocks while fewer than ``_AHEAD_BLOCKS`` wait, so a fast maker stops at the bound and a
+    fast reader waits for each block; an error comes after every block made before it."""
+
+    import threading
+    import time
+
+    made: list[int] = []
+    taken: list[int] = []
+    ahead: list[int] = []
+
+    def blocks():
+        for index in range(40):
+            if slow == "maker":
+                time.sleep(0.001)
+            made.append(index)
+            ahead.append(len(made) - len(taken))
+            yield bytes([index])
+        raise ValueError("refused after 40 blocks")
+
+    with pytest.raises(ValueError, match="after 40 blocks"):
+        for block in record_sequences._ahead(blocks()):
+            if slow == "reader":
+                time.sleep(0.001)
+            taken.append(block[0])
+    assert taken == list(range(40))
+    # One block in the reader's hands, fewer than the bound waiting, and the one the maker is making.
+    assert max(ahead) <= record_sequences._AHEAD_BLOCKS + 1
+    assert not [thread for thread in threading.enumerate() if thread.name == "gbdraw-gzip-ahead"]
+
+
+def test_the_cap_counts_what_a_reader_expanded_so_far(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A file past the cap whose first record lies within it gives that record to a reader that stops there."""
+
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", 1 << 20)
+    path, _ = _first_of_many(tmp_path)
+    (first,) = read_flat_file_records(str(path), first_only=True)
+    assert str(first.seq) == _sequence(GENBANK)
+    with pytest.raises(InputFileError, match="expands to more than 1 MiB"):
+        read_flat_file_records(str(path))
+
+
+def test_a_cap_refuses_only_the_bytes_past_it_at_any_block_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cap is byte-exact: a reader that stops within it reads, whatever the block size and the cap."""
+
+    from gbdraw.io import input_text
+
+    path, expanded = _first_of_many(tmp_path)
+    first_record = len(GENBANK.read_bytes())
+    for cap in (first_record + 22_801, first_record + 1):
+        monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", cap)
+        (first,) = read_flat_file_records(str(path), first_only=True)
+        assert str(first.seq) == _sequence(GENBANK)
+        with pytest.raises(InputFileError, match="expands to more than"):
+            read_flat_file_records(str(path))
+    monkeypatch.setattr(input_text, "MAX_EXPANDED_INPUT_BYTES", expanded)
+    assert len(read_flat_file_records(str(path))) == 13  # a file of exactly the cap reads whole
+
+
+def _many_with_a_cp1252_byte(tmp_path: Path) -> tuple[Path, bytes]:
+    """Thirteen records, the sixth with a byte that is not UTF-8 (é in cp1252) in its definition."""
+
+    text = GENBANK.read_bytes()
+    odd = text.replace(b"DEFINITION  ", b"DEFINITION  caf\xe9 ", 1)
+    plain = text * 5 + odd + text * 7
+    path = tmp_path / "many.gb.gz"
+    path.write_bytes(gzip.compress(plain))
+    return path, plain
+
+
+def test_a_second_pass_expands_the_input_again_and_its_records_read_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    monkeypatch.setattr(record_sequences, "_POINT_BYTES", 64 << 10)
+    monkeypatch.setattr(input_text.locale, "getpreferredencoding", lambda _do_setlocale=True: "cp1252")
+    path, plain = _many_with_a_cp1252_byte(tmp_path)
+    (tmp_path / "plain.gb").write_bytes(plain)
+    records = read_flat_file_records(str(path))
+    expected = read_flat_file_records(str(tmp_path / "plain.gb"))
+    assert [(r.id, r.description, str(r.seq)) for r in records] == [(r.id, r.description, str(r.seq)) for r in expected]
+    assert "café" in records[5].description
+
+
+def test_a_gzip_input_replaced_between_two_passes_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from gbdraw.io import input_text
+
+    monkeypatch.setattr(record_sequences, "_BLOCK_BYTES", 64 << 10)
+    path, plain = _many_with_a_cp1252_byte(tmp_path)
+
+    def replaced(_do_setlocale: bool = True) -> str:  # asked between the UTF-8 pass and the second pass
+        path.write_bytes(gzip.compress(plain.replace(b"ACCESSION   ", b"ACCESSION   X", 13)))
+        return "cp1252"
+
+    monkeypatch.setattr(input_text.locale, "getpreferredencoding", replaced)
+    with pytest.raises(InputFileError, match="changed after gbdraw read it"):
+        read_flat_file_records(str(path))

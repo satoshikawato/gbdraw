@@ -34,7 +34,6 @@ from gbdraw.api import (
     save_session_document,
 )
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions, LinearMultiRecordOptions
-from gbdraw.api.request_render import _materialized_record_inputs, resolve_request_records
 from gbdraw.api.requests import GenBankInputSource, RecordCollectionOptions, RecordPresentation, RecordSelector
 from gbdraw.session_container import read_session_container
 from gbdraw.io.regions import RecordWindow
@@ -208,7 +207,7 @@ def test_a_session_redraws_crops_of_a_file_no_longer_at_hand(tmp_path: Path) -> 
         output=RenderOutputRequest(output_prefix="file", output_directory=tmp_path, overwrite=True),
     )
     render_request(request)
-    planned = _materialized_record_inputs(resolve_request_records(request))
+    planned = resolve_request(request).records
     path.unlink()
     live, replay = _replayed(
         LinearDiagramRequest(records=planned, options=options, layout=LinearMultiRecordOptions(),
@@ -264,6 +263,22 @@ def test_a_session_keeps_the_windows_of_a_record_whose_file_is_gone(second: str,
     assert live.count('data-gbdraw-row-mark="gap"') == 1
     assert _saved_windows(tmp_path) == [("w", 2)]
     assert replay == live
+
+
+def test_a_resolved_request_draws_as_it_did_after_its_caller_writes_its_records_back_over_their_file(
+    tmp_path: Path,
+) -> None:
+    """The records ``resolve_request`` hands back hold their bases, and a crop the record it was cut from: the caller
+    may write them back over their file and still draw them (OV-3353)."""
+
+    path = tmp_path / "one.gb"
+    SeqIO.write([_record("src", "linear")], path, "genbank")
+    resolved = resolve_request(_two_windows(GenBankInputSource(str(path)), tmp_path, "src:40001-52000"))
+    render_request(resolved)
+    before = (tmp_path / "live.svg").read_text()
+    SeqIO.write([_record("src", "linear", seed=4)], path, "genbank")
+    render_request(resolved)
+    assert (tmp_path / "live.svg").read_text() == before
 
 
 _MITO = Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
@@ -366,6 +381,26 @@ def test_a_session_redraws_an_edited_crop_from_its_source_with_the_edits(spec: s
     assert saved["windows"] == [
         {"start": 20001, "end": 40000, "reverseComplement": spec.endswith(":rc"), "column": None}
     ]
+    assert replay == live
+
+
+def test_an_edited_reverse_complemented_crop_of_an_rna_record_is_saved_on_its_source(tmp_path: Path) -> None:
+    """A reverse-complemented crop of an RNA record is complemented as RNA; its edits are written on its source,
+    whose window is complemented as the crop was (OV-3332: it was compared as DNA and saved as its own bytes)."""
+
+    record = _record("src", "linear")
+    record.seq = Seq(str(record.seq).replace("T", "U"))
+    record.annotations["molecule_type"] = "ss-RNA"
+    crop = apply_region_specs([record], parse_region_specs(["src:20001-40000:rc"]))[0]
+    assert "U" in str(crop.seq)
+    _edit(crop)
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(crop), record_key="r"),),
+        options=LinearDiagramOptions(config_overrides=_TRACKS), output=_output(tmp_path),
+    )
+    live, replay = _replayed(request, tmp_path)
+    [saved] = _saved_records(tmp_path)
+    assert saved["windows"] == [{"start": 20001, "end": 40000, "reverseComplement": True, "column": None}]
     assert replay == live
 
 

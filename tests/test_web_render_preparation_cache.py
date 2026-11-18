@@ -2573,77 +2573,119 @@ def test_a_title_position_change_sends_no_children_text(tmp_path: Path) -> None:
     assert not [piece for piece in _content_pieces(moved) if "children" in piece]
 
 
-def _gc_percent_calls(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+def _gc_percent_calls(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[int]]:
+    """The GC percent calls of the definition, and the bytes counted into count rows (by the parse pass or for
+    bases in memory)."""
+
+    import gbdraw.io.record_sequences as record_sequences
     import gbdraw.render.groups.circular.definition as definition_module
 
     calls: list[int] = []
+    counted: list[int] = []
     real = definition_module.calculate_gc_percent
+    real_count_rows = record_sequences.count_rows
 
-    def counted(seq: object) -> float:
+    def counted_gc_percent(seq: Seq) -> float:
         calls.append(1)
         return real(seq)
 
-    monkeypatch.setattr(definition_module, "calculate_gc_percent", counted)
-    return calls
+    def count_rows(data: bytes, *args: object) -> object:
+        counted.append(len(data))
+        return real_count_rows(data, *args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(definition_module, "calculate_gc_percent", counted_gc_percent)
+    monkeypatch.setattr(record_sequences, "count_rows", count_rows)
+    return calls, counted
 
 
-def test_a_circular_title_change_reuses_the_gc_percent_of_every_record(
+def test_a_circular_title_change_counts_no_base_for_the_gc_percent_of_any_record(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The GC percent reads only the record: a warm Generate keys it and does not recompute it."""
+    """Each Generate takes each record's GC percent once (OV-3043), as a sum of the counts the parse pass made: a
+    warm Generate counts no base again, and replaced records are counted by their own parse pass."""
 
-    calls = _gc_percent_calls(monkeypatch)
+    calls, counted = _gc_percent_calls(monkeypatch)
     source = tmp_path / "records.gbk"
     records = (_record("gc-a"), _record("gc-b"), _record("gc-c"))
     records[2].seq = Seq("ATGC" * 180)
     _write_genbank(source, records)
     cache = PreparedBiologicalInputCache()
 
-    cold, cold_diagnostics = _render(tmp_path, cache, _multi_record_document(source, title="Cold"), request_id=1)
-    cold_metrics = _metrics(cold_diagnostics)
-    assert cold_metrics["renderStageBuild:record_gc_percent"] == len(records)
+    cold, _ = _render(tmp_path, cache, _multi_record_document(source, title="Cold"), request_id=1)
     assert len(calls) == len(records)
+    assert counted
 
+    warm = _multi_record_document(source, title="Warm")  # building the document parses the source itself
     calls.clear()
-    retitled, retitled_diagnostics = _render(
-        tmp_path, cache, _multi_record_document(source, title="Warm"), request_id=2
-    )
-    warm_metrics = _metrics(retitled_diagnostics)
-    assert calls == []
-    assert warm_metrics["renderStageHit:record_gc_percent"] >= len(records)
-    assert "renderStageBuild:record_gc_percent" not in warm_metrics
-    assert warm_metrics.get("renderStageUncacheableCount", 0) == 0
+    counted.clear()
+    retitled, retitled_diagnostics = _render(tmp_path, cache, warm, request_id=2)
+    assert len(calls) == len(records)
+    assert counted == []
+    assert _metrics(retitled_diagnostics).get("renderStageUncacheableCount", 0) == 0
     assert retitled["featureCatalog"] == cold["featureCatalog"]
 
-    # Replaced records are other records: each GC percent is computed again.
-    replaced, replaced_diagnostics = _render(
-        tmp_path,
-        cache,
-        _multi_record_document(source, title="Warm"),
-        request_id=3,
-        token_generation=2,
-    )
-    assert _metrics(replaced_diagnostics)["renderStageBuild:record_gc_percent"] == len(records)
+    # Replaced records are other records: each is parsed and counted again.
+    calls.clear()
+    replaced, _ = _render(tmp_path, cache, warm, request_id=3, token_generation=2)
     assert len(calls) == len(records)
+    assert sum(counted) >= sum(len(record.seq) for record in records)
     assert replaced["results"] == retitled["results"]
 
 
-def test_a_single_record_title_change_reuses_the_gc_percent(
+def test_a_single_record_title_change_counts_no_base_for_the_gc_percent(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _gc_percent_calls(monkeypatch)
+    calls, counted = _gc_percent_calls(monkeypatch)
     source = tmp_path / "record.gbk"
     _write_genbank(source, (_record("gc-single"),))
     cache = PreparedBiologicalInputCache()
     _render(tmp_path, cache, _document(source, title="Cold"), request_id=1)
     assert len(calls) == 1
 
+    warm = _document(source, title="Warm")  # building the document parses the source itself
     calls.clear()
-    _warm, diagnostics = _render(tmp_path, cache, _document(source, title="Warm"), request_id=2)
-    metrics = _metrics(diagnostics)
-    assert calls == []
-    assert metrics["renderStageHit:record_gc_percent"] >= 1
-    assert metrics.get("renderStageUncacheableCount", 0) == 0
+    counted.clear()
+    _warm, diagnostics = _render(tmp_path, cache, warm, request_id=2)
+    assert len(calls) == 1
+    assert counted == []
+    assert _metrics(diagnostics).get("renderStageUncacheableCount", 0) == 0
+
+
+def test_a_region_crop_title_change_reads_no_edge_row_for_the_gc_percent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A warm Generate of a region crop reads no base for its GC percent: the prepared cache keeps the crop's view,
+    and the view keeps the counts its edge rows gave (F1: a warm Generate read both edge rows from the file again)."""
+
+    import gbdraw.io.record_sequences as record_sequences
+
+    calls, counted = _gc_percent_calls(monkeypatch)
+    edge_reads: list[int] = []
+    real_row_bases = record_sequences._SequenceTable.row_bases
+
+    def row_bases(self: object, row: int, size: int) -> bytes:
+        edge_reads.append(row)
+        return real_row_bases(self, row, size)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(record_sequences._SequenceTable, "row_bases", row_bases)
+    source = tmp_path / "record.gbk"
+    record = _record("gc-crop")
+    record.seq = Seq("ATGCGGCATT" * 4_000)
+    _write_genbank(source, (record,))
+    cache = PreparedBiologicalInputCache()
+    _render(tmp_path, cache, _document(source, title="Cold", region="1234-31111"), request_id=1)
+    assert len(calls) == 1
+    assert edge_reads  # the crop's edges fall inside rows
+
+    warm = _document(source, title="Warm", region="1234-31111")  # building the document parses the source itself
+    calls.clear()
+    counted.clear()
+    edge_reads.clear()
+    _warm, diagnostics = _render(tmp_path, cache, warm, request_id=2)
+    assert len(calls) == 1
+    assert counted == []
+    assert edge_reads == []
+    assert _metrics(diagnostics).get("renderStageUncacheableCount", 0) == 0
 
 
 def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
