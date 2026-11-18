@@ -7,9 +7,9 @@
 /** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
-  blockOutlineOf,
   FEATURE_PART_CONNECTOR,
   FEATURE_SELECTOR,
+  featureStrokeElements,
   filterFeatureFillTargets,
   getFeatureIdentity,
   getFeaturePart,
@@ -154,14 +154,26 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
+ * A stroke an edit gives one feature: the feature's own stroke edit, or its
+ * Legend row's.
+ * @typedef {object} FeatureStrokeEdit
+ * @property {string} renderedId
+ * @property {string} strokeColor Empty: the edit sets no color.
+ * @property {number | null} strokeWidth Null: the edit sets no width.
+ */
+
+/**
  * One Result's compiled editor operations. The planner is app/candidate-render.js;
  * this module declares the shape it applies.
  * A live feature fill of `color: null` keeps the fill the Result shows.
  * @typedef {Record<
- *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
+ *   'featureFills' | 'featureVisibility' | 'labelText' | 'labelVisibility'
  *   | 'legendFills' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
  *   readonly Record<string, any>[]
- * > & { legendStrokes: readonly LegendStrokeOperation[], callerTransforms: readonly SvgResultTransform[] }} SvgMutationOperations
+ * > & {
+ *   featureStrokes: readonly FeatureStrokeEdit[], legendStrokes: readonly LegendStrokeOperation[],
+ *   callerTransforms: readonly SvgResultTransform[]
+ * }} SvgMutationOperations
  */
 
 /**
@@ -1059,6 +1071,19 @@ const requireFeatureElements = (index, renderedId) => {
   return elements;
 };
 
+// A stroke edit of a feature, its own or its Legend row's, strokes the
+// elements that show the feature's stroke (`featureStrokeElements`).
+/**
+ * @param {LazyMutationIndex} index
+ * @param {FeatureStrokeEdit} stroke
+ */
+const strokeFeature = (index, { renderedId, strokeColor, strokeWidth }) => {
+  featureStrokeElements(requireFeatureElements(index, renderedId)).forEach((element) => {
+    if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
+    if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
+  });
+};
+
 /**
  * @param {LazyMutationIndex} index
  * @param {string} caption
@@ -1085,12 +1110,7 @@ const applyFeatureOperations = (index, operations) => {
       ? keepPaintAttribute(index, element, 'fill')
       : setPaintAttribute(index, element, 'fill', color)));
   });
-  operations.featureStrokes.forEach(({ renderedId, strokeColor, strokeWidth }) => {
-    requireFeatureElements(index, renderedId).forEach((element) => {
-      if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
-      if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
-    });
-  });
+  operations.featureStrokes.forEach((stroke) => strokeFeature(index, stroke));
   operations.featureVisibility.forEach(({ renderedId, mode }) => {
     requireFeatureElements(index, renderedId).forEach((element) => {
       setPaintAttribute(index, element, 'display', mode === 'off' ? 'none' : null);
@@ -1206,12 +1226,9 @@ const applyLegendOperations = (index, operations, {
     const { strokeColor, strokeWidth, reach } = operation;
     const rows = requireRow(operation);
     const pythonColor = rows.length > 0 ? pythonLegendRow(rows[0]).color : null;
-    legendRowFeatureIds(reach, pythonColor, featureFills()).forEach((renderedId) => {
-      requireFeatureElements(index, renderedId).forEach((element) => {
-        if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
-        if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
-      });
-    });
+    legendRowFeatureIds(reach, pythonColor, featureFills()).forEach((renderedId) => (
+      strokeFeature(index, { renderedId, strokeColor, strokeWidth })
+    ));
     rows.forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
@@ -1389,14 +1406,22 @@ const samePaint = (name, left, right) => {
 
 // Python strokes the feature parts of one kind alike within one size class
 // (a Circular record; a whole Linear canvas): a block and its outline with
-// the block stroke, a block drawn under an outline with none, a connector
-// with the line stroke. A Legend swatch of a feature row has the block stroke
-// of the first record.
-/** @param {Element} element @param {readonly Element[]} parts @param {boolean} perRecord */
-const strokeKind = (element, parts, perRecord) => {
-  const record = perRecord ? text(element.getAttribute('data-gbdraw-record-index')) : '';
-  if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return `${record}|connector`;
-  return `${record}|${blockOutlineOf(element, parts) ? 'outlined' : 'block'}`;
+// the block stroke, a block drawn under an outline (one that does not show
+// the feature's stroke, `featureStrokeElements`) with none, a connector with
+// the line stroke. A Legend swatch of a feature row has the block stroke
+// of the first record. Returns each part of one feature with its kind.
+/**
+ * @param {readonly Element[]} parts
+ * @param {boolean} perRecord
+ * @returns {Array<[Element, string]>}
+ */
+const strokeKinds = (parts, perRecord) => {
+  const shown = new Set(featureStrokeElements(parts));
+  return parts.map((element) => {
+    const record = perRecord ? text(element.getAttribute('data-gbdraw-record-index')) : '';
+    if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return [element, `${record}|connector`];
+    return [element, `${record}|${shown.has(element) ? 'block' : 'outlined'}`];
+  });
 };
 
 // Sessions older than 46 (main writes 44) saved a Result with its stroke and
@@ -1501,8 +1526,7 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   const drawnStrokes = new Map();
   index.features().forEach((parts, renderedId) => {
     if (reached.has(renderedId)) return;
-    parts.filter((element) => !isAutoFeatureUnderlay(element)).forEach((element) => {
-      const kind = strokeKind(element, parts, perRecord);
+    strokeKinds(parts, perRecord).filter(([element]) => !isAutoFeatureUnderlay(element)).forEach(([element, kind]) => {
       const drawn = { color: element.getAttribute('stroke'), width: element.getAttribute('stroke-width') };
       const known = drawnStrokes.get(kind);
       if (known === undefined) drawnStrokes.set(kind, drawn);
@@ -1520,10 +1544,9 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     record(element, 'stroke-width', edit.strokeWidth, drawn.width);
   };
   stroked.forEach(([renderedId, edit]) => {
-    const parts = elementsOf(renderedId);
-    parts.forEach((element) => recordStroke(
+    strokeKinds(elementsOf(renderedId), perRecord).forEach(([element, kind]) => recordStroke(
       element,
-      isAutoFeatureUnderlay(element) ? AUTO_FEATURE_UNDERLAY_STROKE : drawnStrokes.get(strokeKind(element, parts, perRecord)),
+      isAutoFeatureUnderlay(element) ? AUTO_FEATURE_UNDERLAY_STROKE : drawnStrokes.get(kind),
       edit
     ));
   });

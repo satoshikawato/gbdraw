@@ -758,6 +758,12 @@ for (const mode of ['linear', 'circular']) {
     featureElementsById.set(joinedFeature.svg_id, elements);
     clickedFeature.value = { svg_id: joinedFeature.svg_id, feat: joinedFeature, color: '#54bcf8', strokeColor: 'gray', strokeWidth: 2 };
     const joinedKey = featureOverrideKey(joinedFeature) || joinedFeature.svg_id;
+    // OV-3726: the stroke the blocks already show is no change, though the
+    // connector line and a fill path under an outline carry other strokes.
+    assert.equal(await actions.updateClickedFeatureStroke('gray', 2), false, `${mode}, ${shape}: the shown stroke is no change`);
+    assert.equal(await actions.applyStrokeToSelectedFeatures([joinedFeature], 'gray', 2), false,
+      `${mode}, ${shape}: the shown stroke is no change for a selection`);
+    assert.equal(featureStrokeOverrides[joinedKey], undefined);
     assert.equal(await actions.updateClickedFeatureStroke('#222222', 3), true);
     assert.deepEqual(
       [featureStrokeOverrides[joinedKey].originalStrokeColor, featureStrokeOverrides[joinedKey].originalStrokeWidth],
