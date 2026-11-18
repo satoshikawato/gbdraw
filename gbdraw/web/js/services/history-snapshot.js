@@ -1004,12 +1004,22 @@ const checkpointCatalogFeatures = (snapshot) => {
  * slot's. Reads and one writer of its rows; nothing here counts holders or reaches a drawing History holds.
  * @param {{ shownDrawingId: () => DrawingId,
  *   artifactSlots: { kept: () => readonly Readonly<ArtifactSlot>[] },
- *   losatEvidenceOf: (drawingId: DrawingId) => LosatEvidence,
+ *   readSlotValues: (drawingId: DrawingId, keys: typeof LOSAT_EVIDENCE_KEYS) => Readonly<LosatEvidence>,
  *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void,
  *   drawingOf: (drawingId: DrawingId) => Pick<DrawingView, 'slices'>,
  *   fileStore: Pick<InputFileStore, 'registerFile'> }} owner
  */
-const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, losatEvidenceOf, writeArtifactValues, drawingOf, fileStore }) => {
+const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, readSlotValues, writeArtifactValues, drawingOf, fileStore }) => {
+  // A drawing's seven values where its artifact is: the shown drawing's state, a kept slot (every key filled).
+  /** @type {(drawingId: DrawingId) => LosatEvidence} */
+  const losatEvidenceOf = (drawingId) => {
+    const values = readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
+    return {
+      losatCacheInfo: values.losatCacheInfo, losatCache: values.losatCache, losatDerivedCache: values.losatDerivedCache,
+      proteinIdentityManifest: values.proteinIdentityManifest, legacyProteinRawCandidates: values.legacyProteinRawCandidates,
+      legacyProteinDerivedEvidence: values.legacyProteinDerivedEvidence, losatNamedKeys: values.losatNamedKeys
+    };
+  };
   return {
     losatEvidenceOf,
     /**
@@ -1914,15 +1924,8 @@ export const createHistorySnapshotService = ({
   };
   const losatEvidence = createLosatEvidenceAccess({
     shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues, drawingOf: state.drawingOf, fileStore,
-    // A drawing's seven values where its artifact is: the shown drawing's state, a kept slot (every key filled).
-    losatEvidenceOf: (drawingId) => {
-      const values = readSlotValues(drawingId, LOSAT_EVIDENCE_KEYS);
-      return {
-        losatCacheInfo: values.losatCacheInfo, losatCache: values.losatCache, losatDerivedCache: values.losatDerivedCache,
-        proteinIdentityManifest: values.proteinIdentityManifest, legacyProteinRawCandidates: values.legacyProteinRawCandidates,
-        legacyProteinDerivedEvidence: values.legacyProteinDerivedEvidence, losatNamedKeys: values.losatNamedKeys
-      };
-    }
+    // readSlotValues fills every key it is given; its `any`-valued result is read as the seven LOSAT values here.
+    readSlotValues: (drawingId, keys) => /** @type {LosatEvidence} */ (readSlotValues(drawingId, keys))
   });
 
   // Synchronous: History captures it without an await (OV-922).
