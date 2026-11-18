@@ -61,7 +61,7 @@ from .core.js_values import (
     js_truthy,
 )
 from .io.input_text import GZIP_ERRORS, open_input_text
-from .exceptions import GbdrawError, ValidationError
+from .exceptions import GbdrawError, SessionFormatError, ValidationError
 from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
@@ -4038,8 +4038,6 @@ def _require_current_circular_track_slots(config: Mapping[str, Any]) -> None:
     but no Session 27-44 written by ``main`` or a release has them, so Python
     has no twin of that step and refuses such a draft instead of writing it.
     """
-
-    from .session import SessionFormatError
 
     adv = config.get("adv")
     if not isinstance(adv, Mapping) or "circular_track_slots" not in adv:

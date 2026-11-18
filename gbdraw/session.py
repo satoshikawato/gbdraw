@@ -18,7 +18,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, NamedTuple, Sequence, cast
 
 from gbdraw.core.numeric import JS_WHITESPACE
-from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.exceptions import (
+    ExportError,
+    SessionConversionError,
+    SessionError,
+    SessionFormatError,
+    SessionRenderError,
+    SessionResourceError,
+    SessionVersionError,
+    ValidationError,
+)
 from gbdraw.session_contract import (
     SESSION_ID_RE,
     CanonicalRequestJson,
@@ -181,28 +190,6 @@ _EMBEDDED_RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
 )
 _EMBEDDED_RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified", "checksum"})
-class SessionError(ValidationError):
-    """Base error for the public session bridge."""
-
-
-class SessionFormatError(SessionError):
-    """Raised when a session document or canonical envelope is malformed."""
-
-
-class SessionVersionError(SessionError):
-    """Raised when a session version has no requested conversion path."""
-
-
-class SessionResourceError(SessionError):
-    """Raised when an embedded canonical resource cannot be materialized."""
-
-
-class SessionConversionError(SessionError):
-    """Raised when a canonical payload cannot be converted to a typed request."""
-
-
-class SessionRenderError(SessionError):
-    """Raised when canonical session rendering fails."""
 
 
 def require_search_frame_protein_results(report: SessionMigrationReport) -> None:

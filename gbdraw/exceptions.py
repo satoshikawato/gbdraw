@@ -76,6 +76,30 @@ class ExportError(GbdrawError):
     """Raised when an explicitly requested library export cannot be generated."""
 
 
+class SessionError(ValidationError):
+    """Base error for the public session bridge."""
+
+
+class SessionFormatError(SessionError):
+    """Raised when a session document or canonical envelope is malformed."""
+
+
+class SessionVersionError(SessionError):
+    """Raised when a session version has no requested conversion path."""
+
+
+class SessionResourceError(SessionError):
+    """Raised when an embedded canonical resource cannot be materialized."""
+
+
+class SessionConversionError(SessionError):
+    """Raised when a canonical payload cannot be converted to a typed request."""
+
+
+class SessionRenderError(SessionError):
+    """Raised when canonical session rendering fails."""
+
+
 def label_capacity_context_key(kind: HorizontalLabelKind) -> str:
     """The Web error's context key of the room one side's labels need when they were not placed (CAPACITY-STOP).
 
@@ -162,5 +186,11 @@ __all__ = [
     "LabelsDoNotFitError",
     "LabelsMayNotFitWarning",
     "ParseError",
+    "SessionConversionError",
+    "SessionError",
+    "SessionFormatError",
+    "SessionRenderError",
+    "SessionResourceError",
+    "SessionVersionError",
     "ValidationError",
 ]
