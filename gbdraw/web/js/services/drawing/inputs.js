@@ -323,10 +323,10 @@ export const createCircularSource = (overrides = {}) => ({
  */
 /**
  * A Circular File card as it was at one moment (a Load, the write of a Depth
- * matrix): its uid, the files its input type reads, and its record count when
- * that was known.
+ * matrix): its uid, the files its input type reads, and the record IDs of its
+ * file in file order when they were known.
  * @typedef {{ uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null,
- *   recordCount: number | null }} CircularCardMark
+ *   recordIds: readonly string[] | null }} CircularCardMark
  */
 /**
  * The five card files' fields (Default colors, Specific rules, Blacklist,

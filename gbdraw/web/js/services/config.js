@@ -5562,7 +5562,7 @@ const applyFiles = (filesData, {
   // OV-2867: the cards as loaded, which an older Session's flat record
   // positions count over (`legacyCircularRecordKeys`); refs once bound.
   const loadedCards = /** @type {CircularCardMark[]} */ (/** @type {unknown} */ (loadedInputs
-    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }))));
+    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordIds: null }))));
   targetState.files.c_legacy_record_cards = legacyRecordPositions && cardsTakeLegacyRecordPositions(circularSources)
     ? loadedCards : null;
   // A Depth slot holds a list. The rows of a record-major matrix stand for the

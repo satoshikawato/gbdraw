@@ -188,6 +188,34 @@ export const recordIdentity = ({ uid, sourceIndex, recordCount }) => (
 );
 
 /**
+ * Which record of a card's new file continues each record of its file then,
+ * after a Replace in the same card (D-05, refining D-20): the one rule for
+ * every row a record holds (feature edits, color rule instances, annotations,
+ * strokes: `recordKeyMoves`; a record-major Depth matrix: `resliceCardRows`).
+ * When every record ID of both files is unique, a record continues as the
+ * record of the new file with its ID, so a reordered file keeps each record's
+ * rows; a record whose ID the new file lacks continues as the record at its
+ * place when no ID names that one (one record replacing one record, a new
+ * version of the same genome, D-32). Otherwise (a duplicated or missing ID)
+ * every record continues by place. -1: the record leaves.
+ * @param {readonly unknown[]} previous the record IDs of the file then, in file order
+ * @param {readonly unknown[]} next the record IDs of the new file, in file order
+ * @returns {number[]} for each record then, the 0-based place of its record in the new file, or -1
+ */
+export const continuedRecordPlaces = (previous, next) => {
+  const ids = (/** @type {readonly unknown[]} */ list) => list.map(cleanKey);
+  const [before, after] = [ids(previous), ids(next)];
+  const unique = (/** @type {string[]} */ list) => list.every(Boolean) && new Set(list).size === list.length;
+  if (!unique(before) || !unique(after)) return before.map((_id, place) => (place < after.length ? place : -1));
+  const kept = new Set(before);
+  return before.map((id, place) => {
+    const byId = after.indexOf(id);
+    if (byId >= 0) return byId;
+    return place < after.length && !kept.has(after[place]) ? place : -1;
+  });
+};
+
+/**
  * The records a drawing's OFF records keep their rows under, as request
  * records a row is matched against (`rowBelongsToRequest`): a Linear card's
  * uid with its `<uid>:<k>` identities, or a Circular record's identity.
@@ -218,10 +246,16 @@ export const offRecordRequestRecords = (recordsOff) => [...offSet(recordsOff)]
  *   windows: readonly unknown[] }} IdentityRequestRecord
  * One drawn record of a request: the record key its features have in that
  * request, its identity, the other keys an older Session may have left its rows
- * under (`legacyCircularRecordKeys`), and the entry of its source list it is.
+ * under (`legacyCircularRecordKeys`), the entry of its source list it is, and
+ * the card it is a record of with the record IDs of that card's file in file
+ * order (`cardRecordIds`), by which a Replace's records continue
+ * (`continuedRecordPlaces`).
  * @typedef {{ requestKey: string, identity: string, aliases: readonly string[],
- *   entry: RecordSourceEntry }} DrawnRecordIdentity
+ *   entry: RecordSourceEntry, card: string, cardRecordIds: readonly string[] }} DrawnRecordIdentity
  */
+
+/** The record ID of a source's record. @param {RecordSourceEntry} entry */
+const entryRecordId = (entry) => cleanKey(entry?.recordId ?? entry?.record_id);
 
 /**
  * The 0-based positions of a source's records, by record ID (a duplicated ID names none).
@@ -230,7 +264,7 @@ export const offRecordRequestRecords = (recordsOff) => [...offSet(recordsOff)]
 const positionsOf = (entries) => {
   const byId = new Map();
   entries.forEach((entry, index) => {
-    const recordId = cleanKey(entry?.recordId ?? entry?.record_id);
+    const recordId = entryRecordId(entry);
     const sourceIndex = Number.isInteger(entry?.sourceIndex) ? Number(entry.sourceIndex) : index;
     byId.set(recordId, byId.has(recordId) ? null : sourceIndex);
   });
@@ -632,18 +666,45 @@ export const drawnRecordIdentities = (records, sources) => {
     const identityOf = (/** @type {number} */ sourceIndex) => recordIdentity({
       uid: base, sourceIndex, recordCount: entries.length
     });
+    const card = { card: base, cardRecordIds: entries.map(entryRecordId) };
     if (record.cardinality === 'all' && !record.selector && record.windows.length === 0) {
       return entries.map((/** @type {RecordSourceEntry} */ entry, /** @type {number} */ sourceIndex) => {
         const identity = identityOf(sourceIndex);
-        return { requestKey: identity, identity, aliases: aliasesOf(identity), entry };
+        return { requestKey: identity, identity, aliases: aliasesOf(identity), entry, ...card };
       });
     }
     const expansion = recordKeyExpansion(recordKey, base);
     const position = expansion !== null ? expansion - 1 : selectedPosition(record, entries);
     if (position === null || position >= entries.length) return [];
     const identity = identityOf(position);
-    return [{ requestKey: recordKey, identity, aliases: aliasesOf(identity), entry: entries[position] }];
+    return [{ requestKey: recordKey, identity, aliases: aliasesOf(identity), entry: entries[position], ...card }];
   });
+};
+
+/**
+ * The records of the cards whose file's record IDs differ between two
+ * requests (a Replace in the same card): `then`, each record's identity then
+ * with the identity of the record it continues as now (null: it leaves), by
+ * `continuedRecordPlaces`; `now`, the identities of those cards' records now.
+ * @param {readonly DrawnRecordIdentity[]} previousDrawn
+ * @param {readonly DrawnRecordIdentity[]} nextDrawn
+ */
+const continuedCardRecords = (previousDrawn, nextDrawn) => {
+  const cardsOf = (/** @type {readonly DrawnRecordIdentity[]} */ drawn) => new Map(drawn.map(({ card, cardRecordIds }) => [card, cardRecordIds]));
+  const nextCards = cardsOf(nextDrawn);
+  /** @type {Map<string, string | null>} */
+  const then = new Map();
+  /** @type {Set<string>} */
+  const now = new Set();
+  cardsOf(previousDrawn).forEach((ids, uid) => {
+    const after = nextCards.get(uid);
+    if (!after || (after.length === ids.length && after.every((id, place) => id === ids[place]))) return;
+    const places = continuedRecordPlaces(ids, after);
+    ids.forEach((_id, place) => then.set(recordIdentity({ uid, sourceIndex: place, recordCount: ids.length }),
+      places[place] < 0 ? null : recordIdentity({ uid, sourceIndex: places[place], recordCount: after.length })));
+    after.forEach((_id, place) => now.add(recordIdentity({ uid, sourceIndex: place, recordCount: after.length })));
+  });
+  return { then, now };
 };
 
 /**
@@ -660,7 +721,10 @@ export const drawnRecordIdentities = (records, sources) => {
  * from one snapshot, so a permutation is safe. A row never leaves or enters a
  * key whose source the Generate replaces (`unbound`): the replaced source no
  * longer binds that record (#494), and the prune decides its rows. The one
- * exception is the first record a Replace in the same card keeps (D-20).
+ * exception is a Replace in the same card (D-05, D-20): the records of a card
+ * whose file's record IDs changed continue as `continuedRecordPlaces` says (by
+ * record ID, else by place), and their rows move with them; a record that
+ * leaves moves none.
  * @param {readonly DrawnRecordIdentity[]} previousDrawn
  * @param {readonly DrawnRecordIdentity[]} nextDrawn
  * @param {ReadonlySet<string>} [unbound]
@@ -671,30 +735,22 @@ export const recordKeyMoves = (previousDrawn, nextDrawn, unbound = new Set()) =>
   const nextKeyOf = new Map(nextDrawn.map(({ identity, requestKey }) => [identity, requestKey]));
   const previousKeys = new Set(previousKeyOf.values());
   const nextKeys = new Set(nextKeyOf.values());
-  // D-20: a Replace in the same card keeps its first record, so the record of
-  // a one-record file (`<uid>`) and the first record of a file of several
-  // (`<uid>:1`) are one record when each request has only one of them. Its
-  // rows move although its source was replaced; the prune keeps the edits of
-  // the features the new file still has.
-  /** @type {Set<string>} */
-  const replacedFirstRecords = new Set();
-  [...nextKeyOf.keys()].filter((identity) => !previousKeyOf.has(identity)).forEach((identity) => {
-    const other = [...previousKeyOf.keys()].find((candidate) => !nextKeyOf.has(candidate)
-      && (recordKeyExpansion(identity, candidate) === 1 || recordKeyExpansion(candidate, identity) === 1));
-    if (other === undefined) return;
-    previousKeyOf.set(identity, /** @type {string} */ (previousKeyOf.get(other)));
-    previousKeyOf.delete(other);
-    replacedFirstRecords.add(identity);
+  const continued = continuedCardRecords(previousDrawn, nextDrawn);
+  // Each record with its identity then and now: a record of a changed card as it continues, any other as it is.
+  /** @type {[string, string][]} */
+  const records = [...continued.then].flatMap(([then, now]) => (now === null ? [] : [/** @type {[string, string]} */ ([then, now])]));
+  new Set([...previousKeyOf.keys(), ...nextKeyOf.keys()]).forEach((identity) => {
+    if (!continued.then.has(identity) && !continued.now.has(identity)) records.push([identity, identity]);
   });
   /** @type {Map<string, string>} */
   const moves = new Map();
-  new Set([...previousKeyOf.keys(), ...nextKeyOf.keys()]).forEach((identity) => {
-    const from = previousKeyOf.get(identity) ?? identity;
-    const to = nextKeyOf.get(identity) ?? identity;
-    if (from === to || (!replacedFirstRecords.has(identity) && (unbound.has(from) || unbound.has(to)))) return;
+  records.forEach(([then, now]) => {
+    const from = previousKeyOf.get(then) ?? then;
+    const to = nextKeyOf.get(now) ?? now;
+    if (from === to || (!continued.then.has(then) && (unbound.has(from) || unbound.has(to)))) return;
     // A row under another record's request key belongs to that record.
-    if (!previousKeyOf.has(identity) && previousKeys.has(from)) return;
-    if (!nextKeyOf.has(identity) && nextKeys.has(to)) return;
+    if (!previousKeyOf.has(then) && previousKeys.has(from)) return;
+    if (!nextKeyOf.has(now) && nextKeys.has(to)) return;
     moves.set(from, to);
   });
   const movedInto = new Set(moves.values());
@@ -718,7 +774,7 @@ export const recordKeyMoves = (previousDrawn, nextDrawn, unbound = new Set()) =>
  * a shorter list are the records that have none yet.
  * @template R
  * @param {readonly R[]} rows one per identity of `previous`, in its order
- * @param {readonly string[]} previous
+ * @param {readonly (string | null)[]} previous null: a record whose row no record of `next` takes
  * @param {readonly string[]} next
  * @param {() => R} empty
  * @returns {R[]}
@@ -729,50 +785,71 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
 });
 
 /**
+ * A File card at one moment with the record IDs of its file, in file order.
+ * @typedef {{ uid: string, recordIds: readonly string[] }} CardRecords
+ */
+
+/**
  * The rows of a list that keeps one row per record of a drawing's cards (a
  * record-major Depth matrix) after its cards change: `marked` are the cards
  * the rows stand for, in row order, `now` the drawing's cards. A record keeps
- * the row of its card's record at the same place in the file (`<uid>:<k>`),
- * so a card moved or removed takes its rows along, and a Replace in the same
- * card keeps the rows of the records the new file has at those places (D-20;
- * the record of a one-record file is the first record of a file of several).
- * A record new to the list gets an empty row (`resliceRecordRows`).
+ * the row of the record of its card it continues (`continuedRecordPlaces`, the
+ * rule a Generate moves the record's other rows by), so a card moved or
+ * removed takes its rows along, and a Replace in the same card keeps each
+ * record's row with the record of the new file with its record ID, or at its
+ * place (D-05, D-20). A record new to the list gets an empty row (`resliceRecordRows`).
  * @template R
  * @param {readonly R[]} rows
- * @param {readonly { uid: string, recordCount: number }[]} marked
- * @param {readonly { uid: string, recordCount: number }[]} now
+ * @param {readonly CardRecords[]} marked
+ * @param {readonly CardRecords[]} now
  * @param {() => R} empty
  * @returns {R[]}
  */
-export const resliceCardRows = (rows, marked, now, empty) => resliceRecordRows(rows, cardRecordKeys(marked), cardRecordKeys(now), empty);
+export const resliceCardRows = (rows, marked, now, empty) => resliceRecordRows(
+  rows, continuedCardRows(marked, now).map(({ key }) => key), cardRecordKeys(now), empty
+);
 
 /**
  * Each record of `cards`, in row order: a record is its card's record at its
- * place in the file (`k`, its key `<uid>:<k>`). The one mapping of a card
- * edit's rows (`resliceCardRows`, `cardRowsLeaving`).
- * @param {readonly { uid: string, recordCount: number }[]} cards
+ * place in the file (`k`, its key `<uid>:<k>`).
+ * @param {readonly CardRecords[]} cards
  * @returns {{ uid: string, k: number, key: string }[]}
  */
-const cardRecords = (cards) => cards.flatMap(({ uid, recordCount }) => Array.from(
-  { length: recordCount }, (_unused, index) => ({ uid, k: index + 1, key: expandedRecordKey(uid, index + 1) })
+const cardRecords = (cards) => cards.flatMap(({ uid, recordIds }) => recordIds.map(
+  (_id, index) => ({ uid, k: index + 1, key: expandedRecordKey(uid, index + 1) })
 ));
-/** @param {readonly { uid: string, recordCount: number }[]} cards */
+/** @param {readonly CardRecords[]} cards */
 const cardRecordKeys = (cards) => cardRecords(cards).map(({ key }) => key);
 
 /**
+ * Each record of `marked`, in row order, with the key (`cardRecords`) of the
+ * record of `now` it continues as, null when it leaves (its card removed, or
+ * a Replace whose new file has no record for it). The one mapping of a card
+ * edit's rows (`resliceCardRows`, `cardRowsLeaving`).
+ * @param {readonly CardRecords[]} marked
+ * @param {readonly CardRecords[]} now
+ * @returns {{ uid: string, k: number, key: string | null }[]}
+ */
+const continuedCardRows = (marked, now) => marked.flatMap(({ uid, recordIds }) => {
+  const after = now.find((card) => card.uid === uid);
+  const places = after ? continuedRecordPlaces(recordIds, after.recordIds) : recordIds.map(() => -1);
+  return recordIds.map((_id, index) => ({
+    uid, k: index + 1, key: places[index] < 0 ? null : expandedRecordKey(uid, places[index] + 1)
+  }));
+});
+
+/**
  * The rows `resliceCardRows` leaves out when the cards change from `marked`
- * to `now`: those of the records `now` no longer has (a card removed, or a
- * Replace whose new file has fewer records), with the record each stands for.
+ * to `now`: those of the records that continue as no record of `now`, with
+ * the record each stands for.
  * @template R
  * @param {readonly R[]} rows one per record of `marked`, in its order
- * @param {readonly { uid: string, recordCount: number }[]} marked
- * @param {readonly { uid: string, recordCount: number }[]} now
+ * @param {readonly CardRecords[]} marked
+ * @param {readonly CardRecords[]} now
  * @returns {{ uid: string, k: number, row: R }[]}
  */
-export const cardRowsLeaving = (rows, marked, now) => {
-  const kept = new Set(cardRecordKeys(now));
-  return cardRecords(marked).flatMap(({ uid, k, key }, index) => (kept.has(key) || index >= rows.length ? [] : [{ uid, k, row: rows[index] }]));
-};
+export const cardRowsLeaving = (rows, marked, now) => continuedCardRows(marked, now)
+  .flatMap(({ uid, k, key }, index) => (key !== null || index >= rows.length ? [] : [{ uid, k, row: rows[index] }]));
 
 /**
  * Whether a key has the shape of a record draw key: a card uid or a record

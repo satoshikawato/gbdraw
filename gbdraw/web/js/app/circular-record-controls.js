@@ -15,7 +15,7 @@ import {
 import { isInputFileRef } from '../services/history-files.js';
 import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
 import { circularSourceInputs, inputSourceFiles, inputTypeSpec, pickedFileCards } from '../services/input-types.js';
-import { circularMarkRecordCounts, settledCircularCardMarks } from '../services/record-discovery.js';
+import { circularMarkRecords, settledCircularCardMarks } from '../services/record-discovery.js';
 import { cardHoldsRecordKey, cardRowsLeaving } from '../services/record-draw-selection.js';
 import { cardCropWindow } from '../services/drawing/inputs.js';
 import { circularRangesWithoutCard, circularRecordEntries, circularRecordRange } from '../services/record-options.js';
@@ -187,7 +187,7 @@ const keepInPlace = (list, keep) => {
 };
 /** @typedef {{ uid: string, field: 'gb' | 'gff' | 'fasta' }} ReplacedCardFile One file of a source card a Replace writes. */
 /** @typedef {InputFileRef | NonNullable<InputFileCandidate>} ReplacementFile A card's file: bound, or the one a Replace writes. */
-/** @typedef {import('../services/record-discovery.js').CardRecordCount<ReplacementFile>} ReplacementCardCount */
+/** @typedef {import('../services/record-discovery.js').CardRecordIds<ReplacementFile>} ReplacementCardRecords */
 /**
  * What a Replace was picked on, compared by identity: the drawing's input type and its cards, in order, with their
  * files. A change ends the Replace (a later pick of the card, the card removed or moved, an Undo).
@@ -221,10 +221,11 @@ const sameEntries = (asked, now) => now.length === asked.length && now.every((en
 /**
  * The Depth files of `drawing` that leave when `value` replaces the card files `replaced` (OV-2318), each with the
  * record it stands for. The rows stand for the cards of `c_depth_rows` (else the cards as last read, which the edit
- * marks), and the read after the edit keeps the rows of the records the cards then have (`circularDepthRowsAfterRead`
- * with `resliceCardRows`): both sets of cards are counted by `circularMarkRecordCounts`, as that read counts them,
- * and the rows past a new file's last record leave. None when the rows cannot be placed (a file that cannot be read,
- * rows that are not those of their cards): that read reports the matrix, as before.
+ * marks), and the read after the edit keeps the row of each record with the record it continues as
+ * (`circularDepthRowsAfterRead` with `resliceCardRows`): both sets of cards are read by `circularMarkRecords`, as that
+ * read reads them, and the rows of the records the new file has no record for leave (`cardRowsLeaving`: by record ID,
+ * else by place, D-05). None when the rows cannot be placed (a file that cannot be read, rows that are not those of
+ * their cards): that read reports the matrix, as before.
  * @param {DrawingState} drawing
  * @param {readonly ReplacedCardFile[]} replaced
  * @param {ReplacementFile} value
@@ -233,26 +234,26 @@ const sameEntries = (asked, now) => now.length === asked.length && now.every((en
  */
 const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf) => {
   const settledMarks = settledCircularCardMarks(drawing);
-  /** @type {readonly ReplacementCardCount[]} */
+  /** @type {readonly ReplacementCardRecords[]} */
   const settled = settledMarks ?? [];
-  /** @type {readonly ReplacementCardCount[] | null} */
+  /** @type {readonly ReplacementCardRecords[] | null} */
   const marks = drawing.files.c_depth_rows ?? settledMarks;
   const rows = depthRowsWithFiles(drawing);
   if (!marks || !rows) return [];
   const inputType = drawing.inputType.value;
   /** @type {import('../services/input-types.js').CircularSourceInput<ReplacementFile>[]} */
   const inputs = circularSourceInputs(inputType, drawing.circularSources);
-  const marked = await circularMarkRecordCounts({ marks, now: settled, inputs, fileOf });
-  if (!marked || marked.reduce((sum, mark) => sum + mark.recordCount, 0) !== rows.length) return [];
+  const marked = await circularMarkRecords({ marks, now: settled, inputs, fileOf });
+  if (!marked || marked.reduce((sum, mark) => sum + mark.recordIds.length, 0) !== rows.length) return [];
   /** @type {import('../services/input-types.js').CircularSourceInput<ReplacementFile>[]} */
   const after = circularSourceInputs(inputType, drawing.circularSources.map((card) => replaced.reduce(
     /** @param {Readonly<Partial<Record<'gb' | 'gff' | 'fasta', ReplacementFile | null>>> & { uid: string }} next */
     (next, { uid, field }) => (uid === card.uid ? { ...next, [field]: value } : next), card
   )));
-  // The cards as marked are counted already; a replaced card's new files are read.
-  const known = [...settled, ...marks.map((mark, index) => ({ ...mark, recordCount: marked[index].recordCount }))];
-  const now = await circularMarkRecordCounts({
-    marks: after.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null })), now: known, inputs: after, fileOf
+  // The cards as marked are read already; a replaced card's new files are read.
+  const known = [...settled, ...marks.map((mark, index) => ({ ...mark, recordIds: marked[index].recordIds }))];
+  const now = await circularMarkRecords({
+    marks: after.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordIds: null })), now: known, inputs: after, fileOf
   });
   if (!now) return [];
   return cardRowsLeaving(rows, marked, now).flatMap(({ uid, k, row }) => {
@@ -346,7 +347,7 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, show
       if (items.length === 0) return true;
       const answer = await askChoice({
         title: t('Replace the file and remove Depth files?'),
-        description: t('The new file has fewer records than the File card had. Replacing the file removes the Depth files of the records after its last one.'),
+        description: t('The new file has no record for these records of the File card. Replacing the file removes their Depth files.'),
         items,
         actions: [{ id: 'replace', label: t('Replace file'), tone: 'danger' }]
       });

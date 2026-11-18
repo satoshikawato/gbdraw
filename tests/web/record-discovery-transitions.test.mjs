@@ -340,7 +340,7 @@ test('after a Load, whose marks have no record count, the Replace still asks bef
   const { unbind } = await twoRecordsWithDepth(null);
   // As Load writes them (config.js): the cards as loaded, their record counts not read. The first settled read of
   // the same cards keeps them.
-  markCircularDepthRows(circular.slices.inputs, settledCircularCardMarks(circular).map((mark) => ({ ...mark, recordCount: null })));
+  markCircularDepthRows(circular.slices.inputs, settledCircularCardMarks(circular).map((mark) => ({ ...mark, recordIds: null })));
   const [card] = circular.circularSources.map((source) => source.uid);
   const pending = pickCardFile(card, 'gb', genbank('a.gb', ['A1', 40]));
   await settle();
@@ -643,6 +643,89 @@ test('a History step of another setting while a Replace reads its new file leave
 // and the Record Order name that record's identity (a `#N` past the cards
 // still held as loaded is dropped), and a Record select value that names one
 // record by its record ID becomes that record's identity.
+// OV-3846 (D-05): a Replace in the same card continues each record by its
+// record ID when every ID of both files is unique, else by place (D-20), so a
+// file with the same records in another order keeps each Depth row with its
+// record (A's Depth is not drawn on B), and the question names the record
+// whose ID leaves.
+test('a reordered Replace keeps each Depth row with its record ID, through Undo and Redo (OV-3846)', async () => {
+  const history = window.__GBDRAW_HISTORY__;
+  const { unbind } = await twoRecordsWithDepth(null);
+  const [card] = circular.circularSources.map((source) => source.uid);
+  await app.uploadCircularSourceFile(card, 'gb', genbank('ba.gb', ['B1', 50], ['A1', 40]));
+  await settle();
+  assert.equal(app.choicePrompt.show, false, 'no record leaves, so nothing is asked');
+  assert.deepEqual(recordIds(circular), ['B1', 'A1']);
+  assert.deepEqual(depthNames(circular), [[null, 'b.tsv'], ['a.tsv', null]]);
+  await app.undoHistory();
+  await settle();
+  assert.deepEqual(recordIds(circular), ['A1', 'B1']);
+  assert.deepEqual(depthNames(circular), [['a.tsv', null], [null, 'b.tsv']]);
+  await app.redoHistory();
+  await settle();
+  assert.deepEqual(recordIds(circular), ['B1', 'A1']);
+  assert.deepEqual(depthNames(circular), [[null, 'b.tsv'], ['a.tsv', null]]);
+  assert.ok(history.getUndoCount() > 0);
+  unbind();
+});
+
+test('a Replace whose record IDs repeat keeps the Depth rows by place (D-20)', async () => {
+  const { unbind } = await twoRecordsWithDepth(null);
+  const [card] = circular.circularSources.map((source) => source.uid);
+  await app.uploadCircularSourceFile(card, 'gb', genbank('bb.gb', ['B1', 50], ['B1', 50]));
+  await settle();
+  assert.equal(app.choicePrompt.show, false);
+  assert.deepEqual(recordIds(circular), ['B1', 'B1']);
+  assert.deepEqual(depthNames(circular), [['a.tsv', null], [null, 'b.tsv']]);
+  unbind();
+});
+
+test('a Replace whose new file lacks a record ID names that record and keeps the others with theirs', async () => {
+  const { unbind } = await twoRecordsWithDepth(null);
+  const [card] = circular.circularSources.map((source) => source.uid);
+  const pending = app.uploadCircularSourceFile(card, 'gb', genbank('b.gb', ['B1', 50]));
+  await settle();
+  assert.equal(app.choicePrompt.show, true);
+  assert.deepEqual(app.choicePrompt.items, ['#1 A1: a.tsv'], 'A1 leaves, not the record past the new file\'s last one');
+  app.resolveChoicePrompt('replace');
+  await pending;
+  await settle();
+  assert.deepEqual(recordIds(circular), ['B1']);
+  assert.deepEqual(depthNames(circular), [[null, 'b.tsv']]);
+  await app.undoHistory();
+  await settle();
+  assert.deepEqual(depthNames(circular), [['a.tsv', null], [null, 'b.tsv']]);
+  unbind();
+});
+
+test('a reordered Replace in every drawing keeps each drawing\'s Depth rows with their record IDs', async () => {
+  const { bindDrawingInputFileTree, markCircularDepthRows } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { unbind } = await twoRecordsWithDepth(null);
+  const out = app.drawingList.duplicateDrawing(circular.id);
+  await settle();
+  const copy = state.drawingOf(out.drawingId);
+  bindDrawingInputFileTree(state.inputFiles, copy.slices.inputs, 'c_depth',
+    [[state.inputFiles.registerFile(new File(['1\t1\n'], 'c.tsv')), null], [null, null]]);
+  markCircularDepthRows(copy.slices.inputs, null);
+  const [card] = copy.circularSources.map((source) => source.uid);
+  const pending = app.uploadCircularSourceFile(card, 'gb', genbank('ba.gb', ['B1', 50], ['A1', 40]));
+  await settle();
+  assert.equal(app.choicePrompt.title, 'Replace input file?');
+  app.resolveChoicePrompt('all');
+  await settle();
+  assert.equal(app.choicePrompt.show, false, 'no record leaves in either drawing');
+  await pending;
+  await settle();
+  assert.deepEqual(depthNames(copy), [[null, null], ['c.tsv', null]]);
+  app.selectDrawing(circular.id);
+  await settle();
+  assert.deepEqual(recordIds(circular), ['B1', 'A1']);
+  assert.deepEqual(depthNames(circular), [[null, 'b.tsv'], ['a.tsv', null]]);
+  app.drawingList.deleteDrawing(copy.id);
+  await settle();
+  unbind();
+});
+
 test('the first settled read places a Session\'s flat #N and a record ID Record select at their records', async () => {
   const { INPUTS_SLICE, installBoundInputs } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
@@ -657,7 +740,7 @@ test('the first settled read places a Session\'s flat #N and a record ID Record 
   const loadedInputs = () => {
     const captured = INPUTS_SLICE.capture(circular.slices.inputs);
     const marks = circularSourceInputs('gb', circular.circularSources)
-      .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null }));
+      .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordIds: null }));
     installBoundInputs(state.inputFiles, circular.slices.inputs, { ...captured, files: { ...captured.files, c_legacy_record_cards: marks } });
   };
   loadedInputs();

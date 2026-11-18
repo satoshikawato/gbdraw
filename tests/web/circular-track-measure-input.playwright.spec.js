@@ -316,40 +316,40 @@ test('Auto preference is transient across input, Clear, History, panel remount, 
   await openPanel(page);
   const before = await snapshot(page);
   const workers = await workerCounts(page);
-  await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
-  await selectUnit(page, 'px', 'features');
+  await expect(unitControl(page, 'features', 'Width')).toHaveValue('px');
+  await selectUnit(page, 'factor', 'features');
   expect(await snapshot(page)).toEqual(before);
   const autoId = (await valueControl(page, 'features', 'Width').getAttribute('aria-describedby')).split(' ').find(id => id.endsWith('-auto'));
   await expect(page.locator(`#${autoId}`)).toContainText('px (auto)');
   await edit(page, '1.5', 'features');
-  expect(await scalar(page, 'features')).toEqual({ value: '1.5', unit: 'px' });
+  expect(await scalar(page, 'features')).toEqual({ value: '1.5', unit: 'factor' });
   await expectCounts(page, before.history[0] + 1);
   await edit(page, '', 'features');
   expect(await scalar(page, 'features')).toBeNull();
   await expectCounts(page, before.history[0] + 2);
   await undo(page);
   await expect(valueControl(page, 'features', 'Width')).toHaveValue('1.5');
-  await expect(unitControl(page, 'features', 'Width')).toHaveValue('px');
+  await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
   await undo(page);
   expect(await scalar(page, 'features')).toBeNull();
   await expect(valueControl(page, 'features', 'Width')).toHaveValue('');
   await redo(page);
-  await expect(unitControl(page, 'features', 'Width')).toHaveValue('px');
+  await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
   await redo(page);
   expect(await scalar(page, 'features')).toBeNull();
-  await selectUnit(page, 'px', 'features');
+  await selectUnit(page, 'factor', 'features');
   const remountWorkers = await workerCounts(page);
   const remountBefore = await snapshot(page);
   await (await openPanel(page)).click();
   await openPanel(page);
-  await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
+  await expect(unitControl(page, 'features', 'Width')).toHaveValue('px');
   expect(await snapshot(page)).toEqual(remountBefore);
   expect(await workerCounts(page)).toEqual(remountWorkers);
-  await selectUnit(page, 'px', 'features');
+  await selectUnit(page, 'factor', 'features');
   await load(page);
   await openPanel(page);
-  await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
-  await selectUnit(page, 'px', 'features');
+  await expect(unitControl(page, 'features', 'Width')).toHaveValue('px');
+  await selectUnit(page, 'factor', 'features');
   expect((await workerCounts(page)).runs, 'no Worker run before Reset').toBe(workers.runs);
   // Reset changes live settings of the loaded Session and removes its color
   // rules: its rerender applies them (PD-OI-102, PD-OI-103; OV-43).
@@ -357,7 +357,7 @@ test('Auto preference is transient across input, Clear, History, panel remount, 
   await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   await settleLive(page);
   await openPanel(page);
-  await expect(unitControl(page, 'features', 'Width')).toHaveValue('factor');
+  await expect(unitControl(page, 'features', 'Width')).toHaveValue('px');
 });
 
 test('DOM edits Save and fresh Load retain draft apart from committed Result; failed admission is atomic', async ({ page, browser }, testInfo) => {
@@ -420,7 +420,7 @@ test('typed and legacy scalars display without writes; decimal, exponent, and pr
     [{ value: '0.12345678901234567', unit: 'factor' }, '0.12345678901234567', 'factor', Number('0.12345678901234567')],
     [{ value: '1e-12', unit: 'px' }, '1e-12', 'px', 1e-12],
     [{ value: '1.2345678901234567e+20', unit: 'px' }, '1.2345678901234567e+20', 'px', Number('1.2345678901234567e+20')],
-    [null, '', 'factor', null], ['', '', 'factor', null]
+    [null, '', 'px', null], ['', '', 'px', null]
   ];
   const observations = [];
   for (const [raw, text, unit, value] of cases) {
@@ -666,7 +666,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1e-12');
       await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');
       await expect(valueControl(fresh, 'features', 'Width')).toHaveValue('');
-      await expect(unitControl(fresh, 'features', 'Width')).toHaveValue('factor');
+      await expect(unitControl(fresh, 'features', 'Width')).toHaveValue('px');
     });
   } finally {
     await page.close();

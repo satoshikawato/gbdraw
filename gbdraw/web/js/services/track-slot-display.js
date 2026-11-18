@@ -159,6 +159,29 @@ export const formatRadiusFactorAuto = (value, { estimate = false, awayFromAxis =
   return autoNote(formatFactor(rounded), estimate);
 };
 
+/**
+ * The unit of a Circular row's Auto Width and Radius: the layout resolves a
+ * width in px and a radius as a factor of R (`widthPx` and `radiusFactor` of
+ * the resolved geometry). Each field's Auto hint is in it
+ * (`formatCircularMeasureAuto`), and the field's unit selector starts at it
+ * while the field is Auto, so a number typed over the hint means what the hint
+ * says (OV-2314, D-03). A stored bare number stays a factor.
+ * @type {Readonly<Record<'width' | 'radius', 'px' | 'factor'>>}
+ */
+export const CIRCULAR_MEASURE_AUTO_UNITS = Object.freeze({ width: 'px', radius: 'factor' });
+
+/**
+ * The Auto hint of a Circular row's Width or Radius, in the unit of its field's Auto (`CIRCULAR_MEASURE_AUTO_UNITS`).
+ * @param {'width' | 'radius'} field
+ * @param {unknown} value px for a Width, a factor of R for a Radius
+ * @param {{ estimate?: boolean, awayFromAxis?: boolean }} [options] `awayFromAxis`: a Radius only (`formatRadiusFactorAuto`)
+ */
+export const formatCircularMeasureAuto = (field, value, { estimate = false, awayFromAxis = false } = {}) => (
+  CIRCULAR_MEASURE_AUTO_UNITS[field] === 'px'
+    ? formatPxAuto(value, { estimate })
+    : formatRadiusFactorAuto(value, { estimate, awayFromAxis })
+);
+
 // tick_sides_for_tick_label_layout (gbdraw/tracks/circular.py): the side of
 // the anchor the tick marks grow to. tick_only follows the row's side;
 // label_only draws no marks.

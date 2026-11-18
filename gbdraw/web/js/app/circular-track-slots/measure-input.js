@@ -5,6 +5,7 @@ import {
   changeCircularMeasureUnit
 } from '../../services/circular-track-measure.js';
 import { circularMeasureInvalidParts } from '../../services/track-slot-validation.js';
+import { CIRCULAR_MEASURE_AUTO_UNITS } from '../../services/track-slot-display.js';
 import { errorText } from '../../utils/error-text.js';
 import { msg, tm } from '../../utils/i18n.js';
 
@@ -49,13 +50,15 @@ export const CircularMeasureInput = {
    */
   setup(props, { emit }) {
     const { computed, ref } = window.Vue;
-    // Only Auto has a local next-input preference. Manual units come from the slot.
-    const autoUnit = ref('factor');
+    // Only Auto has a local next-input preference, which starts at the unit of the field's Auto hint
+    // (`CIRCULAR_MEASURE_AUTO_UNITS`, OV-2314). Manual units come from the slot.
+    /** @type {{ value: string | null }} */
+    const autoUnit = ref(null);
     /** @returns {CircularMeasureField} */
     const field = () => (props.field === 'width' ? 'width' : 'radius');
     const view = computed(() => readCircularMeasure(props.modelValue));
     const selectedUnit = computed({
-      get: () => view.value.isAuto ? autoUnit.value : view.value.selectedUnit,
+      get: () => view.value.isAuto ? (autoUnit.value ?? CIRCULAR_MEASURE_AUTO_UNITS[field()]) : view.value.selectedUnit,
       set: (/** @type {string} */ unit) => {
         if (view.value.isAuto) {
           autoUnit.value = unit;

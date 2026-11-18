@@ -165,8 +165,8 @@ test('the record of a one-record file and the first record of its replacement ar
 test('legacy aliases count over the cards as loaded and stop at the first one gone or replaced', () => {
   const fileA = Object.freeze({ fileId: 'file-a' });
   const fileB = Object.freeze({ fileId: 'file-b' });
-  const marks = [{ uid: 'source-1', primaryFile: fileA, pairedFile: null, recordCount: null },
-    { uid: 'source-2', primaryFile: fileB, pairedFile: null, recordCount: null }];
+  const marks = [{ uid: 'source-1', primaryFile: fileA, pairedFile: null, recordIds: null },
+    { uid: 'source-2', primaryFile: fileB, pairedFile: null, recordIds: null }];
   const input = (uid, primaryFile) => ({ uid, primaryFile, pairedFile: null });
   // File 2 moved up: the order of Load stays.
   assert.deepEqual(heldCardPrefix(marks, [input('source-2', fileB), input('source-1', fileA)]), ['source-1', 'source-2']);
@@ -276,4 +276,48 @@ test('the request of a view-switch Generate reads the moved rows; the drawing ke
   assert.deepEqual(drafts, before);
   // Without the moves the request of the new view has none of the record's rows (the 0.14.2 behavior).
   assert.deepEqual(requestFeatureOverrides(drafts.featureOverrides, records), []);
+});
+
+// OV-3846 (D-05, refining D-20): a Replace in the same card continues each
+// record by its record ID when every ID of both files is unique, else by
+// place; a record whose ID the new file lacks continues as the record at its
+// place when no ID names that one. Every row a record holds moves by this one
+// rule: the feature edits here (`recordKeyMoves`), the Depth rows in
+// `resliceCardRows`.
+test('a reordered Replace moves each record\'s rows to the record with its ID; duplicated IDs follow places', async () => {
+  const { continuedRecordPlaces } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['B', 'A']), [1, 0]);
+  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['B']), [-1, 0], 'A leaves; B keeps its rows');
+  assert.deepEqual(continuedRecordPlaces(['A'], ['A2']), [0], 'one record replacing one record keeps it (D-32)');
+  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['A', 'C']), [0, 1]);
+  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['B', 'B']), [0, 1], 'a duplicated ID: by place');
+  assert.deepEqual(continuedRecordPlaces(['A', 'A', 'B'], ['B']), [0, -1, -1]);
+  const all = (cards) => drawnRecordIdentities(Object.keys(cards).map((recordKey) => ({ recordKey, cardinality: 'all', windows: [] })), circular(cards));
+  const replaced = new Set(['U:1', 'U:2']);
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(all({ U: ['A', 'B'], V: ['v'] }), all({ U: ['B', 'A'], V: ['v'] }), replaced)),
+    { 'U:1': 'U:2', 'U:2': 'U:1' });
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(all({ U: ['A', 'B'] }), all({ U: ['B'] }), replaced)), { 'U:2': 'U' });
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(all({ U: ['A', 'A'] }), all({ U: ['A', 'A'] }), replaced)), {});
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(all({ U: ['A', 'B'] }), all({ U: ['B', 'B'] }), replaced)), {});
+  // The edits move together and the prune keeps each one whose feature its record still has.
+  const { pruneUnmatchedFeatureOverrides } = await import('../../gbdraw/web/js/services/feature-visibility.js');
+  const { FEATURE_EDITS_SLICE } = await import('../../gbdraw/web/js/services/drawing/feature-edits.js');
+  const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
+  const row = (recordKey, biologicalFeatureId, labelText) => ({
+    recordKey, biologicalFeatureId, featureVisibility: null, labelVisibility: null, labelText, labelSourceText: null
+  });
+  const edits = FEATURE_EDITS_SLICE.create({ featureOverrides: {
+    [key('U:1', 'a1')]: row('U:1', 'a1', 'on A'), [key('U:2', 'b1')]: row('U:2', 'b1', 'on B')
+  }, featurePlacementOverrides: {} });
+  pruneUnmatchedFeatureOverrides({
+    featureEdits: edits.handle,
+    replacedRecordKeys: [...replaced],
+    previousRecords: [{ recordKey: 'U', cardinality: 'all' }],
+    currentRecords: [{ recordKey: 'U', cardinality: 'all' }],
+    biologicalFeatures: [{ record_key: 'U:1', biological_feature_id: 'b1' }, { record_key: 'U:2', biological_feature_id: 'a1' }],
+    moves: recordKeyMoves(all({ U: ['A', 'B'] }), all({ U: ['B', 'A'] }), replaced)
+  });
+  assert.deepEqual(edits.view.featureOverrides, {
+    [key('U:2', 'a1')]: row('U:2', 'a1', 'on A'), [key('U:1', 'b1')]: row('U:1', 'b1', 'on B')
+  });
 });

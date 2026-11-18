@@ -2723,7 +2723,7 @@ export const createRunAnalysis = ({
     }));
     // A record-major Depth matrix follows its records to the cards read now (OV-2868).
     const depthRows = reads.some((read) => read.error) ? null : await circularDepthRowsAfterRead({
-      matrix: drawing.files.c_depth, marks: drawing.files.c_depth_rows, inputs, counts: reads.map((read) => read.records.length),
+      matrix: drawing.files.c_depth, marks: drawing.files.c_depth_rows, inputs, records: reads.map((read) => read.records),
       fileOf: (file) => inputFiles.fileOf(file)
     });
     if (

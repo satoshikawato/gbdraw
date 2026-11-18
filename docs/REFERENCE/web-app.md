@@ -614,8 +614,10 @@ continues to use the current Result.
 Clear the numeric field for **Auto**. Its resolved geometry appears separately
 with units. While the field is empty, the selector chooses the next input's
 unit only; it does not change Auto geometry, create a History step, or enter
-the Session. That preference starts at **×R** and resets when the panel is
-remounted or settings are loaded or reset. History restores a manual value
+the Session. That preference starts at the unit of the field's Auto value
+(**px** for Width, **×R** for Radius), so a number typed over the Auto value
+means what it shows, and resets when the panel is remounted or settings are
+loaded or reset. History restores a manual value
 and its unit, or Auto's empty value; it does not promise to restore Auto's
 next-input preference.
 
@@ -1753,7 +1755,11 @@ one of them) moves the rule, the label, visibility, and stroke edits, the
 Feature placements, and the annotation targets of that record to its new key,
 and a record that the Generate does not draw keeps them until it is drawn
 again. A Generate that also replaces or removes the record's file moves none of
-its edits. **Undo** of that Generate puts them back. Edits made on an "all
+its edits, except after a Replace in the same Circular File card: there each
+record's edits, like its Depth files, go to the record of the new file with its
+record ID; when the new file lacks that ID, or record IDs repeat in either file,
+they go to the record at its place in the file unless another record's ID
+names that one (edits of features the new record lacks are removed). **Undo** of that Generate puts them back. Edits made on an "all
 records" card of a gbdraw 0.13.0 Session do not follow its records after the
 first Generate splits the card. Resetting **This feature only** on
 one copy leaves the other copies as they are: a rule that names the shared

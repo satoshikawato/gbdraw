@@ -32,7 +32,7 @@ import {
   findTrackSlotGeometry,
   findTrackSlotGeometryRecord,
   formatPxAuto,
-  formatRadiusFactorAuto,
+  formatCircularMeasureAuto,
   isManualSlotValue,
   normalizeOptionalText,
   overlayFollowsNote,
@@ -1907,17 +1907,17 @@ export const createCircularTrackSlotEditor = ({
       if (field === 'inner_gap_px' || field === 'outer_gap_px') return formatPxAuto(AUTO_SLOT_SIZES.gapPx, { estimate: true });
       if (field !== 'width') return '';
       const widthPx = autoWidthPx(String(slot?.renderer || '').trim(), getPreviewLengthParam(drawing, estimateRecordLengths()), drawing);
-      return widthPx === null ? '' : formatPxAuto(widthPx, { estimate: true });
+      return widthPx === null ? '' : formatCircularMeasureAuto('width', widthPx, { estimate: true });
     }
-    if (field === 'width') return formatPxAuto(resolved.widthPx);
+    if (field === 'width') return formatCircularMeasureAuto('width', resolved.widthPx);
     if (field === 'radius') {
       // `r` pins a ticks row's anchor, not the band centre the payload holds (GX-18).
       const tickAnchor = slot?.renderer === 'ticks'
         ? tickAnchorRadiusFactor(resolved, findTrackSlotGeometryRecord(lookup)?.axisRadiusPx, slot.params?.tick_label_layout)
         : null;
       return tickAnchor === null
-        ? formatRadiusFactorAuto(resolved.radiusFactor)
-        : formatRadiusFactorAuto(tickAnchor, { awayFromAxis: true });
+        ? formatCircularMeasureAuto('radius', resolved.radiusFactor)
+        : formatCircularMeasureAuto('radius', tickAnchor, { awayFromAxis: true });
     }
     if (field === 'inner_gap_px') return formatPxAuto(resolved.innerGapPx);
     if (field === 'outer_gap_px') return formatPxAuto(resolved.outerGapPx);

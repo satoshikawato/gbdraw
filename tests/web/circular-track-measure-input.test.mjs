@@ -38,17 +38,38 @@ test('component reads manual fields and History restores without emitting or mir
 
 test('Auto preference never emits, preserves saved blank, and resets with component lifetime', () => {
   const { props, controls, emissions } = setup('');
-  assert.equal(controls.selectedUnit.value, 'factor');
-  controls.selectedUnit.value = 'px';
+  assert.equal(controls.selectedUnit.value, 'px');
+  controls.selectedUnit.value = 'factor';
   assert.equal(props.modelValue, '');
   assert.equal(emissions.length, 0);
   assert.equal(controls.describedBy.value, 'circular-measure-help slot-width-auto');
   controls.valueText.value = ' 1.5 ';
-  assert.deepEqual({ ...props.modelValue }, { value: '1.5', unit: 'px' });
+  assert.deepEqual({ ...props.modelValue }, { value: '1.5', unit: 'factor' });
   assert.equal(emissions.length, 1);
   controls.valueText.value = '';
   assert.equal(props.modelValue, null);
-  assert.equal(setup(props.modelValue).controls.selectedUnit.value, 'factor');
+  assert.equal(setup(props.modelValue).controls.selectedUnit.value, 'px');
+});
+
+// OV-2314 (D-03): an Auto Width's hint is in px (the layout resolves a width
+// in px) and an Auto Radius's in ×R. While a field is Auto its unit selector
+// starts at the unit of its hint, from the same owner, so a number typed over
+// the hint means what the hint says; a bare number in the slot stays a factor.
+test('an Auto field starts in the unit of its Auto hint, and a number typed over it means that unit', async () => {
+  const { CIRCULAR_MEASURE_AUTO_UNITS, formatCircularMeasureAuto } = await import('../../gbdraw/web/js/services/track-slot-display.js');
+  assert.deepEqual({ ...CIRCULAR_MEASURE_AUTO_UNITS }, { width: 'px', radius: 'factor' });
+  assert.equal(formatCircularMeasureAuto('width', 18), '18 px (auto)');
+  assert.equal(formatCircularMeasureAuto('radius', 0.65), '0.65 R (auto)');
+  const width = setup(null, 'width');
+  assert.equal(width.controls.selectedUnit.value, 'px');
+  width.controls.valueText.value = '18';
+  assert.deepEqual({ ...width.props.modelValue }, { value: '18', unit: 'px' });
+  const radius = setup(null, 'radius');
+  assert.equal(radius.controls.selectedUnit.value, 'factor');
+  radius.controls.valueText.value = '0.65';
+  assert.deepEqual({ ...radius.props.modelValue }, { value: '0.65', unit: 'factor' });
+  // A stored bare number is a factor in both fields, as the CLI reads it.
+  assert.equal(setup('1.5', 'width').controls.selectedUnit.value, 'factor');
 });
 
 test('numeric edits use the shared suffix adapter and retain invalid drafts and units', () => {
