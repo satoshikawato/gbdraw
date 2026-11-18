@@ -1,11 +1,12 @@
 // A test's temporary folders are made and removed by tests/web/helpers/temp-dir.cjs
 // (OV-3858: tests that removed their own folders, or did not, left 124 GiB in
 // one machine's TMPDIR). This file checks that the helper removes them on every
-// way a test process ends.
+// way a test process ends: at its exit, or, when a signal or a crash ends it,
+// in the next process that makes a folder.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { makeTempDirSync } from './helpers/temp-dir.cjs';
@@ -13,17 +14,21 @@ import { makeTempDirSync } from './helpers/temp-dir.cjs';
 const OWNER = 'tests/web/helpers/temp-dir.cjs';
 const HELPER_URL = pathToFileURL(join(process.cwd(), OWNER)).href;
 
-// One test process: two folders made and reported, then the end that
-// `TEMP_DIR_CASE` names. 'handled' stands for a Playwright worker, which
-// handles SIGTERM itself and exits normally.
+// One test process: two folders made and reported with the number of signal
+// listeners the helper added, then the end that `TEMP_DIR_CASE` names.
+// 'handled' stands for a Playwright worker, which handles SIGTERM itself and
+// exits normally.
 const FIXTURE = `
-import { writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import { makeTempDir, makeTempDirSync } from ${JSON.stringify(HELPER_URL)};
 const end = process.env.TEMP_DIR_CASE;
-if (end === 'handled') process.on('SIGTERM', () => process.exit(0));
 const made = [makeTempDirSync('case-sync-'), await makeTempDir('case-async-')];
-writeFileSync(process.env.TEMP_DIR_REPORT, JSON.stringify({ pid: process.pid, made }));
+const listeners = ['SIGINT', 'SIGTERM', 'SIGHUP'].reduce((sum, signal) => sum + process.listenerCount(signal), 0);
+if (end === 'handled') process.on('SIGTERM', () => process.exit(0));
+const report = process.env.TEMP_DIR_REPORT;
+writeFileSync(report + '.part', JSON.stringify({ pid: process.pid, made, listeners }));
+renameSync(report + '.part', report);
 test('case', async () => {
   if (end === 'fail') throw new Error('failed on purpose');
   if (end === 'throw') setTimeout(() => { throw new Error('uncaught on purpose'); }, 0);
@@ -31,14 +36,13 @@ test('case', async () => {
   if (['hang', 'handled'].includes(end)) await new Promise((resolve) => setTimeout(resolve, 60_000));
 });
 `;
-const fixtureDirectory = makeTempDirSync('gbdraw-temp-dir-fixture-');
-const fixture = join(fixtureDirectory, 'case.test.mjs');
+const fixture = join(makeTempDirSync('gbdraw-temp-dir-fixture-'), 'case.test.mjs');
 writeFileSync(fixture, FIXTURE);
 
 /** @param {() => boolean} done @param {string} message */
 const waitFor = async (done, message) => {
   for (const started = Date.now(); !done();) {
-    assert.ok(Date.now() - started < 10_000, message);
+    assert.ok(Date.now() - started < 30_000, message);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
 };
@@ -53,62 +57,162 @@ const running = (pid) => {
   }
 };
 
-/** @param {string} report @returns {Promise<{ pid: number, made: string[] }>} */
-const reported = async (report) => {
-  await waitFor(() => existsSync(report), 'the fixture never made its folders');
-  return JSON.parse(readFileSync(report, 'utf8'));
+/** @param {number} group */
+const killGroup = (group) => {
+  try {
+    process.kill(-group, 'SIGKILL');
+  } catch {
+    // The group has ended.
+  }
+};
+
+/** A folder whose `tmp` folder serves as the TMPDIR of the fixtures of one case. */
+const makeRoot = () => {
+  const root = makeTempDirSync('gbdraw-temp-dir-case-');
+  mkdirSync(join(root, 'tmp'));
+  return root;
 };
 
 /**
- * Runs the fixture in its own process group with its own TMPDIR, outside the
- * test runner that runs this file, and stops it the way `stop` says once both
- * folders exist. Returns the folders it made and what its TMPDIR still holds.
- * @param {string} end
- * @param {{ runner?: boolean, stop?: (pid: number) => void }} options
+ * @typedef {object} FixtureRun
+ * @property {number} pid The test-file process, which made the folders.
+ * @property {number} group The process group the fixture runs in.
+ * @property {string[]} made
+ * @property {number} listeners
+ * @property {() => Promise<void>} ended Resolves when the test-file process has ended.
  */
-const runFixture = async (end, { runner = true, stop } = {}) => {
-  const root = makeTempDirSync(`gbdraw-temp-dir-${end}-`);
-  const directory = join(root, 'tmp');
-  const report = join(root, 'made.json');
-  mkdirSync(directory);
+
+let reports = 0;
+
+/**
+ * Starts the fixture in its own process group with `<root>/tmp` as its TMPDIR,
+ * outside the test runner that runs this file. Resolves once its folders exist.
+ * A fixture that does not get there, or does not end when awaited, is killed so
+ * that a failing case does not leave it running for a minute.
+ * @param {string} root
+ * @param {string} end
+ * @param {{ runner?: boolean }} [options]
+ * @returns {Promise<FixtureRun>}
+ */
+const startFixture = async (root, end, { runner = true } = {}) => {
+  const report = join(root, `made-${reports += 1}.json`);
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('NODE_TEST')));
   const child = spawn(process.execPath, runner ? ['--test', fixture] : [fixture], {
-    env: { ...env, TMPDIR: directory, TEMP_DIR_CASE: end, TEMP_DIR_REPORT: report },
+    env: { ...env, TMPDIR: join(root, 'tmp'), TEMP_DIR_CASE: end, TEMP_DIR_REPORT: report },
     stdio: 'ignore',
     detached: true
   });
-  const exited = new Promise((resolve) => child.once('exit', resolve));
-  if (stop) {
-    await reported(report);
-    stop(/** @type {number} */ (child.pid));
-  }
-  await exited;
-  // `node --test` may exit before the test-file process that made the folders.
-  const { pid, made } = await reported(report);
-  await waitFor(() => !running(pid), 'the test-file process never ended');
-  return { made, left: readdirSync(directory), existing: made.filter((folder) => existsSync(folder)) };
+  const group = /** @type {number} */ (child.pid);
+  /** @param {() => boolean} done @param {string} message */
+  const waitOrKill = async (done, message) => {
+    try {
+      await waitFor(done, message);
+    } catch (error) {
+      killGroup(group);
+      throw error;
+    }
+  };
+  await waitOrKill(() => existsSync(report), 'the fixture never made its folders');
+  /** @type {{ pid: number, made: string[], listeners: number }} */
+  const made = JSON.parse(readFileSync(report, 'utf8'));
+  return {
+    ...made,
+    group,
+    // `node --test` may exit before the test-file process it ran.
+    ended: () => waitOrKill(
+      () => (child.exitCode !== null || child.signalCode !== null) && !running(made.pid),
+      'the fixture never ended'
+    )
+  };
 };
 
-/** @param {{ made: string[], left: string[], existing: string[] }} run */
-const assertRemoved = ({ made, left, existing }) => {
-  assert.equal(made.length, 2);
-  assert.deepEqual({ left, existing }, { left: [], existing: [] });
+/** @param {string} root @param {FixtureRun[]} runs */
+const assertRemoved = (root, ...runs) => {
+  for (const run of runs) assert.equal(run.made.length, 2);
+  assert.deepEqual({
+    existing: runs.flatMap((run) => run.made).filter((folder) => existsSync(folder)),
+    left: readdirSync(join(root, 'tmp'))
+  }, { existing: [], left: [] });
 };
 
 for (const end of ['pass', 'fail', 'throw', 'exit']) {
-  test(`a test file that ends by ${end} leaves no temporary folder`, async () => {
-    assertRemoved(await runFixture(end));
+  test(`a test file that ends by ${end} removes its temporary folders`, async () => {
+    const root = makeRoot();
+    const run = await startFixture(root, end);
+    await run.ended();
+    assertRemoved(root, run);
   });
 }
 
-test('a test file the runner stops with SIGTERM leaves no temporary folder', async () => {
-  assertRemoved(await runFixture('hang', { stop: (pid) => process.kill(pid, 'SIGTERM') }));
+test('a process that handles SIGTERM itself and exits removes its temporary folders', async () => {
+  const root = makeRoot();
+  const run = await startFixture(root, 'handled', { runner: false });
+  process.kill(run.pid, 'SIGTERM');
+  await run.ended();
+  assertRemoved(root, run);
 });
 
-test('a test run stopped with Ctrl-C (SIGINT to its process group) leaves no temporary folder', async () => {
-  assertRemoved(await runFixture('hang', { stop: (pid) => process.kill(-pid, 'SIGINT') }));
+test('the helper handles no signal, so a signal ends a test process as before', async () => {
+  const root = makeRoot();
+  const run = await startFixture(root, 'pass');
+  await run.ended();
+  assert.equal(run.listeners, 0);
 });
 
-test('a process that handles SIGTERM itself and exits leaves no temporary folder', async () => {
-  assertRemoved(await runFixture('handled', { runner: false, stop: (pid) => process.kill(pid, 'SIGTERM') }));
+for (const [how, stop] of /** @type {Array<[string, (run: FixtureRun) => void]>} */ ([
+  ['SIGKILL', (run) => process.kill(run.pid, 'SIGKILL')],
+  ['Ctrl-C (SIGINT to its process group)', (run) => process.kill(-run.group, 'SIGINT')]
+])) {
+  test(`the folders of a test file stopped by ${how} are removed by the next test process`, async () => {
+    const root = makeRoot();
+    const stopped = await startFixture(root, 'hang');
+    stop(stopped);
+    await stopped.ended();
+    assert.deepEqual(stopped.made.filter((folder) => existsSync(folder)), stopped.made);
+    const next = await startFixture(root, 'pass', { runner: false });
+    await next.ended();
+    assertRemoved(root, stopped, next);
+  });
+}
+
+test('the folders of a running test process stay when another test process starts', async () => {
+  const root = makeRoot();
+  const alive = await startFixture(root, 'hang');
+  try {
+    const next = await startFixture(root, 'pass', { runner: false });
+    await next.ended();
+    assert.deepEqual(alive.made.filter((folder) => existsSync(folder)), alive.made);
+  } finally {
+    killGroup(alive.group);
+    await alive.ended();
+  }
+});
+
+test('a test process keeps its folders in a root of its user, in a folder named by its pid and start time', async () => {
+  const root = makeRoot();
+  const before = Date.now();
+  const run = await startFixture(root, 'pass', { runner: false });
+  const after = Date.now();
+  await run.ended();
+  const own = dirname(run.made[0]);
+  assert.equal(dirname(own), join(root, 'tmp', `gbdraw-tests-${process.getuid ? process.getuid() : 'user'}`));
+  const [, pid, started] = (/-(\d+)-(\d+)$/.exec(basename(own)) ?? []).map(Number);
+  assert.equal(pid, run.pid);
+  assert.ok(started >= before - 1 && started <= after, `start time ${started} not in [${before}, ${after}]`);
+});
+
+test('the next test process removes the folders of ended processes on its host and in its PID namespace only', async () => {
+  const root = makeRoot();
+  const ended = await startFixture(root, 'pass', { runner: false });
+  await ended.ended();
+  // This file's processes and the fixtures they start share a host and a PID namespace.
+  const own = dirname(makeTempDirSync('gbdraw-temp-dir-scope-'));
+  const scope = basename(own).replace(/-\d+-\d+$/, '');
+  const userRoot = join(root, 'tmp', basename(dirname(own)));
+  const sameScope = join(userRoot, `${scope}-${ended.pid}-1`);
+  const otherScope = join(userRoot, `other-${scope}-${ended.pid}-1`);
+  for (const folder of [sameScope, otherScope]) mkdirSync(join(folder, 'left'), { recursive: true });
+  const next = await startFixture(root, 'pass', { runner: false });
+  await next.ended();
+  assert.deepEqual({ sameScope: existsSync(sameScope), otherScope: existsSync(otherScope) }, { sameScope: false, otherScope: true });
 });
