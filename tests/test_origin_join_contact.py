@@ -15,7 +15,8 @@ from Bio.SeqFeature import CompoundLocation, SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.api.options import CircularDiagramOptions
+from gbdraw.api.diagram import build_circular_multi_diagram
+from gbdraw.api.options import CircularDiagramOptions, CircularMultiRecordOptions
 from gbdraw.api.request_render import plan_request
 from gbdraw.api.requests import (
     CircularDiagramRequest, GenBankInputSource, GffFastaInputSource, InMemoryRecordSource, RecordDisplayOptions,
@@ -24,6 +25,7 @@ from gbdraw.api.requests import (
 from gbdraw.features.factory import FeatureLayerMode, create_feature_layers
 from gbdraw.labels.circular_candidates import _candidate_segment
 from gbdraw.labels.coordinates import display_label_segment
+from gbdraw.layout.record_coordinates import CirclePlace
 
 _LENGTH = 3000
 _SEQUENCE = ("ACGTTGCA" * 400)[:_LENGTH]
@@ -183,3 +185,65 @@ def test_a_genbank_join_over_the_origin_keeps_its_coordinates_as_written(tmp_pat
     assert _drawn_parts(GenBankInputSource(path), None)["connector"] == 0
     feature = _features(_record(_IN_ORDER), "circular")["ends"]
     assert [(int(part.start), int(part.end)) for part in feature.coordinates] == [(0, 300), (2700, 3000)]
+
+
+def _on_a_shared_circle(record: SeqRecord, start: int | None):
+    """The feature objects of ``record`` drawn on a circle it shares with another record (one-circle layout)."""
+    plan = _plan(InMemoryRecordSource(record), start)
+    place = CirclePlace(offset=100, length=5200, scale_length=_LENGTH)
+    result = create_feature_layers(
+        plan.records[0], {}, ["CDS"], {"CDS": "gray"}, False, True, {},
+        layer_mode=FeatureLayerMode(joins_over_origin=True),
+        record_transform=plan.transforms[0].with_circle(place, _LENGTH),
+    )
+    return {feature.qualifiers["locus_tag"][0]: feature for feature in result.foreground_features.values()}
+
+
+_OVER = ("over", _join((2700, 3000), (0, 300)))
+
+
+def test_a_record_on_a_shared_circle_draws_a_join_in_order_as_written_inside_its_arc():
+    # Review r1 HIGH 1: the record's ends lie next to the gaps to the other records, so its origin is no point of
+    # the drawing. The join keeps its connector inside the record's arc, as on dev, and its label stands on a part.
+    features = _on_a_shared_circle(_record(_IN_ORDER, _MID), None)
+    ends = features["ends"]
+    assert not ends.joins_over_origin
+    assert [part.kind for part in ends.display_parts] == ["block", "line", "block"]
+    segment = display_label_segment(ends, 5200, circular=True)
+    assert segment is not None and segment.span == 300
+    # Its connector line runs under "mid", which takes a lane of its own.
+    assert ends.feature_track_id != features["mid"].feature_track_id
+
+
+def test_the_label_of_a_join_written_over_the_origin_of_a_record_on_a_shared_circle_stands_on_a_part():
+    # OV-3864: dev anchored the label at the middle of both parts, the record's arc end, under the next record.
+    feature = _on_a_shared_circle(_record(_OVER), None)["over"]
+    assert not feature.joins_over_origin
+    segment = display_label_segment(feature, 5200, circular=True)
+    assert segment is not None and segment.span == 300
+    assert 100 < segment.middle < 3100
+
+
+@pytest.mark.parametrize("location", [_IN_ORDER, _OVER])
+def test_a_display_start_inside_a_record_on_a_shared_circle_joins_over_the_origin_it_draws(location):
+    # From display start 1001 the record's origin lies inside its arc: the parts meet there, as on its own circle.
+    feature = _on_a_shared_circle(_record(location), 1001)[location[0]]
+    assert feature.joins_over_origin
+    assert not any(part.kind == "line" for part in feature.display_parts)
+    segment = display_label_segment(feature, 5200, circular=True)
+    assert segment is not None and segment.span == 600
+
+
+def test_a_one_circle_drawing_keeps_the_connector_of_a_join_in_order_inside_the_record_arc():
+    other = SeqRecord(Seq(_SEQUENCE[:2000]), id="other", name="other", annotations={
+        "topology": "circular", "molecule_type": "DNA",
+    })
+    drawing = build_circular_multi_diagram(
+        [_record(_IN_ORDER), other], options=CircularDiagramOptions(),
+        layout=CircularMultiRecordOptions(record_layout="one_circle"),
+    )
+    parts = Counter(
+        node.get("data-gbdraw-feature-part") for node in ET.fromstring(drawing.tostring()).iter()
+        if node.get("data-gbdraw-feature-part")
+    )
+    assert parts["connector"] == 1

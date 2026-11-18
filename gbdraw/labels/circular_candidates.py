@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from ..features.coordinates import get_strand
+from ..features.objects import FeatureObject
 from .circular_types import CircularLabelCandidate
 from .filtering import feature_label
 from .coordinates import display_label_segment
@@ -14,7 +15,7 @@ from .label_style import FeatureLabelStyle, LabelFontStyle
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
-def _candidate_segment(feature: Any, total_length: int) -> tuple[float, float, float, float, str]:
+def _candidate_segment(feature: FeatureObject, total_length: int) -> tuple[float, float, float, float, str]:
     if feature.joins_over_origin:
         # One block over the origin (``FeatureObject.joins_over_origin``): the end-running block starts it.
         right, left = sorted(
@@ -28,7 +29,7 @@ def _candidate_segment(feature: Any, total_length: int) -> tuple[float, float, f
         return start, end, middle, span, get_strand(right.strand)
 
     best: tuple[float, float, float, float, str] | None = None
-    for coordinate in getattr(feature, "coordinates", ()):
+    for coordinate in feature.coordinates:
         start = float(coordinate.start)
         end = float(coordinate.end)
         span = abs(end - start) + 1.0

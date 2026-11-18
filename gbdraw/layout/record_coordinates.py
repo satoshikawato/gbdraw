@@ -301,6 +301,13 @@ class RecordDisplayTransform:
         return self.start_coordinate is not None or self.wrap_length is not None or self.circle is not None
 
     @property
+    def meets_at_origin(self) -> bool:
+        """Whether the drawing puts the record's last base next to its first: a record that closes its own circle,
+        or one on a circle shared with other records when a display start puts its origin inside its arc (else
+        its arc ends there, next to the gaps to the other records)."""
+        return self.circle is None or self._anchor_boundary % self.length != 0
+
+    @property
     def drawn_length(self) -> int:
         """The bases on the display axis, over every row."""
         return self.length if self.display_length is None else self.display_length

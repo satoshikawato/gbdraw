@@ -221,23 +221,29 @@ class _FeatureGeometry(NamedTuple):
 
 
 def _feature_geometry(
-    feature: SeqFeature, genome_length: int, origin_length: int | None, layer_mode: FeatureLayerMode, *, projects: bool
+    feature: SeqFeature,
+    genome_length: int,
+    origin_length: int | None,
+    layer_mode: FeatureLayerMode,
+    transform: RecordDisplayTransform,
 ) -> _FeatureGeometry:
     """The parts ``feature`` draws on its record, decided once per feature and view.
 
     A part past the end of a record whose spans may cross its origin is the join over the origin it is (OV-3724): a
     Linear axis and a display projection draw that join; the feature keeps its location, and Circular draws the
-    part by its angles. A view that joins blocks over the origin draws the parts the contact rule joins
-    (``origin_join_order``) in the order that reads over it; the drawers and the label anchors read the decision.
+    part by its angles. A view that joins blocks over the origin, on a record whose drawing meets there
+    (``RecordDisplayTransform.meets_at_origin``), draws the parts the contact rule joins (``origin_join_order``) in
+    the order that reads over it; the drawers and the label anchors read the decision.
     """
+    joins = layer_mode.joins_over_origin and transform.meets_at_origin
 
     def over_origin(parts: Sequence[SimpleLocation]) -> list[SimpleLocation] | None:
-        return origin_join_order(parts, origin_length) if layer_mode.joins_over_origin else None
+        return origin_join_order(parts, origin_length) if joins else None
 
     joined_parts = location_over_origin(feature.location, genome_length).parts if origin_length is not None else None
     parts = joined_parts if joined_parts is not None and layer_mode.past_end_as_join else feature.location.parts
     drawn = DrawnParts(parts, origin_length, over_origin(parts))
-    if not projects:
+    if not transform.projects:
         return _FeatureGeometry(drawn, None, drawn.over_origin is not None)
     projected = joined_parts if joined_parts is not None else feature.location.parts
     projected_over_origin = over_origin(projected)
@@ -281,10 +287,9 @@ def _build_feature_layers(
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
+    transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
     # Connector lines over the origin are drawn only where a span may cross it, in every view.
-    origin_length = genome_length if spans_may_cross_origin(
-        gb_record, record_transform if record_transform is not None else unset_record_transform(gb_record)
-    ) else None
+    origin_length = genome_length if spans_may_cross_origin(gb_record, transform) else None
     source_indexes = _feature_source_index_map(gb_record.features)
     shared_hashes = shared_source_feature_hashes(gb_record)
     instance_of = feature_instances(gb_record)
@@ -320,10 +325,7 @@ def _build_feature_layers(
             "rectangle" if rendering == "underlay" else rendering
         )
         include_label = compute_label_text and rendering != "underlay"
-        geometry = _feature_geometry(
-            feature, genome_length, origin_length, layer_mode,
-            projects=record_transform is not None and record_transform.projects,
-        )
+        geometry = _feature_geometry(feature, genome_length, origin_length, layer_mode, transform)
 
         feature_id: str
         feature_object: FeatureObject
@@ -381,9 +383,9 @@ def _build_feature_layers(
         feature_object.feature_hash = compute_source_feature_hash(feature, gb_record)
         if feature_object.feature_hash in shared_hashes:
             feature_object.rendered_instance_index = feature_object.source_feature_index
-        if geometry.projected is not None and record_transform is not None:
+        if geometry.projected is not None:
             feature_object.display_parts = project_feature_parts(
-                geometry.projected, record_transform,
+                geometry.projected, transform,
                 origin_length=origin_length,
                 is_trans_spliced="trans_splicing" in feature.qualifiers,
             )
