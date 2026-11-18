@@ -40,6 +40,7 @@ import { headerFit } from './app/header-fit.js';
 import { committedValue, settleCommittedField } from './app/committed-value.js';
 import { blankNull } from './app/blank-number.js';
 import { keepsListFocus } from './app/list-focus.js';
+import { titleCutHint } from './app/hint-title.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
@@ -92,4 +93,7 @@ await showStoredUiLanguage();
 const mountedApp = app.mount('#app');
 window.addEventListener('dragover', refuseStrayFileDrop);
 window.addEventListener('drop', refuseStrayFileDrop);
+// A field's hint cut with an ellipsis shows whole as its title (app/hint-title.js).
+window.addEventListener('pointerover', titleCutHint);
+window.addEventListener('focusin', titleCutHint);
 window.__GBDRAW_APP__ = mountedApp;

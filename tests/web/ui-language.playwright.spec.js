@@ -511,6 +511,10 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
   await page.locator('[aria-controls="circular-custom-track-slots-panel"]').click();
   await page.locator('[data-setting="track-slots"] label input[type="checkbox"]').first().check();
   expect(await textsUnder(page, 12)).toEqual([]);
+  // The Preview's feature search bar (its own rule set 11 px).
+  expect(await page.locator('.preview-feature-search').evaluate((bar) => [...bar.querySelectorAll('input, select, button, span')]
+    .filter((element) => element.getClientRects().length > 0).map((element) => getComputedStyle(element).fontSize)
+    .filter((size) => parseFloat(size) < 12))).toEqual([]);
   // The History list, the Drawing menu and the feature popup.
   await page.locator('[data-history-list-toggle]:visible').click();
   await expect(page.locator('.history-list-row').first()).toBeVisible();
@@ -540,6 +544,98 @@ test('Thai shows its catalog in the header and the rail, in a Thai font and at 1
     };
   })).toEqual({ size: '12px', inside: true });
   expect(await textsUnder(page, 12)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// The definition line Style rows of a Linear drawing (Record Labels), each open: a field's hint (Size, and the fill value
+// beside the Color state) and the Color state's word (Auto) each fit inside their box, measured in the box's own font,
+// and every field lies inside its Style block. Returns the misfits as "<part> cut <text>" or "<part> outside" (part:
+// size, weight, state, fill), once each, and the number of rows.
+const definitionStyleFit = (page) => page.evaluate(async () => {
+  await Promise.all(document.getAnimations().filter((animation) => animation instanceof CSSTransition).map((animation) => animation.finished.catch(() => null)));
+  // The width a field needs for its hint: a text copy of it, beside it, sized to its content (the hint, padding and
+  // border), plus, for a number field, its spin buttons: the scroll width a long value gains in a number field over a
+  // text field of the same width.
+  const copyOf = (field, type, style) => {
+    const copy = /** @type {HTMLInputElement} */ (field.cloneNode(false));
+    copy.type = type;
+    Object.assign(copy.style, { position: 'absolute', visibility: 'hidden', ...style });
+    field.after(copy);
+    return copy;
+  };
+  const spinOf = (field) => {
+    const widths = ['number', 'text'].map((type) => {
+      const copy = copyOf(field, type, { width: '64px' });
+      copy.value = '1'.repeat(40);
+      const width = copy.scrollWidth;
+      copy.remove();
+      return width;
+    });
+    return widths[0] - widths[1];
+  };
+  const needs = (field) => {
+    const copy = copyOf(field, 'text', { fieldSizing: 'content', width: 'auto', minWidth: '0', maxWidth: 'none' });
+    const width = copy.getBoundingClientRect().width + (field.type === 'number' ? spinOf(field) : 0);
+    copy.remove();
+    return width > field.getBoundingClientRect().width + 0.5;
+  };
+  // A word of a box: its text's width against the box's width inside its padding and border.
+  const overflows = (box) => {
+    const style = getComputedStyle(box);
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    const room = box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    return range.getBoundingClientRect().width > room + 0.5 || box.scrollWidth > box.clientWidth;
+  };
+  const misfits = [];
+  const blocks = [...document.querySelectorAll('details[data-definition-line-style]')].filter((block) => block.getClientRects().length > 0);
+  for (const block of blocks) {
+    const edge = block.getBoundingClientRect();
+    const fields = [...block.querySelectorAll('input:not([type=color]), [data-definition-line-color-state], button')].filter((element) => element.getClientRects().length > 0);
+    for (const field of fields) {
+      const part = field.matches('input[type=number]') ? 'size' : field.matches('input') ? 'fill' : field.matches('button') ? 'weight' : 'state';
+      const box = field.getBoundingClientRect();
+      if (box.left < edge.left - 0.5 || box.right > edge.right + 0.5) misfits.push(`${part} outside`);
+      const text = field.matches('input') ? field.placeholder : field.textContent.trim();
+      if (text && (field.matches('input') ? needs(field) : overflows(field))) misfits.push(`${part} cut ${text}`);
+    }
+  }
+  return { rows: blocks.length, misfits: [...new Set(misfits)] };
+});
+
+// In every UI language, a Linear definition line's Style row holds its words: the Size hint, the Color state and the
+// fill hint each fit their box and stay inside the Style block; the row wraps where it does not fit (OV-3900).
+test('a Linear definition line Style row holds its hints and Color state in every language', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await openApp(page);
+  await offerTab(page).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__.mode === 'linear');
+  await page.evaluate(() => document.querySelectorAll('details[data-definition-line-style]').forEach((block) => {
+    for (let details = block; details; details = details.parentElement?.closest('details')) details.open = true;
+  }));
+  const misfits = {};
+  for (const tag of ['en', 'ja', 'zh-Hans', 'zh-Hant', 'ko', 'es', 'fr', 'pt', 'id', 'vi', 'th', 'de', 'it', 'pl', 'tr', 'ru', 'uk']) {
+    await menu(page).selectOption(tag);
+    await expect.poll(() => pageLanguage(page)).toBe(tag);
+    const fit = await definitionStyleFit(page);
+    expect(fit.rows, tag).toBeGreaterThan(0);
+    if (fit.misfits.length) misfits[tag] = fit.misfits;
+  }
+  expect(misfits).toEqual({});
+  // A hint wider than its field (a field made narrow, as a narrow pane can) ends with an ellipsis, and the pointer on
+  // the field shows the whole hint as its title until the hint fits again.
+  await menu(page).selectOption('de');
+  await expect.poll(() => pageLanguage(page)).toBe('de');
+  const size = page.locator('details[data-definition-line-style] input[type="number"]').first();
+  await size.evaluate((field) => { field.previousElementSibling.style.display = 'none'; field.parentElement.style.width = '2rem'; });
+  expect(await size.evaluate((field) => getComputedStyle(field).textOverflow)).toBe('ellipsis');
+  await size.hover();
+  await expect(size).toHaveAttribute('title', 'Standard');
+  await size.evaluate((field) => { field.previousElementSibling.style.display = ''; field.parentElement.style.width = ''; });
+  await page.mouse.move(0, 0);
+  await size.hover();
+  await expect(size).not.toHaveAttribute('title');
   expect(errors).toEqual([]);
 });
 

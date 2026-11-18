@@ -722,29 +722,54 @@ test('the UI languages are the seventeen of the Language menu, Latin script firs
   }
 });
 
-// OV-3669: a text style's floor is one custom property, --ui-text-floor, and
-// every font size under 13px in the page's own CSS (index.html, the component
-// rules and the utilities of css/tailwind.input.css, and each small text
-// utility the sources use) reads it, so the floor reaches every text and never
-// lowers a larger size.
+// OV-3669: a text style's floor is one custom property, --ui-text-floor, that
+// the figure resets to 0. Every font size the page's own CSS writes (index.html,
+// the component rules and the utilities of css/tailwind.input.css) is either
+// 13px or more, or max(<size>, var(--ui-text-floor, 0px)), or one of the named
+// exceptions below; a form the case cannot read (em, %, a keyword, calc(),
+// clamp(), another var()) fails it. Each text size utility the sources use is
+// 13px or more or takes the floor, and no inline style sets a size.
+const FONT_SIZE_EXCEPTIONS = new Map([
+  // Hides the text of a header button that shows its icon alone.
+  ['0 !important', 'no text shown'],
+  // The rail entry's icon size (17-20px); its name has its own floored size.
+  ['var(--rail-icon)', 'icon size of a rail entry']
+]);
 test('OV-3669: every small font size of the page reads the text style floor', () => {
   const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
   const input = readFileSync(join(webRoot, 'css', 'tailwind.input.css'), 'utf8');
   assert.match(html, /:root\[data-ui-text-style="tall-marks"\] \{ --ui-text-floor: 12px; \}/);
+  assert.match(html, /:root svg \{ --ui-text-floor: 0px; \}/);
   const css = [['index.html', html.slice(html.indexOf('<style>'), html.indexOf('</style>'))], ['tailwind.input.css', input]];
   const px = (value, unit) => Number(value) * (unit === 'rem' ? 16 : 1);
-  const unfloored = css.flatMap(([file, text]) => [...text.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/font-size:\s*([^;}]+)/g)]
+  const floored = /^max\([\d.]+(px|rem), var\(--ui-text-floor, 0px\)\)( !important)?$/;
+  const readable = (value) => {
+    const plain = /^([\d.]+)(px|rem)( !important)?$/.exec(value);
+    return floored.test(value) || (plain !== null && px(plain[1], plain[2]) >= 13) || FONT_SIZE_EXCEPTIONS.has(value);
+  };
+  const unread = css.flatMap(([file, text]) => [...text.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/font-size:\s*([^;}]+)/g)]
     .map((match) => match[1].trim())
-    .filter((value) => /^([\d.]+)(px|rem)\b/.test(value) && !value.startsWith('max('))
-    .filter((value) => { const [, n, unit] = /^([\d.]+)(px|rem)/.exec(value); return px(n, unit) > 0 && px(n, unit) < 13; })
+    .filter((value) => !readable(value))
     .map((value) => `${file}: font-size: ${value}`));
-  assert.deepEqual(unfloored, []);
-  const floored = new Set([...input.matchAll(/\.text-(xs|\\\[[\d.]+px\\\]) \{ font-size: max\(/g)].map((match) => match[1].replace(/\\/g, '')));
+  assert.deepEqual(unread, []);
+  assert.doesNotMatch(html, /\sstyle="[^"]*font-size/);
+  assert.doesNotMatch(html, /:style="[^"]*font(Size|-size)/);
+  const utility = /\.text-(xs|\\\[[\d.]+(?:px|rem|em)\\\]) \{ font-size: max\(/g;
+  const flooredUtilities = new Set([...input.matchAll(utility)].map((match) => match[1].replace(/\\/g, '')));
   // text-[9px] and text-[10px] are 11px in every locale, by one rule of index.html that takes the floor.
   assert.match(html, /\[class~="text-\[9px\]"\],\s*\[class~="text-\[10px\]"\] \{\s*font-size: max\(0\.6875rem, var\(--ui-text-floor, 0px\)\) !important;/);
-  ['[9px]', '[10px]'].forEach((size) => floored.add(size));
-  const used = new Set(classSourcePaths().flatMap((file) => [...readFileSync(join(webRoot, '..', '..', file), 'utf8').matchAll(/\btext-(xs|\[[\d.]+px\])(?![\w-])/g)].map((match) => match[1])));
-  assert.deepEqual([...used].filter((size) => (size === 'xs' ? 12 : parseFloat(size.slice(1))) < 13 && !floored.has(size)).sort(), []);
+  ['[9px]', '[10px]'].forEach((size) => flooredUtilities.add(size));
+  // The size of a used utility in px: xs is 12px, the other named sizes are 14px or more; an em size depends on its
+  // parent, so it counts as small.
+  const sizeOf = (size) => {
+    if (size === 'xs') return 12;
+    const length = /^\[([\d.]+)(px|rem|em)\]$/.exec(size);
+    if (!length) return 14;
+    return length[2] === 'em' ? 0 : px(length[1], length[2]);
+  };
+  const used = new Set(classSourcePaths().flatMap((file) => [...readFileSync(join(webRoot, '..', '..', file), 'utf8')
+    .matchAll(/\btext-(xs|\[[\d.]+(?:px|rem|em)\])(?![\w-])/g)].map((match) => match[1])));
+  assert.deepEqual([...used].filter((size) => sizeOf(size) < 13 && !flooredUtilities.has(size)).sort(), []);
 });
 
 test('a locale outside the UI languages is refused', async () => {

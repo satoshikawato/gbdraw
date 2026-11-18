@@ -103,6 +103,14 @@
     /* After .form-input: its padding would clip the compact fields, and its background would hide
        the "(auto)" value drawn behind a transparent input. */
     .form-input-compact { font-size: max(10px, var(--ui-text-floor, 0px)); padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+    /* A field at least as wide as its hint: a hidden copy of the hint in the field's padding and border shares the
+       field's grid cell and sets its width; a number field adds room for its spin buttons (15px in Chromium). The
+       field fills the cell. A row of such fields wraps where they do not fit (OV-3900). */
+    .hint-width-field { display: grid; }
+    .hint-width-field > * { grid-area: 1 / 1; }
+    .hint-width-field > [data-hint-width] { visibility: hidden; white-space: nowrap; padding-inline: 0.25rem; }
+    .hint-width-field > [data-hint-width="number"] { padding-inline-end: calc(0.25rem + 16px); }
+    .hint-width-field > input { width: 0; min-width: 100%; }
     .auto-value-input { display: block; width: 100%; box-sizing: border-box; background: transparent; position: relative; z-index: 1; }
     .track-slot-geometry-input { height: 1.5rem; padding-right: 1.55rem !important; background: transparent; position: relative; z-index: 1; }
     /* A disabled field dims like a disabled .btn, and so do the "(auto)" value and unit drawn with it.
