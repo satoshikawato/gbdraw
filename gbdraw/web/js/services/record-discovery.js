@@ -1319,30 +1319,29 @@ export const circularMarkRecordCounts = async ({ marks, now, inputs, fileOf }) =
  * Depth matrix. The rows stand for the records of `marks` (`c_depth_rows`, in
  * row order); after a card edit they follow their records to the cards read
  * now (`resliceCardRows`). A mark's record count is `circularMarkRecordCounts`'s.
- * Rows that stand for the cards read now (the cards did not change, or the
- * rows followed them) take marks null, the one form of "the rows stand for the
- * records the cards list" (OV-3706): marks stay only while a read is pending,
- * or with rows null, when the rows cannot be placed (a file no longer
- * readable, or a matrix whose rows are not those of its marks) and Generate
- * reports the matrix; the cards read now are then the marks. Null: nothing
- * changes (no matrix, or no marks).
+ * A settled read ends the marks: its caller clears them whenever this gives a
+ * result, since marks null read as the cards as last read, the one form of
+ * "the rows stand for the cards read" (OV-3706). Marks stay only while a read
+ * is pending. Rows null: the rows stay as they are, because the cards did not
+ * change or the rows cannot be placed (a file no longer readable, or a matrix
+ * whose rows are not those of its marks), and then Generate reports the
+ * matrix. Null: nothing changes (no matrix, or no marks).
  * @param {{ matrix: DrawingInputFiles['c_depth'], marks: readonly CircularCardMark[] | null,
  *   inputs: readonly import('./input-types.js').CircularSourceInput<InputFileRef>[], counts: readonly number[],
  *   fileOf: (file: InputFileRef | null) => FileLike | null | undefined }} read
  *   `counts`: the records read now of each card of `inputs`.
- * @returns {Promise<{ rows: (InputFileRef | null)[][] | null, marks: CircularCardMark[] | null } | null>}
+ * @returns {Promise<{ rows: (InputFileRef | null)[][] | null } | null>}
  */
 export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, counts, fileOf }) => {
   if (!marks || !isRecordMajorDepthFileMatrix(matrix)) return null;
   const now = inputs.map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: counts[index] }));
   const unchanged = marks.length === now.length && marks.every((mark, index) => mark.uid === now[index].uid
     && heldRecordCount(now, mark) !== null && (mark.recordCount === null || mark.recordCount === now[index].recordCount));
-  if (unchanged) return { rows: null, marks: null };
+  if (unchanged) return { rows: null };
   const marked = await circularMarkRecordCounts({ marks, now, inputs, fileOf });
-  if (marked === null) return { rows: null, marks: now };
   const rows = /** @type {(InputFileRef | null)[][]} */ (matrix);
-  if (marked.reduce((sum, card) => sum + card.recordCount, 0) !== rows.length) return { rows: null, marks: now };
-  return { rows: resliceCardRows(rows, marked, now, () => /** @type {(InputFileRef | null)[]} */ ([])), marks: null };
+  if (marked === null || marked.reduce((sum, card) => sum + card.recordCount, 0) !== rows.length) return { rows: null };
+  return { rows: resliceCardRows(rows, marked, now, () => /** @type {(InputFileRef | null)[]} */ ([])) };
 };
 
 /**

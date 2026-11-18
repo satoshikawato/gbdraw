@@ -233,6 +233,14 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   await settle();
   assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
   assert.equal(circular.files.c_depth_rows, null);
+  // Marks whose records are not the matrix's rows (B marked with 5 records, 7 against 3 rows): the rows cannot be
+  // placed and stay for Generate to report; the read still ends the marks, as a second read of the same cards would.
+  markCircularDepthRows(circular.slices.inputs, circularSourceInputs('gb', circular.circularSources)
+    .map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: index === 0 ? 5 : 2 })));
+  await app.refreshCircularRecordOrder();
+  await settle();
+  assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
+  assert.equal(circular.files.c_depth_rows, null);
   // Undo gives each Move's matrix back with the records it stood for (the
   // test's Replace is no History step of its own: the file input makes it one).
   for (let step = 0; step < 3; step += 1) await app.undoHistory();
