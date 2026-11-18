@@ -343,7 +343,7 @@ export const createDrawingList = ({
  * @property {DrawingInputSite} site The place the uploader writes in the shown drawing.
  * @property {(sites: readonly DrawingInputSite[], pickHolds: () => boolean) => Promise<boolean> | null} confirm Asked,
  *   after the scope, with every site the chosen scope writes; whether to write, or null when it asks nothing.
- *   `pickHolds`: false once another drawing is shown or History changed since the pick; the question then ends.
+ *   `pickHolds`: false once another drawing is shown than at the pick; the question then ends.
  * @typedef {object} InputReplacementPorts
  * @property {ReadDrawingTabs} drawingTabs
  * @property {ReadShownDrawingId} shownDrawingId
@@ -355,7 +355,6 @@ export const createDrawingList = ({
  * @property {(previous: InputFileRef, otherDrawingIds: readonly DrawingId[]) => Promise<InputReplacementScope | null>} askScope
  *   Asks "This drawing only" / "Every drawing that uses this file"; null is Cancel.
  * @property {(busy: SwitchBusy) => void} onBusy Shows why "Every drawing" wrote nothing: the drawing switch waits (D-15-186).
- * @property {() => number} historyRevision Changes with every History step recorded, undone or redone.
  */
 
 /**
@@ -366,8 +365,7 @@ export const createDrawingList = ({
  * @param {InputReplacementPorts} ports
  */
 export const createInputReplacement = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope, onBusy,
-  historyRevision
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope, onBusy
 }) => {
   /** @param {string} fileId @returns {DrawingInputSite[]} every site of `fileId`, in every drawing */
   const sitesOf = (fileId) => projectInputReplacement(
@@ -416,9 +414,12 @@ export const createInputReplacement = ({
    * When another drawing uses `previous`, the scope is asked first; then the
    * uploader's own `question`, with the sites that scope writes (the shown
    * site alone, or every site of `previous`). The question may read files
-   * with no dialog open: a drawing switch, or a History step, Undo or Redo,
-   * before it settles ends the replacement without writing, as the pick no
-   * longer holds. After an answer the uploader's
+   * with no dialog open, after the uploader's own step has ended: when the
+   * drawing of the pick is not shown once the question settles, the
+   * replacement ends without writing, as the pick no longer holds (a switch
+   * away and back meanwhile leaves the same drawing and card, so it holds; the
+   * question sees what else changed the pick: its card's files). After an
+   * answer the uploader's
    * step has ended: Cancel records nothing; "This drawing only" is that write
    * alone, a step of the shown drawing; "Every drawing that uses this file" is
    * `replaceInputFile` with it, which swaps every other site. A Remove (`file`
@@ -433,15 +434,15 @@ export const createInputReplacement = ({
    */
   const replaceFromShownDrawing = (previous, file, writeShown, question) => {
     const others = previous && file && previous !== file ? otherDrawingsUsing(previous.fileId) : [];
-    // Whether the pick still holds once the question settles: the same drawing shown and no History change since it
-    // started (after the scope's answer, when the scope is asked).
-    /** @type {unknown[]} */
-    let picked = [];
-    const pickHolds = () => shownDrawingId() === picked[0] && historyRevision() === picked[1];
+    // Whether the pick still holds once the question settles: the drawing shown when it started (after the scope's
+    // answer, when the scope is asked) is shown then.
+    /** @type {DrawingId | null} */
+    let picked = null;
+    const pickHolds = () => shownDrawingId() === picked;
     /** @param {InputReplacementScope} scope @returns {Promise<boolean> | null} */
     const confirmed = (scope) => {
       if (!question) return null;
-      picked = [shownDrawingId(), historyRevision()];
+      picked = shownDrawingId();
       const { site } = question;
       const sites = scope === 'all' && previous ? [site, ...sitesOf(previous.fileId).filter((other) => (
         other.drawingId !== site.drawingId || other.slot !== site.slot || other.rowUid !== site.rowUid || other.edgeId !== site.edgeId
