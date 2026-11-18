@@ -4,7 +4,7 @@
 // holds Python's results (tools/generate_legend_layout_vectors.py;
 // tests/test_legend_layout_vectors.py checks Python against them).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -152,7 +152,16 @@ const layoutCase = (vector) => {
 
 test('the vectors cover every Gallery Legend, its edits, and the synthetic branches', () => {
   const gallery = vectors.layout.filter((vector) => !vector.name.startsWith('synthetic'));
-  assert.equal(gallery.filter((vector) => vector.edit === 'none').length, 11);
+  // tests/test_legend_layout_vectors.py rebuilds the Gallery Legends from the Sessions (one per drawn Legend);
+  // here each names a Gallery Session.
+  const drawn = gallery.filter((vector) => vector.edit === 'none');
+  assert.ok(drawn.length > 0, 'Gallery Legends');
+  drawn.forEach((vector) => assert.ok(
+    existsSync(new URL(`../../gbdraw/web/gallery/sessions/${vector.name.split('#')[0]}.gbdraw`, import.meta.url)),
+    `${vector.name} is a Gallery Session`
+  ));
+  assert.ok(vectors.layout.some((vector) => vector.rows.some((row) => row.type === 'ring')
+    && !vector.name.startsWith('synthetic')), 'a Gallery Legend of similarity rings');
   assert.ok(gallery.filter((vector) => vector.edit !== 'none').length >= 80);
   assert.deepEqual(new Set(vectors.layout.map((vector) => vector.mode)), new Set(['circular', 'linear']));
   const branches = vectors.layout.map((vector) => vector.expected);
