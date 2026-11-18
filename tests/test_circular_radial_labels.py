@@ -8,9 +8,10 @@ from pathlib import Path
 import pytest
 
 import gbdraw.labels.circular as circular_labels_module
+import gbdraw.labels.circular_fit as circular_fit_module
 from gbdraw.api.config import apply_config_overrides, load_default_config
 from gbdraw.circular import _get_args, run_circular_from_namespace
-from gbdraw.exceptions import ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.circular_leaders import leader_polyline
 from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_radial import place_radial_labels, radial_text_orientation
@@ -522,6 +523,29 @@ def test_a_radial_leader_ends_where_it_passes_the_neighbouring_features_of_its_l
     assert crossing_pairs([leader_polyline(first), leader_polyline(second)]) == []
     assert results[-1].leader_crossing_count == 0
     assert not _hidden_leaders(labels, output.with_suffix(".svg").read_text(encoding="utf-8"))
+
+
+@pytest.mark.slow
+def test_crowded_radial_inner_labels_that_do_not_fit_are_refused_with_advice(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """OV-3907: in NC_005859.1 with radial labels on both sides at 11 pt, the inner labels moved inward to their
+    leaders' room by ever smaller steps, as packing moved the room with them, until the pass limit stopped the figure
+    with "radial label packing did not converge" and no advice. The figure is refused as before, by the label fit
+    check, with its report of the switches (not searched here: the search budget is set to 0)."""
+
+    monkeypatch.setattr(circular_fit_module, "SWITCH_SEARCH_SECONDS", 0.0)
+    with pytest.raises(LabelsDoNotFitError, match="radial inner labels do not fit at 11 pt") as raised:
+        run_circular_from_namespace(
+            _get_args(
+                [
+                    "--gbk", str(Path(__file__).parents[1] / "tests/test_inputs/NC_005859.1.gb"),
+                    "--labels", "both", "--label_placement", "radial", "--label_font_size", "11",
+                    "--format", "svg", "--output", str(tmp_path / "crowded"),
+                ]
+            )
+        )
+    assert raised.value.report.rows
 
 
 # Feature id of "AAA family ATPase" in lambda (NC_001416.gb).

@@ -521,6 +521,40 @@ def _content_bounds(labels: Sequence[CircularLabel]) -> tuple[float, float, floa
     )
 
 
+class _InwardSearch:
+    """Where the inner text moves inward to its leaders' room (OV-3841). The room moves too, as packing changes with
+    the radius. Each move goes to the room of the radius it leaves; once a move recovers less than half of the
+    shortfall, the radius is found by halving the interval between the lowest radius whose room was short and
+    ``minimum_radius``, whose room never is (OV-3907: a crowded side moved inward by ever smaller steps until the
+    pass limit stopped it, and the figure was refused without the label fit check's advice)."""
+
+    def __init__(self, minimum_radius: float) -> None:
+        self.minimum_radius = minimum_radius
+        self.previous_shortfall: float | None = None
+        self.bracket: tuple[float, float] | None = None
+
+    def next_radius(self, radius: float, room_radius: float) -> float | None:
+        """The radius the text moves to from ``radius``, whose room is at ``room_radius``; None when it stays."""
+        short = radius > room_radius + _LEADER_ROOM_TOLERANCE_PX
+        if self.bracket is not None:
+            if self.bracket[1] - self.bracket[0] <= _LEADER_ROOM_TOLERANCE_PX:
+                return None
+            low, high = (self.bracket[0], radius) if short else (radius, self.bracket[1])
+            self.bracket = (low, high)
+            step = 0.5 * (low + high) if high - low > _LEADER_ROOM_TOLERANCE_PX else low
+            return None if step == radius else step
+        if not short:
+            return None
+        shortfall = radius - room_radius
+        if self.previous_shortfall is not None and shortfall > 0.5 * self.previous_shortfall:
+            self.bracket = (self.minimum_radius, radius)
+            step = 0.5 * (self.minimum_radius + radius)
+        else:
+            step = room_radius
+        self.previous_shortfall = shortfall
+        return step
+
+
 def _place_side(
     labels: Sequence[CircularLabel],
     *,
@@ -557,6 +591,7 @@ def _place_side(
         collision_radius = anchor_radius
 
     pushed_out = False
+    inward = _InwardSearch(minimum_anchor)
     for _ in range(_CONVERGENCE_LIMIT):
         # A label whose leader must pass other features is aimed from this pass's elbow radius (OV-3841).
         if _aim_side(ordered, anchor_radius, is_inner=is_inner, total_length=total_length):
@@ -584,9 +619,10 @@ def _place_side(
         if is_inner:
             limit = min(min(base_anchors), min(room))
             target = max(limit, minimum_anchor)
-            if not pushed_out and anchor_radius > target + _LEADER_ROOM_TOLERANCE_PX:
-                collision_radius -= anchor_radius - target
-                anchor_radius = target
+            step = None if pushed_out else inward.next_radius(anchor_radius, target)
+            if step is not None:
+                collision_radius -= anchor_radius - step
+                anchor_radius = step
                 continue
             required_growth = max(0.0, anchor_radius - limit)
         elif max(room) > anchor_radius + _LEADER_ROOM_TOLERANCE_PX:
