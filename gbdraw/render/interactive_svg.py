@@ -24,6 +24,7 @@ from gbdraw.core.numeric import (
 )
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import SourceFeatureHash, parse_source_feature_hash
+from gbdraw.render.drawers.annotation_marks import ANNOTATION_ID_ATTRIBUTE
 from gbdraw.render.drawers.circular.conservation import HIT_DISPLAY_SPAN_ATTRIBUTES
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -1719,7 +1720,7 @@ def _original_geometry(root: ET.Element) -> _OriginalGeometry:
 
 
 def _clear_interactive_state(root: ET.Element) -> None:
-    """Remove the assets an earlier enrichment added and the search and highlight classes its viewer left."""
+    """Remove the assets and annotation marks an earlier enrichment added and the classes its viewer left."""
 
     _remove_existing_assets(root)
     _remove_class_token(root, "gbdraw-feature-search-active")
@@ -1728,6 +1729,8 @@ def _clear_interactive_state(root: ET.Element) -> None:
         _remove_class_token(element, "gbdraw-interactive-feature--dimmed")
         _remove_class_token(element, "gbdraw-interactive-feature--match")
         _remove_class_token(element, "gbdraw-interactive-feature--active-match")
+        if element.attrib.pop("data-gbdraw-interactive-annotation", None) is not None:
+            _remove_class_token(element, "gbdraw-interactive-annotation")
 
 
 def _fallback_catalog_context(root: ET.Element, context: InteractiveSvgContext) -> InteractiveSvgContext:
@@ -1888,6 +1891,23 @@ def _mark_interactive_matches(root: ET.Element, catalog_item: Mapping[str, objec
             _add_class_token(element, "gbdraw-interactive-pairwise-match")
 
 
+def _mark_interactive_annotations(root: ET.Element, catalog_item: Mapping[str, object]) -> None:
+    """Mark each region annotation group whose ID the catalog item lists as interactive: the viewer opens a popup
+    only on a marked group (``enrichSvgWithStandaloneInteractivity`` marks the Web export alike)."""
+
+    dom_ids = {
+        str(annotation.get("dom_id") or "").strip()
+        for annotation in _catalog_array(catalog_item, "annotations")
+        if isinstance(annotation, Mapping)
+    }
+    dom_ids.discard("")
+    for element in root.iter():
+        if element.get(ANNOTATION_ID_ATTRIBUTE) is None or (element.get("id") or "").strip() not in dom_ids:
+            continue
+        element.set("data-gbdraw-interactive-annotation", "true")
+        _add_class_token(element, "gbdraw-interactive-annotation")
+
+
 def _append_interactive_assets(
     root: ET.Element,
     catalog: Mapping[str, object],
@@ -1967,6 +1987,7 @@ def enrich_svg(
     catalog = interactive_embed_catalog(catalog_item, context.sequence_records)
     _mark_interactive_features(root, catalog_item)
     _mark_interactive_matches(root, catalog_item)
+    _mark_interactive_annotations(root, catalog_item)
     _append_interactive_assets(
         root,
         catalog,
