@@ -55,7 +55,8 @@ from gbdraw.io.cli_tables import (
 )
 from gbdraw.io.comparisons import read_comparison_resource
 from gbdraw.io.genome import (
-    feature_types_left_out, filter_features_by_type, load_fasta, load_gbks, parse_gff_fasta, require_record_sequence,
+    FeatureOutsideRecord, feature_types_left_out, filter_features_by_type, leave_out_features_outside_record, load_fasta,
+    load_gbks, parse_gff_fasta, require_record_sequence,
 )
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -98,6 +99,7 @@ from .options import (
 )
 from gbdraw.features.source import SourceFeatureCatalog, SourceFeatureIdentity, capture_source_features
 from gbdraw.annotations.models import FeatureSelector
+from gbdraw.features.coordinates import location_parts_text
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
@@ -295,6 +297,9 @@ class ResolvedRecordProvenance:
     # GFF3 features whose type the request does not draw, left out when the record
     # was planned, by type (the GFF3 type filter); the input summary counts them.
     feature_types_left_out_at_load: tuple[tuple[str, int], ...] = field(default=(), kw_only=True)
+    # The features left out when the record was planned because they do not fit in it
+    # (``leave_out_features_outside_record``); the input summary names them.
+    features_outside_record: tuple[FeatureOutsideRecord, ...] = field(default=(), kw_only=True)
     # The window this unit draws, when the record is drawn through windows; ``record_key`` is then the unit's key.
     window: ResolvedWindow | None = field(default=None, kw_only=True)
     # The record whose window an earlier plan drew this record as, when this plan draws it whole (``RecordOrigin``).
@@ -1318,9 +1323,7 @@ def with_origin_feature_starts(
 def _feature_location_text(feature: SourceFeatureIdentity) -> str:
     """The feature's span in 1-based source coordinates, with ``complement`` for the minus strand."""
 
-    parts = ",".join(f"{start + 1}..{end}" for start, end, _strand in feature.location_parts)
-    text = parts if len(feature.location_parts) == 1 else f"join({parts})"
-    return f"complement({text})" if feature.location_parts[0][2] == -1 else text
+    return location_parts_text(feature.location_parts)
 
 
 @dataclass(frozen=True)
@@ -2180,6 +2183,7 @@ def resolve_record_inputs(
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
+            source_record, outside_record = leave_out_features_outside_record(source_record)
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = _detached_record(source_record)
             reverse = record_input.presentation.reverse_complement
@@ -2226,6 +2230,7 @@ def resolve_record_inputs(
                 is_cropped=source_cropped,
                 source_features=parsed.source_features[source_record_index],
                 feature_types_left_out_at_load=types_left_out,
+                features_outside_record=outside_record,
             )
             for unit in units:
                 _apply_record_key(unit, record_key=record_key)

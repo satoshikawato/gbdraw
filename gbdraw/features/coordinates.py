@@ -53,6 +53,24 @@ class _Span(Protocol):
     def end(self) -> int: ...
 
 
+def location_parts_text(parts: Sequence[tuple[int, int, int | None]]) -> str:
+    """A location's parts (0-based, half-open, with Biopython strands) as a GenBank file writes them: 1-based, in
+    ``join`` when there are several, in ``complement`` when the first part is on the minus strand. Messages that name
+    a feature write its location this way."""
+
+    text = ",".join(f"{start + 1}..{end}" for start, end, _strand in parts)
+    text = text if len(parts) == 1 else f"join({text})"
+    return f"complement({text})" if parts and parts[0][2] == -1 else text
+
+
+def location_fits_record(parts: Sequence[_Span], length: int) -> bool:
+    """Whether a location fits in a record of ``length`` bases: each part starts in the record and covers at most
+    all of it. A part that starts in the record may end past its end, the GFF3 way to write a span over a circular
+    record's origin; a part that starts outside the record, or is longer than it, cannot be drawn on it (OV-3678)."""
+
+    return all(0 <= int(part.start) < length and int(part.end) - int(part.start) <= length for part in parts)
+
+
 class OriginCrossing(NamedTuple):
     """A location that crosses its record's origin: the record's length and the gap between its parts that the
     location does not cover (``uncovered_gap``)."""

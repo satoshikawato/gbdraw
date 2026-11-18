@@ -13,6 +13,7 @@ import gzip
 import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -933,3 +934,144 @@ def test_a_window_across_the_origin_names_its_span_and_its_export_check_reads_it
         {"format": "png", "width": 1000.0, "height": 500.0, "dpi": 96, "linearWrap": {"requested": 500, "records": records}}
     )))
     assert reply["ok"] is True
+
+
+def _genbank_text(name: str, topology: str, locations: Sequence[tuple[str, str]]) -> str:
+    """A 100 bp GenBank record whose CDS features have ``locations``, each with a ``locus_tag`` or a ``product``."""
+
+    features = "".join(
+        f"     CDS             {location}\n                     /{qualifier}\n" for location, qualifier in locations
+    )
+    sequence = "acgtgcatgc" * 10
+    origin = "".join(
+        f"{start + 1:>9} " + " ".join(sequence[at:at + 10] for at in range(start, min(start + 60, 100), 10)) + "\n"
+        for start in range(0, 100, 60)
+    )
+    return (
+        f"LOCUS       {name:<16}         100 bp    DNA     {topology} UNK 01-JAN-1980\n"
+        f"DEFINITION  .\nACCESSION   {name}\nVERSION     {name}\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n"
+        f"            .\nFEATURES             Location/Qualifiers\n     source          1..100\n{features}"
+        f"ORIGIN\n{origin}//\n"
+    )
+
+
+# OV-3678: a 100 bp circular record with a CDS that fits and one that starts after the record's end.
+OUTSIDE_RECORD = (("21..90", 'product="p"'), ("121..240", 'product="q"'))
+OUTSIDE_RECORD_WARNING = (
+    "WARNING: Record tiny (tiny.gb): left out 1 feature that does not fit in the record's 100 bp: CDS 121..240 (q)."
+)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_cli_leaves_out_a_feature_outside_its_record_and_names_it(tmp_path: Path, mode: str) -> None:
+    """A feature that does not fit in its record is left out with a warning that names it (OV-3678): Circular
+    stopped with "A circle arc spans at most 360 degrees", Linear drew it past the end of the record."""
+    (tmp_path / "tiny.gb").write_text(_genbank_text("tiny", "circular", OUTSIDE_RECORD), encoding="utf-8")
+
+    run = _gbdraw(mode, "--gbk", "tiny.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert OUTSIDE_RECORD_WARNING in lines
+    assert "INFO: Record tiny (tiny.gb), record 1 of 1, 100 bp: drew 1 feature (1 CDS); left out 1 source (type not drawn)." in lines
+
+
+def test_web_reply_names_a_feature_outside_its_record(tmp_path: Path) -> None:
+    from gbdraw.api import CircularDiagramRequest
+
+    path = tmp_path / "tiny.gb"
+    path.write_text(_genbank_text("tiny", "circular", OUTSIDE_RECORD), encoding="utf-8")
+    document = _embedded(build_session_document(CircularDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(path)),),
+        output=RenderOutputRequest(output_prefix="tiny", formats=("svg",)),
+    )))
+    reply = render_embedded_canonical_web_request(
+        document["drawings"][0]["renderRequest"], resources=document["resources"], workspace=tmp_path / "web",
+    )
+
+    assert reply["metadata"]["inputSummaries"][0]["warnings"] == [
+        {"code": "feature_outside_record", "message": OUTSIDE_RECORD_WARNING.removeprefix("WARNING: ")}
+    ]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_python_api_names_a_feature_outside_its_record(
+    tmp_path: Path, mode: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    from gbdraw import read_genbank
+
+    path = tmp_path / "tiny.gb"
+    path.write_text(_genbank_text("tiny", "circular", OUTSIDE_RECORD), encoding="utf-8")
+    records = read_genbank(str(path))
+    with caplog.at_level("WARNING", logger="gbdraw.api.input_summary"):
+        diagram = (gbdraw.draw_circular if mode == "circular" else gbdraw.draw_linear)(records)
+
+    assert [record.getMessage() for record in caplog.records if record.levelname == "WARNING"] == [
+        OUTSIDE_RECORD_WARNING.removeprefix("WARNING: ").replace("(tiny.gb)", "(in-memory record)")
+    ]
+    assert diagram is not None
+
+
+def test_the_warning_names_each_feature_by_its_type_name_and_location(tmp_path: Path) -> None:
+    """Up to three features are named, by locus_tag (else gene, label, product), the rest counted."""
+    path = tmp_path / "many.gb"
+    path.write_text(_genbank_text("many", "linear", (
+        ("1..10", 'locus_tag="in1"'),
+        ("complement(101..110)", 'locus_tag="out1"'),
+        ("join(1..10,150..160)", 'gene="out2"'),
+        ("1..150", 'label="out3"'),
+        ("200..210", 'note="no name"'),
+    )), encoding="utf-8")
+
+    run = _gbdraw("linear", "--gbk", "many.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert (
+        "WARNING: Record many (many.gb): left out 4 features that do not fit in the record's 100 bp: "
+        "CDS complement(101..110) (out1), CDS join(1..10,150..160) (out2), CDS 1..150 (out3), and 1 more."
+    ) in _lines(run)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_features_that_fit_their_record_draw_as_before_without_a_warning(tmp_path: Path, mode: str) -> None:
+    """Joins over the origin, partial ends, and a span over a circular record's origin written past its end (the
+    GFF3 way) all fit: each is drawn and nothing warns."""
+    path = tmp_path / "fit.gb"
+    path.write_text(_genbank_text("fit", "circular", (
+        ("join(91..100,1..10)", 'locus_tag="join"'),
+        ("<1..30", 'locus_tag="partial5"'),
+        ("70..>100", 'locus_tag="partial3"'),
+        ("81..110", 'locus_tag="past_end"'),
+        ("1..100", 'locus_tag="whole"'),
+    )), encoding="utf-8")
+
+    run = _gbdraw(mode, "--gbk", "fit.gb", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    lines = _lines(run)
+    assert not [line for line in lines if line.startswith("WARNING")]
+    assert "INFO: Record fit (fit.gb), record 1 of 1, 100 bp: drew 5 features (5 CDS); left out 1 source (type not drawn)." in lines
+
+
+def test_features_after_one_left_out_keep_their_source_identity(tmp_path: Path) -> None:
+    """Leaving out a feature that does not fit moves no other feature's source index or hash: edits and colors that
+    name a later feature still find it."""
+    from gbdraw.api.request_render import resolve_request_records
+    from gbdraw.core.record_metadata import _feature_source_index_map
+    from gbdraw.features.ids import compute_source_feature_hash
+
+    path = tmp_path / "tiny.gb"
+    path.write_text(_genbank_text("tiny", "circular", (("121..240", 'locus_tag="out"'), ("21..90", 'locus_tag="in"'))),
+                    encoding="utf-8")
+    (source,) = read_flat_file_records(str(path))
+    resolved = resolve_request_records(LinearDiagramRequest(records=(RecordInput(GenBankInputSource(path)),)))
+
+    (record,) = resolved.records
+    indexes = _feature_source_index_map(record.features)
+    assert [(feature.qualifiers.get("locus_tag"), indexes[id(feature)]) for feature in record.features] == [
+        (None, 0), (["in"], 2),
+    ]
+    assert compute_source_feature_hash(record.features[1], record) == compute_source_feature_hash(
+        source.features[2], source
+    )
+    assert [item.location for item in resolved.provenance[0].features_outside_record] == ["121..240"]

@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import copy
 import os
 import logging
 from contextlib import contextmanager
+from dataclasses import dataclass
 from collections import Counter
 from collections.abc import Iterator, Sequence, Set as AbstractSet
 import string
@@ -30,7 +32,10 @@ from .record_sequences import read_fasta_records, read_flat_records, read_gff3_t
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
-from gbdraw.core.record_metadata import _copy_source_feature_identity, _feature_source_index_map
+from gbdraw.core.record_metadata import (
+    _copy_source_feature_identity, _feature_source_index_map, _read_coord_map, _source_period,
+)
+from gbdraw.features.coordinates import location_fits_record, location_parts_text
 from gbdraw.features.source import SourceFeatureCatalog, capture_source_features
 
 logger = logging.getLogger(__name__)
@@ -564,6 +569,63 @@ def feature_types_left_out(
     return tuple(sorted(counts.items()))
 
 
+# The qualifiers that name a feature left out of its record, the first one it has.
+_FEATURE_NAME_QUALIFIERS = ("locus_tag", "gene", "label", "product")
+
+
+@dataclass(frozen=True)
+class FeatureOutsideRecord:
+    """A feature left out because it does not fit in its record (``location_fits_record``)."""
+
+    feature_type: str
+    # Its first ``locus_tag``, ``gene``, ``label`` or ``product``, if it has one.
+    name: str | None
+    # Its location as a GenBank file writes it (``location_parts_text``).
+    location: str
+
+
+def _feature_outside_record(feature: SeqFeature) -> FeatureOutsideRecord:
+    qualifiers = feature.qualifiers or {}
+    names = (str(value) for key in _FEATURE_NAME_QUALIFIERS for value in qualifiers.get(key, ())[:1])
+    parts = tuple((int(part.start), int(part.end), part.strand) for part in feature.location.parts)
+    return FeatureOutsideRecord(str(feature.type), next(names, None), location_parts_text(parts))
+
+
+def leave_out_features_outside_record(record: SeqRecord) -> tuple[SeqRecord, tuple[FeatureOutsideRecord, ...]]:
+    """``record`` without the features that do not fit in it, and those features (OV-3678).
+
+    The one owner of that decision: a record is planned through it before any crop, so no drawing, label, legend or
+    analysis reads a feature that starts outside its record or is longer than it. A record whose features all fit is
+    returned as it is. Otherwise the kept features are copies that carry their source identity, as the GFF3 type
+    filter's do, so each keeps its source feature index and hash.
+    """
+
+    length = len(record.seq)
+    outside = [
+        feature for feature in record.features
+        if feature.location is not None and not location_fits_record(feature.location.parts, length)
+    ]
+    if not outside:
+        return record, ()
+    left_out = {id(feature) for feature in outside}
+    indexes = _feature_source_index_map(record.features)
+    base, step = _read_coord_map(record)
+    period = _source_period(record)
+
+    def carried(feature: SeqFeature) -> SeqFeature:
+        kept = copy.copy(feature)
+        _copy_source_feature_identity(
+            feature, kept, index=indexes[id(feature)], coord_base=base, coord_step=step, period=period,
+        )
+        if getattr(feature, "sub_features", None):
+            kept.sub_features = [carried(sub_feature) for sub_feature in feature.sub_features]
+        return kept
+
+    trimmed = copy.copy(record)
+    trimmed.features = [carried(feature) for feature in record.features if id(feature) not in left_out]
+    return trimmed, tuple(_feature_outside_record(feature) for feature in outside)
+
+
 @contextmanager
 def _gff_fasta_errors(gff_file: str, fasta_file: str):
     """Report a failure while reading a GFF3/FASTA pair the way every caller expects."""
@@ -773,6 +835,8 @@ __all__ = [
     "merge_gff_fasta_records",
     "scan_features_recursive",
     "feature_types_left_out",
+    "FeatureOutsideRecord",
+    "leave_out_features_outside_record",
     "filter_features_by_type",
 ]
 
