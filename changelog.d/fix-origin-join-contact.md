@@ -3,6 +3,10 @@
   sorted GFF3 rows, is now drawn as one block over the origin from a display
   start too. A Circular diagram with `--display_start_coordinate` drew a
   connector line all round the ring between the two parts.
+- Fixed: From a display start, a feature drawn over the origin of a circular
+  record, such as a mitochondrial D-loop written `join(16024..16569,1..576)`,
+  is now drawn as one block across the origin. A Circular diagram with
+  `--display_start_coordinate` drew a stroked seam across it at the origin.
 - Fixed: A join over the origin that leaves base 1 out, such as
   `join(2901..3000,2..100)`, now shows its 1-base gap and connector line in the
   whole Circular view as it does from a display start, and its label stands on
@@ -20,4 +24,5 @@
   strand, in the whole view as from a display start. From a display start, the
   label of a two-part join that covers both ends of a circular record with
   parts that touch or overlap each other stands on the middle of its longer
-  part.
+  part; in the whole view, the label of such a join whose parts touch stands
+  on its first part instead of outside the circle at the origin.
