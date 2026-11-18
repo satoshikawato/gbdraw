@@ -3,6 +3,7 @@
 /** @import { PressPoint } from '../utils/popup-bounds.js' */
 /** @import { WebState } from '../state.js' */
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
+import { EDITABLE_LABEL_SELECTOR } from '../services/preview-affordances.js';
 import { isClickAtPress, primaryPressAfter } from '../utils/popup-bounds.js';
 import { nextTick, watch } from '../utils/reactivity.js';
 
@@ -76,7 +77,7 @@ const isSvgEditingTarget = (target) =>
   Boolean(
     target?.closest?.(
       [
-        'text[data-label-editable="true"]',
+        EDITABLE_LABEL_SELECTOR,
         '[data-gbdraw-feature-id]',
         'path[id^="f"]',
         'polygon[id^="f"]',

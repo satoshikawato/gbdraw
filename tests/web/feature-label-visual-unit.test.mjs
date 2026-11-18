@@ -10,6 +10,8 @@ import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
 import { wordedNotice } from './helpers/worded-notice.mjs';
+import { serializeCleanSvg, stripTransientPreviewState } from '../../gbdraw/web/js/services/svg-serialization.js';
+import { LABEL_BINDER_ATTRIBUTES, stripLabelSourceRecords } from '../../gbdraw/web/js/services/preview-affordances.js';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -1335,8 +1337,10 @@ test('the Web finds the labels Python bound to features only by the drawn-groups
 // one index of the SVG, and the binder reads each label's candidate features
 // from one set per candidate list, so the work of a projection grows with the
 // labels and their parts, not with their product (4,713 labels blocked the
-// page for many seconds). Counted, not timed: the queries, the attribute
-// reads, and the array elements mapped by one projection at two sizes.
+// page for many seconds). A Result without a feature catalog finds a label's
+// feature in one index of the extracted features. Counted, not timed: the
+// queries, the attribute reads, and the array elements one projection maps or
+// searches, at two sizes.
 const PARTS_PER_LABEL = 3;
 const manyLabelSvg = (count) => new DOMParser().parseFromString([
   '<svg><g id="records">',
@@ -1352,22 +1356,27 @@ const projectionWork = (count, project) => {
   const hiddenId = 'f-0';
   const svg = manyLabelSvg(count);
   const harness = buildHarness({ svg, featureId: hiddenId, visibilityOverrides: { [hiddenId]: 'off' } });
+  harness.state.extractedFeatures.value = Array.from({ length: count }, (_, index) => featureFor(`f-${index}`));
   const proto = Object.getPrototypeOf(svg.children[0]);
-  const counts = { queries: 0, reads: 0, mapped: 0 };
+  const counts = { queries: 0, reads: 0, mapped: 0, searched: 0 };
   const originals = Object.fromEntries(['querySelectorAll', 'getAttribute', 'hasAttribute']
     .map((name) => [name, proto[name]]));
-  const arrayMap = Array.prototype.map;
+  const { map: arrayMap, find: arrayFind } = Array.prototype;
   proto.querySelectorAll = function (...args) { counts.queries += 1; return originals.querySelectorAll.apply(this, args); };
   proto.getAttribute = function (...args) { counts.reads += 1; return originals.getAttribute.apply(this, args); };
   proto.hasAttribute = function (...args) { counts.reads += 1; return originals.hasAttribute.apply(this, args); };
   // eslint-disable-next-line no-extend-native
   Array.prototype.map = function (...args) { counts.mapped += this.length; return arrayMap.apply(this, args); };
+  // eslint-disable-next-line no-extend-native
+  Array.prototype.find = function (...args) { counts.searched += this.length; return arrayFind.apply(this, args); };
   try {
     project(harness.actions);
   } finally {
     Object.assign(proto, originals);
     // eslint-disable-next-line no-extend-native
     Array.prototype.map = arrayMap;
+    // eslint-disable-next-line no-extend-native
+    Array.prototype.find = arrayFind;
   }
   // The projection did its work: the hidden label's parts are hidden.
   assert.equal(exactParts(svg, hiddenId).filter((part) => part.getAttribute('display') === 'none').length,
@@ -1381,9 +1390,63 @@ for (const [name, project] of [
   test(`one projection of ${name} does work linear in the labels`, () => {
     const small = projectionWork(1000, project);
     const large = projectionWork(2000, project);
-    for (const kind of ['queries', 'reads', 'mapped']) {
+    for (const kind of ['queries', 'reads', 'mapped', 'searched']) {
       assert.ok(large[kind] <= 2.2 * small[kind],
         `${kind} grow linearly with the labels: ${small[kind]} for 1000 labels, ${large[kind]} for 2000`);
     }
   });
 }
+
+// OV-3848: the serializer that writes a Result's text (Save, History) drops
+// the label binder's marks, and keeps a label's source text only where the
+// label shows another text (the record of what Python drew, which an Undo of
+// the edit returns to). The export copy drops the record too. Python's binding
+// stays on both.
+test('a Result written from the mounted root keeps only a renamed label\'s source text, and an export none of the marks', () => {
+  const boundSvg = () => new DOMParser().parseFromString([
+    '<svg><text data-label-editable="true" data-label-key="label-1" data-label-source-text="alpha protein" ',
+    'data-label-feature-id="f-1" data-gbdraw-label-binding-schema="1">renamed</text>',
+    '<text data-label-editable="true" data-label-key="label-2" data-label-source-text="beta" data-label-feature-id="f-2">beta</text>',
+    '<line data-label-feature-id="f-1" /></svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const marksOf = (svg) => svg.querySelectorAll('text').map((element) => LABEL_BINDER_ATTRIBUTES
+    .filter((name) => element.hasAttribute(name)));
+  // The fake root's deep clone is the root itself, so the written copy is read on it.
+  const written = boundSvg();
+  serializeCleanSvg(written);
+  assert.deepEqual(marksOf(written), [['data-label-source-text'], []]);
+  assert.equal(written.querySelector('text').getAttribute('data-label-source-text'), 'alpha protein');
+  const exported = boundSvg();
+  stripTransientPreviewState(exported);
+  assert.deepEqual(marksOf(exported), [['data-label-source-text'], []], 'the shared strip keeps the record');
+  // services/export.js getCurrentSvgClone: the shared strip, then the records.
+  stripLabelSourceRecords(exported);
+  assert.deepEqual(marksOf(exported), [[], []]);
+  for (const svg of [written, exported]) {
+    const label = svg.querySelector('text');
+    assert.deepEqual([label.getAttribute('data-label-feature-id'), label.getAttribute('data-gbdraw-label-binding-schema')], ['f-1', '1']);
+  }
+  assert.deepEqual(LABEL_BINDER_ATTRIBUTES, ['data-label-editable', 'data-label-key', 'data-label-source-text']);
+});
+
+// OV-3848, OV-3880: a remounted Result has no recorded source text, so Reset label
+// edits shows a label's feature row's source text; a label with no feature
+// identity has no row, and while bulk edits exist only Python knows its text:
+// Reset asks for the rerender then, and only then.
+test('Reset label edits shows the row source text of a remounted label, and asks Python for a label with no feature row', () => {
+  const remounted = (featureAttribute) => new DOMParser().parseFromString(
+    `<svg><text data-label-editable="true" data-label-key="label-1"${featureAttribute}>renamed</text></svg>`, 'image/svg+xml'
+  ).documentElement;
+  const tracked = buildHarness({ svg: remounted(' data-label-feature-id="feature:one/[a]"') });
+  setRow(tracked.state, 'feature:one/[a]', { labelText: 'renamed', labelSourceText: 'alpha protein' });
+  tracked.state.labelTextBulkOverrides = { beta: 'BULK' };
+  tracked.actions.resetAllLabelTextOverrides();
+  assert.equal(tracked.svg.querySelector('text').textContent, 'alpha protein');
+  assert.equal(tracked.state.labelReflowForceRequestSeq.value, 0);
+
+  const untracked = buildHarness({ svg: remounted('') });
+  untracked.state.labelTextBulkOverrides = { 'alpha protein': 'renamed' };
+  untracked.actions.resetAllLabelTextOverrides();
+  assert.equal(untracked.state.labelReflowForceRequestSeq.value, 1, 'Python draws the source text');
+  assert.deepEqual(untracked.state.labelTextBulkOverrides, {});
+});
