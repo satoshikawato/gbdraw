@@ -7500,7 +7500,7 @@
                             <label class="text-xs font-medium text-slate-500 block mb-1">{{ t('Legend name') }}</label>
                             <input type="text"
                                    v-committed-value="clickedFeature.legendName === clickedFeature.appliedLegendName ? shownLegendName(clickedFeature.legendName) : clickedFeature.legendName"
-                                   @input="clickedFeature.legendName = $event.target.value"
+                                   @input="clickedFeature.legendName = $event.target.value; clickedFeature.legendNameEdited = true"
                                    @change="settleCommittedField($event.target, handleLegendNameCommit())"
                                    @keydown.enter.prevent="settleCommittedField($event.target, handleLegendNameCommit())"
                                    data-history-managed

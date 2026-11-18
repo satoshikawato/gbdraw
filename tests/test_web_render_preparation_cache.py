@@ -64,7 +64,6 @@ from gbdraw.io.regions import parse_region_spec
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.session import build_session_document
 from tests.utils.session_files import embedded_session, read_session_payload
-from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
@@ -345,6 +344,59 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         name for name in _metrics(render_only_diagnostics) if name.startswith("renderStageBuild:")
     } == {"renderStageBuild:circular_plot_title_content", "renderStageBuild:composition_plan"}
     assert render_only["featureCatalog"] == cold["featureCatalog"]
+
+
+@pytest.mark.parametrize("kind", ["genbank", "gff3"])
+def test_a_record_left_out_names_its_rows_from_the_cached_parse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    """The record a selection leaves out (a record the Web draws OFF) reports its rows suppressed in every
+    Generate, from the parse the record load cached: a warm Generate parses nothing, builds no stage and
+    flattens no left-out GFF3 record."""
+    import gbdraw.legend.row_facts as row_facts
+
+    flattened: list[str] = []
+    original = row_facts.filter_features_by_type
+    monkeypatch.setattr(
+        row_facts, "filter_features_by_type", lambda record, types: (flattened.append(record.id), original(record, types))[1]
+    )
+    if kind == "genbank":
+        left_out = _record("off-record")
+        left_out.features.append(SeqFeature(FeatureLocation(400, 470, strand=1), type="tRNA", qualifiers={}))
+        _write_genbank(tmp_path / "two-records.gbk", (_record("on-record"), left_out))
+        source: GenBankInputSource | GffFastaInputSource = GenBankInputSource(tmp_path / "two-records.gbk")
+    else:
+        sequence = "ATG" * 240
+        (tmp_path / "two.fasta").write_text(f">on\n{sequence}\n>off\n{sequence}\n", encoding="utf-8")
+        (tmp_path / "two.gff3").write_text(
+            "##gff-version 3\non\t.\tCDS\t31\t180\t.\t+\t0\tID=c1\n"
+            "off\t.\tCDS\t31\t180\t.\t+\t0\tID=c2\noff\t.\ttRNA\t401\t470\t.\t+\t.\tID=t1\n",
+            encoding="utf-8",
+        )
+        source = GffFastaInputSource(tmp_path / "two.gff3", tmp_path / "two.fasta")
+    request = CircularDiagramRequest(
+        records=(RecordInput(source=source, selector=parse_record_selector("#1"), record_key="record-1"),),
+        output=RenderOutputRequest(output_prefix="left-out", formats=("svg",)),
+    )
+    document = drawing_view(_embedded(build_session_document(request)))
+    cache = PreparedBiologicalInputCache()
+    cold, _cold_diagnostics = _render(tmp_path, cache, document, request_id=1)
+    cold_flattened = len(flattened)
+    warm, warm_diagnostics = _render(tmp_path, cache, document, request_id=2)
+
+    for result in (cold, warm):
+        [rows] = result["metadata"]["legendRows"]
+        assert "tRNA" in rows["suppressed"] and "tRNA" not in rows["drawn"]
+        assert "CDS" in rows["drawn"]
+    assert warm["results"] == cold["results"]
+    assert cold_flattened == (1 if kind == "gff3" else 0)
+    assert len(flattened) == cold_flattened
+    metrics = _metrics(warm_diagnostics)
+    assert metrics["parsedSourceParseCount"] == 0
+    assert metrics["resolvedRecordCacheHitCount"] == 1
+    assert metrics["renderStageHit:legend_table"] >= 1
+    assert not [name for name in metrics if name.startswith("renderStageBuild:")]
+    assert metrics["preparedInputCacheMutationViolationCount"] == 0
 
 
 def _linear_document(source: Path, *, title: str) -> dict[str, object]:

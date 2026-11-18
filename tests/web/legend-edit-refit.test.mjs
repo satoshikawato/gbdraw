@@ -12,7 +12,8 @@ import { gallerySessionDocument } from './helpers/session-documents.mjs';
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
 
-const { stepRefitsDrawnLegend } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { legendEditConfigLeaves, stepRefitsDrawnLegend } = await import('../../gbdraw/web/js/services/legend-draft-rows.js');
+const { compileDirectEditorMutationPlan } = await import('../../gbdraw/web/js/app/candidate-render.js');
 const { SETTING_APPLICATION, refitFieldsBeforeStep, settingApplicationHelp } = await import('../../gbdraw/web/js/services/setting-application.js');
 const { requestedCanvasOf } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { createFigureSizeField } = await import('../../gbdraw/web/js/app/figure-size-field.js');
@@ -34,7 +35,8 @@ test('the Legend editor and Canvas padding rows are live, name the draft fields 
   const rows = Object.fromEntries(SETTING_APPLICATION.map((entry) => [entry.id, entry]));
   assert.equal(rows['legend-editor'].application, 'live');
   assert.deepEqual(rows['legend-editor'].refitPaths, {
-    'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries', 'config.rules': 'rules'
+    'editorState.legend.entries': 'legendEntries', 'editorState.legend.deletedEntries': 'deletedLegendEntries',
+    'editorState.legend.dormantEntries': 'dormantLegendEntries', 'config.rules': 'rules'
   });
   assert.equal(rows['canvas-padding'].application, 'live');
   assert.deepEqual(rows['canvas-padding'].refitPaths, { 'ui.canvasPadding': 'canvasPadding' });
@@ -105,6 +107,42 @@ test('a rename that writes color rules fits again; a rule color edit does not', 
   const recolored = rules.map((entry) => ({ ...entry, color: '#ff0000' }));
   assert.equal(stepRefitsDrawnLegend([{ path: ['config', 'rules'], before: rules, after: recolored, beforeHas: true, afterHas: true }],
     undefined, { ...after, rules: recolored }), false, 'a rule color stays the size');
+});
+
+// OV-244 (c): the rename of a type's palette row (`CDS`, no color rule draws it) writes no color rule. The request
+// names the row by its key (`objects.legends.row_names`), Python draws the name, and a sized figure is fitted again.
+// The name is the type's (V-OD26): while a captioned rule for the type is used, Python draws its features in the rule's
+// row and the type's "other" row, no `CDS` row. Given the rename as a dormant entry (OV-120; the rule commit that
+// keeps it is pinned in tests/web/legend-sync.test.mjs), the request still carries `[CDS, Coding]`, and the live
+// executor's operation names the type, which it gives the "other" row. Once the rule goes, the same request names the
+// drawn `CDS` row "Coding" again. This test covers the request projection and the live compile only.
+test('a palette row rename is a row name the request carries, with no rule, in every state of a captioned rule for its type', () => {
+  const renamed = [row('CDS', 'Coding'), row('tRNA'), row('rRNA')];
+  const named = { 'objects.legends.row_names': [['CDS', 'Coding']] };
+  assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named);
+  assert.equal(stepRefitsDrawnLegend([entriesChange(ENTRIES, renamed)], undefined, drawing({ legendEntries: renamed, rules: [] })), true);
+  const nd1 = { feat: 'CDS', qual: 'product', val: '^ND1$', color: '#e63946', cap: 'ND1' };
+  const ruledRows = ['ND1', 'other proteins', 'tRNA', 'rRNA'];
+  const waiting = drawing({ legendEntries: ruledRows.map((key) => row(key)), dormantLegendEntries: [row('CDS', 'Coding')], originalLegendOrder: ruledRows });
+  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [nd1] }), named, 'with the rule, the request still names the type');
+  assert.deepEqual(legendEditConfigLeaves({ ...waiting, rules: [] }), named, 'the rule removed: the next request names it');
+  const live = compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: waiting.legendEntries, originalLegendOrder: ruledRows, dormantLegendEntries: waiting.dormantLegendEntries
+  }).operationsByResult[0];
+  assert.deepEqual(live.legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]), [['CDS', 'Coding', true]],
+    'the live edit renames the type\'s drawn row from the waiting entry: CDS, else its "other" row');
+  // The "other" row's own name is its own (D-23) and goes with the type's.
+  const ownName = drawing({ ...waiting, legendEntries: [row('ND1'), row('other proteins', 'Other coding'), row('tRNA'), row('rRNA')] });
+  assert.deepEqual(legendEditConfigLeaves({ ...ownName, rules: [nd1] }),
+    { 'objects.legends.row_names': [['other proteins', 'Other coding'], ['CDS', 'Coding']] });
+  assert.deepEqual(legendEditConfigLeaves({ ...drawing({ legendEntries: renamed }), rules: [] }), named, 'listed again, the row is named');
+  // V-OD27: while the rule holds, a rename of the drawn "other" row names the type: the step changes only the dormant
+  // entry, which the request carries, so a sized figure is fitted again.
+  const proteins = [row('CDS', 'Proteins')];
+  const dormantChange = { path: ['editorState', 'legend', 'dormantEntries'], before: waiting.dormantLegendEntries, after: proteins, beforeHas: true, afterHas: true };
+  assert.equal(stepRefitsDrawnLegend([dormantChange], undefined, { ...waiting, dormantLegendEntries: proteins, rules: [nd1] }), true,
+    'a rename of the type on its "other" row fits again');
 });
 
 test('an Undo or a Redo of such a step fits again; the Undo reads the drawing as it was before the step', () => {

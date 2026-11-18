@@ -224,12 +224,12 @@ export const WORK_ALLOWLIST = [
     requests: ['render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
   },
   {
-    // Python writes the rules that carry the row's features under the new
-    // name (synthesizeColorRules, after it names the qualifiers the rules
-    // read, synthesisQualifiers), so their matches are a request. The rules
-    // also match Result 2's tRNAs, so Python draws that Result again.
-    kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
-    requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesisQualifiers', 'synthesizeColorRules'],
+    // OV-244 (c): a whole palette row's rename names the row only (Python's
+    // row names, `objects.legends.row_names`), as the rename of a row without
+    // features does: no rule is written, so Python synthesizes none and
+    // draws neither Result again; the rename is its own History step.
+    kind: 'Legend rename, palette row with features', stages: ['legend', 'legendFills', 'strokes'], compiles: 1,
+    requests: ['evaluateRules'],
     run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },
   // A delete, its Undo and a Restore also show the strokes: a deleted row's
@@ -251,10 +251,13 @@ export const WORK_ALLOWLIST = [
   {
     // U3b review L2: a mode switch arrives at the Result its mode drew, which
     // already shows that drawing's intent (it was left unchanged), so the
-    // display compiles nothing. OV-286: the arriving Result was applied with
-    // another palette than the departing one (arctic, default), so the palette
-    // watcher prepares the rules once more (one `evaluateRules`).
-    kind: 'mode switch back to a Result', stages: [], compiles: 0, requests: ['evaluateRules'],
+    // display compiles nothing for it. OV-286: the arriving Result was applied
+    // with another palette than the departing one, so the palette watcher
+    // projects the palette and the rules once more. The palette row rename
+    // above matched the rules on this Result's features (the test its color
+    // takes, D-15), so the watcher asks for no match and shows the fills at
+    // once (one compile of the fill domains).
+    kind: 'mode switch back to a Result', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: [],
     before: async (page) => {
       await switchMode(page, 'linear');
       await page.evaluate(async (text) => {

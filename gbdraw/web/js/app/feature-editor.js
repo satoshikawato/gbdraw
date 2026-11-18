@@ -189,7 +189,8 @@ export const createFeatureEditor = ({
     findLegendRowNamed,
     keepBothNamesOf,
     legendEntryName,
-    writeLegendRowColor
+    writeLegendRowColor,
+    runUndoableCheckpoint
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature

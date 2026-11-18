@@ -109,6 +109,8 @@ const popupEdit = async (page, match, edit = {}) => {
     await app.openFeatureEditorFromList(app.filteredFeatures.find(matches), null);
     await window.Vue.nextTick();
     if (!app.clickedFeature) throw new Error(`no popup for ${JSON.stringify(target)}`);
+    // A name typed in the Legend name field and not committed: the color edit below names its rule with it.
+    if (change.typedLegendName !== undefined) app.clickedFeature.legendName = change.typedLegendName;
     if (change.fill) {
       await app.updateClickedFeatureColor(change.fill);
       if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');

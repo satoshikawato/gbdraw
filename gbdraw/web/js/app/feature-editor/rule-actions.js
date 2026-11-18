@@ -109,7 +109,7 @@ import {
  *   | 'selectedResultIndex' | 'selectedSpecificPreset' | 'sessionOperationAvailability' | 'specificRulePresetLoading'
  *   | 'specificRulePresets' | 'svgContainer'>} state
  *   The members of the app state (state.js) this owner and the helpers it passes `state` to read.
- * @property {(intents: RuleLegendIntent[], options?: { drawing?: DrawingState, previousFileIntents?: import('../legend/entry-actions.js').EntryRecord[], isCurrent?: () => boolean, placement?: import('../legend/entry-actions.js').LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>, legendOrder?: readonly PythonLegendKey[] | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {(intents: RuleLegendIntent[], options?: { drawing?: DrawingState, previousFileIntents?: import('../legend/entry-actions.js').EntryRecord[], isCurrent?: () => boolean, placement?: import('../legend/entry-actions.js').LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>, legendOrder?: readonly PythonLegendKey[] | null, defaultRowOf?: import('../legend/entry-actions.js').DefaultRowOf, rowTypeOf?: import('../legend/entry-actions.js').RowTypeOf }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {MoveLegendRecordsPort} moveLegendRecords
  *   The Legend owner's move of a drawing's Legend records; this owner calls it only for Delete settings' take-back.
@@ -174,6 +174,19 @@ const featureRowReader = (context, labelOf) => {
     return typeof row === 'string' ? captionKey(row) : row ? null : captionKey('');
   };
 };
+
+// The key of a type's default row in the next rule table (`featureLegendRows`
+// over the displayed Result's features): its own row, its "other" row while a
+// captioned rule takes some of its features, or null when its features all
+// take captioned rules (a whole-row Merge). Read only when a rule commit stops
+// drawing a renamed type row (V-OD27), so most commits never match again.
+/** @param {Parameters<typeof drawnRuleMatches>[0]} next @returns {(type: string) => PythonLegendKey | null} */
+const nextDefaultRowOf = (next) => (type) => drawnRuleMatches(next).rows.typeRow(type);
+
+// The type whose row a listed row is under the current rule table (`matches`, of the displayed features): K for K's
+// "other" row, else the row's key (K's own row).
+/** @param {ReturnType<typeof drawnRuleMatches>} matches @returns {import('../legend/entry-actions.js').RowTypeOf} */
+const currentRowTypeOf = (matches) => (key) => matches.rows.otherRowType(key) ?? key;
 
 // The drawn type whose "other" row a key is in the displayed Result
 // (`featureLegendRows`), else null: a row the drawing names (D-23).
@@ -284,7 +297,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
       rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows),
-      rendererRows
+      rendererRows,
+      defaultRowOf: nextDefaultRowOf({ rules: candidateRules, features: displayed.features, palette: displayed.palette }),
+      rowTypeOf: currentRowTypeOf(currentMatches)
     };
   };
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
@@ -562,7 +577,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = () => !state.sessionOperationAvailability() && isCurrent()
       && isRuleInputCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
+    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows, defaultRowOf, rowTypeOf } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
     // commit allocates to it (`X [<fill>]` while another row shows `X`).
     /** @type {PythonLegendKey | undefined} */
@@ -587,7 +602,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       isCurrent: current,
       placement,
       rekeyed: inPlace,
-      legendOrder: order
+      legendOrder: order,
+      defaultRowOf,
+      rowTypeOf
     });
     if (!legend) return false;
     // A commit whose answer moves a listed row asks for the rerender, so Python draws that order.

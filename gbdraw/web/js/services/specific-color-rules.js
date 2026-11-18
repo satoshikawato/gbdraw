@@ -233,7 +233,7 @@ export const NO_DRAWN_FEATURES = Object.freeze({ features: [], palette: Object.f
 
 // The key of a feature type's "other" row: Python's `_other_feature_legend_key`.
 /** @param {string} type @returns {PythonLegendKey} */
-const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
+export const otherFeatureRowKey = (type) => captionRowKey(type === 'CDS' ? 'other proteins' : `other ${type}s`);
 
 // The type among `types` whose own row or "other" row `key` is.
 /** @param {string} key @param {Iterable<string>} types @returns {string | undefined} */

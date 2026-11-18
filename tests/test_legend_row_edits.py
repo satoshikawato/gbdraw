@@ -352,6 +352,79 @@ def test_the_cli_options_draw_the_edits_and_a_saved_session_replays_them(
     assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == drawn
 
 
+def _row_swatches(svg: str) -> dict[str, tuple[str, str]]:
+    """Each feature Legend row's key: its text and its swatch fill."""
+
+    swatches = {}
+    for match in re.finditer(r'<g ([^>]*data-legend-key="[^"]*"[^>]*)>(.*?)</g>', svg):
+        key = html.unescape(re.search(r'data-legend-key="([^"]*)"', match[1])[1])
+        text = re.search(r"<text[^>]*>([^<]*)</text>", match[2])
+        fill = re.search(r'fill="([^"]*)"', match[2])
+        swatches[key] = (html.unescape(text[1]) if text else "", fill[1] if fill else "")
+    return swatches
+
+
+def test_a_type_row_named_from_the_cli_keeps_its_palette_color_and_replays(tmp_path: Path, monkeypatch, capsys) -> None:
+    """``CDS<TAB>Coding`` names the CDS row of a 530-CDS genome as the Web app's rename of that row does (OV-244 (c)):
+    the row keeps its key and its palette color, no other row is drawn, and ``render --session`` draws the same SVG."""
+
+    genome = INPUTS / "AP027078.gb"
+    status, err = _gbdraw(monkeypatch, capsys, "circular", "--gbk", str(genome), "-o", str(tmp_path / "plain"), "-f", "svg")
+    assert status == 0, err
+    plain = _row_swatches((tmp_path / "plain.svg").read_text(encoding="utf-8"))
+    rows = _rows_table(tmp_path, "key\tname\thidden\tposition\nCDS\tCoding\n")
+    session = tmp_path / "named.gbdraw"
+    status, err = _gbdraw(monkeypatch, capsys, "circular", "--gbk", str(genome), "--legend_rows", str(rows),
+                          "-o", str(tmp_path / "named"), "-f", "svg", "--save_session", "--session_output", str(session))
+    assert status == 0, err
+    drawn = (tmp_path / "named.svg").read_text(encoding="utf-8")
+    named = _row_swatches(drawn)
+    assert named["CDS"] == ("Coding", plain["CDS"][1])
+    assert {key: row for key, row in named.items() if key != "CDS"} == {key: row for key, row in plain.items() if key != "CDS"}
+    status, err = _gbdraw(monkeypatch, capsys, "render", "--session", str(session), "-o", str(tmp_path / "replay"), "-f", "svg")
+    assert status == 0, err
+    assert (tmp_path / "replay.svg").read_text(encoding="utf-8") == drawn
+
+
+MARKER_TABLE = "CDS\tproduct\tcytochrome c oxidase subunit I\t#ff0000\tMarker\n"
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [
+        # The type's name names its default row, the "other" row while a captioned rule draws some of its features.
+        ("CDS\tCoding\n", {"Marker": "Marker", "other proteins": "Coding"}),
+        # The other row's own name wins (D-23).
+        ("CDS\tCoding\nother proteins\tOther coding\n", {"Marker": "Marker", "other proteins": "Other coding"}),
+        # A rule caption's key is no type's row: it names no other row.
+        ("Marker\tKey genes\n", {"Marker": "Key genes", "other proteins": "other proteins"}),
+        ("Unknown\tCoding\n", {"Marker": "Marker", "other proteins": "other proteins"}),
+    ],
+)
+def test_a_type_name_names_its_other_row_while_a_captioned_rule_draws_some_of_its_features(
+    mode: str, rows: str, expected: dict[str, str], tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """``--legend_rows CDS<TAB>Coding`` with a captioned rule for one CDS (OV-244 (c), V-OD26): Python draws no CDS row
+    then, and the name names the type's "other" row, drawn ``Coding``; the row keeps Python's key as a record."""
+
+    table = tmp_path / "rules.tsv"
+    table.write_text(MARKER_TABLE, encoding="utf-8")
+    rows_table = _rows_table(tmp_path, "key\tname\thidden\tposition\n" + rows)
+    status, err = _gbdraw(monkeypatch, capsys, mode, "--gbk", str(MITO), "-t", str(table), "--legend_rows",
+                          str(rows_table), "-o", str(tmp_path / "named"), "-f", "svg")
+    assert status == 0, err
+    svg = (tmp_path / "named.svg").read_text(encoding="utf-8")
+    drawn = {}
+    for match in re.finditer(r'<g ([^>]*data-legend-key="[^"]*"[^>]*)>(.*?)</g>', svg):
+        attributes = {name: html.unescape(value) for name, value in re.findall(r'([\w:-]+)="([^"]*)"', match[1])}
+        key = attributes.get("data-gbdraw-base-data-legend-key", attributes["data-legend-key"])
+        text = re.search(r"<text[^>]*>([^<]*)</text>", match[2])
+        drawn.setdefault(key, html.unescape(text[1]) if text else "")
+    assert "CDS" not in drawn
+    assert {key: drawn[key] for key in expected} == expected
+
+
 @pytest.mark.parametrize(
     ("text", "message"),
     [

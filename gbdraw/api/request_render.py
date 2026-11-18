@@ -140,6 +140,7 @@ from gbdraw.labels.filtering import (
     read_qualifier_priority_file,
 )
 from gbdraw.labels.fit import WARN_SEARCH_SECONDS, LabelFitReport
+from gbdraw.legend.row_facts import LeftOutRecord, cover_records_left_out
 from gbdraw.layout.linear_multi_record import drawn_unit_rows, grid_display_pairs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology, reads_over_origin
@@ -532,6 +533,8 @@ class PreparedDiagramInputs:
     feature_bindings: Mapping[tuple[str, str], IdentityBindings] | None = None
     # Source parses shared by the loads of one ``_load_request_records`` call.
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] | None = field(default=None, repr=False, compare=False)
+    # The records of the request's files that its record selection does not draw (``_with_records_left_out``).
+    records_left_out: tuple[LeftOutRecord, ...] = field(default=(), repr=False, compare=False)
 
 
 def _is_current_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
@@ -1474,6 +1477,42 @@ def _load_request_records(
     )))
 
 
+def _with_records_left_out(
+    request: DiagramRequest,
+    collection: ResolvedRecordCollection,
+    inputs: PreparedDiagramInputs,
+    parsed_sources: Mapping[tuple[object, ...], ParsedRecordInputs],
+) -> PreparedDiagramInputs:
+    """``inputs`` with the records of the request's files that its record selection does not draw.
+
+    The Web sends a drawing's files with the records it draws; the records it draws OFF are the rest of
+    those files (a file keeps one record ON). The Legend row facts name their rows as rows the draft did
+    not draw (``LegendRowFacts``). The record load parsed each file already: ``parsed_sources`` holds the
+    parse, or the prepared cache does when the load reused a resolved collection. A record in memory is
+    drawn. Only references are kept: a GFF3 record is flattened to the request's types when the facts are
+    read (``producible_drawing_rows``), so a render that does not read them pays nothing. Each record left
+    out is keyed by its parse and place, so the facts' render stage keeps it.
+    """
+
+    drawn: dict[tuple[object, ...], tuple[RecordInputSource, set[int]]] = {}
+    for item in collection.provenance:
+        source = request.records[item.input_index].source
+        if not isinstance(source, InMemoryRecordSource):
+            drawn.setdefault(_source_key(source), (source, set()))[1].add(item.source_record_index)
+    gff_types = _gff_feature_types(inputs.gff_candidate_features, inputs.gff_keep_all_features)
+    left_out: list[LeftOutRecord] = []
+    for key, (source, indexes) in drawn.items():
+        gff3 = isinstance(source, GffFastaInputSource)
+        spec = _prepared_source_cache_spec(source)
+        for index, record in enumerate((parsed_sources.get(key) or load_render_source_records(source)).records):
+            if index in indexes:
+                continue
+            if spec is not None:
+                register_prepared_value_identity(record, (RECORD_IDENTITY_TAG, "left-out", spec[0], index))
+            left_out.append(LeftOutRecord(record, gff3, gff_types if gff3 else None))
+    return replace(inputs, records_left_out=tuple(left_out))
+
+
 def _render_source_loaders() -> tuple[GenBankLoader, GffFastaLoader, FastaLoader]:
     """The loaders a request render reads its record sources with (read when called).
 
@@ -2058,6 +2097,7 @@ def plan_circular_request(
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+        inputs = _with_records_left_out(unresolved_request, collection, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
@@ -2122,6 +2162,7 @@ def plan_circular_batch_request(
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+        inputs = _with_records_left_out(unresolved_request, collection, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request, collection, rotated = _with_origin_feature(unresolved_request, collection)
         inputs = _materialize_feature_inputs(unresolved_request, collection, inputs)
@@ -2301,6 +2342,7 @@ def _load_linear_request(request: LinearDiagramRequest) -> _LoadedLinearRequest:
     parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] = {}
     with _request_render_diagnostic_phase("recordLoad"):
         unresolved_request, collection = _load_request_records(unresolved_request, inputs, parsed_sources)
+        inputs = _with_records_left_out(unresolved_request, collection, inputs, parsed_sources)
     with _request_render_diagnostic_phase("preparation"):
         projected_request = _with_window_layout(replace(
             unresolved_request,
@@ -3447,8 +3489,9 @@ def _build_request_plan_diagram(
                     mode="circular",
                     request=item_plan.request,
                     records=item_plan.records,
-                    drawing=item_plan.build(
-                        label_fit_warn_search_seconds=label_fit_warn_search_seconds
+                    drawing=cover_records_left_out(
+                        item_plan.build(label_fit_warn_search_seconds=label_fit_warn_search_seconds),
+                        item_plan.inputs.records_left_out if item_plan.inputs is not None else (),
                     ),
                     inputs=item_plan.inputs,
                     transforms=item_plan.transforms,
@@ -3537,6 +3580,7 @@ def _build_request_plan_diagram(
                 and linear_artifacts.extraction.identity_manifest is not None
                 else current_artifacts.protein_identity_manifest
             )
+    cover_records_left_out(drawing, plan.inputs.records_left_out if plan.inputs is not None else ())
     return PreparedDiagramRequest(
         mode=plan.mode,
         transforms=plan.transforms,

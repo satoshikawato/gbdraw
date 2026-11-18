@@ -1138,6 +1138,19 @@ CDS	Protein-coding genes		2
 tRNA		true	3
 ```
 
+A line that names a feature type's own row, such as `CDS`, renames that row
+and keeps its default color, as renaming the row in the Web app's Legend
+editor does:
+
+```tsv
+key	name	hidden	position
+CDS	Coding
+```
+
+While a color rule with a Legend name takes some of the type's features, the
+type's name names its "other" row (`other proteins` for `CDS`), unless the
+table gives that row a name of its own.
+
 `--canvas_padding TOP,RIGHT,BOTTOM,LEFT` adds room in px around the figure
 (config key `canvas.padding`); see
 [Figure size and PNG DPI](REFERENCE/output-formats-and-export.md#figure-size-and-png-dpi).

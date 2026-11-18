@@ -401,6 +401,21 @@ class LegendRowEdits:
         return bool(self.names or self.hidden or self.order)
 
 
+def _type_names_of_other_rows(
+    names: Mapping[LegendRowKey, LegendRowName], keys: Iterable[LegendRowKey]
+) -> dict[LegendRowKey, LegendRowName]:
+    """The names that name a type's "other" row in ``keys``: each name of a key the drawing has no row of, given to
+    the "other" row of that key read as a feature type (``_other_feature_legend_key``). A key that is no feature
+    type's has no "other" row in a drawing, so its name names none."""
+
+    drawn = set(keys)
+    return {
+        _other_feature_legend_key(key): name
+        for key, name in names.items()
+        if key not in drawn and _other_feature_legend_key(key) in drawn
+    }
+
+
 def apply_legend_row_edits(legend_table: LegendTable, edits: LegendRowEdits) -> LegendTable:
     """THE one place Python applies a request's Legend row edits; returns the table the legend measures and draws.
 
@@ -410,7 +425,10 @@ def apply_legend_row_edits(legend_table: LegendTable, edits: LegendRowEdits) -> 
     ``tests/fixtures/legend_row_edit_vectors.json``):
 
     1. A rename gives the row of a key its name; the row shows that name as its key and keeps Python's key as a
-       record. The drawn names then follow the naming rule (``drawn_legend_names``).
+       record. The name of a feature type's row names the type's default row whichever key Python gives it: while
+       the drawing has no row of the type's key (a captioned rule draws some of its features), the type's "other"
+       row (``other_feature_row_name``), unless that row is given a name of its own. The drawn names then follow
+       the naming rule (``drawn_legend_names``).
     2. A hidden row stays in the drawing, hidden, with a record that Python drew it shown; it is not measured.
     3. The order puts the rows of the listed keys first, in the listed order, then the other rows in their order;
        the feature Legend group records Python's order when the rows move.
@@ -440,8 +458,10 @@ def apply_legend_row_edits(legend_table: LegendTable, edits: LegendRowEdits) -> 
         edited._python_order = tuple(solid)
     edited._rows = rows
     edited._unedited_texts = {key: names.drawn for key, names in legend_table.names().items()}
+    names = dict(edits.names)
     edited._renamed = {
-        key: name for key, name in dict(edits.names).items() if key in solid and name != key
+        key: name for key, name in {**_type_names_of_other_rows(names, solid), **names}.items()
+        if key in solid and name != key
     }
     edited._hidden = {key: None for key in edits.hidden if key in solid}
     seen: dict[tuple[LegendRowName, tuple[object, ...]], LegendRowKey] = {}

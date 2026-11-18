@@ -324,8 +324,8 @@ edits are carried forward. Generate places legend entries in the edited order
 on its new layout; an entry that appears later follows them. Generate may not
 draw a legend row, such as GC content while it is off or a Depth row while
 **Show Depth** is off. If you rename such a row, the new name waits with the
-colors and applies when a later Generate draws the row. Removing the row's data
-also discards the waiting name and colors. Canvas padding
+colors and applies when a later Generate draws the row, also after the File is
+replaced. Removing the row's data discards the waiting name and colors. Canvas padding
 applies once to every Result, including each Result of a batch. For the same
 diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when
@@ -1709,7 +1709,19 @@ keeps `CDS (2)` as written, and the numbering of `CDS` skips it. Rows of one
 name and one swatch are one row, so **Keep both** with an equal swatch gives
 one row and its button names it without a number. When the rename takes only
 some features of a row, their new row goes right after the row of that name,
-so the legend draws the name the dialog showed. Renaming a row that a feature type's default
+so the legend draws the name the dialog showed. Renaming a whole row that no specific color
+rule draws, such as `CDS`, changes only the row's name: it writes no specific color rule, its
+features keep their default color, and **Reset** returns the name. This holds from the Legend
+editor and from the popup's Legend name, also on a row of one feature, and for a type's "other"
+row such as `other proteins`. The name is the type's: while a color rule with a Legend name takes
+some of the type's features, the rest are drawn in the type's "other" row under this name, and the
+type's row keeps it when the rule goes. Renaming the "other" row renames the type the same way, so
+the name stays the same in both states whichever row you renamed. Typing the row's default name
+(`CDS`, or `other proteins` while the rule holds) gives the default name back. These renames still
+write rules: **Merge into
+"<name>"**, a pick from the popup's list, a typed name of a color rule group in the row's color,
+**This feature only** on a row of several features, and a rename of a row that color rules or a
+per-feature color edit draw. Renaming a row that a feature type's default
 color draws keeps its features drawn when you later clear that type in **Feature Types**; set
 their **Feature visibility** to **Off** to hide them. In the color scope, legend name, and
 **Reset fill color** dialogs, whether a fill color in the popup or the Features

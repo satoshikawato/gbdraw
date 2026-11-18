@@ -177,6 +177,7 @@ test('D-58: a row deleted on one Result of a batch stays hidden in the request w
     slices: {},
     legendEntries: { value: keysOfA.map((key) => row(key)) },
     deletedLegendEntries: { value: [row('tRNA'), row('Added row')] },
+    dormantLegendEntries: { value: [] },
     manualSpecificRules: [],
     canvasPadding: NO_PADDING
   };

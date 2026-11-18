@@ -2274,18 +2274,40 @@ test('a popup color change for a rule whose row another rule also draws shows Ge
   await expectLiveEqualsGenerate(page, { label: 'a popup color change for a rule whose row another rule also draws' });
 });
 
-// OV-2265 (release-tier random walk, seed 40923303904): a Legend name on the
-// feature of a type row with a Legend color of its own gives the row a rule
-// and keeps that color, live and at Generate. A later rule commit that leaves
-// the row's rule alone kept refusing the edit (LEGEND_ROW_CONFLICT); one that
-// recolors the row's rule recolors the row (OV-61).
+// The editor's rows and deleted rows, and the keys of the drawing's Legend strokes and colors.
+const legendEditorState = (page) => page.evaluate(async () => {
+  const app = window.__GBDRAW_APP__;
+  const drawing = (await import('/gbdraw/web/js/state.js')).state.activeDrawing();
+  return {
+    listed: app.legendEntries.map((entry) => entry.caption),
+    deleted: app.deletedLegendEntries.map((entry) => entry.originalCaption || entry.caption),
+    edits: [Object.keys(drawing.legendStrokeOverrides), Object.keys(drawing.legendColorOverrides)]
+  };
+});
+// A rule row with a Legend color of its own under its key, `Walk group`: a
+// popup color with that Legend name typed gives the fixture's only
+// repeat_region a rule of its own, and a popup color on that rule's whole group
+// recolors the rule and stores the color under the row's key. (A Legend name on
+// a type row that no rule draws changes only its name, PD-OI-089 scenario
+// revision 3, so it no longer gives the row a rule.)
+const ruleRowWithLegendColor = async (page) => {
+  await popupEdit(page, { type: 'repeat_region' }, { typedLegendName: 'Walk group', fill: '#2a9d8f' });
+  await popupEdit(page, { type: 'repeat_region' }, { fill: '#123456' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.filter(({ cap }) => cap === 'Walk group')
+    .map(({ cap, color }) => [cap, color])), 'one rule draws the row').toEqual([['Walk group', '#123456']]);
+  expect((await legendEditorState(page)).edits[1], 'the row\'s Legend color is under its key').toContain('Walk group');
+  return 'Walk group';
+};
+
+// OV-2265 (release-tier random walk, seed 40923303904): a rule row with a
+// Legend color of its own keeps that color, live and at Generate. A later rule
+// commit that leaves the row's rule alone kept refusing the edit
+// (LEGEND_ROW_CONFLICT); one that recolors the row's rule recolors the row (OV-61).
 test('a rule commit beside a rule row with a Legend color of its own is applied, live = Generate (OV-2265)', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
   await addColorRule(page, FL1_ALPHA);
-  await legendRowColor(page, 'repeat_region', '#123456');
-  await popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' });
-  await settleLive(page);
+  await ruleRowWithLegendColor(page);
   const fills = async () => Object.fromEntries((await semanticSnapshot(page)).legend
     .filter((row) => ['alpha', 'Walk group'].includes(row.key)).map((row) => [row.key, row.fill.toLowerCase()]));
   expect(await fills(), 'the named row keeps its Legend color').toEqual({ alpha: '#e63946', 'Walk group': '#123456' });
@@ -2315,31 +2337,15 @@ const STALE_ROUTES = {
   'its rule removed': async (page, row) => appAction(page, 'removeSpecificRule', await ruleIndex(page, row)),
   'its rule recaptioned': async (page, row) => appAction(page, 'setSpecificRuleField', await ruleIndex(page, row), 'cap', 'Other name')
 };
-// The editor's rows and deleted rows, and the keys of the drawing's Legend strokes and colors.
-const legendEditorState = (page) => page.evaluate(async () => {
-  const app = window.__GBDRAW_APP__;
-  const drawing = (await import('/gbdraw/web/js/state.js')).state.activeDrawing();
-  return {
-    listed: app.legendEntries.map((entry) => entry.caption),
-    deleted: app.deletedLegendEntries.map((entry) => entry.originalCaption || entry.caption),
-    edits: [Object.keys(drawing.legendStrokeOverrides), Object.keys(drawing.legendColorOverrides)]
-  };
-});
-// The rule row of a Legend edit: `Alpha row` (a stroke, or none), or a type row
-// with a Legend color of its own that a popup Legend name gives a rule
-// (`Walk group`, OV-2265), which keeps the color under the row's key.
+// The rule row of a Legend edit: `Alpha row` (a stroke, or none), or
+// `Walk group`, a rule row with a Legend color of its own under its key.
 const STALE_ROWS = {
   stroke: async (page) => {
     await addColorRule(page, STALE_ALPHA_RULE);
     await legendRowStrokeColor(page, 'Alpha row', '#7b2cbf');
     return 'Alpha row';
   },
-  color: async (page) => {
-    await legendRowColor(page, 'repeat_region', '#123456');
-    await popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' });
-    await settleLive(page);
-    return 'Walk group';
-  },
+  color: ruleRowWithLegendColor,
   none: async (page) => {
     await addColorRule(page, STALE_ALPHA_RULE);
     return 'Alpha row';
