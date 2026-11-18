@@ -1555,6 +1555,10 @@
       "reason": "The Web checks a Session's file bindings at Load (it drops a refused fileUid with a repair row) and the CLI checks them at replay (it refuses the Session); the shared vector file makes both accept and refuse the same values.",
       "retireWhen": "Web Load reads a stored Session's file bindings through Python",
       "source": "twin.unregistered.v1 on fix/linear-file-card-identity; an authority-only row that goes in before its twin, with pending until that branch lands",
+      "whyNotAskPython": "Web Load checks a Session's file bindings before any Worker is started, and a saved Session must load and show its repair rows without Python.",
+      "whyNotGenerate": "The rule is one field check (a non-empty string, or left out) with different outcomes on each side: the Web drops the value and lists a repair row, Python refuses the Session; there is no Python value to generate from.",
+      "retireBy": "2027-02-28",
+      "waiver": "The row registers the check pair of a fix pull request in the same change; no row was retired first because this authority-only pull request holds no production change. The row retires with the Web Load check when Load reads file bindings through Python.",
       "pending": true
     }
   ]
