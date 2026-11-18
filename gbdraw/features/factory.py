@@ -254,6 +254,16 @@ def _feature_geometry(
     )
 
 
+def _record_origin(
+    gb_record: SeqRecord, record_transform: RecordDisplayTransform | None
+) -> tuple[RecordDisplayTransform, int | None]:
+    """The transform ``gb_record`` is drawn with (the unset one when no plan bound one), and its length when a
+    span may cross its origin, else None: connector lines over the origin are drawn only there, in every view."""
+
+    transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
+    return transform, len(gb_record.seq) if spans_may_cross_origin(gb_record, transform) else None
+
+
 @dataclass(frozen=True)
 class FeatureBuildResult:
     """Visible features partitioned by their resolved rendering layer."""
@@ -287,9 +297,7 @@ def _build_feature_layers(
     repeat_count: int = 0
     feature_count: int = 0
     genome_length: int = len(gb_record.seq)
-    transform = record_transform if record_transform is not None else unset_record_transform(gb_record)
-    # Connector lines over the origin are drawn only where a span may cross it, in every view.
-    origin_length = genome_length if spans_may_cross_origin(gb_record, transform) else None
+    transform, origin_length = _record_origin(gb_record, record_transform)
     source_indexes = _feature_source_index_map(gb_record.features)
     shared_hashes = shared_source_feature_hashes(gb_record)
     instance_of = feature_instances(gb_record)
