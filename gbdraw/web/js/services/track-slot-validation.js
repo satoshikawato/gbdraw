@@ -1351,6 +1351,21 @@ export const clampTrackAxisIndex = (value, slotCount, losses = null) => {
 };
 
 /**
+ * The Axis index of a Circular or Linear stack after rows leave it, so no row that stays crosses the Axis (R10): a placed
+ * index lowered by the rows before it that leave, or null for an unset one, which stays unset. The caller names the rows
+ * that leave by `leaves`, read on the rows before the change. The one rule of the stack editors' managed-row commits and
+ * of a feature density track's removal.
+ * @template T
+ * @param {readonly T[]} rows The stack before the change.
+ * @param {number | null} axisIndex
+ * @param {(row: T) => boolean} leaves
+ * @returns {number | null}
+ */
+export const axisIndexAfterRowsLeave = (rows, axisIndex, leaves) => (
+  axisIndex === null ? null : axisIndex - rows.slice(0, axisIndex).filter(leaves).length
+);
+
+/**
  * Whether a drawing's custom track stack of `stack` is placed: the request draws it (its Use custom stack is on), or an
  * edit of the stack placed it (its Axis index is set). A stack neither placed is the stack a new drawing holds, with
  * its sides and lane directions unset; the Load and every change that is no edit of the stack keep it so, and the

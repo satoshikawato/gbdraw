@@ -9,6 +9,7 @@ import {
   depthSourceLoss,
   depthTrackMatrixWidth,
   nextDepthSlotTrackIndex,
+  leavesOnDepthSeriesRemoval,
   reconcileManagedDepthSlots,
   reindexDepthSlots,
   shownAfterSourceChange
@@ -26,7 +27,7 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
-import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterRowsLeave, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -250,20 +251,19 @@ export const editLinearFeatureDensityRows = (changeTrackLayout, drawing, edit, n
  */
 
 /**
- * The stack after managed rows left it or joined it: `nextSlots` are the rows that stay, by their ids, and `newSlots`
- * go after them. A placed Axis index is lowered by the rows that leave before it, so no other row crosses the Axis
- * (R10); an unset one stays unset, so a stack nobody placed stays unplaced (OV-3696). The caller normalizes the stack
- * after it.
+ * The stack after managed rows left it or joined it: `nextSlots` are the rows that stay, `leaves` names the rows that
+ * leave, read on the rows before the change (by default the rows `nextSlots` does not hold; a change that copies the
+ * rows names them itself), and `newSlots` go after them. A placed Axis index is lowered by the rows
+ * that leave before it (`axisIndexAfterRowsLeave`), so no other row crosses the Axis (R10); an unset one stays unset,
+ * so a stack nobody placed stays unplaced (OV-3696). The caller normalizes the stack after it.
  * @param {DrawingState} drawing @param {LinearTrackSlot[]} nextSlots @param {LinearTrackSlot[]} [newSlots]
+ * @param {(slot: LinearTrackSlot) => boolean} [leaves]
  */
-const commitManagedLinearSlots = (drawing, nextSlots, newSlots = []) => {
+const commitManagedLinearSlots = (drawing, nextSlots, newSlots = [], leaves = (slot) => !nextSlots.includes(slot)) => {
   /** @type {LinearTrackSlot[]} */
   const slots = drawing.adv.linear_track_slots;
   const axis = clampTrackAxisIndex(drawing.adv.linear_track_slots_axis_index, slots.length);
-  if (axis !== null) {
-    const staying = new Set(nextSlots.map((slot) => String(slot.id)));
-    drawing.adv.linear_track_slots_axis_index = axis - slots.slice(0, axis).filter((slot) => !staying.has(String(slot.id))).length;
-  }
+  if (axis !== null) drawing.adv.linear_track_slots_axis_index = axisIndexAfterRowsLeave(slots, axis, leaves);
   slots.splice(0, slots.length, ...nextSlots, ...newSlots);
 };
 
@@ -274,7 +274,9 @@ const commitManagedLinearSlots = (drawing, nextSlots, newSlots = []) => {
 const removeLinearDepthSeriesRows = (drawing, removedIndex, keptSeries) => commitManagedLinearSlots(
   drawing,
   // The reindexed rows are the drawing's own rows, copied (R13: the service types them as DepthSlotRow).
-  /** @type {LinearTrackSlot[]} */ (reindexDepthSlots({ slots: drawing.adv.linear_track_slots, removedIndex, activeCount: keptSeries }))
+  /** @type {LinearTrackSlot[]} */ (reindexDepthSlots({ slots: drawing.adv.linear_track_slots, removedIndex, activeCount: keptSeries })),
+  [],
+  leavesOnDepthSeriesRemoval({ removedIndex, activeCount: keptSeries })
 );
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as

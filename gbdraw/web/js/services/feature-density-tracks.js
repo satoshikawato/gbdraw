@@ -14,7 +14,7 @@ import { isUnsetValue } from '../utils/field-reading.js';
 import { cloneJsonData } from './json-clone.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
-import { nextCopyId, nextNumberedId } from './track-slot-validation.js';
+import { axisIndexAfterRowsLeave, nextCopyId, nextNumberedId } from './track-slot-validation.js';
 
 const TRACK_SHAPE = Object.freeze({ kind: /** @type {const} */ ('ref'), name: 'CanonicalFeatureDensityTrack' });
 
@@ -141,9 +141,9 @@ export const insertFeatureDensitySlots = (rows, axisIndex, trackIds, makeSlot) =
  */
 export const removeFeatureDensityRows = (rows, axisIndex, trackId) => {
   const drawsTrack = (/** @type {T} */ row) => row.renderer === 'feature_density' && String(row.params?.track ?? '') === trackId;
-  const before = axisIndex === null ? 0 : rows.slice(0, axisIndex).filter(drawsTrack).length;
+  const axis = axisIndexAfterRowsLeave(rows, axisIndex, drawsTrack);
   rows.splice(0, rows.length, ...rows.filter((row) => !drawsTrack(row)));
-  return axisIndex === null ? null : axisIndex - before;
+  return axis;
 };
 
 /**

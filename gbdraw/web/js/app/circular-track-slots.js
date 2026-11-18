@@ -17,9 +17,9 @@ import {
 } from '../services/conservation-series.js';
 import {
   DEPTH_FILES_CHANGE,
-  isDefaultManagedDepthSlot,
   depthSourceLoss,
   nextDepthSlotTrackIndex,
+  leavesOnDepthSeriesRemoval,
   reconcileManagedDepthSlots,
   reindexDepthSlots,
   representativeDepthFiles,
@@ -60,6 +60,7 @@ import {
   annotationSetForNewRow,
   annotationSetIdsOf,
   automaticAnnotationTrackSlots,
+  axisIndexAfterRowsLeave,
   clampTrackAxisIndex,
   nextCopyId,
   nextNumberedId,
@@ -622,38 +623,28 @@ const reassigningRingColors = (move, sync) => (drawing, ...args) => {
 };
 
 /**
- * The stack after managed rows left it or joined it: `nextSlots` are the rows that stay (the managed ones by their ids),
- * and `newSlots` go in at `preferredInsertIndex`, inside the Axis. A placed Axis index is lowered by the managed rows
- * that leave before it, so no other row crosses the Axis (R10); an unset one stays unset, so a stack nobody placed
- * stays unplaced (OV-3696). The caller normalizes the stack after it.
+ * The stack after managed rows left it or joined it: `nextSlots` are the rows that stay, `leaves` names the rows that
+ * leave, read on the rows before the change (by default the rows `nextSlots` does not hold; a change that copies the
+ * rows names them itself), and `newSlots` go in at `preferredInsertIndex`, inside the Axis. The Axis
+ * index the rows read as is lowered by the rows that leave before it (`axisIndexAfterRowsLeave`), so no other row
+ * crosses the Axis (R10); only a placed stack has it written, so a stack nobody placed stays unplaced (OV-3696). The
+ * caller normalizes the stack after it.
  * @param {DrawingState} drawing
- * @param {{ nextSlots: CircularTrackSlot[], newSlots?: CircularTrackSlot[], managedPredicate: (slot: CircularTrackSlot | null | undefined) => boolean, preferredInsertIndex?: number | null }} mutation
+ * @param {{ nextSlots: CircularTrackSlot[], newSlots?: CircularTrackSlot[], leaves?: (slot: CircularTrackSlot) => boolean, preferredInsertIndex?: number | null }} mutation
  */
 const commitManagedSlotMutation = (drawing, {
   nextSlots,
   newSlots = [],
-  managedPredicate,
+  leaves = (slot) => !nextSlots.includes(slot),
   preferredInsertIndex = null
 }) => {
   /** @type {CircularTrackSlot[]} */
   const currentSlots = Array.isArray(drawing.adv.circular_track_slots)
     ? drawing.adv.circular_track_slots
     : [];
-  const currentAxis = currentAxisIndex(drawing, currentSlots);
-  const retainedManagedIds = new Set(
-    (Array.isArray(nextSlots) ? nextSlots : [])
-      .filter((slot) => managedPredicate(slot))
-      .map((slot) => String(slot?.id || '').trim())
-      .filter(Boolean)
-  );
-  const removedBeforeAxis = currentSlots
-    .slice(0, currentAxis)
-    .filter((slot) => (
-      managedPredicate(slot) &&
-      !retainedManagedIds.has(String(slot?.id || '').trim())
-    )).length;
   const committed = Array.isArray(nextSlots) ? nextSlots.slice() : [];
-  const axis = Math.max(0, currentAxis - removedBeforeAxis);
+  // The index the rows read as is a number, so the rule gives a number back.
+  const axis = /** @type {number} */ (axisIndexAfterRowsLeave(currentSlots, currentAxisIndex(drawing, currentSlots), leaves));
   const additions = (Array.isArray(newSlots) ? newSlots : []).map((slot) => {
     applyPlacementDefaults(slot, 'inside');
     return slot;
@@ -694,7 +685,7 @@ const removeCircularDepthSeriesRows = (drawing, removedIndex, keptSeries) => com
   nextSlots: /** @type {CircularTrackSlot[]} */ (reindexDepthSlots({
     slots: drawing.adv.circular_track_slots, removedIndex, activeCount: keptSeries
   })),
-  managedPredicate: isDefaultManagedDepthSlot
+  leaves: leavesOnDepthSeriesRemoval({ removedIndex, activeCount: keptSeries })
 });
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -1087,7 +1078,6 @@ export const createCircularTrackSlotEditor = ({
     commitManagedSlotMutation(drawing, {
       nextSlots,
       newSlots,
-      managedPredicate: isDefaultManagedDepthSlot,
       preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
     });
     refreshSlots(drawing);
@@ -1177,7 +1167,6 @@ export const createCircularTrackSlotEditor = ({
     commitManagedSlotMutation(drawing, {
       nextSlots,
       newSlots: missingSlots,
-      managedPredicate: isManagedConservationSlot,
       preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
     });
     refreshSlots(drawing);

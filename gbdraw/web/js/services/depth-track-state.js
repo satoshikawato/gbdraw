@@ -838,40 +838,58 @@ const disableInvalidManualDepthSlot = (slot, removedTrackIndex = null) => {
   return next;
 };
 
-/** @param {ReindexDepthSlotsOptions} [options] */
-export const reindexDepthSlots = ({
-  slots,
-  removedIndex,
-  activeCount
-} = {}) => {
+/**
+ * A stack row after Depth series `idx` is removed and `count` series stay: a copy with its new series index, a manual
+ * Depth row of no series left turned off, or null for a managed Depth row of no series left, which leaves the stack.
+ * @param {DepthSlotRow} slot @param {number} idx @param {number} count
+ * @returns {ClonedDepthSlot | null}
+ */
+const depthSlotAfterSeriesRemoval = (slot, idx, count) => {
+  if (!slot || String(slot.renderer || '') !== 'depth') return cloneSlot(slot);
+  const oldTrackIndex = depthSlotTrackIndex(slot);
+  const isManaged = isDefaultManagedDepthSlot(slot);
+  if (oldTrackIndex === null || oldTrackIndex === idx) {
+    return isManaged ? null : disableInvalidManualDepthSlot(slot, oldTrackIndex ?? idx);
+  }
+  const newTrackIndex = oldTrackIndex > idx ? oldTrackIndex - 1 : oldTrackIndex;
+  if (newTrackIndex < 0 || newTrackIndex >= count) {
+    return isManaged ? null : disableInvalidManualDepthSlot(slot, oldTrackIndex);
+  }
+  const next = cloneSlot(slot);
+  next.params.track_index = newTrackIndex;
+  return next;
+};
+
+/**
+ * The series index and count of a removal as `reindexDepthSlots` reads them, or null when nothing is removed.
+ * @param {ReindexDepthSlotsOptions} options
+ * @returns {{ idx: number, count: number } | null}
+ */
+const seriesRemoval = ({ removedIndex, activeCount }) => {
   const idx = Number(removedIndex);
-  const count = Math.max(0, Number(activeCount) || 0);
-  if (!Array.isArray(slots) || !Number.isInteger(idx) || idx < 0) {
+  return Number.isInteger(idx) && idx >= 0 ? { idx, count: Math.max(0, Number(activeCount) || 0) } : null;
+};
+
+/** @param {ReindexDepthSlotsOptions} [options] */
+export const reindexDepthSlots = (options = {}) => {
+  const { slots } = options;
+  const removal = seriesRemoval(options);
+  if (!Array.isArray(slots) || removal === null) {
     return Array.isArray(slots) ? slots.map((slot) => cloneSlot(slot)) : [];
   }
-  /** @type {ClonedDepthSlot[]} */
-  const nextSlots = [];
-  slots.forEach((slot) => {
-    if (!slot || String(slot.renderer || '') !== 'depth') {
-      nextSlots.push(cloneSlot(slot));
-      return;
-    }
-    const oldTrackIndex = depthSlotTrackIndex(slot);
-    const isManaged = isDefaultManagedDepthSlot(slot);
-    if (oldTrackIndex === null || oldTrackIndex === idx) {
-      if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot, oldTrackIndex ?? idx));
-      return;
-    }
-    const newTrackIndex = oldTrackIndex > idx ? oldTrackIndex - 1 : oldTrackIndex;
-    if (newTrackIndex < 0 || newTrackIndex >= count) {
-      if (!isManaged) nextSlots.push(disableInvalidManualDepthSlot(slot, oldTrackIndex));
-      return;
-    }
-    const next = cloneSlot(slot);
-    next.params.track_index = newTrackIndex;
-    nextSlots.push(next);
-  });
-  return nextSlots;
+  return slots.map((slot) => depthSlotAfterSeriesRemoval(slot, removal.idx, removal.count))
+    .filter((/** @type {ClonedDepthSlot | null} */ slot) => slot !== null);
+};
+
+/**
+ * Which rows of a stack a Depth series removal takes out (`reindexDepthSlots` leaves no copy of them), read on the rows
+ * before the removal: the managed Depth rows of no series left. A manual Depth row stays, turned off and renamed.
+ * @param {ReindexDepthSlotsOptions} options The removal; its `slots` are not read.
+ * @returns {(slot: DepthSlotRow) => boolean}
+ */
+export const leavesOnDepthSeriesRemoval = (options) => {
+  const removal = seriesRemoval(options);
+  return (slot) => removal !== null && depthSlotAfterSeriesRemoval(slot, removal.idx, removal.count) === null;
 };
 
 /**
