@@ -1400,6 +1400,23 @@ def test_a_circular_crop_keeps_both_blocks_of_a_part_past_the_end(tmp_path: Path
     assert paths[0] and paths[0] == paths[1]
 
 
+@pytest.mark.parametrize("region", ["1-100", "1-30"])
+def test_a_circular_crop_of_a_linear_record_cuts_a_part_past_the_end_at_the_end(tmp_path: Path, region: str) -> None:
+    """A linear record has no origin to cross, also in a Circular diagram: a records-table crop of ``81..110`` cuts it at
+    the end as dev did, so it draws as ``81..>100`` does, the cut end a fuzzy one (r4 LOW-1: only a record drawn
+    circular reads the part over the origin in a crop)."""
+    for name, location in (("past", "81..110"), ("cut", "81..>100")):
+        (tmp_path / f"{name}.gb").write_text(
+            _genbank_text("rec", "linear", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+        (tmp_path / f"{name}.tsv").write_text(f"gbk\tregion\n{name}.gb\t{region}\n", encoding="utf-8")
+        run = _gbdraw("circular", "--records_table", f"{name}.tsv", "-o", name, "-f", "svg", cwd=tmp_path)
+        assert run.returncode == 0, run.stderr
+
+    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "cut")]
+    assert paths[0] == paths[1]
+    assert bool(paths[0]) == (region == "1-100")
+
+
 def _gff3_text(*landmarks: tuple[str, str, int, int, str], cds: tuple[str, int, int] | None = ("rec", 81, 110)) -> str:
     lines = ["##gff-version 3"]
     for seqid, feature_type, start, end, attributes in landmarks:
