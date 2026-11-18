@@ -24,7 +24,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.contract_shapes import read_spelling
-from gbdraw.core.js_values import js_string, js_text, js_truthy
+from gbdraw.core.js_values import js_string, js_text, js_truthy, mapping_list, nonnegative_integer
 from gbdraw.definition_line_styles import DEFINITION_LINE_KINDS
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import COMPARISON_SEQUENCE_SEPARATOR
@@ -38,10 +38,6 @@ from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     SessionFileBinding,
     SessionRunSpec,
-    _mapping_list,
-    _nonnegative_integer,
-    _option_all_values,
-    _option_value,
     _with_resolved_override_colors,
     get_session_slot,
     materialize_embedded_file,
@@ -55,6 +51,8 @@ from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_TYPES,
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
     LEGACY_SCALAR_AXIS_LABELS,
+    _option_all_values,
+    _option_value,
 )
 from gbdraw.tracks.circular import _LEGACY_SPACING_PARAM, _migrate_legacy_circular_track_slot_spec
 
@@ -1327,7 +1325,7 @@ def _append_linear_gui_sequence_options(
             continue
         record_selector = str(seq.get("region_record_id") or "").strip()
         record_selectors.append(record_selector)
-        card_windows = _mapping_list(seq.get("windows"))
+        card_windows = mapping_list(seq.get("windows"))
         if card_windows:
             # A card whose windows its crop fields cannot hold: several (D-01), or one across the origin (D-34). One
             # region per window, in order. The CLI places them in that order; the Record Layout columns are not
@@ -1377,8 +1375,8 @@ def _append_linear_gui_sequence_options(
 def _card_window_span(index: int, window: Mapping[str, object]) -> str:
     """The span of a ``--region`` of one window of Linear card ``index`` (0-based)."""
 
-    start = _nonnegative_integer(window.get("start"))
-    end = _nonnegative_integer(window.get("end"))
+    start = nonnegative_integer(window.get("start"))
+    end = nonnegative_integer(window.get("end"))
     if not start or not end:
         raise ValidationError(f"Linear sequence #{index + 1} has a window without a valid start and end.")
     return region_text(start, end, js_truthy(window.get('reverseComplement')))

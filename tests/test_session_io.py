@@ -19,6 +19,7 @@ import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.circular as circular_cli_module
 import gbdraw.session_container as session_container_module
 import gbdraw.session_io as session_io_module
+import gbdraw.session_legacy_values as session_legacy_values_module
 from gbdraw.analysis.protein_colinearity import (
     build_protein_losat_cache_key,
     build_protein_losat_pair_identity,
@@ -2513,7 +2514,7 @@ def test_gui_session_replays_arrow_shape_and_geometry_flags(tmp_path: Path) -> N
         format_override=None,
     )
 
-    assert "CDS=arrow" in session_io_module._option_all_values(
+    assert "CDS=arrow" in session_legacy_values_module._option_all_values(
         spec.args,
         "--feature_shape",
     )

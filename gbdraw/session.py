@@ -58,7 +58,6 @@ from gbdraw.session_io import (
     SessionResources,
     _read_session_json,
     _attach_current_web_file_bindings,
-    _option_all_values,
     CLI_SESSION_ADMISSION,
     WEB_READ_SESSION_ADMISSION,
     SessionAdmission,
@@ -77,6 +76,7 @@ from gbdraw.session_io import (
     validate_session_resources,
     EmbeddedResources,
 )
+from gbdraw.session_legacy_values import _option_all_values
 from gbdraw.session_drawings import (
     DRAWING_NAMES,
     DrawingMode,

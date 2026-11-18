@@ -3,13 +3,14 @@
 The canonical-request decoder (:mod:`gbdraw.session_request_codec`), the
 Session migration of a draft (:mod:`gbdraw.session_io`) and the replay of a
 recorded command line (:mod:`gbdraw.cli_utils.legacy_session_args`) read the
-same renames from here.
+same renames from here, and the values of an option in a recorded command line
+(``_option_value``, ``_option_all_values``).
 """
 
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, Sequence
 
 # The feature types an older writer drew when it named none.
 LEGACY_FEATURE_TYPES: tuple[str, ...] = (
@@ -44,6 +45,35 @@ LEGACY_GIVEN_COMPARISON_SCHEMAS: tuple[int, ...] = (2, 5, 6, 7, 8, 9)
 # this column holds no protein matches; every other stored protein table holds them. Python's decoder and the Web Load
 # read them by this rule (OV-3512, OV-3573, OV-3574).
 LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN = "query_protein_id"
+
+
+def _option_all_values(args: Sequence[str], *names: str) -> list[str]:
+    values: list[str] = []
+    for index, token in enumerate(args):
+        text = str(token)
+        for name in names:
+            if text == name:
+                if index + 1 < len(args):
+                    values.append(str(args[index + 1]))
+                break
+            prefix = f"{name}="
+            if text.startswith(prefix):
+                values.append(text[len(prefix):])
+                break
+    return values
+
+
+def _option_value(args: Sequence[str], *names: str) -> str | None:
+    for index, token in enumerate(args):
+        text = str(token)
+        for name in names:
+            prefix = f"{name}="
+            if text.startswith(prefix):
+                return text[len(prefix):]
+            if text == name and index + 1 < len(args):
+                return str(args[index + 1])
+    return None
+
 
 __all__ = [
     "LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN",

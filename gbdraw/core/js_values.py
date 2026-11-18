@@ -1,15 +1,18 @@
-"""JavaScript's reading of a JSON value: ``String()``, ``Number()``, truthiness, the integer test, and key order.
+"""JavaScript's reading of a JSON value: ``String()``, ``Number()``, truthiness, the integer test, and key order;
+and the JSON readers on top of them: a copy of a value, an array read as objects, and a safe or non-negative integer.
 
 Python readers of Web-written Session values use these so that they read a value as the Web does.
 """
 
 from __future__ import annotations
 
+import copy
+import json
 import math
 import re
-from typing import Mapping
+from typing import Any, Mapping
 
-from .numeric import JS_WHITESPACE
+from .numeric import JS_MAX_SAFE_INTEGER, JS_WHITESPACE
 
 
 # The Web readers' ``String(value ?? '')`` and ``.trim()`` (JS_WHITESPACE).
@@ -91,6 +94,40 @@ def js_integral(value: float) -> int | float:
     return int(value) if value.is_integer() else value
 
 
+def safe_integer(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and abs(value) <= JS_MAX_SAFE_INTEGER:
+        return value
+    return None
+
+
+def mapping_list(value: object) -> list[Mapping[str, object]]:
+    """The entries of a JSON array, each read as an object (a non-object reads as empty)."""
+
+    return [item if isinstance(item, Mapping) else {} for item in value] if isinstance(value, list) else []
+
+
+def nonnegative_integer(value: object) -> int | None:
+    """``Number(value)`` when it is a non-negative safe integer (``null`` and ``''`` are not)."""
+
+    if value is None or value == "":
+        return None
+    number = js_number(value)
+    if math.isfinite(number) and number.is_integer() and 0 <= number <= JS_MAX_SAFE_INTEGER:
+        return int(number)
+    return None
+
+
+def json_clone(value: Any) -> Any:
+    try:
+        return json.loads(json.dumps(value))
+    except (TypeError, ValueError):
+        return copy.deepcopy(value)
+
+
 __all__ = [
     "js_string",
     "js_text",
@@ -100,4 +137,8 @@ __all__ = [
     "js_integer",
     "js_number",
     "js_integral",
+    "safe_integer",
+    "mapping_list",
+    "nonnegative_integer",
+    "json_clone",
 ]

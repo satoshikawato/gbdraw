@@ -59,6 +59,10 @@ from .core.js_values import (
     js_string,
     js_text,
     js_truthy,
+    json_clone,
+    mapping_list,
+    nonnegative_integer,
+    safe_integer,
 )
 from .io.input_text import GZIP_ERRORS, open_input_text
 from .exceptions import GbdrawError, SessionFormatError, ValidationError
@@ -83,6 +87,7 @@ from .session_container import (
 from .session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
+    _option_value,
 )
 from .session_contract import (
     CURRENT_SESSION_VERSION,
@@ -2315,22 +2320,6 @@ def _parse_rendered_id(rendered_id: object) -> tuple[str, int | None, int | None
     return rest, record_ordinal, source_index
 
 
-def _safe_integer(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, float) and value.is_integer():
-        value = int(value)
-    if isinstance(value, int) and abs(value) <= JS_MAX_SAFE_INTEGER:
-        return value
-    return None
-
-
-def _mapping_list(value: object) -> list[Mapping[str, Any]]:
-    """The entries of a JSON array, each read as an object (a non-object reads as empty)."""
-
-    return [item if isinstance(item, Mapping) else {} for item in value] if isinstance(value, list) else []
-
-
 @dataclass(frozen=True)
 class FeatureEditMigration:
     """The Session 46 ``features`` of an older Session and what Load would report."""
@@ -2354,21 +2343,21 @@ def _catalog_feature_index(
     rendered_by_id: dict[str, dict[str, None]] = {}
     biological: list[_IndexedFeature] = []
     items = catalog.get("items") if isinstance(catalog, Mapping) else None
-    for item in _mapping_list(items):
+    for item in mapping_list(items):
         record_keys_value = item.get("recordKeys")
         record_keys = (
             [js_text(record_key) for record_key in record_keys_value]
             if isinstance(record_keys_value, list)
             else []
         )
-        for feature in _mapping_list(item.get("features")):
+        for feature in mapping_list(item.get("features")):
             key = _feature_identity_key(
                 mode, js_text(feature.get("recordKey")), js_text(feature.get("biologicalFeatureId"))
             )
             svg_id = _rendered_id_without_part(feature.get("svgId"))
             if key and svg_id:
                 rendered_by_id.setdefault(svg_id, {})[key] = None
-        for feature in _mapping_list(item.get("biologicalFeatures")):
+        for feature in mapping_list(item.get("biologicalFeatures")):
             record_key = js_text(feature.get("recordKey"))
             feature_id = js_text(feature.get("biologicalFeatureId"))
             key = _feature_identity_key(mode, record_key, feature_id)
@@ -2377,22 +2366,11 @@ def _catalog_feature_index(
                     (
                         key,
                         js_text(feature.get("stableFeatureId")) or feature_id,
-                        _safe_integer(feature.get("sourceFeatureIndex")),
+                        safe_integer(feature.get("sourceFeatureIndex")),
                         record_keys.index(record_key) + 1 if record_key in record_keys else 0,
                     )
                 )
     return rendered_by_id, biological
-
-
-def _nonnegative_integer(value: object) -> int | None:
-    """``Number(value)`` when it is a non-negative safe integer (``null`` and ``''`` are not)."""
-
-    if value is None or value == "":
-        return None
-    number = js_number(value)
-    if math.isfinite(number) and number.is_integer() and 0 <= number <= JS_MAX_SAFE_INTEGER:
-        return int(number)
-    return None
 
 
 def _first(feature: Mapping[str, Any], *fields: str) -> object:
@@ -2453,7 +2431,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     def describe(feature: Mapping[str, Any]) -> tuple[int | None, int | None, int | None, str, str]:
         ordinal = _LINEAR_RECORD_SUFFIX.search(js_text(_first(feature, "svg_id", "svgId")))
         svg_ordinal = int(ordinal.group(1)) if ordinal else None
-        file_index = _nonnegative_integer(feature.get("fileIdx"))
+        file_index = nonnegative_integer(feature.get("fileIdx"))
         if linear:
             input_index = file_index if file_index is not None else (
                 svg_ordinal - 1 if svg_ordinal else None
@@ -2463,13 +2441,13 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
         record_index = (
             0
             if linear and file_index is None
-            else _nonnegative_integer(_first(feature, "record_idx", "recordIndex"))
+            else nonnegative_integer(_first(feature, "record_idx", "recordIndex"))
         )
         source_index = next(
             (
                 index
                 for index in (
-                    _nonnegative_integer(feature.get(field))
+                    nonnegative_integer(feature.get(field))
                     for field in ("source_feature_index", "sourceFeatureIndex", "feature_index")
                 )
                 if index is not None
@@ -2491,7 +2469,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     def described(value: object) -> list[tuple[int, int, int | None, str, str]]:
         entries: list[tuple[int, int, int | None, str, str]] = []
         for input_index, record_index, source_index, source_hash, drawn_hash in map(
-            describe, _mapping_list(value)
+            describe, mapping_list(value)
         ):
             if input_index is not None and record_index is not None and source_hash:
                 entries.append((input_index, record_index, source_index, source_hash, drawn_hash))
@@ -2592,14 +2570,14 @@ def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeatu
 
     drawn: list[_IndexedFeature] = []
     items = catalog.get("items") if isinstance(catalog, Mapping) else None
-    for item in _mapping_list(items):
+    for item in mapping_list(items):
         record_keys_value = item.get("recordKeys")
         record_keys = (
             [js_text(record_key) for record_key in record_keys_value]
             if isinstance(record_keys_value, list)
             else []
         )
-        for feature in _mapping_list(item.get("features")):
+        for feature in mapping_list(item.get("features")):
             record_key = js_text(feature.get("recordKey"))
             key = _feature_identity_key(mode, record_key, js_text(feature.get("biologicalFeatureId")))
             drawn_hash, record_ordinal, source_index = _parse_rendered_id(feature.get("svgId"))
@@ -2689,9 +2667,9 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
 
     linear_seqs = files.get("linearSeqs") if isinstance(files, Mapping) else None
     records: list[dict[str, Any]] = []
-    for index, seq in enumerate(_mapping_list(linear_seqs)):
-        start = _nonnegative_integer(seq.get("region_start"))
-        end = _nonnegative_integer(seq.get("region_end"))
+    for index, seq in enumerate(mapping_list(linear_seqs)):
+        start = nonnegative_integer(seq.get("region_start"))
+        end = nonnegative_integer(seq.get("region_end"))
         cropped = start is not None or end is not None
         reverse = bool(seq.get("region_reverse"))
         record_id = js_text(seq.get("region_record_id")).strip()
@@ -2724,8 +2702,8 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
 
     presentation = record.get("presentation")
     return any(
-        _nonnegative_integer(window["start"]) is not None
-        or _nonnegative_integer(window["end"]) is not None
+        nonnegative_integer(window["start"]) is not None
+        or nonnegative_integer(window["end"]) is not None
         or js_truthy(window["reverseComplement"])
         for window in stored_record_windows(record)
     ) or (isinstance(presentation, Mapping) and js_truthy(presentation.get("reverseComplement")))
@@ -2746,9 +2724,9 @@ def _drawn_hashes_unknown(records: object, features: object) -> bool:
     reverse-complemented and no feature carries its drawn hash (they are not
     the sources read again)."""
 
-    return any(_hash_frame_changed(record) for record in _mapping_list(records)) and not any(
+    return any(_hash_frame_changed(record) for record in mapping_list(records)) and not any(
         isinstance(feature.get("drawn_selector") or feature.get("drawnSelector"), Mapping)
-        for feature in _mapping_list(features)
+        for feature in mapping_list(features)
     )
 
 
@@ -3001,7 +2979,7 @@ def _drawn_transformed(record: Mapping[str, Any]) -> bool:
         js_truthy(record.get("region"))
         or bool(stored_record_windows(record))
         or (isinstance(presentation, Mapping) and js_truthy(presentation.get("reverseComplement")))
-        or (isinstance(display, Mapping) and _safe_integer(display.get("startCoordinate")) is not None)
+        or (isinstance(display, Mapping) and safe_integer(display.get("startCoordinate")) is not None)
     )
 
 
@@ -3054,11 +3032,11 @@ def migrate_session_annotation_targets(
     record_ids: dict[str, set[str]] = {}
     features_by_hash: dict[str, dict[tuple[str, str], None]] = {}
     items = catalog.get("items") if isinstance(catalog, Mapping) else None
-    for item in _mapping_list(items):
+    for item in mapping_list(items):
         item_record_keys = item.get("recordKeys")
         for record_key in item_record_keys if isinstance(item_record_keys, list) else ():
             record_ids.setdefault(js_text(record_key), set())
-        for feature in _mapping_list(item.get("biologicalFeatures")):
+        for feature in mapping_list(item.get("biologicalFeatures")):
             record_key = js_text(feature.get("recordKey"))
             feature_id = js_text(feature.get("biologicalFeatureId"))
             if not record_key or not feature_id:
@@ -3454,19 +3432,19 @@ def _annotation_sets_of_mode(sets: list[Any], mode: DiagramMode) -> list[Any]:
     for annotation_set in sets:
         annotations = annotation_set.get("annotations") if isinstance(annotation_set, Mapping) else None
         if not isinstance(annotations, list):
-            result.append(_json_clone(annotation_set))
+            result.append(json_clone(annotation_set))
             continue
         kept = []
         for annotation in annotations:
             bound = _annotation_binding_mode(annotation)
             if bound is not None and bound != mode:
                 continue
-            annotation = _json_clone(annotation)
+            annotation = json_clone(annotation)
             target = annotation.get("target") if isinstance(annotation, dict) else None
             if isinstance(target, dict) and target.get("kind") == "featureIdentity":
                 target.pop("scope", None)
             kept.append(annotation)
-        result.append({**_json_clone(annotation_set), "annotations": kept})
+        result.append({**json_clone(annotation_set), "annotations": kept})
     return result
 
 
@@ -3480,37 +3458,37 @@ def _split_setting(
     """The value each slice takes for one saved registry value."""
 
     if row.migrate == "own":
-        return {cast("DiagramMode", row.modes): _json_clone(value)}
+        return {cast("DiagramMode", row.modes): json_clone(value)}
     if row.migrate == "result-mode":
-        return {committed: _unscoped_rows(_json_clone(value), committed)}
+        return {committed: _unscoped_rows(json_clone(value), committed)}
     if row.migrate == "layout":
         slots = value if isinstance(value, Mapping) else {}
-        return {mode: _json_clone(slots[mode]) for mode in DIAGRAM_MODES if mode in slots}
+        return {mode: json_clone(slots[mode]) for mode in DIAGRAM_MODES if mode in slots}
     split: dict[DiagramMode, Any] = {}
     for mode in DIAGRAM_MODES:
         if row.migrate == "show-if-source":
             # ``show_depth && hasSource``
             split[mode] = (widths[mode] > 0) if js_truthy(value) else value
         elif row.migrate == "depth" and isinstance(value, list):
-            split[mode] = _json_clone(value[: max(1, widths[mode])])
+            split[mode] = json_clone(value[: max(1, widths[mode])])
         elif row.migrate == "by-scope" and isinstance(value, list):
             split[mode] = [
-                {field: item for field, item in _json_clone(draft).items() if field != "scope"}
+                {field: item for field, item in json_clone(draft).items() if field != "scope"}
                 for draft in value
                 if isinstance(draft, Mapping) and draft.get("scope") == mode
             ]
         elif row.migrate == "by-side":
-            split[mode] = _unscoped_rows(_json_clone(value), mode)
+            split[mode] = _unscoped_rows(json_clone(value), mode)
         elif row.migrate == "by-leaf" and isinstance(value, Mapping):
             split[mode] = {
-                path: _json_clone(leaf)
+                path: json_clone(leaf)
                 for path, leaf in value.items()
                 if mode in unmanaged_config_override_modes(str(path))
             }
         elif row.migrate == "by-binding" and isinstance(value, list):
             split[mode] = _annotation_sets_of_mode(value, mode)
         else:
-            split[mode] = _json_clone(value)
+            split[mode] = json_clone(value)
     return split
 
 
@@ -3864,7 +3842,7 @@ def split_draft_into_modes(
         bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else draft.get("files")
         widths = session_depth_source_widths(bindings)
     else:
-        widths = {mode: _safe_integer(depth_sources.get(mode)) or 0 for mode in DIAGRAM_MODES}
+        widths = {mode: safe_integer(depth_sources.get(mode)) or 0 for mode in DIAGRAM_MODES}
     adv_value = config.get("adv")
     adv: Mapping[str, Any] = adv_value if isinstance(adv_value, Mapping) else {}
 
@@ -3879,11 +3857,11 @@ def split_draft_into_modes(
             split = {}
             flat = container.get(source_path, _HISTORICAL_FLAT_PROFILE_VALUES.get(source_path, _ABSENT))
             if flat is not _ABSENT:
-                split[active] = _json_clone(flat)
+                split[active] = json_clone(flat)
             other: DiagramMode = "linear" if active == "circular" else "circular"
             saved = _mode_profile_values(profiles, other)
             if source_path in saved:
-                split[other] = _json_clone(saved[source_path])
+                split[other] = json_clone(saved[source_path])
         elif source_path in container:
             split = _split_setting(row, container[source_path], committed=committed, widths=widths)
         else:
@@ -3914,7 +3892,7 @@ def split_draft_into_modes(
             result[head] = kept
     losat = config.get("losat")
     execution = {
-        field: _json_clone(losat[field])
+        field: json_clone(losat[field])
         for field in LOSAT_EXECUTION_FIELDS
         if isinstance(losat, Mapping) and field in losat
     }
@@ -3922,7 +3900,7 @@ def split_draft_into_modes(
     # popup (a missing value reads true), and Instant Preview.
     app_ui: dict[str, Any] = {"losatExecution": execution} if execution else {}
     if "rich_feature_popup" in adv:
-        app_ui["richFeaturePopup"] = _json_clone(adv["rich_feature_popup"])
+        app_ui["richFeaturePopup"] = json_clone(adv["rich_feature_popup"])
     # Web Load applies ``ui``, then a boolean draft value, which wins.
     preview = config.get("paletteInstantPreviewEnabled")
     if isinstance(preview, bool):
@@ -3931,7 +3909,7 @@ def split_draft_into_modes(
         result["ui"] = {**(result.get("ui") or {}), **app_ui}
     # Session provenance, written only when the draft has it.
     if "cliOptions" in config:
-        result["cliOptions"] = _json_clone(config["cliOptions"])
+        result["cliOptions"] = json_clone(config["cliOptions"])
     if isinstance(config_value, Mapping):
         result["modes"] = {mode: slices[mode] for mode in DIAGRAM_MODES}
     return result
@@ -4208,7 +4186,7 @@ def _clean_id(value: object, fallback: str) -> str:
 
 
 def _draft_annotation_target(target: object) -> dict[str, Any]:
-    source = _json_clone(target) if isinstance(target, Mapping) else {}
+    source = json_clone(target) if isinstance(target, Mapping) else {}
     envelope = "segments" if source.get("envelope") == "segments" else "outer_bounds"
     circular_path = source.get("circularPath") if source.get("circularPath") in ("forward", "reverse") else "shortest"
     if source.get("kind") == "featureIdentity":
@@ -4259,7 +4237,7 @@ def _draft_annotation_target(target: object) -> dict[str, Any]:
 def _draft_annotation_style(style: object) -> dict[str, Any]:
     from .session_request_codec import describe_draft_annotation_style
 
-    return {**describe_draft_annotation_style(), **(_json_clone(style) if isinstance(style, Mapping) else {})}
+    return {**describe_draft_annotation_style(), **(json_clone(style) if isinstance(style, Mapping) else {})}
 
 
 def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[dict[str, Any]]:
@@ -4282,7 +4260,7 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
         annotations: list[dict[str, Any]] = []
         raw_items = source.get("annotations")
         for item_index, raw_item in enumerate(raw_items if isinstance(raw_items, list) else []):
-            item = _json_clone(raw_item) if isinstance(raw_item, Mapping) else {}
+            item = json_clone(raw_item) if isinstance(raw_item, Mapping) else {}
             target = item.get("target")
             if isinstance(target, Mapping) and target.get("kind") == "featureIdentity":
                 target = {"scope": mode, **target}
@@ -4303,7 +4281,7 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
                     else js_integral(max(0.0, js_number(lane) or 0.0)),
                     "style": None if item.get("style") is None else _draft_annotation_style(item.get("style")),
                     "legendLabel": None if item.get("legendLabel") is None else js_string(item.get("legendLabel")),
-                    "metadata": _json_clone(metadata) if isinstance(metadata, Mapping) else {},
+                    "metadata": json_clone(metadata) if isinstance(metadata, Mapping) else {},
                     **({"strand": item["strand"]} if item.get("strand") in {"+", "-"} else {}),
                 }
             )
@@ -4567,7 +4545,7 @@ def normalize_current_session_artifacts(
         current_manifest = (
             proof
             if proof is source_manifest and is_json_exact_protein_identity_manifest(proof)
-            else _json_clone(source_manifest)
+            else json_clone(source_manifest)
         )
 
     source_raw_entries = (
@@ -4580,7 +4558,7 @@ def normalize_current_session_artifacts(
     for index, entry in enumerate(source_raw_entries):
         classification = classify_raw_losat_cache_entry(entry)
         if classification in {"protein-current", "nucleotide-current"}:
-            clone = _json_clone(entry)
+            clone = json_clone(entry)
             # As the Web writes it: a shown entry keeps its text name or gets
             # the default `losat_pair_<n>.tsv` (OV-1007); a hidden entry is
             # cache only and has no name (OV-1013).
@@ -4591,7 +4569,7 @@ def normalize_current_session_artifacts(
             )
             current_raw_entries.append(clone)
         elif classification == "protein-legacy":
-            imported_legacy_entries.append(_json_clone(entry))
+            imported_legacy_entries.append(json_clone(entry))
         else:
             raise ValidationError(
                 f"Cannot write invalid LOSAT cache entry at index {index}."
@@ -4605,11 +4583,11 @@ def normalize_current_session_artifacts(
     imported_derived_evidence: list[dict[str, Any]] = []
     for index, entry in enumerate(source_derived_entries):
         if _is_current_derived_cache_entry(entry):
-            current_derived_entries.append(_json_clone(entry))
+            current_derived_entries.append(json_clone(entry))
         elif _is_derived_cache_entry(
             entry, schema=LEGACY_LOSAT_DERIVED_CACHE_SCHEMA
         ):
-            imported_derived_evidence.append(_json_clone(entry))
+            imported_derived_evidence.append(json_clone(entry))
         else:
             raise ValidationError(
                 f"Cannot write invalid derived LOSATP cache entry at index {index}."
@@ -4840,7 +4818,7 @@ def _normalize_legacy_candidate_entries(
             "entries": [candidate],
         }
         _validate_legacy_protein_candidate_envelope(probe)
-        clone = _json_clone(candidate)
+        clone = json_clone(candidate)
         fingerprint = json.dumps(
             clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         )
@@ -4871,7 +4849,7 @@ def _normalize_legacy_derived_entries(
             raise ValidationError(
                 f"Invalid legacy derived LOSATP evidence at index {index}."
             )
-        clone = _json_clone(entry)
+        clone = json_clone(entry)
         fingerprint = json.dumps(
             clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         )
@@ -5219,7 +5197,7 @@ def _carry_existing_comparison_plan(
 ) -> tuple[dict[str, object], list[_ComparisonFileBinding]]:
     """An existing plan with each edge's ``file`` (or the file bound to its id) moved to a binding."""
 
-    plan = _json_clone(dict(existing_plan))
+    plan = json_clone(dict(existing_plan))
     edges_value = plan.get("edges")
     file_by_id: dict[str, object] = {
         str(item.get("id") or ""): item.get("file")
@@ -5497,8 +5475,8 @@ def migrate_legacy_linear_comparison_draft_for_current_writer(
     no Web comparison.
     """
 
-    migrated_config = _json_clone(dict(config))
-    migrated_files = _json_clone(dict(files))
+    migrated_config = json_clone(dict(config))
+    migrated_files = json_clone(dict(files))
     rows = _take_legacy_record_rows(migrated_files)
     comparisons_value = migrated_files.get("linearComparisons")
     file_comparisons = (
@@ -5842,7 +5820,7 @@ def _web_card_binding(
         "region_end": sequence.get("region_end"),
         "region_reverse": bool(sequence.get("region_reverse")),
         # The card's window list (several windows, or one across the origin), as the Web writes it.
-        "windows": [dict(window) for window in _mapping_list(sequence.get("windows"))],
+        "windows": [dict(window) for window in mapping_list(sequence.get("windows"))],
     }
 
 
@@ -6016,7 +5994,7 @@ def _rebound_web_files(
     the resource IDs the binding gave."""
 
     web_files = (
-        _json_clone(dict(web_files_value))
+        json_clone(dict(web_files_value))
         if isinstance(web_files_value, Mapping)
         else {}
     )
@@ -6109,7 +6087,7 @@ def build_session_json(
     if context.source_session is not None:
         validate_session(context.source_session, resource_sources=dict(context.source_resources or {}))
         source_version = int(context.source_session["version"])
-        payload: dict[str, Any] = _json_clone(context.source_session)
+        payload: dict[str, Any] = json_clone(context.source_session)
     else:
         payload = {}
 
@@ -6149,20 +6127,20 @@ def build_session_json(
     ui.setdefault("selectedResultIndex", 0)
     ui.setdefault("canvasPan", {"x": 0, "y": 0})
 
-    payload["files"] = _json_clone(embedded_files)
+    payload["files"] = json_clone(embedded_files)
     payload["results"] = [
         {"name": name or f"Result {index + 1}", "content": content}
         for index, (name, content) in enumerate(svg_results)
     ]
     if context.run_metadata is not None:
-        payload["runMetadata"] = _json_clone(context.run_metadata)
+        payload["runMetadata"] = json_clone(context.run_metadata)
     else:
         payload.pop("runMetadata", None)
     editor_state = payload.get("editorState")
     editor_state = (
         dict(editor_state) if isinstance(editor_state, Mapping) else {}
     )
-    editor_state["featureCatalog"] = _json_clone(
+    editor_state["featureCatalog"] = json_clone(
         feature_catalog
         if feature_catalog is not None
         else {
@@ -6412,41 +6390,6 @@ def _decode_depth_run(reference_name: str, run: Any, lines: list[str]) -> int:
             raise ValidationError("Invalid embedded depth coordinate overflow.")
         lines.append(f"{reference_name}\t{position}\t{'' if depth_value is None else depth_value}")
     return count
-
-
-def _json_clone(value: Any) -> Any:
-    try:
-        return json.loads(json.dumps(value))
-    except (TypeError, ValueError):
-        return copy.deepcopy(value)
-
-
-def _option_all_values(args: Sequence[str], *names: str) -> list[str]:
-    values: list[str] = []
-    for index, token in enumerate(args):
-        text = str(token)
-        for name in names:
-            if text == name:
-                if index + 1 < len(args):
-                    values.append(str(args[index + 1]))
-                break
-            prefix = f"{name}="
-            if text.startswith(prefix):
-                values.append(text[len(prefix):])
-                break
-    return values
-
-
-def _option_value(args: Sequence[str], *names: str) -> str | None:
-    for index, token in enumerate(args):
-        text = str(token)
-        for name in names:
-            prefix = f"{name}="
-            if text.startswith(prefix):
-                return text[len(prefix):]
-            if text == name and index + 1 < len(args):
-                return str(args[index + 1])
-    return None
 
 
 __all__ = [
