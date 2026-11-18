@@ -15,7 +15,8 @@ import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendKeyOrder, isLegendOrderEdited, ownLegendColor } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
-import { biologicalFeatureKey } from '../services/feature-catalog.js';
+import { featureRowTargets } from '../services/feature-catalog.js';
+import { labelSourceTextsByResult, recordLabelSourceTexts } from '../services/preview-affordances.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
 import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
@@ -37,7 +38,8 @@ import { draftLegendRows, normalizedLegendEntries } from '../services/legend-dra
  *   a Result without a catalog (`displayedFeatureAddressing`).
  * @property {Record<string, SavedFeatureColorEdit>} [featureColorOverrides]
  * @property {Record<string, SavedStrokeEdit>} [featureStrokeOverrides]
- * @property {Record<string, CanonicalFeatureOverride>} [featureOverrides]
+ * @property {Record<string, CanonicalFeatureOverride & { labelSourceText?: string | null }>} [featureOverrides]
+ *   The drawing's draft rows: a row's Web-only `labelSourceText` is the source text its labels record.
  * @property {readonly (LegendEntryInput | null | undefined)[]} [legendEntries]
  * @property {readonly (LegendEntryInput | null | undefined)[]} [deletedLegendEntries]
  * @property {string[]} [originalLegendOrder]
@@ -511,9 +513,7 @@ const renderedResultIndexes = (catalogAdmission, renderedId) => (
  * @param {EditorAddressing} catalogAdmission
  * @param {CanonicalFeatureOverride | null | undefined} row
  */
-const identityTargets = (catalogAdmission, row) => (
-  resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
-);
+const identityTargets = (catalogAdmission, row) => featureRowTargets(catalogAdmission, row);
 
 
 /** @param {EditorPlanOptions} options */
@@ -935,6 +935,28 @@ export const compileDirectEditorMutationPlan = (options = /** @type {EditorPlanO
   compilePlanBundle(options).plan
 );
 
+/**
+ * The per-Result transforms of a Result Python drew, each followed by the
+ * writer of the rows' label source-text records on that Result (OV-3848); the
+ * live projection keeps them on the displayed Result.
+ * @param {SvgResultTransform[] | undefined} resultTransforms
+ * @param {EditorPlanOptions['featureOverrides']} featureOverrides
+ * @param {EditorAddressing} catalogAdmission
+ * @returns {SvgResultTransform[]}
+ */
+const withLabelSourceRecords = (resultTransforms = [], featureOverrides, catalogAdmission) => {
+  const transforms = [...resultTransforms];
+  labelSourceTextsByResult(featureOverrides, (row) => featureRowTargets(catalogAdmission, row)).forEach((sources, resultIndex) => {
+    const own = transforms[resultIndex];
+    /** @type {SvgResultTransform} */
+    const records = (svg) => recordLabelSourceTexts(svg, sources);
+    transforms[resultIndex] = typeof own === 'function'
+      ? (svg, context) => [own(svg, context) !== false, records(svg, context)].includes(true)
+      : records;
+  });
+  return transforms;
+};
+
 /** @param {CandidateCommitOptions} options */
 export const prepareCandidateRenderCommit = ({
   generationResponse,
@@ -945,7 +967,11 @@ export const prepareCandidateRenderCommit = ({
   replacedResults = null,
   ...editorState
 }) => {
-  const bundle = compilePlanBundle({ catalogAdmission, ...editorState });
+  const bundle = compilePlanBundle({
+    catalogAdmission,
+    ...editorState,
+    resultTransforms: withLabelSourceRecords(editorState.resultTransforms, editorState.featureOverrides, catalogAdmission)
+  });
   return {
     results: admitCurrentGeneratedResults(generationResponse, {
       catalogAdmission,

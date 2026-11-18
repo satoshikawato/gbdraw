@@ -174,12 +174,14 @@ import {
 } from './svg-result-ingestion.js';
 import {
   admitFeatureCatalog,
+  featureRowTargets,
   featureStateFromCatalog,
   isAdoptedFeatureCatalog,
   validateFeatureCatalog,
   validateFeatureCatalogForImport
 } from './feature-catalog.js';
 import { bindRecordDisplayDrafts, migrateLegacyRecordDisplayDrafts, readRecordDisplayDrafts } from './record-display-model.js';
+import { labelSourceTextsByResult } from './preview-affordances.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups,
@@ -3411,7 +3413,8 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
     rules: savedSpecificRules(rules),
     legendRekeys,
     mode,
-    resultsRecordPythonPaint: sourceFacts.resultsRecordPythonPaint
+    resultsRecordPythonPaint: sourceFacts.resultsRecordPythonPaint,
+    featureOverrides: featureOverridesForState(slice?.features?.featureOverrides)
   };
 };
 
@@ -3447,9 +3450,10 @@ const savedLegendRekeys = (rules, kept) => {
  */
 const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes, savedEdits, legacy = null }) => {
   const catalogAdmission = admitFeatureCatalog(featureCatalog, logicalResults, { adopt: true, mode });
+  const labelSources = labelSourceTextsByResult(savedEdits?.featureOverrides, (row) => featureRowTargets(catalogAdmission, row));
   return admitCurrentSessionResults(
     createCurrentSessionResultSource(logicalResults, catalogAdmission),
-    { mutationPlan: createSavedResultPlan(logicalResults, catalogAdmission, savedEdits, legacy), selectedFeatureTypes }
+    { mutationPlan: createSavedResultPlan(logicalResults, catalogAdmission, savedEdits, legacy, labelSources), selectedFeatureTypes }
   );
 };
 

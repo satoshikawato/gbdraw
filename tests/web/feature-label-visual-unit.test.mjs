@@ -11,7 +11,10 @@ import { SOURCE_LOCALE, setUiLocale } from '../../gbdraw/web/js/utils/i18n.js';
 import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
 import { wordedNotice } from './helpers/worded-notice.mjs';
 import { serializeCleanSvg, stripTransientPreviewState } from '../../gbdraw/web/js/services/svg-serialization.js';
-import { LABEL_BINDER_ATTRIBUTES, stripLabelSourceRecords } from '../../gbdraw/web/js/services/preview-affordances.js';
+import {
+  LABEL_BINDER_ATTRIBUTES, labelSourceTextsByResult, recordLabelSourceTexts, stripLabelSourceRecords
+} from '../../gbdraw/web/js/services/preview-affordances.js';
+import { biologicalFeatureKey, featureRowTargets } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -1427,6 +1430,47 @@ test('a Result written from the mounted root keeps only a renamed label\'s sourc
     assert.deepEqual([label.getAttribute('data-label-feature-id'), label.getAttribute('data-gbdraw-label-binding-schema')], ['f-1', '1']);
   }
   assert.deepEqual(LABEL_BINDER_ATTRIBUTES, ['data-label-editable', 'data-label-key', 'data-label-source-text']);
+});
+
+// OV-3848: a Result entering the page (Generate, a rerender, Load) records
+// the source text of each label whose feature row records one and shows
+// another text, so its text holds the record whether or not a label was
+// clicked; the binder's marks and a record equal to the shown text leave
+// (a Session saved before this writer). A second pass changes nothing.
+test('a Result entering the page records each feature row\'s label source text, and drops the binder\'s marks', () => {
+  const admitted = () => new DOMParser().parseFromString([
+    '<svg><text data-label-feature-id="f-1">renamed</text>',
+    '<text data-label-feature-id="f-2">beta</text>',
+    '<text data-label-editable="true" data-label-key="label-3" data-label-source-text="gamma" data-label-feature-id="f-3">gamma</text>',
+    '<text data-label-source-text="delta" data-label-feature-id="f-4">live</text>',
+    '<line data-label-feature-id="f-1" /></svg>'
+  ].join(''), 'image/svg+xml').documentElement;
+  const rows = {
+    one: { recordKey: 'r', biologicalFeatureId: 'one', labelSourceText: 'alpha protein' },
+    two: { recordKey: 'r', biologicalFeatureId: 'two', labelSourceText: 'beta' },
+    three: { recordKey: 'r', biologicalFeatureId: 'three', labelSourceText: null }
+  };
+  const targets = new Map([
+    [biologicalFeatureKey('r', 'one'), [{ resultIndex: 0, renderedId: 'f-1' }, { resultIndex: 1, renderedId: 'f-1' }]],
+    [biologicalFeatureKey('r', 'two'), [{ resultIndex: 0, renderedId: 'f-2' }]],
+    [biologicalFeatureKey('r', 'three'), [{ resultIndex: 0, renderedId: 'f-3' }]]
+  ]);
+  const byResult = labelSourceTextsByResult(rows, (row) => featureRowTargets({ renderedTargetsByOverrideKey: targets }, row));
+  assert.deepEqual([...byResult].map(([index, sources]) => [index, [...sources]]), [
+    [0, [['f-1', 'alpha protein'], ['f-2', 'beta']]], [1, [['f-1', 'alpha protein']]]
+  ]);
+  const svg = admitted();
+  const marksOf = () => svg.querySelectorAll('text').map((element) => LABEL_BINDER_ATTRIBUTES
+    .filter((name) => element.hasAttribute(name)).map((name) => `${name}=${element.getAttribute(name)}`));
+  assert.equal(recordLabelSourceTexts(svg, /** @type {Map<string, string>} */ (byResult.get(0))), true);
+  assert.deepEqual(marksOf(), [
+    ['data-label-source-text=alpha protein'], [], [], ['data-label-source-text=delta']
+  ], 'a row records its source; a label no row reaches keeps its own record (a live edit)');
+  assert.equal(recordLabelSourceTexts(svg, /** @type {Map<string, string>} */ (byResult.get(0))), false, 'once');
+  // A Session saved before this writer: only the marks and the equal record leave.
+  const old = admitted();
+  assert.equal(recordLabelSourceTexts(old, new Map()), true);
+  assert.equal(recordLabelSourceTexts(old, new Map()), false);
 });
 
 // OV-3848, OV-3880: a remounted Result has no recorded source text, so Reset label

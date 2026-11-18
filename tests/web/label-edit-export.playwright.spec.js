@@ -10,9 +10,10 @@
 const { expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { evaluateWithRetainedPromise, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
-const { open, popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
+const { generate, legendRowColor, open, popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
 const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
+const { readSessionFile } = require('./helpers/session-file.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -134,4 +135,59 @@ test('renamed labels show their original text after Reset label edits, also afte
   } finally {
     await loaded.context().close();
   }
+});
+
+// The Results of a saved Session: the SVG text of each drawing's Results.
+const savedResultSvgs = async (file) => (await readSessionFile(file)).drawings
+  .flatMap((drawing) => (drawing.results || []).map((result) => String(result.content)));
+const sourceTextRecords = (svgs) => svgs.flatMap((svg) => [...svg.matchAll(/data-label-source-text="([^"]*)"/g)].map((match) => match[1]));
+
+// The color of the first Legend row, set to `color` (the Legend editor's control; no popup, so no label binding).
+const colorCdsRow = async (page, color) => {
+  const row = await page.evaluate(() => {
+    const [entry] = window.__GBDRAW_APP__.legendEntries;
+    return entry ? { caption: entry.caption, color: window.__GBDRAW_APP__.legendEntryColor(entry) } : null;
+  });
+  expect(row?.color, 'the first Legend row').toBeTruthy();
+  await legendRowColor(page, row.caption, color);
+  return row.color;
+};
+
+// OV-3848: the record of a renamed label's source text is written when the
+// Result enters the page (Generate, Load), from the feature row, so a saved
+// Session does not depend on whether a label was clicked or the displayed
+// Result was written again.
+test('a Session saved after a Generate of a label edit is the same with and without a label click', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await popupEdit(page, 'FL1', { labelText: 'renamed label' });
+  await generate(page);
+
+  // Saved at once, and after the displayed Result was written again (a color changed and back).
+  const atGenerate = testInfo.outputPath('at-generate.gbdraw');
+  await download(page, 'Save Session', atGenerate, { title: '' });
+  const original = await colorCdsRow(page, '#7b2cbf');
+  await colorCdsRow(page, original);
+  const rewritten = testInfo.outputPath('rewritten.gbdraw');
+  await download(page, 'Save Session', rewritten, { title: '' });
+  expect(sourceTextRecords(await savedResultSvgs(atGenerate))).toEqual(['alpha protein']);
+  expect(sourceTextRecords(await savedResultSvgs(rewritten))).toEqual(['alpha protein']);
+
+  // Loaded twice: one page clicks a label (a popup opened and closed binds the
+  // labels), the other does not; both change one color and save.
+  const saves = [];
+  for (const click of [true, false]) {
+    const loaded = await load(browser, atGenerate);
+    try {
+      if (click) await popupEdit(loaded, 'FL2');
+      await colorCdsRow(loaded, '#2a9d8f');
+      const file = testInfo.outputPath(`loaded-${click ? 'clicked' : 'not-clicked'}.gbdraw`);
+      await download(loaded, 'Save Session', file, { title: '' });
+      saves.push(await savedResultSvgs(file));
+    } finally {
+      await loaded.context().close();
+    }
+  }
+  expect(sourceTextRecords(saves[0])).toEqual(['alpha protein']);
+  expect(saves[0]).toEqual(saves[1]);
 });

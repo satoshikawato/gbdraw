@@ -1553,9 +1553,10 @@ test('Load records Python\'s paint on a Session 44 Result saved without records'
   const plan = createSavedResultPlan(results, admission, edits);
   assert.equal(plan.kind, 'MUTATING');
   const { callerTransforms } = plan.operationsByResult[0];
-  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [true], 'the records');
+  // The second transform drops the label binder's marks the Session 44 writer saved (OV-3848).
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [true, true], 'the records');
   assert.deepEqual(paint(), saved, 'the records leave the paint as saved');
-  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [false], 'a Result with records gets none again');
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [false, false], 'a Result with records gets none again');
   resetPaint(svg);
   const python = paint();
   assert.equal(python.f38ba7c3f, '#54bcf8 gray 2.0', 'the stroke of the blocks no edit reached');
@@ -1641,11 +1642,29 @@ test('Load records Python\'s paint only on the Result of a Session older than 46
   assert.equal(edits.resultsRecordPythonPaint, false);
   assert.equal(createSavedResultPlan(results, admission, edits).kind, 'MUTATING');
   const edits46 = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(46, false));
-  assert.deepEqual(createSavedResultPlan(results, admission, edits46), createEmptySvgMutationPlan(1));
+  // The Result also holds the label binder's marks, which Load drops (OV-3848): one transform, not the records.
+  assert.equal(createSavedResultPlan(results, admission, edits46).operationsByResult[0].callerTransforms.length, 1);
+  const unmarked = results.map((result) => ({ ...result, content: String(result.content).replace(/ data-label-(?:editable|key)="[^"]*"/g, '') }));
+  assert.deepEqual(createSavedResultPlan(unmarked, admission, edits46), createEmptySvgMutationPlan(1));
   assert.deepEqual([46, 47, 48, 49].map((version) => sessionSourceFactsOf(version, false).resultsRecordPythonPaint),
     [true, true, true, true]);
   assert.deepEqual([27, 31, 44].map((version) => sessionSourceFactsOf(version, false).resultsRecordPythonPaint),
     [false, false, false]);
+});
+
+// OV-3848: Load records the source text each saved feature row records on
+// the labels of its features, so a Session saved before Generate wrote the
+// record shows the same text whether or not a label is clicked. A Result with
+// neither such a row nor the binder's marks is admitted as saved.
+test('Load records the saved rows\' label source texts on their labels', () => {
+  const results = [{ name: 'figure.svg', content: '<svg><text data-label-feature-id="f-1">renamed</text></svg>' }];
+  const sources = new Map([[0, new Map([['f-1', 'alpha protein']])]]);
+  const plan = createSavedResultPlan(results, null, null, null, sources);
+  assert.equal(plan.kind, 'MUTATING');
+  const svg = parseSvgText(results[0].content);
+  assert.deepEqual(plan.operationsByResult[0].callerTransforms.map((transform) => transform(svg)), [true]);
+  assert.equal(svg.querySelector('text').getAttribute('data-label-source-text'), 'alpha protein');
+  assert.deepEqual(createSavedResultPlan(results, null, null), createEmptySvgMutationPlan(1));
 });
 
 // D-19: a build of first-parent main drew a color rule's row under its key

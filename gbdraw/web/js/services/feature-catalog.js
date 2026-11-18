@@ -429,6 +429,17 @@ export const biologicalFeatureKey = (recordKey, biologicalFeatureId) => {
     : '';
 };
 
+/**
+ * The rendered features of a per-feature row's source identity in each Result
+ * of an admission (design Q4 6.2, R2).
+ * @param {{ readonly renderedTargetsByOverrideKey: ReadonlyMap<string, readonly { resultIndex: number, renderedId: string }[]> }} addressing
+ * @param {{ recordKey?: unknown, biologicalFeatureId?: unknown } | null | undefined} row
+ * @returns {readonly { resultIndex: number, renderedId: string }[]}
+ */
+export const featureRowTargets = (addressing, row) => (
+  addressing.renderedTargetsByOverrideKey.get(biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId)) || []
+);
+
 /** @param {FeatureCatalogRow | null | undefined} feature */
 export const stableFeatureOverrideKey = (feature) => biologicalFeatureKey(
   feature?.record_key ?? feature?.recordKey,

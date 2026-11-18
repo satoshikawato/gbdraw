@@ -23,7 +23,8 @@ import {
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 import {
-  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, labelTextOf
+  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, labelTextOf,
+  labelSourceTextOf as recordedLabelSourceTextOf
 } from '../../services/preview-affordances.js';
 
 /**
@@ -685,11 +686,11 @@ const resolveCompleteLabelVisualUnit = (svg, textEl, index = null) => {
 const labelFeatureAssignments = (svg, labelElements, mode) => assignFeatureIdsToLabels(
   svg, labelElements, collectFeatureGeometry(svg), mode
 );
-// A label's source text: its feature row's recorded source text, else the
-// text the binder recorded on the label, else the text it shows.
+// A label's source text, by the rule the Result's admission shares
+// (services/preview-affordances.js): its feature row's, else the label's record,
+// else the text it shows.
 /** @param {{ labelSourceText?: string | null } | null | undefined} row @param {Element} element */
-const labelSourceTextOf = (row, element) => row?.labelSourceText
-  ?? element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? labelTextOf(element);
+const labelSourceTextOf = (row, element) => recordedLabelSourceTextOf(row?.labelSourceText, element);
 // A label's feature row: the drawing's row of the feature's identity (R2).
 /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
 const rowOf = (drawing, feature) => {
