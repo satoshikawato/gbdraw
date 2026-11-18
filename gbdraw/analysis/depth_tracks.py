@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
-from numbers import Integral
+from numbers import Integral, Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 
@@ -151,6 +152,45 @@ def _expand_track_metadata(
     return [item or None for item in items]
 
 
+# The words that leave a per-series number unset (automatic).
+DEPTH_TRACK_UNSET_WORDS = frozenset({"", "auto", "none", "null", "-"})
+# Each per-series number option and the DepthTrackInput field it fills, which a refusal names.
+_DEPTH_TRACK_NUMBER_FIELDS = {
+    "depth_track_heights": "height",
+    "depth_track_large_tick_intervals": "large_tick_interval",
+    "depth_track_small_tick_intervals": "small_tick_interval",
+    "depth_track_tick_font_sizes": "tick_font_size",
+}
+
+
+def depth_track_number(value: object | None, *, field_name: str) -> float | None:
+    """One per-series number of the option ``field_name`` (a height, tick interval or tick font size), given as text
+    or a number: None when unset (None or one of ``DEPTH_TRACK_UNSET_WORDS``), else a finite number > 0.
+
+    The one reader of this rule for the option lists, the request encoder, the CLI's groups and the beginner API; a
+    refusal is INPUT_INVALID / POSITIVE_OR_AUTO for the DepthTrackInput field, as DepthTrackInput's own refusal.
+    """
+
+    if value is None or (isinstance(value, str) and value.strip().lower() in DEPTH_TRACK_UNSET_WORDS):
+        return None
+    numeric = math.nan
+    if isinstance(value, (str, Real)) and not isinstance(value, bool):
+        try:
+            numeric = ascii_float(value)
+        except (ValueError, OverflowError):
+            numeric = math.nan
+    if not math.isfinite(numeric) or numeric <= 0:
+        raise ValidationError(
+            f"{field_name} values must be finite numbers > 0 or auto.",
+            diagnostic={
+                "code": "INPUT_INVALID",
+                "field": _DEPTH_TRACK_NUMBER_FIELDS[field_name],
+                "reason": "POSITIVE_OR_AUTO",
+            },
+        )
+    return numeric
+
+
 def _expand_track_float_metadata(
     values: Sequence[float | str | None] | None,
     *,
@@ -161,18 +201,7 @@ def _expand_track_float_metadata(
         return []
     if values is None:
         return [None for _ in range(track_count)]
-    items: list[float | None] = []
-    for value in values:
-        if value is None:
-            items.append(None)
-            continue
-        if isinstance(value, str) and value.strip().lower() in {"", "auto", "none", "null", "-"}:
-            items.append(None)
-            continue
-        numeric = ascii_float(value)
-        if numeric <= 0:
-            raise ValidationError(f"{field_name} values must be > 0.")
-        items.append(numeric)
+    items = [depth_track_number(value, field_name=field_name) for value in values]
     if len(items) == 1:
         return [items[0] for _ in range(track_count)]
     if len(items) != track_count:

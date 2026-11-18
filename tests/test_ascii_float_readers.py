@@ -180,10 +180,9 @@ def _outcome(read: Callable[[str], object], text: str) -> tuple[str, object]:
 
 
 def _readers() -> dict[str, Callable[[str], object]]:
-    from gbdraw.analysis.depth_tracks import _expand_track_float_metadata
+    from gbdraw.analysis.depth_tracks import _expand_track_float_metadata, depth_track_number
     from gbdraw.annotations.io import _number
     from gbdraw.annotations.models import _finite
-    from gbdraw.api.record_planning import _optional_positive_float
     from gbdraw.cli_utils.common import parse_arrow_head_length_ratio_arg, parse_arrow_shaft_width_ratio_arg
     from gbdraw.config.models.canvas import _positive_finite_float
     from gbdraw.config.models.objects import (
@@ -213,9 +212,13 @@ def _readers() -> dict[str, Callable[[str], object]]:
         "definition line font size": normalize_definition_line_font_size,
         "definition line font weight": normalize_definition_line_font_weight,
         "font weight": _css_weight,
-        "depth track metadata": lambda text: _expand_track_float_metadata([text], track_count=1, field_name="f"),
-        "request depth metadata": lambda text: _expanded_depth_numeric_metadata([text], track_count=1, field_name="f"),
-        "depth track option": lambda text: _optional_positive_float(text, field_name="f"),
+        "depth track metadata": lambda text: _expand_track_float_metadata(
+            [text], track_count=1, field_name="depth_track_heights"
+        ),
+        "request depth metadata": lambda text: _expanded_depth_numeric_metadata(
+            [text], track_count=1, field_name="depth_track_heights"
+        ),
+        "depth track option": lambda text: depth_track_number(text, field_name="depth_track_heights"),
         "annotation table number": lambda text: _number(text, row_number=1, column="c"),
         "annotation number": lambda text: _finite(text, "n"),
         "track slot scalar": ScalarSpec.parse,

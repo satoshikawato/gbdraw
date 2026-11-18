@@ -55,7 +55,7 @@ from gbdraw.analysis.conservation import (
     normalize_conservation_tracks_for_record,
     resolve_drawn_conservation_rings,
 )
-from gbdraw.analysis.depth import depth_df as build_depth_df
+from gbdraw.analysis.depth import check_depth_range, depth_df as build_depth_df
 from gbdraw.analysis.depth_tracks import (
     DepthTrackData,
     DepthTrackSpec,
@@ -875,14 +875,9 @@ def _resolve_circular_window_step(
     )
 
 
-def _validate_depth_bounds(min_depth: float | None, max_depth: float | None) -> None:
-    # A value range may be negative (a signed series); the log scale refuses negative values where it draws them.
-    if min_depth is not None and max_depth is not None and float(min_depth) > float(max_depth):
-        raise ValidationError("depth_min must be <= depth_max")
-
-
 def _validate_depth_config(depth_config) -> None:
-    _validate_depth_bounds(depth_config.min_depth, depth_config.max_depth)
+    # The range's order; a log-scaled axis refuses a negative bound where it draws a series (depth_df).
+    check_depth_range(depth_config.min_depth, depth_config.max_depth, log_scale=False)
     if (
         depth_config.large_tick_interval is not None
         and float(depth_config.large_tick_interval) <= 0

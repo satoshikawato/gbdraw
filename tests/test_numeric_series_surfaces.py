@@ -104,6 +104,56 @@ def test_cli_series_values_are_checked() -> None:
         _cli_tracks(circular_cli, "--depth_track", "a", "--depth_track_style", "bar")
 
 
+def _refusal(call) -> tuple[str, object]:
+    """The message and diagnostic of the error ``call`` raises: the first error of its cause chain with a diagnostic."""
+
+    with pytest.raises(ValidationError) as caught:
+        call()
+    error: BaseException | None = caught.value
+    while error is not None and getattr(error, "diagnostic", None) is None:
+        error = error.__cause__
+    assert error is not None, caught.value
+    return str(error), getattr(error, "diagnostic")
+
+
+@pytest.mark.parametrize("text", ["0", "-2", "nan", "inf", "x"])
+def test_a_per_series_number_is_refused_alike_on_every_surface(tmp_path: Path, text: str) -> None:
+    """One rule reads a per-series number (here a large tick interval) wherever it is given as text or a number:
+    a finite number > 0, or unset. The low-level list reader took NaN and inf, the CLI's and the beginner API's
+    reader inf, and each worded its refusal in its own way (OV-3887)."""
+
+    from gbdraw.analysis.depth_tracks import _expand_track_float_metadata
+    from gbdraw.api.record_planning import DepthTrackCliValues, depth_track_inputs_from_cli
+
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("NC_012920.1\t1\t5\n")
+    surfaces = {
+        # The CLI's groups after parsing, as a Session replay reads them too (the parser refuses first, in its words).
+        "CLI groups": lambda: depth_track_inputs_from_cli([[str(depth)]], DepthTrackCliValues(large_tick_intervals=[text])),
+        "beginner API": lambda: gbdraw.draw_circular(
+            gbdraw.read_genbank(_HMMT),
+            options=gbdraw.CircularOptions(
+                depth_tracks=(gbdraw.DepthTrackOptions(source=depth, large_tick_interval=text),)  # type: ignore[arg-type]
+            ),
+        ),
+        "request option lists": lambda: encode_canonical_request(
+            CircularDiagramRequest(
+                records=(RecordInput(source=GenBankInputSource(_HMMT)),),
+                options=CircularDiagramOptions(depth_track_files=[[str(depth)]], depth_track_large_tick_intervals=[text]),
+            )
+        ),
+        "assembly option lists": lambda: _expand_track_float_metadata(
+            [text], track_count=1, field_name="depth_track_large_tick_intervals"
+        ),
+    }
+    expected = (
+        "depth_track_large_tick_intervals values must be finite numbers > 0 or auto.",
+        {"code": "INPUT_INVALID", "field": "large_tick_interval", "reason": "POSITIVE_OR_AUTO"},
+    )
+
+    assert {name: _refusal(call) for name, call in surfaces.items()} == dict.fromkeys(surfaces, expected)
+
+
 @pytest.mark.parametrize("module", [circular_cli, linear_cli])
 def test_the_global_depth_range_may_be_negative_except_on_a_log_scale(
     module, capsys: pytest.CaptureFixture[str]
@@ -122,6 +172,26 @@ def test_the_global_depth_range_may_be_negative_except_on_a_log_scale(
     with pytest.raises(SystemExit):
         validated("--depth_min", "-2", "--depth_log_scale")
     assert "--depth_min must be >= 0 with --depth_log_scale" in capsys.readouterr().err
+
+
+def test_a_drawing_refuses_a_global_depth_range_out_of_order_as_the_series_reader_does(tmp_path: Path) -> None:
+    """The assembler's check of the global range is the series reader's (``check_depth_range``): one message, which
+    the Web reads as the ORDER of min_depth; it had its own wording, which the Web could not classify."""
+
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("NC_012920.1\t1\t5\n")
+    overrides = {"objects.depth.min_depth": 5, "objects.depth.max_depth": 1}
+    with pytest.raises(ValidationError, match=r"^min_depth must be <= max_depth\.$") as caught:
+        gbdraw.draw_circular(
+            gbdraw.read_genbank(_HMMT),
+            options=gbdraw.CircularOptions(
+                depth_tracks=(gbdraw.DepthTrackOptions(source=depth),), config_overrides=overrides
+            ),
+        ).to_svg()
+    payload = serialize_web_error(caught.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == ("INPUT_INVALID", {"field": "min_depth", "reason": "ORDER"})
 
 
 # --- DepthTrackInput -------------------------------------------------------------------------------------------------

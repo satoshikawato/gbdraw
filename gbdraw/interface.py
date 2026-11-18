@@ -35,7 +35,7 @@ from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_se
 from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.io.record_sequences import detached_records
 from gbdraw.analysis.depth import DepthAggregation, DepthFileFormat
-from gbdraw.api.record_planning import _optional_positive_float
+from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.layout.series_style import DEPTH_UNIT, SeriesBaseline, SeriesBound, SeriesStyle
 from gbdraw.api.options import (
     DepthTrackInput,
@@ -916,14 +916,14 @@ def _depth_kwargs(
                 # A blank label or colour is unset, as the beginner API read it before.
                 label=(track.label or "").strip() or None,
                 color=(track.color or "").strip() or None,
-                height=_optional_positive_float(track.height, field_name="depth_track_heights"),
-                large_tick_interval=_optional_positive_float(
+                height=depth_track_number(track.height, field_name="depth_track_heights"),
+                large_tick_interval=depth_track_number(
                     track.large_tick_interval, field_name="depth_track_large_tick_intervals"
                 ),
-                small_tick_interval=_optional_positive_float(
+                small_tick_interval=depth_track_number(
                     track.small_tick_interval, field_name="depth_track_small_tick_intervals"
                 ),
-                tick_font_size=_optional_positive_float(track.tick_font_size, field_name="depth_track_tick_font_sizes"),
+                tick_font_size=depth_track_number(track.tick_font_size, field_name="depth_track_tick_font_sizes"),
                 format=track.format,
                 agg=track.agg,
                 style=track.style,

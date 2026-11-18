@@ -58,6 +58,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.analysis.collinearity_units import _COLLINEARITY_UNIT_MODES, COLLINEARITY_UNIT_MODE_SPELLINGS
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
+from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.analysis.feature_density import (
     FEATURE_DENSITY_TRACK_FIELD_ATTRIBUTES,
     FEATURE_DENSITY_TRACK_FIELDS,
@@ -84,7 +85,6 @@ from gbdraw.config.models.objects import DEFAULT_SCALAR_AXIS_LABELS
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.record_planning import _source_details
-from gbdraw.core.numeric import ascii_float
 from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
     LEGACY_FEATURE_SHAPES,
@@ -2933,25 +2933,10 @@ def _expanded_depth_numeric_metadata(
 ) -> list[float | None]:
     if values is None:
         return [None] * track_count
-    items: list[float | None] = []
-    for value in values:
-        if value is None or (
-            isinstance(value, str)
-            and value.strip().lower() in {"", "auto", "none", "null", "-"}
-        ):
-            items.append(None)
-            continue
-        try:
-            numeric = ascii_float(value)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise CanonicalRequestEncodingError(
-                f"{field_name} values must be finite numbers > 0 or None."
-            ) from exc
-        if not math.isfinite(numeric) or numeric <= 0:
-            raise CanonicalRequestEncodingError(
-                f"{field_name} values must be finite numbers > 0 or None."
-            )
-        items.append(numeric)
+    try:
+        items = [depth_track_number(value, field_name=field_name) for value in values]
+    except ValidationError as exc:
+        raise CanonicalRequestEncodingError(str(exc), diagnostic=exc.diagnostic) from exc
     if len(items) == 1:
         return items * track_count
     if len(items) != track_count:

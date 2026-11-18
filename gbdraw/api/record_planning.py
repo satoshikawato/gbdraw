@@ -8,7 +8,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Callable, Hashable, Iterable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
+from typing import Callable, Hashable, Iterable, Literal, Mapping, MutableMapping, NamedTuple, Sequence, TypeAlias, TypeVar, cast
 
 import pandas as pd
 from Bio.Seq import Seq
@@ -30,7 +30,7 @@ from gbdraw.config.models.canvas import LINEAR_WRAP_LENGTH_PATH, LinearWrapLengt
 from gbdraw.config.modify import modify_config_dict, raw_config_value, with_config_overrides
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.windows import WINDOW_SOURCE_ANNOTATION, WindowSource, cut_content
-from gbdraw.core.numeric import ascii_float, parse_ascii_integer
+from gbdraw.core.numeric import parse_ascii_integer
 from gbdraw.core.record_metadata import (
     WINDOW_OF_ANNOTATION,
     WINDOW_SPAN_ANNOTATION,
@@ -80,6 +80,7 @@ from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_lengt
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology, drawn_circular, reads_over_origin
 from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS
+from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.core.numeric import parse_ascii_finite_float
 from gbdraw.layout.series_style import DEPTH_UNIT, SERIES_STYLES, SeriesBaseline, SeriesBound
 from gbdraw.render_stages import render_stage
@@ -1490,24 +1491,6 @@ def _expanded_cli_track_values(
     return items
 
 
-def _optional_positive_float(value: object | None, *, field_name: str) -> float | None:
-    if value is None or str(value).strip().lower() in {
-        "",
-        "auto",
-        "none",
-        "null",
-        "-",
-    }:
-        return None
-    try:
-        numeric = ascii_float(cast(Any, value))
-    except (TypeError, ValueError) as exc:
-        raise ValidationError(f"{field_name} values must be numeric or auto.") from exc
-    if numeric <= 0:
-        raise ValidationError(f"{field_name} values must be > 0.")
-    return numeric
-
-
 @dataclass(frozen=True)
 class DepthTrackCliValues:
     """The values of the CLI's per-track depth options (``--depth_track_label`` ...), as typed: each one value for
@@ -1610,14 +1593,14 @@ def depth_track_inputs_from_cli(
                 source=source,
                 label=_cli_text(labels[index]),
                 color=_cli_text(colors[index]),
-                height=_optional_positive_float(heights[index], field_name="depth_track_heights"),
-                large_tick_interval=_optional_positive_float(
+                height=depth_track_number(heights[index], field_name="depth_track_heights"),
+                large_tick_interval=depth_track_number(
                     large_ticks[index], field_name="depth_track_large_tick_intervals"
                 ),
-                small_tick_interval=_optional_positive_float(
+                small_tick_interval=depth_track_number(
                     small_ticks[index], field_name="depth_track_small_tick_intervals"
                 ),
-                tick_font_size=_optional_positive_float(font_sizes[index], field_name="depth_track_tick_font_sizes"),
+                tick_font_size=depth_track_number(font_sizes[index], field_name="depth_track_tick_font_sizes"),
                 format=_cli_word(formats[index], DEPTH_FILE_FORMATS, "auto", field_name="depth_track_formats"),
                 agg=_cli_word(aggs[index], DEPTH_AGGREGATIONS, "mean", field_name="depth_track_aggs"),
                 style=_cli_word(styles[index], SERIES_STYLES, "area", field_name="depth_track_styles"),
