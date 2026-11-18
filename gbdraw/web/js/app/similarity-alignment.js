@@ -1773,7 +1773,7 @@ export const createSimilarityAlignmentActions = ({
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (!artifactIsCurrent()) return rejectStaleDraft();
     if (!projected.selectionComplete || !projected.geometryValidated) {
-      throw new Error('Alignment selection or final geometry is not validated.');
+      throw diagnosticError('ALIGNMENT_NOT_VALIDATED', {}, { operation: 'align', stage: 'helper' });
     }
     rebaseDraftBaseline();
     const orientations = projected.records.map(({ recordKey, afterReverseComplement }) => ({
@@ -1853,11 +1853,9 @@ export const createSimilarityAlignmentActions = ({
     if (blocked) return blocked;
     const id = String(groupId || '').trim();
     if (!reference) {
-      publishError(new Error(
-        source === 'drawer'
-          ? 'Select an exact reference feature before aligning this Similarity Group.'
-          : 'The clicked feature does not resolve to one exact Similarity Group member.'
-      ));
+      publishError(source === 'drawer'
+        ? new Error('Select an exact reference feature before aligning this Similarity Group.')
+        : diagnosticError('ALIGNMENT_REFERENCE', {}, { operation: 'align', stage: 'helper' }));
       return { status: 'rejected' };
     }
     const expectedActionId = ++actionId;
@@ -1866,7 +1864,7 @@ export const createSimilarityAlignmentActions = ({
     status.value = 'resolving';
     try {
       const group = getOrthogroupById(id);
-      if (!group) throw new Error('The selected Similarity Group is unavailable.');
+      if (!group) throw diagnosticError('ALIGNMENT_GROUP_MISSING', {}, { operation: 'align', stage: 'helper' });
       activeBaseline = baseline({ materializePlan: true });
       const members = getEnrichedOrthogroupMembers(group);
       const request = buildHelperRequest({
@@ -1877,7 +1875,8 @@ export const createSimilarityAlignmentActions = ({
       setReviewNames(request, members, activeBaseline.request);
       activeRequest = request;
       artifactStamp = captureArtifact(request.groupId);
-      return resolveRequest(request, expectedActionId, mode);
+      // Awaited, so a failure of the automatic Apply reaches the catch below (OV-3849).
+      return await resolveRequest(request, expectedActionId, mode);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       clearDraft();
@@ -1953,7 +1952,7 @@ export const createSimilarityAlignmentActions = ({
         publishError(new Error('Validated directions or reference placement changed. Review the updated preview and Apply again.'));
         return {status:'reviewing'};
       }
-      return applyPlan(response, expectedActionId, final);
+      return await applyPlan(response, expectedActionId, final);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       status.value = 'reviewing';

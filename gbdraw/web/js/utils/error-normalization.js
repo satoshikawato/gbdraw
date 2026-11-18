@@ -339,8 +339,14 @@ const DEFINITIONS = Object.freeze({
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.
   MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
-  // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
   ALIGNMENT_STALE: [ALIGNMENT_STALE_TEXT, ['edit-input']],
+  // An Align or Review from a feature popup whose feature is no single member of the group, or of a group the shown
+  // diagram no longer has, and an Align whose final geometry the check did not confirm (OV-3849). The same click fails
+  // the same way, so each names what to do instead of Retry.
+  ALIGNMENT_REFERENCE: ['The clicked feature is not exactly one member of this Similarity Group; choose the exact reference record and feature in the Similarity groups tab, then Align.', ['edit-input']],
+  ALIGNMENT_GROUP_MISSING: ['This Similarity Group is not in the shown diagram; choose a group in the Similarity groups tab, then Align.', ['edit-input']],
+  ALIGNMENT_NOT_VALIDATED: ['The alignment could not be checked against the drawn records, so nothing was changed; select Align… again.', ['edit-input']],
+  // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
   ALIGNMENT_RESET_EVIDENCE: ['What Reset alignment would restore no longer matches the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
   REGEX_SYNTAX: ['Not a valid regular expression.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],

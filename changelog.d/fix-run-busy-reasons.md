@@ -9,3 +9,7 @@
   screen readers.
 - Fixed: Web app: Align on a Similarity Group with several candidates is refused while a Generate runs, as it is for
   one candidate, instead of opening a review.
+- Fixed: Web app: Align… or Review alignment options… on a feature that is not exactly one member of its Similarity
+  Group, on a Similarity Group the shown diagram no longer has, or whose final geometry could not be checked, says
+  what to do instead of "The operation failed without recognized diagnostic information"; a failed one-click Align
+  no longer leaves the alignment in progress (OV-3849).

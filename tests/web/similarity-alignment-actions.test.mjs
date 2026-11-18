@@ -1767,6 +1767,27 @@ test('a review across a Generate disables Apply with the reason and a stale Appl
     'The diagram changed after this review opened. Start alignment again.');
 });
 
+// OV-3849: an Align or Review the user can fix fails with its own code and sentence, not as UNKNOWN.
+test('an alignment without one exact reference, of a group not drawn, or not validated fails with its own code', async () => {
+  const cases = [
+    ['ALIGNMENT_REFERENCE', create(), (fixture) => startAlign(fixture, null)],
+    ['ALIGNMENT_GROUP_MISSING', create(), (fixture) => fixture.actions.startFromPopup({ groupId: 'og-gone', reference })],
+    ['ALIGNMENT_NOT_VALIDATED', create({ mutateProjection: (response, count) => {
+      if (count !== 1) return;
+      const orientations = response.projection.geometryOrientations;
+      orientations.a = !orientations.a;
+    } }), (fixture) => startAlign(fixture)]
+  ];
+  const outcomes = [];
+  for (const [, fixture, run] of cases) {
+    const { status } = await run(fixture);
+    const { code, operation } = fixture.state.errorLog.value;
+    outcomes.push({ status, code, operation, drawn: fixture.generationCalls.length, after: fixture.actions.status.value });
+  }
+  // A failed automatic Apply ends the work as the failed resolve does (`start` awaits it).
+  assert.deepEqual(outcomes, cases.map(([code]) => ({ status: 'rejected', code, operation: 'align', drawn: 0, after: 'idle' })));
+});
+
 // D-40 (S2, N1): a switch waits for the alignment work in flight, with the reason the Apply line gives.
 test('the alignment owner names the work a drawing switch waits for (D-40)', async () => {
   let release;

@@ -7716,7 +7716,7 @@
                                               :text="t('Coordinates refer to the original record.')"></help-tip>
                                 </p>
                                 </template>
-                                <run-blocked-reason v-if="!featureRecordRotationDraft.targetFailure" id="feature-record-rotation-run-reason" class="mt-2"></run-blocked-reason>
+                                <run-blocked-reason id="feature-record-rotation-run-reason" class="mt-2"></run-blocked-reason>
                                 <p id="feature-record-rotation-reason"
                                    v-if="featureRecordRotationDraft.disabledReason.length"
                                    class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ errorText(featureRecordRotationDraft.disabledReason) }}</p>

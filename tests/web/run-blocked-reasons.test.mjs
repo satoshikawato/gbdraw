@@ -25,6 +25,26 @@ test('every control disabled while a run holds it names the run\'s reason in its
   }
 });
 
+// An aria-describedby that names a missing element describes nothing (accessibility.playwright.spec.js, 'aria-describedby
+// without a target'): the element with a reason's id is there whenever a control that names it is.
+test('a run-blocked reason element is there whenever a control that names it is', () => {
+  const components = readFileSync(new URL('../../gbdraw/web/js/components.js', import.meta.url), 'utf8');
+  const component = /export const RunBlockedReason = \{[\s\S]*?\n\};/.exec(components)?.[0] || '';
+  const root = /template: `(<[a-z][\w-]*\b[^>]*>)/.exec(component)?.[1] || '';
+  assert.match(root, /\s:id="id"/, 'the root element carries the id');
+  assert.doesNotMatch(root, /\sv-(if|else|else-if|for)=/, `the root element with the id is always rendered: ${root}`);
+  const conditionOf = (tag) => /\sv-if="([^"]*)"/.exec(tag)?.[1] ?? null;
+  for (const tag of TAGS.filter((entry) => entry.startsWith('<run-blocked-reason'))) {
+    const id = /\sid="([^"]+)"/.exec(tag)?.[1];
+    const controls = TAGS.filter((entry) => (/\saria-describedby="([^"]*)"/.exec(entry)?.[1] || '').split(/\s+/).includes(id));
+    assert.ok(controls.length > 0, `a control names ${id}`);
+    for (const control of controls) {
+      assert.ok(conditionOf(tag) === null || conditionOf(tag) === conditionOf(control),
+        `<run-blocked-reason id="${id}"> is rendered whenever its control is: ${tag} / ${control.replace(/\s+/g, ' ')}`);
+    }
+  }
+});
+
 test('the alignment owner\'s Align, Review and Apply read only the owner, which words the run\'s reason', () => {
   const drawer = TAGS.filter((tag) => /@click="startSimilarityAlignmentFromDrawer\(/.test(tag));
   assert.equal(drawer.length, 2);
