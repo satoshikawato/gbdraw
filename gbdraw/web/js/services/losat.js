@@ -141,6 +141,18 @@ const SERIAL_LOSATN_TASKS = new Set(['megablast', 'blastn']);
  */
 
 /**
+ * What the page posts to a pool worker (workers/losat-worker.js) to run one pair job, with the FASTA texts of the
+ * job's sequences that worker has not loaded yet (`buildJobSequencePayload`); `losatBuild` as in
+ * `LosatThreadedRunMessage`.
+ * @typedef {object} LosatWorkerRunMessage
+ * @property {'run'} type
+ * @property {string} id
+ * @property {string} losatBuild
+ * @property {LosatJob} job
+ * @property {{ key: string, fasta: string }[]} sequences
+ */
+
+/**
  * The first message to a pool worker; `losatBuild` as in `LosatThreadedRunMessage`.
  * @typedef {object} LosatWorkerInit
  * @property {'init'} type
@@ -741,6 +753,7 @@ const runLosatPairsWithWorkers = async (
       const id = `${Date.now()}-${requestId}`;
       requestId += 1;
       const loadedKeys = workerLoadedSequenceKeys.get(worker) || new Set();
+      /** @type {{ key: string, fasta: string }[]} */
       let sequencePayload = [];
       try {
         sequencePayload = buildJobSequencePayload(job, sequenceStore, loadedKeys);
@@ -794,13 +807,13 @@ const runLosatPairsWithWorkers = async (
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
-      worker.postMessage({
+      worker.postMessage(/** @type {LosatWorkerRunMessage} */ ({
         type: 'run',
         id,
         losatBuild: LOSAT_WASM_BUILD.version,
         job,
         sequences: sequencePayload
-      });
+      }));
     };
 
     try {
@@ -1205,7 +1218,8 @@ export const runUntilCanceled = async (signal, write, task) => {
 /**
  * The jobs of a search by File (Find in other files, PD-OI-123): one job per File, one after another, so the status
  * says "File k of N". A File whose job fails keeps its reason (`error`) and the next File still runs; Cancel stops
- * the run (the abort is thrown).
+ * the run (the abort is thrown), and so does a LOSAT of another build (OV-2440), which every File would meet: its one
+ * diagnostic asks for a reload.
  * @param {readonly LosatJob[]} jobs
  * @param {(job: LosatJob) => Promise<LosatJobResult[]>} execute
  * @param {Pick<LosatOverlayRun, 'signal' | 'status'>} run
@@ -1220,7 +1234,7 @@ export const runLosatJobsByFile = async (jobs, execute, { signal, status }, oper
     try {
       results.push(...await execute(job));
     } catch (error) {
-      if (signal.aborted) throw error;
+      if (signal.aborted || isLosatBuildChangedFailure(error)) throw error;
       results.push({ ...job, text: '', error: errorText(normalizeCaughtError(error, { stage: 'losat', operation }).summaryParts) });
     }
   }

@@ -146,7 +146,8 @@ const runThreadFromCold = async (data) => {
     flushThreadOutput(context, { type: 'done', tid });
     self.close();
   } catch (error) {
-    markWorkerStart(control, -1);
+    // -2: this worker is of another LOSAT build than its job worker, which then ends the job with that failure.
+    markWorkerStart(control, isLosatBuildChangedFailure(error) ? -2 : -1);
     self.postMessage({
       type: 'error',
       tid,

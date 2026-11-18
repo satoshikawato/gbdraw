@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import dataclasses
 import hashlib
 import json
 import threading
@@ -38,8 +39,12 @@ WASM_PATH = WEB_ROOT / "wasm" / "losat" / "losat.wasm"
 # qualified with (its derivation in the tutorial fixture manifest).
 BUILD_MANIFEST_PATH = WASM_PATH.with_name("losat-build.json")
 FIXTURE_MANIFEST_PATH = FIXTURE_ROOT / "manifest.json"
-QUERY_ID = "NC_001416.1"
-SUBJECT_ID = "NC_042057.1"
+# The one value of a source record the manifest does not hold: the FASTA text the browser search reads, which this
+# script builds from the record (60 columns, upper case).
+BROWSER_FASTA_SHA256 = {
+    "NC_001416.1": "1471a46a2b559a7c0cd6d018c442044e92aff8b4b1c4f6f1ab888efd44d20329",
+    "NC_042057.1": "c89d0dbeeb4552822e7c79f166ae65a66abb578378d2a8189febb98ac1134117",
+}
 OUTFMT6_COLUMN_COUNT = 12
 DISPLAY_THRESHOLDS = {
     "evalueMaximum": 0.01,
@@ -51,12 +56,24 @@ DISPLAY_THRESHOLDS = {
 
 @dataclass(frozen=True)
 class RecordSpec:
+    """A source record of the searches, from its tutorial fixture manifest entry (``derivation.sourceFileIds``)."""
+
     record_id: str
     path: Path
     length: int
     file_sha256: str
     sequence_sha256: str
-    browser_fasta_sha256: str
+
+    @classmethod
+    def from_entry(cls, entry: dict[str, Any]) -> RecordSpec:
+        (record,) = entry["records"]
+        return cls(
+            record_id=str(record["id"]),
+            path=FIXTURE_ROOT / entry["relativePath"],
+            length=int(record["length"]),
+            file_sha256=str(entry["sha256"]),
+            sequence_sha256=str(record["sequenceSha256"]),
+        )
 
 
 @dataclass(frozen=True)
@@ -65,6 +82,8 @@ class Evidence:
 
     file_id: str
     entry: dict[str, Any]
+    # The query and the subject record, in the order of the entry's ``derivation.sourceFileIds``.
+    sources: tuple[RecordSpec, RecordSpec]
 
     @property
     def output_path(self) -> Path:
@@ -89,24 +108,6 @@ class Evidence:
         raise ValueError(f"{self.file_id} records program {self.runtime_program}, which this script does not run")
 
 
-RECORDS = {
-    QUERY_ID: RecordSpec(
-        record_id=QUERY_ID,
-        path=FIXTURE_ROOT / "lambda" / "NC_001416.gb",
-        length=48_502,
-        file_sha256="4b76b8bacc8026aac3f19a4a915f4ac772ad61e7ec18f0e2cc859229f95a66e7",
-        sequence_sha256="36432a40f602258d19ae7c8152ddbc30390b559f2859c01d7047c77b048c71b3",
-        browser_fasta_sha256="1471a46a2b559a7c0cd6d018c442044e92aff8b4b1c4f6f1ab888efd44d20329",
-    ),
-    SUBJECT_ID: RecordSpec(
-        record_id=SUBJECT_ID,
-        path=FIXTURE_ROOT / "de3" / "NC_042057.1.gb",
-        length=42_925,
-        file_sha256="288eb87480f8fe6eab6246fe1fc4af78c85a6cb7e591c47fd7d7f0170c932e09",
-        sequence_sha256="533c360de52e4d5ac1f5dc31e0b927a518ff04951676d287b4b6d0238758aa45",
-        browser_fasta_sha256="c89d0dbeeb4552822e7c79f166ae65a66abb578378d2a8189febb98ac1134117",
-    ),
-}
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -130,7 +131,7 @@ def _browser_fasta(spec: RecordSpec) -> str:
     lines = [f">{record.id}"]
     lines.extend(sequence[index : index + 60] for index in range(0, len(sequence), 60))
     fasta = "\n".join(lines) + "\n"
-    if _sha256(fasta.encode("ascii")) != spec.browser_fasta_sha256:
+    if _sha256(fasta.encode("ascii")) != BROWSER_FASTA_SHA256[spec.record_id]:
         raise ValueError(f"browser FASTA checksum mismatch: {spec.record_id}")
     return fasta
 
@@ -160,12 +161,13 @@ def _retained(row: tuple[str, ...]) -> bool:
     )
 
 
-def _summarize(data: bytes, entry: dict[str, Any]) -> dict[str, Any]:
+def _summarize(data: bytes, evidence: Evidence) -> dict[str, Any]:
+    query, subject = evidence.sources
     rows = _parse_rows(data)
     retained = [row for row in rows if _retained(row)]
     orientations: Counter[str] = Counter()
     for line_number, row in enumerate(rows, start=1):
-        if row[0] != QUERY_ID or row[1] != SUBJECT_ID:
+        if row[0] != query.record_id or row[1] != subject.record_id:
             raise ValueError(f"LOSAT row {line_number} has the wrong endpoints")
         identity = float(row[2])
         alignment_length = int(row[3])
@@ -177,10 +179,10 @@ def _summarize(data: bytes, entry: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"LOSAT row {line_number} has invalid alignment values")
         if mismatches < 0 or gap_opens < 0 or evalue < 0 or bitscore < 0:
             raise ValueError(f"LOSAT row {line_number} has invalid score values")
-        if not 1 <= qstart <= RECORDS[QUERY_ID].length or not 1 <= qend <= RECORDS[QUERY_ID].length:
-            raise ValueError(f"LOSAT row {line_number} is outside the complete Lambda record")
-        if not 1 <= sstart <= RECORDS[SUBJECT_ID].length or not 1 <= send <= RECORDS[SUBJECT_ID].length:
-            raise ValueError(f"LOSAT row {line_number} is outside the complete DE3 record")
+        if not 1 <= qstart <= query.length or not 1 <= qend <= query.length:
+            raise ValueError(f"LOSAT row {line_number} is outside the complete {query.record_id} record")
+        if not 1 <= sstart <= subject.length or not 1 <= send <= subject.length:
+            raise ValueError(f"LOSAT row {line_number} is outside the complete {subject.record_id} record")
         orientations[("+" if qend >= qstart else "-") + ("+" if send >= sstart else "-")] += 1
     summary: dict[str, Any] = {
         "sizeBytes": len(data),
@@ -197,7 +199,7 @@ def _summarize(data: bytes, entry: dict[str, Any]) -> dict[str, Any]:
         ],
         "orientationCounts": dict(sorted(orientations.items())),
     }
-    minimum = entry["expectedSemantics"].get("tutorialMinimumAlignmentLength")
+    minimum = evidence.entry["expectedSemantics"].get("tutorialMinimumAlignmentLength")
     if minimum is not None:
         summary["tutorialRetainedRowCount"] = sum(int(row[3]) >= minimum for row in rows)
     return summary
@@ -216,7 +218,7 @@ def _frozen(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate(evidence: Evidence, data: bytes, *, frozen: bool) -> dict[str, Any]:
-    summary = _summarize(data, evidence.entry)
+    summary = _summarize(data, evidence)
     if frozen:
         for key, value in _frozen(evidence.entry).items():
             if summary[key] != value:
@@ -280,8 +282,8 @@ def _write_manifest(evidence: list[Evidence], build: dict[str, Any], runs: int) 
     old = json.loads(text)
     new = copy.deepcopy(old)
     for item in evidence:
-        entry = new["files"][item.file_id]
-        _record(Evidence(item.file_id, entry), _summarize(item.output_path.read_bytes(), entry), build, runs)
+        written = dataclasses.replace(item, entry=new["files"][item.file_id])
+        _record(written, _summarize(item.output_path.read_bytes(), written), build, runs)
     spans = _value_spans(text)
     for path, value in sorted(_changed_values(old, new), key=lambda change: spans[change[0]][0], reverse=True):
         start, end = spans[path]
@@ -291,12 +293,23 @@ def _write_manifest(evidence: list[Evidence], build: dict[str, Any], runs: int) 
     FIXTURE_MANIFEST_PATH.write_text(text, encoding="utf-8")
 
 
+def _sources(manifest: dict[str, Any], file_id: str, derivation: dict[str, Any]) -> tuple[RecordSpec, RecordSpec]:
+    """The query and the subject record an evidence entry names (``derivation.sourceFileIds``)."""
+
+    query_id, subject_id = derivation["sourceFileIds"]
+    entries = [manifest["files"][query_id], manifest["files"][subject_id]]
+    if derivation["sourceChecksums"] != [entry["sha256"] for entry in entries]:
+        raise ValueError(f"{file_id} records source checksums that are not its source files' sha256")
+    query, subject = (RecordSpec.from_entry(entry) for entry in entries)
+    return query, subject
+
+
 def _evidence(manifest: dict[str, Any]) -> list[Evidence]:
     """The manifest entries this script derives."""
 
     script = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
     found = [
-        Evidence(file_id, entry)
+        Evidence(file_id, entry, _sources(manifest, file_id, entry["derivation"]))
         for file_id, entry in manifest["files"].items()
         if (entry.get("derivation") or {}).get("script") == script
     ]
@@ -368,8 +381,7 @@ def _run_browser(evidence: list[Evidence], runs: int) -> tuple[dict[str, list[by
     except ImportError as error:
         raise RuntimeError("Python Playwright with Chromium is required") from error
 
-    query_fasta = _browser_fasta(RECORDS[QUERY_ID])
-    subject_fasta = _browser_fasta(RECORDS[SUBJECT_ID])
+    fasta = {spec.record_id: _browser_fasta(spec) for item in evidence for spec in item.sources}
     handler = partial(_Handler, directory=str(WEB_ROOT))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -403,8 +415,8 @@ def _run_browser(evidence: list[Evidence], runs: int) -> tuple[dict[str, list[by
                             }""",
                             {
                                 "program": item.runtime_program,
-                                "queryFasta": query_fasta,
-                                "subjectFasta": subject_fasta,
+                                "queryFasta": fasta[item.sources[0].record_id],
+                                "subjectFasta": fasta[item.sources[1].record_id],
                                 "extraArgs": item.extra_args,
                             },
                         )
@@ -424,8 +436,8 @@ def _check() -> dict[str, dict[str, Any]]:
 
     evidence = _evidence(_load_json(FIXTURE_MANIFEST_PATH))
     _check_runtime(_load_json(BUILD_MANIFEST_PATH), evidence)
-    for spec in RECORDS.values():
-        _load_record(spec)
+    for spec in {spec for item in evidence for spec in item.sources}:
+        _browser_fasta(spec)
     return {item.file_id: _validate(item, item.output_path.read_bytes(), frozen=True) for item in evidence}
 
 

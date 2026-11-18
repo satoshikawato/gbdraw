@@ -150,7 +150,7 @@ const FUNCTION_STATEMENTS = {
   'services/track-slot-validation.js::validateTrackSlotBindingInvariants': 98,
   'utils/contract-repair.js::repairPlace': 121,
   'workers/diagram-generation-worker.js::runGeneration': 96,
-  'workers/losat-threaded-worker.js::runThreadedLosat': 104
+  'workers/losat-threaded-worker.js::runThreadedLosat': 96
 };
 
 const COMPOSITION_ROOT_LOGIC_STATEMENTS = {

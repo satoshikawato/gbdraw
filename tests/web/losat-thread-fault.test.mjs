@@ -226,6 +226,36 @@ for (const [label, module, posted, setup = {}] of [
   });
 }
 
+// OV-2440: a thread started cold (no prepared thread worker) by a job worker of another LOSAT build refuses to start
+// (control -2, `losat-wasi-thread-worker.js`); the job then fails with the build change, not as a threaded host
+// failure, so the page asks for a reload instead of falling back to the serial engine.
+test('the threaded job worker: a cold thread of another LOSAT build ends the job with the build change', async (t) => {
+  restoreGlobalsAfter(t, ['self', 'Worker']);
+  const sent = [];
+  let terminated = 0;
+  globalThis.self = { postMessage: (message) => sent.push(message) };
+  globalThis.Worker = class {
+    addEventListener() {}
+    postMessage({ control }) {
+      const view = new Int32Array(control);
+      Atomics.store(view, 0, -2);
+      Atomics.notify(view, 0, 1);
+    }
+    terminate() { terminated += 1; }
+  };
+  await import(`${new URL('js/workers/losat-threaded-worker.js', webRoot).href}?instance=cold-build-${Date.now()}`);
+  await globalThis.self.onmessage({
+    data: {
+      type: 'run', id: 'job-1', losatBuild, module: await WebAssembly.compile(exitingJobModule(true)), wasiShimUrl,
+      threadsPerJob: 1, faultChannel: '', job: { program: 'blastn', extraArgs: [] }, queryFasta: '>q\nACGT\n', subjectFasta: '>s\nACGT\n'
+    }
+  });
+  assert.deepEqual(sent.map(({ ok, buildChanged, hostFailure, trap }) => ({ ok, buildChanged, hostFailure, trap })),
+    [{ ok: false, buildChanged: true, hostFailure: false, trap: false }]);
+  assert.match(sent[0].error, /LOSAT WASI thread 1 runs another LOSAT build/);
+  assert.ok(terminated >= 1);
+});
+
 const setupPage = async (t, {
   trappedAttempts = Infinity, trap = true, losatReported, threadedHostFailure = false, threadedWorkerThrows = false,
   trapReply = false, threadedWorkerEvent = '', buildChangedReply = false

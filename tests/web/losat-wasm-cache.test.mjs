@@ -153,7 +153,8 @@ test('a WASI thread worker refuses a job worker of another LOSAT build', async (
     { id: undefined, type: 'error', ok: undefined, buildChanged: true }
   ]);
   assert.equal(Atomics.load(new Int32Array(readyControl), 0), -1);
-  assert.equal(Atomics.load(new Int32Array(control), 0), -1);
+  // -2 tells the job worker, which waits on `control`, that the refusal is a build change (OV-2440).
+  assert.equal(Atomics.load(new Int32Array(control), 0), -2);
 });
 
 test('every LOSAT wasm loader fetches through compileLosatWasm and names the file it loads', () => {
