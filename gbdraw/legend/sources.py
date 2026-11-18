@@ -155,9 +155,9 @@ class GcSkewLegendSource(DinucleotideLegendSource):
 
 @dataclass(frozen=True)
 class DepthLegendSource:
-    """The row of a depth track, in the paint it draws with (its configurator's ``series_paint``). ``label`` and
-    ``track_index`` name one of several logical tracks (``depth_track_legend_name``); a lone track's row is
-    ``Depth`` (``lone``)."""
+    """The row of a depth track, in its colour (its configurator's ``legend_paint``: one row whatever its style and
+    negative colour). ``label`` and ``track_index`` name one of several logical tracks (``depth_track_legend_name``);
+    a lone track's row is ``Depth`` (``lone``)."""
 
     label: str
     track_index: int
@@ -165,7 +165,7 @@ class DepthLegendSource:
 
     @classmethod
     def of(cls, config: DepthConfigurator, label: str, track_index: int) -> DepthLegendSource:
-        return cls(label, track_index, config.series_paint)
+        return cls(label, track_index, config.legend_paint)
 
     @classmethod
     def lone(cls, config: DepthConfigurator) -> DepthLegendSource:

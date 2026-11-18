@@ -12,7 +12,7 @@ from ..layout.linear_coords import normalize_position_to_linear_track
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from ..layout.scalar_axis import ProjectedScalarLine, ScalarRow, SeriesSamples, held_to_end, project_scalar_line
 from .path_data import path_line_to, path_number
-from .track_paths import track_line_to
+from .track_paths import track_line_to, track_polyline
 
 def _samples(
     positions: ArrayLike,
@@ -56,6 +56,22 @@ def _area_path(start_x: float, base_y: float, xs: NDArray[np.float64], ys: NDArr
     )
 
 
+def linear_series_baseline_y(samples: SeriesSamples, frame: LinearTrackFrame) -> float:
+    """The y of the baseline a numeric series path closes on, and below which the part below the baseline is
+    painted: ``start_y`` for a deviation series, else the band's bottom raised by the band fraction
+    ``samples.baseline``."""
+
+    if samples.deviation is not None:
+        return float(frame.start_y)
+    return float(frame.start_y) + float(frame.track_height) - (float(frame.track_height) * samples.baseline)
+
+
+def _line_desc(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_starts: tuple[int, ...]) -> str:
+    """The open line of a ``line`` series through its samples."""
+
+    return track_polyline(xs, ys, segment_starts)
+
+
 def linear_series_path_desc(
     samples: SeriesSamples,
     frame: LinearTrackFrame,
@@ -65,7 +81,8 @@ def linear_series_path_desc(
     """The path of a numeric series track. A deviation series draws each sample's deviation from the mean of the
     series' windows with a value, closed to the baseline at ``start_y``; a window without a value lies on the
     baseline, so the area breaks there (OV-2799). A band series draws each value as the fraction of the height it
-    fills, closed to the baseline at the bottom of the track."""
+    fills from the bottom of the track, closed to its baseline (``linear_series_baseline_y``). A ``line`` series
+    is its line alone, open."""
 
     start_x, start_y, record_len, alignment_width, track_height = frame
     scale = samples.deviation
@@ -79,10 +96,12 @@ def linear_series_path_desc(
         max_diff = scale.max_diff
         # A completely flat series draws a flat line (no division by zero).
         ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - scale.mean) / max_diff))
+        if samples.style == "line":
+            return _line_desc(xs, ys, segment_starts)
         return _area_path(start_x, start_y, xs, ys, segment_starts)
     if record_len <= 0 or track_height <= 0:
         return ""
-    baseline_y = float(start_y) + float(track_height)
+    bottom_y = float(start_y) + float(track_height)
     positions, values, segment_starts = _samples(
         # Unprojected positions are whole bases.
         samples.positions if record_transform is not None and record_transform.projects
@@ -95,7 +114,10 @@ def linear_series_path_desc(
     if not len(positions):
         return ""
     xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
-    return _area_path(start_x, baseline_y, xs, baseline_y - (float(track_height) * np.clip(values, 0.0, 1.0)), segment_starts)
+    ys = bottom_y - (float(track_height) * np.clip(values, 0.0, 1.0))
+    if samples.style == "line":
+        return _line_desc(xs, ys, segment_starts)
+    return _area_path(start_x, linear_series_baseline_y(samples, frame), xs, ys, segment_starts)
 
 
-__all__ = ["LinearTrackFrame", "linear_series_path_desc"]
+__all__ = ["LinearTrackFrame", "linear_series_baseline_y", "linear_series_path_desc"]

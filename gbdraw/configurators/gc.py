@@ -91,7 +91,7 @@ class GcContentConfigurator:
     def series_paint(self) -> SeriesPaint:
         """How the track's path is painted, as drawn and as its Legend row shows it."""
 
-        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None)
+        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None, None)
 
     @property
     def axis_style(self) -> ScalarAxisStyle | None:
@@ -148,7 +148,7 @@ class GcSkewConfigurator:
         baseline and the low fill below it."""
 
         return SeriesPaint(
-            self.high_fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, self.low_fill_color
+            self.high_fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, self.low_fill_color, None
         )
 
 __all__ = [

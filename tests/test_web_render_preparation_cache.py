@@ -20,7 +20,7 @@ from tests.utils.session_drawing_view import drawing_view
 from tests.utils.web_render_result import web_result_svg
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
-from gbdraw.analysis.depth import DEPTH_COLUMNS, DepthCoverage, _read_depth_tsv_cached, clear_depth_tsv_cache
+from gbdraw.analysis.depth import DEPTH_COLUMNS, DepthCoverage, DepthFileFormat, _read_depth_tsv_cached, clear_depth_tsv_cache
 import gbdraw.analysis.depth as depth_module
 from gbdraw.api import (
     CircularBatchRequest,
@@ -3074,8 +3074,8 @@ def test_hiding_depth_releases_its_parsed_table(
     parsed: list[weakref.ref[DepthCoverage]] = []
     real_parse = depth_module._parse_depth_file
 
-    def recording_parse(resolved_path: str) -> DepthCoverage:
-        coverage = real_parse(resolved_path)
+    def recording_parse(resolved_path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
+        coverage = real_parse(resolved_path, file_format)
         parsed.append(weakref.ref(coverage))
         return coverage
 
@@ -3177,9 +3177,9 @@ def _depth_parse_counter(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     counts = {"parse": 0}
     real_parse = depth_module._parse_depth_file
 
-    def counting_parse(resolved_path: str) -> DepthCoverage:
+    def counting_parse(resolved_path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
         counts["parse"] += 1
-        return real_parse(resolved_path)
+        return real_parse(resolved_path, file_format)
 
     monkeypatch.setattr(depth_module, "_parse_depth_file", counting_parse)
     return counts

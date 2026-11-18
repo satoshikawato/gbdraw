@@ -3,12 +3,13 @@
 
 """Depth coverage parsing and binning helpers.
 
-A depth file is a table of numbers along a reference, in one of three forms told
-apart by the column count of its first data line (never by the file's name,
-which the Web does not keep): two columns are a 1-based position and a value,
-three are a reference name, a 1-based position and a value (``samtools depth``),
-and four or more are a reference name, a 0-based start, an exclusive end and a
-value (bedGraph). Every form is read into one parsed form, :class:`DepthCoverage`.
+A depth file is a table of numbers along a reference. Its format (``DepthFileFormat``) is stated, or ``auto``:
+then it is told apart by the column count of its first data line (never by the file's name, which the Web does not
+keep): two columns are a 1-based position and a value (``position_value``), three are a reference name, a 1-based
+position and a value (``samtools``, ``samtools depth``), and four or more are a reference name, a 0-based start, an
+exclusive end and a value (``bedgraph``). A ``bed`` file is never told by its columns: its rows are features, each
+adding its score (column 5, else 1) to every base it covers. Values may be negative. Every format is read into one
+parsed form, :class:`DepthCoverage`.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Generator, Iterable, Iterator, Mapping, TypeAlias
+from typing import Callable, Generator, Iterable, Iterator, Literal, Mapping, TypeAlias, get_args
 
 import numpy as np
 import pandas as pd
@@ -31,10 +32,26 @@ from gbdraw.io.input_text import GZIP_ERRORS, open_input_text
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
+# How a depth file reads: by its column count (``auto``), or as the format stated.
+DepthFileFormat = Literal["auto", "samtools", "bedgraph", "bed", "position_value"]
+DEPTH_FILE_FORMATS: tuple[DepthFileFormat, ...] = get_args(DepthFileFormat)
+# The value of a window: the mean of the bases it counts, their largest value, or their sum.
+DepthAggregation = Literal["mean", "max", "sum"]
+DEPTH_AGGREGATIONS: tuple[DepthAggregation, ...] = get_args(DepthAggregation)
 # The columns of each form, by the column count of the first data line (four or more: bedGraph).
 _POSITION_VALUE_COLUMNS = ("position", "depth")
 _INTERVAL_COLUMNS = ("reference_name", "start", "end", "depth")
 _FORM_COLUMNS = {2: _POSITION_VALUE_COLUMNS, 3: tuple(DEPTH_COLUMNS), 4: _INTERVAL_COLUMNS}
+# A BED row: a feature and its optional name and score. The name is not read.
+_BED_COLUMNS = ("reference_name", "start", "end", "name", "depth")
+# The columns a stated format reads, and how many a data line needs at least.
+_FORMAT_COLUMNS: Mapping[DepthFileFormat, tuple[tuple[str, ...], int]] = {
+    "samtools": (tuple(DEPTH_COLUMNS), 3),
+    "bedgraph": (_INTERVAL_COLUMNS, 4),
+    "bed": (_BED_COLUMNS, 3),
+    "position_value": (_POSITION_VALUE_COLUMNS, 2),
+}
+_TEXT_COLUMNS = frozenset({"reference_name", "name"})
 _COLUMN_DTYPES = {
     # A few names repeat on every row: codes, not one string per row.
     "reference_name": "category",
@@ -57,9 +74,14 @@ _SUM_CHUNK_BASES = 1 << 20
 # Bases of bedGraph rows spread per chunk: a spread base holds about four times the transient bytes of a read
 # row (its position, row and value arrays and the store's copies), so a quarter of a read chunk.
 _SPREAD_BASES = 1 << 18
-# Whole depths take the first of these that holds the largest; others are float64.
+# Whole depths take the first of these that holds them all (signed when one is negative); others are float64.
 _WHOLE_DEPTH_DTYPES = (np.dtype(np.uint8), np.dtype(np.uint16), np.dtype(np.uint32))
-DepthArray: TypeAlias = NDArray[np.uint8] | NDArray[np.uint16] | NDArray[np.uint32] | NDArray[np.float64]
+_SIGNED_DEPTH_DTYPES = (np.dtype(np.int8), np.dtype(np.int16), np.dtype(np.int32))
+DepthArray: TypeAlias = (
+    NDArray[np.uint8] | NDArray[np.uint16] | NDArray[np.uint32]
+    | NDArray[np.int8] | NDArray[np.int16] | NDArray[np.int32]
+    | NDArray[np.float64]
+)
 _UNREADABLE = {"code": "INPUT_UNREADABLE"}
 
 
@@ -83,21 +105,37 @@ def _is_float_like(value: str) -> bool:
     return True
 
 
+def checked_depth_file_format(file_format: str) -> DepthFileFormat:
+    """``file_format`` as one of ``DEPTH_FILE_FORMATS``; another value is refused."""
+
+    for known in DEPTH_FILE_FORMATS:
+        if file_format == known:
+            return known
+    raise ValidationError(f"Depth file format must be one of {', '.join(DEPTH_FILE_FORMATS)}; got {file_format!r}.")
+
+
 @dataclass(frozen=True)
 class _DepthForm:
-    """How the rows of one depth file read: the columns of its form, and the lines before its first row."""
+    """How the rows of one depth file read: the columns of its form (a ``name`` column is skipped), the lines
+    before its first row, and whether its rows stack (``bed``: each adds its value to the bases it covers)."""
 
     columns: tuple[str, ...]
     skiprows: int
+    stacks: bool = False
+
+    @property
+    def read_columns(self) -> tuple[str, ...]:
+        return tuple(column for column in self.columns if column != "name")
 
 
-def _is_header(fields: list[str], columns: tuple[str, ...]) -> bool:
-    """Whether the first data line names its columns: a number column of it is not a number."""
+def _is_header(fields: list[str], columns: tuple[str, ...], file_format: DepthFileFormat = "auto") -> bool:
+    """Whether the first data line names its columns: a number column of it is not a number (a BED score of ``.``
+    is no score, not a name)."""
 
     return not all(
-        _is_float_like(field) if column == "depth" else _is_int_like(field)
+        (_is_float_like(field) or (file_format == "bed" and field == ".")) if column == "depth" else _is_int_like(field)
         for field, column in zip(fields, columns)
-        if column != "reference_name"
+        if column not in _TEXT_COLUMNS
     )
 
 
@@ -107,19 +145,28 @@ def _fields(line: str) -> list[str]:
     return line.rstrip("\r\n").split("\t")
 
 
-def _form_columns(fields: list[str]) -> tuple[str, ...]:
-    return _FORM_COLUMNS[min(len(fields), 4)]
+def _form_columns(fields: list[str], file_format: DepthFileFormat = "auto") -> tuple[str, ...]:
+    """The columns a data line of ``fields`` reads: by its column count (``auto``), else those of the format a line
+    of that many fields holds (a BED line of three fields has no name or score)."""
+
+    if file_format == "auto":
+        return _FORM_COLUMNS[min(len(fields), 4)]
+    columns, _needed = _FORMAT_COLUMNS[file_format]
+    return columns if file_format != "bed" else columns[: max(3, min(len(fields), len(columns)))]
 
 
-def _depth_form(path: Path) -> _DepthForm:
+def _depth_form(path: Path, file_format: DepthFileFormat = "auto") -> _DepthForm:
     """The form of a depth file from its first data line, after any comment, track and browser lines.
 
-    That line has two columns, three, or four or more. A comment line that reads
-    as a row is one (a reference may be named ``#1``). The rows after the header
-    ``samtools depth -H`` writes are samtools depth rows, however many samples
-    they hold, and their first sample is read. The first data line is a header
-    line, skipped too, when one of its number columns is not a number. An empty
-    file reads as three columns, as before.
+    By its column count (``auto``), that line has two columns, three, or four or
+    more; a stated format reads its own columns of each row (the first value
+    column of a several-sample ``samtools`` file) and refuses a line of fewer. A
+    comment line that reads as a row is one (a reference may be named ``#1``).
+    The rows after the header ``samtools depth -H`` writes are samtools depth
+    rows, however many samples they hold, and their first sample is read. The
+    first data line is a header line, skipped too, when one of its number
+    columns is not a number. An empty file reads as three columns, as before (a
+    stated format: its own).
     """
 
     skipped = 0
@@ -129,7 +176,7 @@ def _depth_form(path: Path) -> _DepthForm:
             for line in handle:
                 fields = _fields(line)
                 if not _PREAMBLE_LINE.match(line) or (
-                    len(fields) >= 2 and not _is_header(fields, _form_columns(fields))
+                    len(fields) >= 2 and not _is_header(fields, _form_columns(fields, file_format), file_format)
                 ):
                     break
                 samtools = samtools or line.startswith(_SAMTOOLS_HEADER)
@@ -141,6 +188,19 @@ def _depth_form(path: Path) -> _DepthForm:
             f"Unable to read depth file '{path}': {exc}", diagnostic=_UNREADABLE
         ) from exc
 
+    stacks = file_format == "bed"
+    if file_format != "auto":
+        columns, needed = _FORMAT_COLUMNS[file_format]
+        if not line:
+            return _DepthForm(columns[:needed], skipped, stacks)
+        if len(fields) < needed:
+            raise ParseError(
+                f"Depth file '{path}' read as {file_format} must have {needed} or more tab-separated columns "
+                f"({', '.join(columns[:needed])}).",
+                diagnostic={"code": "TABLE_INVALID", "reason": "DEPTH_COLUMNS"},
+            )
+        columns = _form_columns(fields, file_format)
+        return _DepthForm(columns, skipped + int(_is_header(fields, columns, file_format)), stacks)
     if not line:
         return _DepthForm(tuple(DEPTH_COLUMNS), skipped)
     if len(fields) < 2:
@@ -173,8 +233,8 @@ def _depth_tsv_cache_key(path: str) -> tuple[str, int, int]:
 
 
 @lru_cache(maxsize=_DEPTH_TSV_CACHE_MAXSIZE)
-def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> DepthCoverage:
-    return _parse_depth_file(resolved_path)
+def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int, file_format: DepthFileFormat) -> DepthCoverage:
+    return _parse_depth_file(resolved_path, file_format)
 
 
 @dataclass(frozen=True, eq=False)
@@ -182,12 +242,14 @@ class DepthCoverage:
     """The parsed form of depth rows: per reference, the depth at each 1-based source position.
 
     ``depths[name][position - 1]`` is the mean of the rows for that position
-    (their sum, in row order, divided by their count) and 0 where no row names
-    it; a bedGraph row names the positions ``start + 1`` to ``end``. Names keep
+    (their sum, in row order, divided by their count; a ``bed`` file's sum) and
+    0 where no row names it; a bedGraph or BED row names the positions
+    ``start + 1`` to ``end``. Names keep
     the order of their first row; a file without reference names (two columns)
     has one reference named ``""``. Each array is read-only and
     has the smallest dtype that holds every value exactly: ``uint8``,
-    ``uint16`` or ``uint32`` for whole depths, ``float64`` otherwise.
+    ``uint16`` or ``uint32`` for whole depths, ``int8``, ``int16`` or ``int32``
+    when one is negative, ``float64`` otherwise.
     ``extents[name]`` is the first and the last position the rows name: the
     part of the reference the file covers.
     """
@@ -200,17 +262,21 @@ class DepthCoverage:
         return sum(int(array.nbytes) for array in self.depths.values())
 
 
-def _smallest_exact_dtype(values: NDArray[np.float64], dtype: np.dtype) -> np.dtype:
-    """The first dtype of the ladder from ``dtype`` that holds ``values`` exactly."""
+def _smallest_exact_dtype(
+    values: NDArray[np.float64], dtype: np.dtype, held: tuple[float, float] = (0.0, 0.0)
+) -> np.dtype:
+    """The first whole dtype of the ladder (signed when a value is negative) that holds ``values`` and the range
+    ``held`` of the values already stored in ``dtype``, exactly; ``float64`` once a value is not whole."""
 
     if dtype == np.float64 or not values.size:
         return dtype
     whole = np.isfinite(values) & (values == np.floor(values))
     if not whole.all():
         return np.dtype(np.float64)
-    largest = float(values.max())
-    for candidate in _WHOLE_DEPTH_DTYPES[_WHOLE_DEPTH_DTYPES.index(dtype):]:
-        if largest <= np.iinfo(candidate).max:
+    smallest, largest = min(held[0], float(values.min())), max(held[1], float(values.max()))
+    for candidate in _WHOLE_DEPTH_DTYPES if smallest >= 0 else _SIGNED_DEPTH_DTYPES:
+        limits = np.iinfo(candidate)
+        if limits.min <= smallest and largest <= limits.max:
             return candidate
     return np.dtype(np.float64)
 
@@ -222,6 +288,8 @@ class _SortedDepths:
         self.values: DepthArray = np.zeros(0, dtype=np.uint8)
         self.length = 0
         self.first = 0
+        # The least and the largest value stored (0 holds where no row is).
+        self.held = (0.0, 0.0)
 
     def add(self, positions: NDArray[np.int64], depths: NDArray[np.float64]) -> bool:
         """Store rows that follow every earlier one; False (nothing stored) when they do not."""
@@ -230,9 +298,10 @@ class _SortedDepths:
             return False
         if not self.length:
             self.first = int(positions[0])
-        dtype = _smallest_exact_dtype(depths, self.values.dtype)
+        dtype = _smallest_exact_dtype(depths, self.values.dtype, self.held)
         if dtype != self.values.dtype:
             self.values = self.values.astype(dtype)
+        self.held = (min(self.held[0], float(depths.min())), max(self.held[1], float(depths.max())))
         last = int(positions[-1])
         if last > self.values.size:
             # Grow in place where the allocator can; the new tail is zero.
@@ -248,9 +317,11 @@ class _SortedDepths:
 
 
 class _SummedDepths:
-    """One reference's rows in any order: sums in row order and counts, divided at the end."""
+    """One reference's rows in any order: sums in row order and counts, divided at the end unless the rows stack
+    (``bed``: the sum is the value)."""
 
-    def __init__(self) -> None:
+    def __init__(self, stacks: bool) -> None:
+        self.stacks = stacks
         self.sums: NDArray[np.float64] = np.zeros(0, dtype=np.float64)
         self.counts: NDArray[np.uint32] = np.zeros(0, dtype=np.uint32)
         self.first = 0
@@ -273,9 +344,10 @@ class _SummedDepths:
         # Up to the last position, as the sorted store keeps: the length never depends on how the rows were chunked.
         self.sums.resize(self.last, refcheck=False)
         self.counts.resize(self.last, refcheck=False)
-        present = self.counts > 0
         means = self.sums
-        means[present] /= self.counts[present]
+        if not self.stacks:
+            present = self.counts > 0
+            means[present] /= self.counts[present]
         self.counts = np.zeros(0, dtype=np.uint32)
         dtype = _smallest_exact_dtype(means, np.dtype(np.uint8))
         return (means if dtype == np.float64 else means.astype(dtype)), (self.first, self.last)
@@ -305,11 +377,11 @@ def _coverage(references: Mapping[str, tuple[DepthArray, tuple[int, int]]]) -> D
     )
 
 
-def _summed_coverage(chunks: Iterable[DataFrame]) -> DepthCoverage:
+def _summed_coverage(chunks: Iterable[DataFrame], *, stacks: bool = False) -> DepthCoverage:
     references: dict[str, _SummedDepths] = {}
     for chunk in chunks:
         for reference, positions, depths in _reference_rows(chunk):
-            references.setdefault(reference, _SummedDepths()).add(positions, depths)
+            references.setdefault(reference, _SummedDepths(stacks)).add(positions, depths)
     return _coverage({name: summed.finish() for name, summed in references.items()})
 
 
@@ -334,7 +406,7 @@ def _named_rows(chunk: DataFrame) -> DataFrame:
 
 
 def _interval_bases(rows: DataFrame) -> Iterator[DataFrame]:
-    """The per-base rows of bedGraph rows: bases ``start + 1`` to ``end`` of a row take its value.
+    """The per-base rows of bedGraph or BED rows: bases ``start + 1`` to ``end`` of a row take its value.
 
     The bases are spread in row order, ``_SPREAD_BASES`` at a time, so a long row
     spans several chunks and each chunk stays small beside the stored depths.
@@ -395,7 +467,17 @@ def _intervals_overlap_or_go_back(rows: DataFrame, last_ends: dict[str, int]) ->
     return failed
 
 
-def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
+def _scored_rows(chunk: DataFrame) -> DataFrame:
+    """BED rows with their values: the score, else 1 (no score column, or ``.`` for none)."""
+
+    if "depth" not in chunk:
+        chunk["depth"] = 1.0
+    else:
+        chunk["depth"] = chunk["depth"].fillna(1.0)
+    return chunk
+
+
+def _depth_chunks(resolved_path: str, file_format: DepthFileFormat = "auto") -> Generator[DataFrame, None, None]:
     """The per-base rows of one depth file in file order, a chunk at a time, each one valid.
 
     A file with an invalid row raises once it is read to the end, so a value
@@ -404,7 +486,10 @@ def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
     """
 
     depth_path = Path(resolved_path)
-    form = _depth_form(depth_path)
+    form = _depth_form(depth_path, file_format)
+    columns = form.read_columns
+    # A BED score of ``.`` is no score; nothing else reads as missing there but an empty reference name.
+    missing = {"keep_default_na": False, "na_values": {"reference_name": [""], "depth": ["."]}} if form.stacks else {}
     failed: set[str] = set()
     last_ends: dict[str, int] = {}
     try:
@@ -413,18 +498,24 @@ def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
                 handle,
                 sep="\t",
                 header=None,
-                names=list(form.columns),
-                usecols=list(range(len(form.columns))),
+                names=list(columns),
+                usecols=[index for index, column in enumerate(form.columns) if column != "name"],
                 skiprows=form.skiprows,
-                dtype={column: _COLUMN_DTYPES[column] for column in form.columns},
+                dtype={column: _COLUMN_DTYPES[column] for column in columns},
                 chunksize=_CHUNK_ROWS,
+                **missing,
                 **EXACT_FLOAT_READ_OPTIONS,
             )
             with reader:
                 for read in reader:
-                    chunk = _named_rows(read)
+                    chunk = _named_rows(_scored_rows(read) if form.stacks else read)
                     failed.update(_failed_depth_checks(chunk))
-                    if not failed and "start" in chunk and _intervals_overlap_or_go_back(chunk, last_ends):
+                    if (
+                        not failed
+                        and "start" in chunk
+                        and not form.stacks
+                        and _intervals_overlap_or_go_back(chunk, last_ends)
+                    ):
                         failed.add("INTERVAL")
                     if failed:
                         continue
@@ -440,20 +531,21 @@ def _depth_chunks(resolved_path: str) -> Generator[DataFrame, None, None]:
     _raise_first_failed_check(failed)
 
 
-def _parse_depth_file(resolved_path: str) -> DepthCoverage:
+def _parse_depth_file(resolved_path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
     """Parse and validate one depth file into its coverage (see ``parse_depth_tsv``).
 
     Rows in increasing positions per reference (a samtools depth file) are
-    stored as they are read; any other file is read again and summed.
+    stored as they are read; any other file is read again and summed (a
+    ``bed`` file's rows stack: the sum is the value).
     """
 
-    chunks = _depth_chunks(resolved_path)
+    chunks = _depth_chunks(resolved_path, file_format)
     try:
         coverage = _sorted_coverage(chunks)
     finally:
         chunks.close()
     if coverage is None:
-        coverage = _summed_coverage(_depth_chunks(resolved_path))
+        coverage = _summed_coverage(_depth_chunks(resolved_path, file_format), stacks=file_format == "bed")
     return coverage
 
 
@@ -463,38 +555,44 @@ def clear_depth_tsv_cache() -> None:
     _read_depth_tsv_cached.cache_clear()
 
 
-def parse_depth_tsv(path: str) -> DepthCoverage:
-    """Parse one depth file without the process cache of renders.
+def parse_depth_tsv(path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
+    """Parse one depth file, read in ``file_format``, without the process cache of renders.
 
     The Worker's decoded-resource layer owns the coverage it returns and shares
     it, read-only, with every record and render.
     """
 
+    file_format = checked_depth_file_format(file_format)
     resolved_path, _mtime_ns, _size = _depth_tsv_cache_key(path)
-    return _parse_depth_file(resolved_path)
+    return _parse_depth_file(resolved_path, file_format)
 
 
-def read_cached_depth_coverage(path: str) -> DepthCoverage:
-    """The process cache's coverage of one file (CLI and Python API renders), shared read-only."""
+def read_cached_depth_coverage(path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
+    """The process cache's coverage of one file read in ``file_format`` (CLI and Python API renders), shared
+    read-only."""
 
+    file_format = checked_depth_file_format(file_format)
     resolved_path, mtime_ns, size = _depth_tsv_cache_key(path)
-    return _read_depth_tsv_cached(resolved_path, mtime_ns, size)
+    return _read_depth_tsv_cached(resolved_path, mtime_ns, size, file_format)
 
 
-def read_depth_tsv(path: str) -> DataFrame:
+def read_depth_tsv(path: str, file_format: DepthFileFormat = "auto") -> DataFrame:
     """Read a depth file as a table of its per-base rows: reference name, 1-based position, depth.
 
-    The file is in any form of this module: two columns (position, value),
+    The file is in any form of this module, read by its column count or in
+    ``file_format``: two columns (position, value),
     three (reference, position, value) or four or more (bedGraph, whose rows
-    give one row per base they cover). Headerless files are expected; comment,
+    give one row per base they cover; a BED file's rows give one row per base
+    each covers). Headerless files are expected; comment,
     track and browser lines before the rows are skipped, and a single header
     line is tolerated when one of its number fields is non-numeric. Reference
     names are a ``string`` column. Each call reads the file and returns a new
     table.
     """
 
+    file_format = checked_depth_file_format(file_format)
     resolved_path, _mtime_ns, _size = _depth_tsv_cache_key(path)
-    chunks = list(_depth_chunks(resolved_path))
+    chunks = list(_depth_chunks(resolved_path, file_format))
     table = (
         pd.concat(chunks, ignore_index=True)
         if chunks
@@ -557,11 +655,6 @@ _DEPTH_CHECKS: tuple[tuple[str, str, Callable[[DataFrame], bool]], ...] = (
         "Depth values must be finite numbers.",
         lambda rows: not bool(np.isfinite(rows["depth"].to_numpy(dtype=np.float64)).all()),
     ),
-    (
-        "NONNEGATIVE",
-        "Depth values must be non-negative.",
-        lambda rows: bool((rows["depth"] < 0).any()),
-    ),
 )
 
 
@@ -591,8 +684,8 @@ def _select_record_reference(record: SeqRecord, coverage: DepthCoverage) -> str:
     )
 
 
-def _window_bases_read(windows: SlidingWindows, record_length: int, extent: tuple[int, int]) -> NDArray[np.int64]:
-    """How many bases each window's mean is over (D-64).
+def _counted_runs(windows: SlidingWindows, record_length: int, extent: tuple[int, int]) -> list[list[int]]:
+    """The local positions ``[start, stop)`` a window's value reads (D-64), as merged runs in local order.
 
     Every base of the molecule the record draws counts; a base past the drawn record or crop counts only within
     ``extent``, the first to the last position the depth rows of the record name. A position inside both that
@@ -635,26 +728,23 @@ def _window_bases_read(windows: SlidingWindows, record_length: int, extent: tupl
             merged[-1][1] = max(merged[-1][1], stop)
         else:
             merged.append([start, stop])
+    return merged
+
+
+def _window_bases_read(windows: SlidingWindows, counted: list[list[int]]) -> NDArray[np.int64]:
+    """How many bases each window's mean is over: its bases in the ``counted`` runs (``_counted_runs``)."""
+
     bases = np.zeros(windows.starts.size, dtype=np.int64)
-    for start, stop in merged:
+    for start, stop in counted:
         bases += np.clip(np.minimum(windows.ends, stop) - np.maximum(windows.starts, start), 0, None)
     return bases
 
 
-def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[np.float64]:
-    """The depth summed over each window ``windows.starts[i] .. windows.ends[i] - 1`` of the record's local axis.
+def _shown_pieces(windows: SlidingWindows, depths: DepthArray) -> list[tuple[int, DepthArray]]:
+    """The per-base depths the windows read, in local order: for each source piece, its first local position and
+    the depths it reads there, backwards when the record reads its source backwards (a reverse complement).
+    Positions the depth file does not hold are left out (they read 0)."""
 
-    Each source piece of the windows (:func:`gbdraw.analysis.windows.sliding_windows`) reads source coordinates
-    in a run, backwards when the record reads its source backwards (a reverse complement); positions the depth
-    file does not hold add 0. Each sum is ``prefix[end] - prefix[start]`` of the running float64 sums of the
-    per-base depths along the local axis. The running sums are kept only at window bounds: the bases are summed
-    one chunk of ``_SUM_CHUNK_BASES`` at a time, each chunk carrying on from the last sum of the one before, so
-    every sum is the same chain of additions as one pass along the axis.
-    """
-
-    starts, ends = windows.starts, windows.ends
-    bounds, bound_of = np.unique(np.concatenate((starts, ends)), return_inverse=True)
-    prefix = np.zeros(bounds.size, dtype=np.float64)
     source = windows.source
     available = int(depths.size)
     pieces: list[tuple[int, DepthArray]] = []
@@ -675,6 +765,63 @@ def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[n
             else depths[coordinate - (keep - skip) : coordinate][::-1]
         )
         pieces.append((piece.local + skip, shown))
+    return pieces
+
+
+def _window_depth_maxima(windows: SlidingWindows, depths: DepthArray, counted: list[list[int]]) -> NDArray[np.float64]:
+    """The largest per-base depth of each window among the bases its mean counts (``counted``): a counted base the
+    file leaves out is 0 (D-24).
+
+    The depths are laid out along the local axis in their own dtype, a base no window counts at the dtype's least
+    value; each window is a run of the elementary intervals between window bounds, whose maxima are reduced once
+    and then combined two overlapping power-of-two runs at a time (a sparse table), so no window reads its bases
+    again. Every index array is ``np.intp``: Pyodide's NumPy is 32-bit.
+    """
+
+    starts, ends = windows.starts, windows.ends
+    # The local axis the pieces map (``sliding_windows``); the counted runs lie on it.
+    low = min(int(starts.min()), 0)
+    high = max(int(ends.max()), max((stop for _start, stop in counted), default=0))
+    values = np.zeros(high - low, dtype=depths.dtype)
+    for first, shown in _shown_pieces(windows, depths):
+        values[first - low : first - low + int(shown.size)] = shown
+    read = np.zeros(high - low, dtype=bool)
+    for start, stop in counted:
+        read[start - low : stop - low] = True
+    values[~read] = np.iinfo(depths.dtype).min if depths.dtype.kind in "iu" else -np.inf
+    bounds, bound_of = np.unique(np.concatenate((starts, ends)) - low, return_inverse=True)
+    bounds = bounds.astype(np.intp)
+    level = [np.maximum.reduceat(values[: int(bounds[-1])], bounds[:-1])]
+    first_interval, last_interval = bound_of[: starts.size].astype(np.intp), bound_of[starts.size :].astype(np.intp)
+    spans = last_interval - first_interval
+    widest = int(spans.max())
+    while (1 << len(level)) <= widest:
+        half = 1 << (len(level) - 1)
+        level.append(np.maximum(level[-1][:-half], level[-1][half:]))
+    powers = np.floor(np.log2(np.maximum(spans, 1))).astype(np.intp)
+    maxima = np.empty(starts.size, dtype=np.float64)
+    for power in np.unique(powers).tolist():
+        rows = np.flatnonzero(powers == power)
+        table = level[power]
+        maxima[rows] = np.maximum(table[first_interval[rows]], table[last_interval[rows] - (1 << power)])
+    return maxima
+
+
+def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[np.float64]:
+    """The depth summed over each window ``windows.starts[i] .. windows.ends[i] - 1`` of the record's local axis.
+
+    Each source piece of the windows (:func:`gbdraw.analysis.windows.sliding_windows`) reads source coordinates
+    in a run, backwards when the record reads its source backwards (a reverse complement); positions the depth
+    file does not hold add 0. Each sum is ``prefix[end] - prefix[start]`` of the running float64 sums of the
+    per-base depths along the local axis. The running sums are kept only at window bounds: the bases are summed
+    one chunk of ``_SUM_CHUNK_BASES`` at a time, each chunk carrying on from the last sum of the one before, so
+    every sum is the same chain of additions as one pass along the axis.
+    """
+
+    starts, ends = windows.starts, windows.ends
+    bounds, bound_of = np.unique(np.concatenate((starts, ends)), return_inverse=True)
+    prefix = np.zeros(bounds.size, dtype=np.float64)
+    pieces = _shown_pieces(windows, depths)
     carry = np.float64(0.0)
     covered = int(bounds[0])
     # The first base starts the chain (adding 0.0 would turn a -0.0 depth into 0.0).
@@ -703,12 +850,17 @@ def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[n
 
 
 def _validate_depth_range(min_depth: float | None, max_depth: float | None) -> None:
-    if min_depth is not None and min_depth < 0:
-        raise ValidationError("min_depth must be >= 0.")
-    if max_depth is not None and max_depth < 0:
-        raise ValidationError("max_depth must be >= 0.")
+    """A value range may be negative; its minimum is at most its maximum."""
+
     if min_depth is not None and max_depth is not None and min_depth > max_depth:
         raise ValidationError("min_depth must be <= max_depth.")
+
+
+def _refuse_negative_values(depths: DepthArray) -> None:
+    """Refuse depths of which one is negative: a log-scaled axis draws only values of 0 or more."""
+
+    if depths.dtype.kind != "u" and depths.size and float(depths.min()) < 0:
+        raise ValidationError("Depth values must be non-negative.", diagnostic=_invalid_depth("NONNEGATIVE"))
 
 
 def depth_df(
@@ -720,8 +872,11 @@ def depth_df(
     circular: bool,
     min_depth: float | None = None,
     max_depth: float | None = None,
+    agg: DepthAggregation = "mean",
+    log_scale: bool = False,
 ) -> DataFrame:
-    """The mean depth of each sliding window of a record: one row per sample.
+    """The value of each sliding window of a record (``agg``: the mean depth, the largest or the sum): one row per
+    sample.
 
     ``depth_table`` is a parsed file or a table of rows (an API table, which is
     converted here). Positions are 1-based source coordinates of the named
@@ -730,15 +885,20 @@ def depth_df(
     windows are those of :func:`gbdraw.analysis.windows.sliding_windows`, centred
     on the sample; ``circular`` says whether the molecule is circular. A crop
     reads its flanking positions of the source where the depth rows cover them;
-    a mean is over the bases a window reads (``_window_bases_read``), clipped
-    to ``min_depth``..``max_depth``. Where a mean is drawn on the track, linear
-    or log scaled, is the drawers' (``_prepare_depth_plot_dataframe``).
+    a mean is over the bases a window reads (``_counted_runs``), the largest
+    value is among the same bases (a base the rows leave out is 0) and the sum
+    is over every base the window reads; each value is clipped to
+    ``min_depth``..``max_depth``. A ``log_scale`` track refuses a negative
+    value of the record's reference. Where a value is drawn on the track,
+    linear or log scaled, is the drawers' (``_prepare_depth_plot_dataframe``).
     """
 
     if window <= 0:
         raise ValidationError("window must be > 0.")
     if step <= 0:
         raise ValidationError("step must be > 0.")
+    if agg not in DEPTH_AGGREGATIONS:
+        raise ValidationError(f"Depth agg must be one of {', '.join(DEPTH_AGGREGATIONS)}; got {agg!r}.")
     _validate_depth_range(min_depth, max_depth)
 
     coverage_source = depth_table if isinstance(depth_table, DepthCoverage) else _table_coverage(depth_table)
@@ -749,8 +909,15 @@ def depth_df(
     windows = sliding_windows(record, int(window), int(step), circular=circular)
     reference = _select_record_reference(record, coverage_source)
     depths = coverage_source.depths[reference]
-    bases = _window_bases_read(windows, record_len, coverage_source.extents[reference])
-    means = _window_depth_sums(windows, depths) / bases
+    if log_scale:
+        _refuse_negative_values(depths)
+    counted = _counted_runs(windows, record_len, coverage_source.extents[reference])
+    if agg == "max":
+        means = _window_depth_maxima(windows, depths, counted)
+    elif agg == "sum":
+        means = _window_depth_sums(windows, depths)
+    else:
+        means = _window_depth_sums(windows, depths) / _window_bases_read(windows, counted)
 
     if min_depth is not None or max_depth is not None:
         lower = float(min_depth) if min_depth is not None else None
@@ -766,8 +933,13 @@ def depth_df(
 
 
 __all__ = [
+    "DEPTH_AGGREGATIONS",
     "DEPTH_COLUMNS",
+    "DEPTH_FILE_FORMATS",
+    "DepthAggregation",
     "DepthCoverage",
+    "DepthFileFormat",
+    "checked_depth_file_format",
     "clear_depth_tsv_cache",
     "depth_df",
     "parse_depth_tsv",

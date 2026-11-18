@@ -7,18 +7,26 @@ from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from numbers import Integral
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
+from typing import TYPE_CHECKING, Callable, Literal, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
-from gbdraw.analysis.depth import DepthCoverage, depth_df, parse_depth_tsv, read_cached_depth_coverage
+from gbdraw.analysis.depth import (
+    DepthAggregation,
+    DepthCoverage,
+    DepthFileFormat,
+    depth_df,
+    parse_depth_tsv,
+    read_cached_depth_coverage,
+)
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import bind_record_transforms
+from gbdraw.layout.series_style import SeriesBaseline, SeriesStyle
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import depth_slot_track_index, slot_legend_label
@@ -28,21 +36,42 @@ if TYPE_CHECKING:
     from gbdraw.legend.table import LegendTable
 
 
+# A bound of one series' value range: a number, ``auto`` (from its values, whatever the global setting), or None
+# (the global ``min_depth``/``max_depth``).
+DepthSeriesBound = float | Literal["auto"] | None
+
+
+def series_bound(bound: DepthSeriesBound, global_bound: float | None) -> float | None:
+    """A series' bound as its drawing config holds it: its own number, None for ``auto``, else the global one."""
+
+    if bound is None:
+        return global_bound
+    return None if bound == "auto" else float(bound)
+
+
 @dataclass(frozen=True)
 class DepthTrackStyle:
-    """The fields of a depth track spec its drawing config reads (not its id or label)."""
+    """The fields of a depth track spec its drawing config reads (not its id, label or source). The fields after
+    the ticks default to how every depth track drew before they existed."""
 
     fill_color: str | None
     large_tick_interval: float | None
     small_tick_interval: float | None
     tick_font_size: float | None
+    series_style: SeriesStyle = "area"
+    negative_color: str | None = None
+    baseline: SeriesBaseline = "auto"
+    min_value: DepthSeriesBound = None
+    max_value: DepthSeriesBound = None
 
 
 @dataclass(frozen=True)
 class DepthTrackSpec:
     """One depth source for one displayed record and logical track.
 
-    ``table`` is a parsed file, or an API table that ``depth_df`` converts.
+    ``table`` is a parsed file (read in ``format``), or an API table that ``depth_df`` converts. ``agg`` is the
+    value of a window; ``style``, ``negative_color``, ``baseline`` and the value range ``min_value``/``max_value``
+    (``DepthSeriesBound``) say how the series draws. Every default draws as before these fields existed.
     """
 
     id: str
@@ -54,14 +83,26 @@ class DepthTrackSpec:
     large_tick_interval: float | None = None
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
+    format: DepthFileFormat = "auto"
+    agg: DepthAggregation = "mean"
+    style: SeriesStyle = "area"
+    negative_color: str | None = None
+    baseline: SeriesBaseline = "auto"
+    min_value: DepthSeriesBound = None
+    max_value: DepthSeriesBound = None
 
     @property
-    def style(self) -> DepthTrackStyle:
+    def drawing_style(self) -> DepthTrackStyle:
         return DepthTrackStyle(
             fill_color=self.fill_color,
             large_tick_interval=self.large_tick_interval,
             small_tick_interval=self.small_tick_interval,
             tick_font_size=self.tick_font_size,
+            series_style=self.style,
+            negative_color=self.negative_color,
+            baseline=self.baseline,
+            min_value=self.min_value,
+            max_value=self.max_value,
         )
 
 
@@ -180,8 +221,8 @@ def _record_major_sources(
     return rows, False
 
 
-def _read_depth_table(path: str) -> DepthCoverage:
-    """Read one depth file; in a Worker transaction, give its coverage its resource identity.
+def _read_depth_table(path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
+    """Read one depth file in ``file_format``; in a Worker transaction, give its coverage its resource identity.
 
     There the decoded-resource layer owns the coverage, one per resource;
     elsewhere (CLI, Python API) the process cache does. Either way every record
@@ -192,19 +233,27 @@ def _read_depth_table(path: str) -> DepthCoverage:
     from gbdraw.api.prepared import get_or_build_decoded_resource, prepared_resource_identity
 
     if prepared_resource_identity(path) is None:
-        return read_cached_depth_coverage(path)
-    coverage: DepthCoverage = get_or_build_decoded_resource(path, ("depth-coverage-v1",), lambda: parse_depth_tsv(path))
+        return read_cached_depth_coverage(path, file_format)
+    coverage: DepthCoverage = get_or_build_decoded_resource(
+        path, ("depth-coverage-v1", file_format), lambda: parse_depth_tsv(path, file_format)
+    )
     return coverage
 
 
-def _read_depth_series(path: str, series_index: int) -> DepthCoverage:
+def _name_series(exc: GbdrawError, series_index: int) -> None:
+    """Let a failure of one logical series name the series, not its file."""
+
+    if exc.diagnostic is not None:
+        exc.diagnostic = {**exc.diagnostic, "seriesIndex": series_index}
+
+
+def _read_depth_series(path: str, series_index: int, file_format: DepthFileFormat = "auto") -> DepthCoverage:
     """Read one logical series source; failures name the series, not the file."""
 
     try:
-        return _read_depth_table(path)
+        return _read_depth_table(path, file_format)
     except GbdrawError as exc:
-        if exc.diagnostic is not None:
-            exc.diagnostic = {**exc.diagnostic, "seriesIndex": series_index}
+        _name_series(exc, series_index)
         raise
 
 
@@ -636,6 +685,16 @@ def representative_depth_tracks(
     return [representatives[index] for index in sorted(representatives)]
 
 
+def _checked_series_color(color: str, field: str) -> str:
+    # Every depth track color (CLI, options, Session, slot) is checked here.
+    check_user_color(
+        color,
+        where="for a depth track",
+        diagnostic={"code": "INPUT_INVALID", "field": field, "reason": "COLOR"},
+    )
+    return str(color)
+
+
 def clone_depth_config(
     base_config: DepthConfigurator,
     *,
@@ -648,13 +707,7 @@ def clone_depth_config(
 ) -> DepthConfigurator:
     config = copy.copy(base_config)
     if fill_color:
-        # Every depth track color (CLI, options, Session, slot) is applied here.
-        check_user_color(
-            fill_color,
-            where="for a depth track",
-            diagnostic={"code": "INPUT_INVALID", "field": "color", "reason": "COLOR"},
-        )
-        config.fill_color = str(fill_color)
+        config.fill_color = _checked_series_color(fill_color, "color")
     if window is not None:
         config.window = int(window)
     if step is not None:
@@ -673,15 +726,16 @@ def depth_track_config(
     base_config: DepthConfigurator,
     window: int,
     step: int,
-    shared_max_depth: float | None,
+    shared_bounds: SharedBounds | None,
 ) -> DepthConfigurator:
     """Build one track's drawing config (render stage ``depth_track_config``).
 
     It reads the track's style, not its label, so a label change keeps the
-    config and the depth content drawn with it (OV-1229).
-    ``shared_max_depth`` is the maximum over every record's frame of this
-    logical track when the axis is shared; the config is complete when it is
-    returned, so nothing writes into it afterwards (M5).
+    config and the depth content drawn with it (OV-1229): its colour, ticks,
+    value range (``series_bound``), series style, negative colour and baseline.
+    ``shared_bounds`` are the auto bounds over every record's frame of this
+    logical track when the axis is shared (``_shared_bounds``); the config is
+    complete when it is returned, so nothing writes into it afterwards (M5).
     """
 
     config = clone_depth_config(
@@ -693,25 +747,71 @@ def depth_track_config(
         small_tick_interval=style.small_tick_interval,
         tick_font_size=style.tick_font_size,
     )
-    if shared_max_depth is not None:
-        config.max_depth = shared_max_depth
+    config.min_depth = series_bound(style.min_value, base_config.min_depth)
+    config.max_depth = series_bound(style.max_value, base_config.max_depth)
+    config.series_style = style.series_style
+    config.negative_color = (
+        None if style.negative_color is None else _checked_series_color(style.negative_color, "negativeColor")
+    )
+    config.baseline = style.baseline
+    if shared_bounds is not None:
+        shared_min, shared_max = shared_bounds
+        if config.min_depth is None and shared_min is not None:
+            config.min_depth = shared_min
+        if config.max_depth is None:
+            config.max_depth = shared_max
     return config
 
 
-def _shared_max_depths(
-    frames: Sequence[Sequence[tuple[DepthTrackSpec, DataFrame]]],
-) -> dict[int, float]:
-    """The maximum depth of each logical track over every record's frame."""
+SharedBounds = tuple[float | None, float]
 
-    shared: dict[int, float] = {}
+
+def _shared_bounds(frames: Sequence[Sequence[tuple[DepthTrackSpec, DataFrame]]]) -> dict[int, SharedBounds]:
+    """The auto bounds of each logical track over every record's frame: its largest value (0 when none is above
+    0), and its smallest value when one is below 0 (else None: the axis starts at 0 as before)."""
+
+    smallest: dict[int, float] = {}
+    largest: dict[int, float] = {}
     for row in frames:
         for spec, frame in row:
             if frame.empty or "depth" not in frame.columns:
                 continue
-            value = float(frame["depth"].max())
-            previous = shared.get(spec.track_index)
-            shared[spec.track_index] = value if previous is None else max(previous, value)
-    return shared
+            index = spec.track_index
+            smallest[index] = min(smallest.get(index, 0.0), float(frame["depth"].min()))
+            largest[index] = max(largest.get(index, 0.0), float(frame["depth"].max()))
+    return {index: (smallest[index] if smallest[index] < 0 else None, largest[index]) for index in largest}
+
+
+def _series_frame(
+    depth_df_builder: DepthDfBuilder,
+    record: SeqRecord,
+    spec: DepthTrackSpec,
+    window: int,
+    step: int,
+    *,
+    circular: bool,
+    base_config: DepthConfigurator,
+) -> DataFrame:
+    """One series' binned frame of one record (render stage ``depth_frame``); a failure names the series."""
+
+    try:
+        frame: DataFrame = render_stage(
+            "depth_frame",
+            depth_df_builder,
+            record,
+            spec.table,
+            window,
+            step,
+            circular=circular,
+            min_depth=series_bound(spec.min_value, base_config.min_depth),
+            max_depth=series_bound(spec.max_value, base_config.max_depth),
+            agg=spec.agg,
+            log_scale=base_config.normalize,
+        )
+    except GbdrawError as exc:
+        _name_series(exc, spec.track_index)
+        raise
+    return frame
 
 
 def build_depth_track_dataframes(
@@ -726,9 +826,11 @@ def build_depth_track_dataframes(
     """Build depth dataframes once for each record/track pair.
 
     Two render stages per record and track: ``depth_frame`` (the binned
-    dataframe) and ``depth_track_config`` (its drawing config, taking the
-    shared axis maximum as an argument). A record's windows wrap round its
-    ends when it is drawn as circular (its transform, ``record_transforms``).
+    dataframe: the series' window value ``agg``, clipped to its value range)
+    and ``depth_track_config`` (its drawing config, taking the shared axis
+    bounds as an argument). A record's windows wrap round its ends when it is
+    drawn as circular (its transform, ``record_transforms``). A log-scaled
+    track refuses a series with a negative value, naming the series.
     """
 
     if base_config is None or not record_depth_tracks:
@@ -752,27 +854,21 @@ def build_depth_track_dataframes(
             [
                 (
                     spec,
-                    render_stage(
-                        "depth_frame",
+                    _series_frame(
                         depth_df_builder,
                         record,
-                        spec.table,
+                        spec,
                         int(window),
                         int(step),
                         circular=transforms[record_index].is_circular,
-                        min_depth=base_config.min_depth,
-                        max_depth=base_config.max_depth,
+                        base_config=base_config,
                     ),
                 )
                 for spec in track_specs
             ]
         )
 
-    shared_max_depths = (
-        _shared_max_depths(frames)
-        if bool(getattr(base_config, "share_axis", False)) and base_config.max_depth is None
-        else {}
-    )
+    shared_bounds = _shared_bounds(frames) if base_config.share_axis else {}
     return [
         [
             DepthTrackData(
@@ -782,11 +878,11 @@ def build_depth_track_dataframes(
                 config=render_stage(
                     "depth_track_config",
                     depth_track_config,
-                    spec.style,
+                    spec.drawing_style,
                     base_config,
                     window,
                     step,
-                    shared_max_depths.get(spec.track_index),
+                    shared_bounds.get(spec.track_index),
                 ),
                 track_index=spec.track_index,
                 height=spec.height,
@@ -834,6 +930,7 @@ def sync_depth_track_legend_entries(
 __all__ = [
     "DepthTrackData",
     "DepthTrackSpec",
+    "DepthSeriesBound",
     "DepthTrackStyle",
     "ResolvedDepthTracks",
     "build_depth_track_dataframes",
@@ -848,6 +945,7 @@ __all__ = [
     "index_depth_track_row",
     "normalize_depth_tracks",
     "representative_depth_tracks",
+    "series_bound",
     "sync_depth_track_legend_entries",
     "thaw_depth_tracks",
 ]

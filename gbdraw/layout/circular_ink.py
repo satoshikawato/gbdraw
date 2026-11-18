@@ -86,6 +86,15 @@ class CircularInkProfile:
             outer_px=np.maximum(line, base_px) + pad_px,
         )
 
+    @classmethod
+    def along(cls, positions: ArrayLike, radii: ArrayLike, *, record_length: int, pad_px: float) -> CircularInkProfile:
+        """The paint of the line through ``radii`` at display ``positions`` alone, ``pad_px`` (half its stroke) to
+        either side."""
+
+        line = np.asarray(radii, dtype=float)
+        turns = np.asarray(positions, dtype=float) / float(record_length)
+        return cls(turns=np.mod(turns, 1.0), inner_px=line - pad_px, outer_px=line + pad_px)
+
     def spans(self, turns: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         if self.turns.size == 0:
             return np.full(turns.shape, np.inf), np.full(turns.shape, -np.inf)

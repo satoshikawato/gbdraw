@@ -19,7 +19,7 @@ from ....layout.scalar_axis import (
     ScalarRow,
 )
 from ....svg.ids import stable_svg_id
-from ....svg.linear_tracks import LinearTrackFrame, linear_series_path_desc
+from ....svg.linear_tracks import LinearTrackFrame, linear_series_baseline_y, linear_series_path_desc
 from ....svg.path_data import path_point
 from ...numeric_series import AXIS_STROKE, NumericSeriesPlot, SeriesBandFrame
 
@@ -78,36 +78,41 @@ def _axis_group(axis: ScalarAxis, frame: LinearTrackFrame, axis_group_id: str) -
 
 def _series_paths(plot: NumericSeriesPlot, desc: str, frame: LinearTrackFrame, group_id: str,
                   row: ScalarRow | None) -> list[ClipPath | Path]:
-    """The series path, and for a series with a fill below its baseline its clip and the clipped copy."""
+    """The series path, and for a series with a paint of its own below its baseline the clip of the band below the
+    baseline (one track height deep, so a stroke at the band's bottom is held) and the clipped copy in that paint."""
 
     paint = plot.paint
     style = {"stroke": paint.stroke, "fill_opacity": paint.fill_opacity, "fill_rule": "evenodd"}
     if paint.writes_stroke_width:
         style["stroke_width"] = paint.stroke_width
     main = Path(d=desc, fill=paint.fill, **style)
-    if paint.below_fill is None:
+    if plot.samples is None or not paint.paints_below:
         return [main]
     start_x, start_y, record_len, alignment_width, track_height = frame
+    base_y = linear_series_baseline_y(plot.samples, frame)
     clip_id = stable_svg_id(
         f"{group_id}_clipper_line", "linear-skew-clip", group_id, plot.clip_key, record_len, alignment_width,
         track_height, start_x, start_y, desc,
         # Two rows may draw the same path; each later row refers to its own clip.
         *((row.row,) if row is not None and row.row else ()),
+        # A line's path does not hold its baseline: two baselines are two clips.
+        *(() if plot.samples.deviation is not None else (base_y,)),
     )
     clip = ClipPath(id=clip_id)
     clip.add(
         Path(
             d=(
-                f"M{path_point(start_x, start_y)} "
-                f"L{path_point(alignment_width, start_y)} "
-                f"L{path_point(alignment_width, start_y + track_height)} "
-                f"L{path_point(start_x, start_y + track_height)} z"
+                f"M{path_point(start_x, base_y)} "
+                f"L{path_point(alignment_width, base_y)} "
+                f"L{path_point(alignment_width, base_y + track_height)} "
+                f"L{path_point(start_x, base_y + track_height)} z"
             ),
             fill="white",
             stroke="none",
         )
     )
-    below = Path(d=desc, fill=paint.below_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero", **style)
+    below = Path(d=desc, fill=paint.low_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero",
+                 **{**style, "stroke": paint.low_stroke})
     return [clip, main, below]
 
 

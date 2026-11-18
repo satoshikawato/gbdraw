@@ -15,7 +15,7 @@ from svgwrite import Drawing
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
-from gbdraw.analysis.depth import DepthCoverage, clear_depth_tsv_cache, depth_df, read_depth_tsv
+from gbdraw.analysis.depth import DepthCoverage, DepthFileFormat, clear_depth_tsv_cache, depth_df, read_depth_tsv
 from gbdraw.analysis.depth_tracks import (
     DepthTrackSpec,
     build_depth_track_dataframes,
@@ -2157,10 +2157,10 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
 
     real_read_cached_depth_coverage = depth_tracks_module.read_cached_depth_coverage
 
-    def counting_read_cached_depth_coverage(path: str) -> DepthCoverage:
+    def counting_read_cached_depth_coverage(path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
         nonlocal read_count
         read_count += 1
-        return real_read_cached_depth_coverage(path)
+        return real_read_cached_depth_coverage(path, file_format)
 
     monkeypatch.setattr(depth_tracks_module, "read_cached_depth_coverage", counting_read_cached_depth_coverage)
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)

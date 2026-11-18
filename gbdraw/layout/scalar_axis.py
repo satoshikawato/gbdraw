@@ -15,7 +15,7 @@ from gbdraw.analysis.skew import DeviationScale, deviation_scale
 from gbdraw.auto_sizes import TickedAxisSource
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
-from .series_style import ScalarAxisStyle
+from .series_style import ScalarAxisStyle, SeriesBaseline, SeriesStyle
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
@@ -91,18 +91,21 @@ class ScalarAxisSource(TickedAxisSource, Protocol):
 
 
 class SeriesSamples(NamedTuple):
-    """The samples a numeric series track draws, record-local, and its baseline rule.
+    """The samples a numeric series track draws, record-local, its baseline rule and its style.
 
     With a ``deviation`` scale the baseline is the series mean, along the middle of the band, and each value is
     drawn as its deviation from it, the largest at the band's edge; a value that is missing lies on the baseline
-    (GC content in deviation mode, GC skew). Without one the baseline is the band's bottom and each value is the
-    fraction of the band it fills (GC content in percent, depth). ``closes_at_record_end`` repeats a first sample
-    at 0 at the record's end on a whole circular molecule (GC content in both modes)."""
+    (GC content in deviation mode, GC skew). Without one each value is the fraction of the band it fills from the
+    band's bottom (GC content in percent, depth), and the area closes on ``baseline``, a fraction of the band (0:
+    its bottom). ``closes_at_record_end`` repeats a first sample at 0 at the record's end on a whole circular
+    molecule (GC content in both modes). ``style`` draws the area, or the line alone."""
 
     positions: Index
     values: Series
     deviation: DeviationScale | None
     closes_at_record_end: bool
+    baseline: float
+    style: SeriesStyle
 
 
 def deviation_samples(series: Series, *, closes_at_record_end: bool) -> SeriesSamples | None:
@@ -112,16 +115,23 @@ def deviation_samples(series: Series, *, closes_at_record_end: bool) -> SeriesSa
     scale = deviation_scale(series)
     if series.empty or scale is None:
         return None
-    return SeriesSamples(series.index, series, scale, closes_at_record_end)
+    return SeriesSamples(series.index, series, scale, closes_at_record_end, 0.0, "area")
 
 
-def band_samples(frame: DataFrame, value_column: str, *, closes_at_record_end: bool) -> SeriesSamples | None:
-    """The samples of ``frame`` (``position`` and the band fraction ``value_column``) drawn up from the band's
-    bottom; none for an empty frame."""
+def band_samples(
+    frame: DataFrame,
+    value_column: str,
+    *,
+    closes_at_record_end: bool,
+    baseline: float = 0.0,
+    style: SeriesStyle = "area",
+) -> SeriesSamples | None:
+    """The samples of ``frame`` (``position`` and the band fraction ``value_column``) drawn from the band fraction
+    ``baseline`` (the band's bottom by default); none for an empty frame."""
 
     if frame.empty:
         return None
-    return SeriesSamples(Index(frame["position"]), frame[value_column], None, closes_at_record_end)
+    return SeriesSamples(Index(frame["position"]), frame[value_column], None, closes_at_record_end, baseline, style)
 
 
 class ScalarRows:
@@ -338,16 +348,39 @@ def scalar_axis_range_label(axis_min: float, axis_max: float, unit: str, *, log_
 
 
 def _depth_axis_bounds(depth_df: DataFrame, min_depth: float | None, max_depth: float | None) -> tuple[float, float]:
-    axis_min = float(min_depth) if min_depth is not None else 0.0
+    """The bounds of a depth axis: the set minimum and maximum, else ``[min(0, smallest), max(0, largest)]`` of the
+    window values (``[0, largest]`` for values of 0 or more)."""
+
+    values = depth_df["depth"] if "depth" in depth_df.columns and not depth_df.empty else None
+    if min_depth is not None:
+        axis_min = float(min_depth)
+    else:
+        smallest = float(values.min()) if values is not None else 0.0
+        axis_min = min(0.0, smallest) if math.isfinite(smallest) else 0.0
     if max_depth is not None:
         axis_max = float(max_depth)
-    elif "depth" in depth_df.columns and not depth_df.empty:
-        axis_max = float(depth_df["depth"].max())
+    elif values is not None:
+        axis_max = max(0.0, float(values.max()))
     else:
         axis_max = axis_min
     if not math.isfinite(axis_max):
         axis_max = axis_min
     return axis_min, max(axis_min, axis_max)
+
+
+def series_baseline_fraction(
+    baseline: SeriesBaseline, axis_min: float, axis_max: float, mean: float, *, log_scale: bool
+) -> float:
+    """Where a band series' area closes, as a fraction of its axis: ``auto`` at 0 when the axis holds it, else at
+    its lower end; ``mean`` at the series' ``mean``; a number at that value; each held within the axis."""
+
+    if baseline == "mean":
+        value = mean if math.isfinite(mean) else axis_min
+    elif baseline == "auto":
+        value = 0.0 if axis_min <= 0.0 <= axis_max else axis_min
+    else:
+        value = float(baseline)
+    return scaled_axis_fraction(min(max(value, axis_min), axis_max), axis_min, axis_max, log_scale=log_scale)
 
 
 def _axis_scale_value(value: float, *, log_scale: bool) -> float:
@@ -467,4 +500,5 @@ __all__ = [
     "scalar_axis_tick_values",
     "scaled_axis_fraction",
     "scaled_scalar_fraction",
+    "series_baseline_fraction",
 ]

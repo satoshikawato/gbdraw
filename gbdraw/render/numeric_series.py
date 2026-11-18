@@ -11,6 +11,7 @@ for its axis and its Legend rows come from one owner.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -28,6 +29,7 @@ from ..layout.scalar_axis import (
     _prepare_depth_plot_dataframe,
     band_samples,
     deviation_samples,
+    series_baseline_fraction,
 )
 from ..layout.series_style import ScalarAxisStyle, SeriesPaint
 
@@ -133,8 +135,9 @@ def gc_content_axis(config: GcContentConfigurator) -> ScalarAxis | None:
 
 
 def depth_axis(config: DepthConfigurator, depth_df: DataFrame) -> ScalarAxis | None:
-    """The axis of a depth track, when it is shown: from the set minimum (else 0) to the set maximum (else the
-    largest depth), linear or log-scaled; each record of a shared circle draws its own."""
+    """The axis of a depth track, when it is shown: from the set minimum to the set maximum, else from the
+    smallest value (0 for values of 0 or more) to the largest, linear or log-scaled; each record of a shared circle
+    draws its own. Its lower bound is labelled when it is set or below 0."""
 
     style = _drawn_style(config.axis_style)
     if style is None:
@@ -145,7 +148,7 @@ def depth_axis(config: DepthConfigurator, depth_df: DataFrame) -> ScalarAxis | N
         axis_max=axis_max,
         unit=DEPTH_UNIT,
         log_scale=bool(config.normalize),
-        label_axis_min=config.min_depth is not None,
+        label_axis_min=config.min_depth is not None or axis_min < 0,
         style=style,
         large_tick_interval=config.large_tick_interval,
         small_tick_interval=config.small_tick_interval,
@@ -186,11 +189,17 @@ def gc_skew_series(config: GcSkewConfigurator, gc_df: DataFrame) -> NumericSerie
 
 
 def depth_series(config: DepthConfigurator, depth_df: DataFrame) -> NumericSeriesPlot:
-    """A depth track (or a feature density histogram): each window's depth as the share of its axis it fills."""
+    """A depth track (or a feature density histogram): each window's value as the share of its axis it fills, drawn
+    from the series' baseline (``baseline``) as an area or a line (``series_style``)."""
 
     plot_df = _prepare_depth_plot_dataframe(depth_df, config.min_depth, config.max_depth, normalize=config.normalize)
+    axis_min, axis_max = _depth_axis_bounds(depth_df, config.min_depth, config.max_depth)
+    mean = float(depth_df["depth"].mean()) if "depth" in depth_df.columns and not depth_df.empty else math.nan
+    baseline = series_baseline_fraction(config.baseline, axis_min, axis_max, mean, log_scale=bool(config.normalize))
     return NumericSeriesPlot(
-        band_samples(plot_df, "depth_normalized", closes_at_record_end=False),
+        band_samples(
+            plot_df, "depth_normalized", closes_at_record_end=False, baseline=baseline, style=config.series_style
+        ),
         config.series_paint,
         None,
         depth_axis(config, depth_df),

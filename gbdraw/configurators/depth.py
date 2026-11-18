@@ -7,11 +7,19 @@ from __future__ import annotations
 
 from gbdraw.config.models import RenderProfile
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
-from gbdraw.layout.series_style import ScalarAxisStyle, SeriesPaint
+from gbdraw.layout.series_style import ScalarAxisStyle, SeriesBaseline, SeriesPaint, SeriesStyle
+
+# The stroke of a ``line`` series when the Depth stroke width is 0, which would draw nothing (D-25).
+LINE_SERIES_MIN_STROKE_PX = 1.0
 
 
 class DepthConfigurator:
-    """Collect drawing and normalization options for depth coverage tracks."""
+    """Collect drawing and normalization options for depth coverage tracks.
+
+    One series' own values (``depth_track_config``) replace the colour, the value range (``min_depth``,
+    ``max_depth``), the ticks, and set ``series_style``, ``negative_color`` and ``baseline``; the defaults draw as
+    every depth track drew before they existed.
+    """
 
     def __init__(
         self,
@@ -59,12 +67,29 @@ class DepthConfigurator:
         # The axis labels are measured and drawn in the figure's font (OV-2757).
         self.font_family: str = str(cfg.objects.text.font_family)
         self.axis_labels: ScalarAxisLabelStyle = cfg.objects.depth.axis_labels
+        self.series_style: SeriesStyle = "area"
+        # The paint of the part below the baseline; None: the series colour.
+        self.negative_color: str | None = None
+        self.baseline: SeriesBaseline = "auto"
 
     @property
     def series_paint(self) -> SeriesPaint:
-        """How the track's path is painted, as drawn and as its Legend row shows it."""
+        """How the track's path is painted: an ``area`` filled in the series colour, a ``line`` stroked in it at the
+        Depth stroke width (1 px when that is 0); the part below the baseline in the negative colour when it is
+        another colour."""
 
-        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None)
+        below = None if self.negative_color in (None, self.fill_color) else self.negative_color
+        if self.series_style == "line":
+            width = self.stroke_width if self.stroke_width > 0 else LINE_SERIES_MIN_STROKE_PX
+            return SeriesPaint("none", self.fill_color, width, self.fill_opacity, None, below)
+        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, below, None)
+
+    @property
+    def legend_paint(self) -> SeriesPaint:
+        """The paint of the track's one Legend row: its colour as an area, whatever its style and negative colour
+        (one row per series)."""
+
+        return SeriesPaint(self.fill_color, self.stroke_color, self.stroke_width, self.fill_opacity, None, None)
 
     @property
     def axis_style(self) -> ScalarAxisStyle:
@@ -72,4 +97,4 @@ class DepthConfigurator:
 
         return ScalarAxisStyle.of(self)
 
-__all__ = ["DepthConfigurator"]
+__all__ = ["LINE_SERIES_MIN_STROKE_PX", "DepthConfigurator"]

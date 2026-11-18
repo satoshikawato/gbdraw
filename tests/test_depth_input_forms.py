@@ -167,7 +167,6 @@ def test_comment_track_and_header_lines_before_the_rows_are_skipped(
         ("chr\t5\t5\t3\n", {"code": "DEPTH_INVALID", "reason": "INTERVAL"}),
         ("chr\t5\t4\t3\n", {"code": "DEPTH_INVALID", "reason": "INTERVAL"}),
         ("chr\t0\t5\t3\nchr\tx\t5\t3\n", {"code": "DEPTH_INVALID", "reason": "DEPTH_VALUES"}),
-        ("chr\t1\t5\t-3\n", {"code": "DEPTH_INVALID", "reason": "NONNEGATIVE"}),
         ("\t1\t5\t3\n", {"code": "DEPTH_INVALID", "reason": "REFERENCE_REQUIRED"}),
         ("0\t3\n", {"code": "DEPTH_INVALID", "reason": "POSITIVE_INTEGER"}),
         # bedGraph rows of a reference come in increasing order without overlapping.

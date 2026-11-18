@@ -876,10 +876,7 @@ def _resolve_circular_window_step(
 
 
 def _validate_depth_bounds(min_depth: float | None, max_depth: float | None) -> None:
-    if min_depth is not None and float(min_depth) < 0:
-        raise ValidationError("depth_min must be >= 0")
-    if max_depth is not None and float(max_depth) < 0:
-        raise ValidationError("depth_max must be >= 0")
+    # A value range may be negative (a signed series); the log scale refuses negative values where it draws them.
     if min_depth is not None and max_depth is not None and float(min_depth) > float(max_depth):
         raise ValidationError("depth_min must be <= depth_max")
 

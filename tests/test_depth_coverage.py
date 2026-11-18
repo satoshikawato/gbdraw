@@ -36,10 +36,9 @@ def _reference_validate(table: pd.DataFrame) -> None:
         raise ValidationError("Depth table contains missing reference names.", diagnostic=_invalid("REFERENCE_REQUIRED"))
     if (table["position"] <= 0).any():
         raise ValidationError("Depth positions must be 1-based positive integers.", diagnostic=_invalid("POSITIVE_INTEGER"))
+    # Negative values are values (a signed series); the log scale refuses them when it draws.
     if not np.isfinite(table["depth"].to_numpy()).all():
         raise ValidationError("Depth values must be finite numbers.", diagnostic=_invalid("FINITE"))
-    if (table["depth"] < 0).any():
-        raise ValidationError("Depth values must be non-negative.", diagnostic=_invalid("NONNEGATIVE"))
 
 
 def _reference_parse(path: Path) -> pd.DataFrame:
@@ -237,7 +236,6 @@ def test_a_whole_genome_table_takes_about_two_bytes_per_base(tmp_path: Path) -> 
         "chr\t1\t5\nchr\t2\tlots\n",
         "chr\t1\t5\n\t2\t5\n",
         "chr\t1\t5\nchr\t0\t5\n",
-        "chr\t1\t5\nchr\t2\t-1\n",
         "chr\t1\t5\nchr\t2\tnan\n",
         "chr\t1\t-1\nchr\t2\tinf\n",
         # Every check fails in a later chunk than the next: the first check still names the file.

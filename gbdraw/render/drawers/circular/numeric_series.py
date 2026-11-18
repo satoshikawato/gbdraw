@@ -30,6 +30,7 @@ from ....svg.circular_tracks import (
     circle_record_turns,
     circle_unit_arc,
     circle_unit_turns,
+    circular_series_baseline_radius,
     circular_series_line,
     circular_series_path_desc,
     generate_circle_path_desc,
@@ -114,8 +115,9 @@ def _axis_ink(axis: ScalarAxis, place: CircularTrackPlace) -> list[CircularInk]:
 
 def circular_series_ink(plot: NumericSeriesPlot, place: CircularTrackPlace) -> tuple[CircularInk, ...]:
     """What ``draw_circular_series`` paints with the same arguments: the area between the baseline and the line,
-    with half its stroke; a deviation series also its baseline (with a stroke); a band series its frame when it
-    shows and its axis, the labels measured in the figure's font as they are written."""
+    with half its stroke (a ``line`` series: the line and half its stroke); a deviation series also its baseline
+    (with a stroke); a band series its frame when it shows and its axis, the labels measured in the figure's font
+    as they are written."""
 
     if plot.samples is None:
         return ()
@@ -131,8 +133,10 @@ def circular_series_ink(plot: NumericSeriesPlot, place: CircularTrackPlace) -> t
         baseline = CircularInkRing(RadialBand(base - pad, base + pad), *circle_unit_turns(place.record_transform))
         return (area, baseline) if pad > 0 else (area,)
     inks: list[CircularInk] = [
-        CircularInkProfile.between(line.positions, line.radii, record_length=record_len, base_px=line.baseline_radius,
-                                   pad_px=pad)
+        CircularInkProfile.along(line.positions, line.radii, record_length=record_len, pad_px=pad)
+        if plot.samples.style == "line"
+        else CircularInkProfile.between(line.positions, line.radii, record_length=record_len,
+                                        base_px=line.baseline_radius, pad_px=pad)
     ]
     if plot.frame is not None:
         inks.extend(_frame_ink(plot.frame, place))
@@ -208,20 +212,25 @@ def _add_axis(group: Group, axis: ScalarAxis, place: CircularTrackPlace, axis_gr
 
 def _series_paths(plot: NumericSeriesPlot, desc: str, place: CircularTrackPlace, group_id: str,
                   record_id: str | None) -> list[ClipPath | Path]:
-    """The series path, and for a series with a fill below its baseline its clip and the clipped copy."""
+    """The series path, and for a series with a paint of its own below its baseline the clip of the disc inside the
+    baseline and the clipped copy in that paint."""
 
     paint = plot.paint
     style = {"stroke": paint.stroke, "fill_opacity": paint.fill_opacity, "fill_rule": "evenodd"}
     main = Path(d=desc, fill=paint.fill, **style)
     elements: list[ClipPath | Path] = [main]
-    if paint.below_fill is not None:
+    if plot.samples is not None and paint.paints_below:
+        baseline_radius = circular_series_baseline_radius(plot.samples, place)
         clip_id = stable_svg_id(
             "clipper_circle", "circular-skew-clip", group_id, record_id, place.record_len, place.track_width,
             place.norm_factor, plot.clip_key, desc,
+            # A line's path does not hold its baseline: two baselines are two clips.
+            *(() if plot.samples.deviation is not None else (baseline_radius,)),
         )
         clip = ClipPath(id=clip_id)
-        clip.add(Path(d=generate_circle_path_desc(place.radius, place.norm_factor), fill="white", stroke="none"))
-        below = Path(d=desc, fill=paint.below_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero", **style)
+        clip.add(Path(d=generate_circle_path_desc(baseline_radius, 1.0), fill="white", stroke="none"))
+        below = Path(d=desc, fill=paint.low_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero",
+                     **{**style, "stroke": paint.low_stroke})
         elements = [clip, main, below]
     if paint.writes_stroke_width:
         for element in elements:

@@ -198,19 +198,36 @@ def _placed_samples(
     return positions, value_array, ()
 
 
+def _band_bottom_radius(place: CircularTrackPlace) -> float:
+    """The bottom of a band series: half the track's width inside the circle at ``radius * norm_factor``."""
+
+    return max(0.0, (float(place.radius) * float(place.norm_factor)) - (0.5 * float(place.track_width)))
+
+
+def circular_series_baseline_radius(samples: SeriesSamples, place: CircularTrackPlace) -> float:
+    """The radius of the baseline a numeric series path closes on, and below which (inside it) the part below the
+    baseline is painted: the circle at ``radius * norm_factor`` for a deviation series, else the band's bottom
+    raised by the band fraction ``samples.baseline``."""
+
+    if samples.deviation is not None:
+        return place.radius * place.norm_factor
+    return _band_bottom_radius(place) + (float(place.track_width) * samples.baseline)
+
+
 def circular_series_line(samples: SeriesSamples, place: CircularTrackPlace) -> CircularAreaLine | None:
     """The line a numeric series path draws: display positions, their radii and the baseline radius.
 
     A deviation series lies about the circle at ``radius * norm_factor``, its largest deviation half the track's
     width from it (a window without a value on the circle, OV-2799); a band series rises from the band's bottom,
-    half the track's width inside that circle, by the fraction of the width each value fills."""
+    half the track's width inside that circle, by the fraction of the width each value fills, and closes on its
+    baseline (``circular_series_baseline_radius``)."""
 
     scale = samples.deviation
     positions = samples.positions.to_numpy(dtype=float)
     if scale is not None:
         if place.record_len <= 0:
             return None
-        norm_radius: float = place.radius * place.norm_factor
+        norm_radius: float = circular_series_baseline_radius(samples, place)
         diff = (samples.values - scale.mean).fillna(0.0)
         if scale.max_diff == 0:
             radii = np.full(len(samples.values), norm_radius)
@@ -220,10 +237,15 @@ def circular_series_line(samples: SeriesSamples, place: CircularTrackPlace) -> C
         return CircularAreaLine(placed[0], placed[1], norm_radius, placed[2])
     if place.record_len <= 0 or place.track_width <= 0:
         return None
-    baseline_radius = max(0.0, (float(place.radius) * float(place.norm_factor)) - (0.5 * float(place.track_width)))
+    bottom_radius = _band_bottom_radius(place)
     values = np.clip(samples.values.to_numpy(dtype=float), 0.0, 1.0)
     positions, values, segment_starts = _placed_samples(positions, values, place, samples.closes_at_record_end)
-    return CircularAreaLine(positions, baseline_radius + (float(place.track_width) * values), baseline_radius, segment_starts)
+    return CircularAreaLine(
+        positions,
+        bottom_radius + (float(place.track_width) * values),
+        circular_series_baseline_radius(samples, place),
+        segment_starts,
+    )
 
 
 def _area_desc(line: CircularAreaLine, record_len: int) -> str:
@@ -246,11 +268,13 @@ def _area_desc(line: CircularAreaLine, record_len: int) -> str:
 def circular_series_path_desc(samples: SeriesSamples, place: CircularTrackPlace) -> str:
     """The path of a numeric series track: the area between its line and its baseline. A deviation series of a
     record alone closes its line round the circle and draws the baseline circle as its own subpath (filled even-odd);
-    every other line closes down to its baseline (``_area_desc``)."""
+    every other line closes down to its baseline (``_area_desc``). A ``line`` series is its line alone, open."""
 
     line = circular_series_line(samples, place)
     if line is None or len(line.positions) == 0:
         return ""
+    if samples.style == "line":
+        return track_polyline(*circular_drawn_line(line.positions, line.radii, float(place.record_len), line.segment_starts))
     if samples.deviation is not None and place.record_transform.circle is None:
         return _closed_line_desc(line, float(place.record_len)) + generate_circle_path_desc(place.radius, place.norm_factor)
     return _area_desc(line, place.record_len)
@@ -275,6 +299,7 @@ __all__ = [
     "CircularTrackPlace",
     "circle_unit_arc",
     "circle_unit_turns",
+    "circular_series_baseline_radius",
     "circular_series_line",
     "circular_series_path_desc",
     "draw_circle_path",
