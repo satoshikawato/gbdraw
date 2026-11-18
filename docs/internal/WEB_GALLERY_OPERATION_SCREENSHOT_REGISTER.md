@@ -665,6 +665,9 @@ Two new tutorials, `bacillus_velezensis_fengycin` and
 `vibrio_parahaemolyticus_pva1`, follow the same eleven steps: draw the
 reference File alone, add the other two Files, select a region, find it in the
 other Files, create the new drawing, then group, color, name, and finish it.
+Step 8 also sets Match style to Curve, and step 11 clears Separate Strands,
+so the Gallery figure draws the genes of both strands on one lane and the
+similarity-group matches as curves.
 Steps 1 to 5 happen in the reference drawing and steps 7 to 11 in the drawing
 that step 7 creates. The Gallery Session therefore holds both drawings: the
 reference drawing without a render and the created drawing, which the Gallery
@@ -686,3 +689,6 @@ the crop.
 | both | `manual-05-01-region-popup.webp` | Add | Replay through step 5 (Fit, Select region, drag on the reference row); the whole region popup, its header with the selected span and its buttons through **Find in other files** (the popup's dialog element; the first capture cropped only the button list) | Recaptured; accepted |
 | both | `manual-06-01-proposal.webp` | Add | Replay through step 6; the **Find in other files** dialog panel with the proposal for each File and **Create new drawing** (the panel, not the full-page overlay, which the first capture cropped) | Recaptured; accepted |
 | both | `manual-07-01-windows.webp` to `manual-11-01-final.webp` | Add | Replay through steps 7 to 11; the generated preview at 1370 px; `visibleText` the record IDs (steps 7 to 9) or the strain names the rows show from step 10 on | Captured; accepted |
+| both | `manual-08-01-similarity-groups.webp` to `manual-11-01-final.webp` | Recapture; recipe extended | Step 8 sets Match style to Curve (`assertAppState` `adv.pairwise_match_style`); step 11 clears Separate Strands (`form.separate_strands`); the Gallery Session is the Session the Web app holds after the replay through step 11, refreshed | Recaptured; accepted |
+| `bacillus_velezensis_fengycin` | `manual-05-01-region-popup.webp` | Recapture; recipe corrected | Both step 5 targets also hide the preview's feature search bar, which covered the top of the fengycin popup; the plasmid crop does not change | Recaptured; accepted |
+| both | `manual-03-01-reference-preview.webp`, `manual-07-01-windows.webp` | Recapture | Redrawn with the current feature drawing; no step change | Recaptured; accepted |

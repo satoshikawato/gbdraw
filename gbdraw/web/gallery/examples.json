@@ -408,7 +408,7 @@
       "NZ_CP011937.1.gbk",
       "GCF_000513755.1_SOAPdenovo_genomic.gbff.gz"
     ],
-    "fileSizeLabel": "1.4 MB",
+    "fileSizeLabel": "1.5 MB",
     "command": "gbdraw linear --session bacillus_velezensis_fengycin.gbdraw --drawing linear-2",
     "commandKind": "runnable",
     "commandNote": "Download the Session file with the Session button, then run this command in the same directory. The Session holds the input files and the color and label tables.",

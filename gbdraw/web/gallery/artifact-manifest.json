@@ -18,7 +18,7 @@
   "files": {
     "gallery/examples.json": {
       "bytes": 35279,
-      "sha256": "88124f0a457c41d7f8fe753428292ad37e6d82fdfd69efce3bb5576767da6aa0"
+      "sha256": "9273b35e30aa2dacdcb4ff92776b9526045251f2bd4698190b9cb1d93ebc61ce"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1320281,
@@ -37,8 +37,8 @@
       "sha256": "bd38a608598b840a1a490d860a4d7a79d7c0cc4d1deffe9a0118a4b53a95575f"
     },
     "gallery/examples/bacillus_velezensis_fengycin.svg": {
-      "bytes": 1520320,
-      "sha256": "800f53d10812c0210560fde790604038c75d8034e29b95968235154887f82252"
+      "bytes": 1523903,
+      "sha256": "e2fd8fd3e50902e744ebd5e44d6d071b80cf60eed3688dfac50a0e0ecb68297d"
     },
     "gallery/examples/ecoli_o157_sakai_rings.svg": {
       "bytes": 26737680,
@@ -73,8 +73,8 @@
       "sha256": "2e2d2a03c166f3e1cbd4bd614b4317838e4c6d1fc02bab2239dd1363ad84c8e1"
     },
     "gallery/examples/vibrio_parahaemolyticus_pva1.svg": {
-      "bytes": 1882461,
-      "sha256": "411bde4f39d14d6c86f02be224579c3ec8b8dfe7ebf73db8f739908a843da755"
+      "bytes": 1888520,
+      "sha256": "575c4c28c2148f742f2c3af3109c156fe7a42e4b68734a99e63d9d1138c4e049"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw": {
       "bytes": 484249,
@@ -93,8 +93,8 @@
       "sha256": "16b8ac9965b0bd602a52e2292c463cb54165e5448fb31805ae7ea2b8be2ae9d3"
     },
     "gallery/sessions/bacillus_velezensis_fengycin.gbdraw": {
-      "bytes": 8737825,
-      "sha256": "29e087754d7bfc726685032c3862ae5b70a18957e4156fc1fe0aa2a9141c9927"
+      "bytes": 8737519,
+      "sha256": "3d61de12d72a81e949869e6af0118325834810d6c3e68e731dafbf047d9aba27"
     },
     "gallery/sessions/ecoli_o157_sakai_rings.gbdraw": {
       "bytes": 12319932,
@@ -129,8 +129,8 @@
       "sha256": "13f03510536545c009030d2486a95e3a3736f3c8b5214cbcd531f90bbedcadda"
     },
     "gallery/sessions/vibrio_parahaemolyticus_pva1.gbdraw": {
-      "bytes": 4484326,
-      "sha256": "a51829aa4355b1dd597dace7afb40f70ab0856677e254ab36c926f5102393e47"
+      "bytes": 4485915,
+      "sha256": "e45946d64f8e0b18019c31b219ca2a124bc046750a532335719d5a64297642d5"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 235517,
@@ -149,8 +149,8 @@
       "sha256": "647c0758773805f2a4f909e32886fc66006ff737cb83744cfe92884af7580717"
     },
     "gallery/sources/bacillus_velezensis_fengycin.svg": {
-      "bytes": 224476,
-      "sha256": "8238fa2fd1ca57a4f7e56a1ba47b3cf9b9ff5d3d9c26689e9a25ff073f41526b"
+      "bytes": 228059,
+      "sha256": "9184c67e1c95d9aca1cfd1e3e18fad7cc0279d992f34293ea65506b69bbeb8d0"
     },
     "gallery/sources/ecoli_o157_sakai_rings.svg": {
       "bytes": 14244271,
@@ -185,8 +185,8 @@
       "sha256": "8984e89d8d1e9556acc361c29a71bcf1760ed3e623ebe64bd32b5da33d70ef5c"
     },
     "gallery/sources/vibrio_parahaemolyticus_pva1.svg": {
-      "bytes": 372858,
-      "sha256": "cbd7f23930dca0614e8ef6946978f4f08d7f7c0b93da4b89a20891b4c385f316"
+      "bytes": 378917,
+      "sha256": "59bd5015dcd2c009167e437940839232aa70616f77b9f1e6727799c723449998"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
       "bytes": 18666,
@@ -205,8 +205,8 @@
       "sha256": "7a03885326d10fd041add530d2f5471c48165766cf025dec6d2ec390347940b5"
     },
     "gallery/thumbnails/bacillus_velezensis_fengycin.webp": {
-      "bytes": 14246,
-      "sha256": "aa5cb7c9d767a9b68e1df67908861206365f1cdd786ea224e713ef0c4f228fa6"
+      "bytes": 13120,
+      "sha256": "c7858cac64a3fca8972f539d1d0ba8b120023dd150153e9dc113a6d85a655cc4"
     },
     "gallery/thumbnails/ecoli_o157_sakai_rings.webp": {
       "bytes": 25542,
@@ -241,8 +241,8 @@
       "sha256": "4b38e282867c7e1b2b623f745de807be2bf75f3d7cde8d073af240373446128c"
     },
     "gallery/thumbnails/vibrio_parahaemolyticus_pva1.webp": {
-      "bytes": 16294,
-      "sha256": "25ef7ddead47601babff74eca865eb57d4baa4a660ebe5dee0438b32cdb6f73d"
+      "bytes": 15098,
+      "sha256": "205793e26a4adad676d63b3c2fbfc0ce5d85aedaa4b40ab8dc790b26fa4c2ff8"
     }
   },
   "inventory": "tools.prepare_interactive_gallery_assets.EXAMPLES",

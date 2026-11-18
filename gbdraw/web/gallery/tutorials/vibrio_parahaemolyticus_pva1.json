@@ -260,7 +260,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const el = (() => { document.querySelector('.preview-toolbar')?.style.setProperty('visibility', 'hidden', 'important'); return document.querySelector('[data-preview-item-popup=\"region\"]')?.closest('[role=\"dialog\"]'); })(); if (!el) throw new Error('Capture target not found: g-region'); el.dataset.capture = 'g-region'; el.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const el = (() => { document.querySelector('.preview-toolbar')?.style.setProperty('visibility', 'hidden', 'important'); document.querySelector('.preview-feature-search')?.style.setProperty('visibility', 'hidden', 'important'); return document.querySelector('[data-preview-item-popup=\"region\"]')?.closest('[role=\"dialog\"]'); })(); if (!el) throw new Error('Capture target not found: g-region'); el.dataset.capture = 'g-region'; el.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
@@ -464,7 +464,7 @@
     },
     {
       "title": "Group similar proteins",
-      "body": "In Comparison, click Run LOSAT, open Settings, press LOSATP under LOSAT Mode, and set LOSATP mode to Similarity groups. Click Generate Diagram. Ribbons now link proteins of one similarity group in neighboring rows.",
+      "body": "In Comparison, click Run LOSAT, open Settings, press LOSATP under LOSAT Mode, and set LOSATP mode to Similarity groups. Under Comparison appearance, set Match style to Curve. Click Generate Diagram. Curves now link proteins of one similarity group in neighboring rows.",
       "table": {
         "columns": [
           "Setting",
@@ -482,6 +482,10 @@
           [
             "LOSATP mode",
             "Similarity groups"
+          ],
+          [
+            "Match style",
+            "Curve"
           ]
         ]
       },
@@ -490,8 +494,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio_parahaemolyticus_pva1/manual-08-01-similarity-groups.webp",
-            "alt": "The three rows linked by similarity-group ribbons.",
-            "caption": "Similarity groups link one protein family per ribbon."
+            "alt": "The three rows linked by similarity-group curves.",
+            "caption": "Similarity groups link one protein family per curve."
           },
           "capture": {
             "source": "webapp",
@@ -516,7 +520,8 @@
             "assertAppState": {
               "mode": "linear",
               "losatProgram": "blastp",
-              "losat.blastp.mode": "orthogroup"
+              "losat.blastp.mode": "orthogroup",
+              "adv.pairwise_match_style": "curve"
             },
             "visibleText": [
               "NZ_CP046414.1",
@@ -550,6 +555,15 @@
           "type": "select",
           "selector": "select[aria-label='LOSATP mode']",
           "value": "orthogroup"
+        },
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"select[aria-label='Comparison match style']\"); if (!el) throw new Error('Not found: ' + \"select[aria-label='Comparison match style']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "select",
+          "selector": "select[aria-label='Comparison match style']",
+          "value": "curve"
         },
         {
           "type": "generate"
@@ -745,14 +759,14 @@
       ]
     },
     {
-      "title": "Finish the arrows",
-      "body": "In Features, under Arrow Geometry, set Head Length Ratio to 0.64 and Shaft Width Ratio to 0.6, and in Labels set Label Placement to Above Feature. Generate Diagram to get the Gallery figure.",
+      "title": "Finish the layout and the arrows",
+      "body": "In Layout, clear Separate Strands, so the genes of both strands share one lane. In Features, under Arrow Geometry, set Head Length Ratio to 0.64 and Shaft Width Ratio to 0.6, and in Labels set Label Placement to Above Feature. Generate Diagram to get the Gallery figure.",
       "operations": [
         {
           "dataDependent": true,
           "media": {
             "src": "./media/vibrio_parahaemolyticus_pva1/manual-11-01-final.webp",
-            "alt": "Finished figure: the AHPND plasmid in three V. parahaemolyticus genomes with colored genes and similarity-group ribbons.",
+            "alt": "Finished figure: the AHPND plasmid in three V. parahaemolyticus genomes with colored genes on one lane and similarity-group curves.",
             "caption": "The Gallery figure."
           },
           "capture": {
@@ -776,7 +790,9 @@
             "selector": "svg[data-capture-tutorial-overview='true']",
             "cropPadding": 12,
             "assertAppState": {
-              "mode": "linear"
+              "mode": "linear",
+              "form.separate_strands": false,
+              "adv.pairwise_match_style": "curve"
             },
             "visibleText": [
               "19-021-D1",
@@ -787,6 +803,14 @@
         }
       ],
       "replay": [
+        {
+          "type": "evaluate",
+          "script": "const el = document.querySelector(\"input[aria-label='Separate Strands'][aria-describedby='help-linear-separate-strands']\"); if (!el) throw new Error('Not found: ' + \"input[aria-label='Separate Strands'][aria-describedby='help-linear-separate-strands']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
+        },
+        {
+          "type": "uncheck",
+          "selector": "input[aria-label='Separate Strands'][aria-describedby='help-linear-separate-strands']"
+        },
         {
           "type": "evaluate",
           "script": "const el = document.querySelector(\"input[aria-label='Arrow head length ratio']\"); if (!el) throw new Error('Not found: ' + \"input[aria-label='Arrow head length ratio']\"); for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true; el.scrollIntoView({ block: 'center' });"
