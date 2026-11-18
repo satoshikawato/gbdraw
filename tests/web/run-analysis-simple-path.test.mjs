@@ -4468,7 +4468,9 @@ test('a gzip Circular reference stages for the LOSAT ring plan as Generate names
 // The admitted features reach the rule preparation through both hops of a
 // Generate (`prepareAndAdmitCandidate`, then the preparation's
 // `prepareCandidate`): the commit reads the row matches of the admitted
-// catalog's objects, not of the page's previous features.
+// catalog's objects, not of the page's previous features. Keep this case last
+// in the file: the page state its two Generates leave (features whose matches
+// are known) fails the earlier cases, which pass no `isCurrentFeature`.
 test('a Generate with a Legend row stroke prepares the rule matches of the catalog it admits', async () => {
   installShownDrawing('linear');
   modeDrawing(state, 'linear').inputType.value = 'gb';
