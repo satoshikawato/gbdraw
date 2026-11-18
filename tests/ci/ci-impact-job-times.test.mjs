@@ -16,8 +16,11 @@ const limitsOfTests = () => workflowJobLimits(readFileSync(resolve(REPOSITORY_RO
 const limitOf = (limits, name) => limits.filter(({ pattern }) => pattern.test(name))
   .sort((left, right) => right.literalLength - left.literalLength)[0];
 let nextJobId = 1;
-const job = (name, minutes, { status = 'completed', conclusion = 'success' } = {}) => {
+const at = (minutes) => new Date(Date.parse('2026-11-06T01:00:00Z') + minutes * 60000).toISOString().replace('.000', '');
+// steps: [name, minutes, conclusion?], one after another from the job's start.
+const job = (name, minutes, { status = 'completed', conclusion = 'success', steps = [] } = {}) => {
   const id = nextJobId++;
+  let start = 0;
   return {
     id,
     run_id: RUN_ID,
@@ -25,8 +28,20 @@ const job = (name, minutes, { status = 'completed', conclusion = 'success' } = {
     status,
     conclusion,
     started_at: '2026-11-06T01:00:00Z',
-    completed_at: new Date(Date.parse('2026-11-06T01:00:00Z') + minutes * 60000).toISOString().replace('.000', ''),
-    html_url: `https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}/job/${id}`
+    completed_at: at(minutes),
+    html_url: `https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}/job/${id}`,
+    steps: steps.map(([stepName, stepMinutes, stepConclusion = 'success'], index) => {
+      const step = {
+        name: stepName,
+        status: 'completed',
+        conclusion: stepConclusion,
+        number: index + 1,
+        started_at: at(start),
+        completed_at: at(start + stepMinutes)
+      };
+      start += stepMinutes;
+      return step;
+    })
   };
 };
 
@@ -51,17 +66,36 @@ test('every job of the Tests workflow has its limit, and each run name finds its
     assert.equal(limitOf(limits, name)?.id, id, name);
     assert.equal(limitOf(limits, name).limitMinutes, minutes, name);
   }
+  // Each step-level timeout-minutes belongs to one named step of its job.
+  assert.equal(limits.flatMap(({ steps }) => steps).length, workflow.match(/^ {8}timeout-minutes:/gm).length);
+  const browserSteps = limitOf(limits, 'Browser (Python 3.11)').steps;
+  assert.deepEqual(browserSteps.map(({ name, limitMinutes }) => [name, limitMinutes]), [
+    ['Run Web JavaScript tests', 15],
+    ['Run Python browser tests', 10],
+    ['Run package build integration', 5],
+    ['Run offline GUI browser contracts', 5]
+  ]);
 });
 
-test('a job without a name matches its ID and its matrix values; step limits do not count', () => {
+test('a job without a name matches its ID and its matrix values; a step limit is its step\'s', () => {
   const limits = workflowJobLimits([
     'name: Example', 'on: push', 'jobs:',
     '  build:', '    runs-on: ubuntu-latest', '    timeout-minutes: 12',
     '    strategy:', '      matrix:', '        python: ["3.10"]',
+    '    needs:', '      - setup',
     '    steps:', '      - name: Step', '        timeout-minutes: 3', '        run: true',
-    '  "quoted":', '  report:', '    name: "Report ${{ matrix.part }} done"', '    steps:', '      - run: true', ''
+    '      - uses: actions/setup-node@v4', '        name: "Node ${{ matrix.python }}"', '        timeout-minutes: 2',
+    '      - name: Unlimited', '        run: true',
+    '      - name: Commented   # a YAML comment, not part of the name', '        timeout-minutes: 4', '        run: true',
+    "      - name: 'It''s quoted' # and commented", '        timeout-minutes: 1', '        run: true',
+    '  "quoted":', '  report:', '    name: "Report ${{ matrix.part }} done" # comment', '    steps:', '      - run: true', ''
   ].join('\n'));
   assert.deepEqual(limits.map(({ id, limitMinutes }) => [id, limitMinutes]), [['build', 12], ['report', 360]]);
+  assert.deepEqual(limits[0].steps.map(({ name, limitMinutes }) => [name, limitMinutes]),
+    [['Step', 3], ['Node ${{ matrix.python }}', 2], ['Commented', 4], ["It's quoted", 1]]);
+  assert.ok(limits[0].steps[2].pattern.test('Commented'));
+  assert.ok(limits[0].steps[1].pattern.test('Node 3.10'));
+  assert.deepEqual(limits[1].steps, []);
   assert.equal(limitOf(limits, 'build (3.10)').id, 'build');
   assert.equal(limitOf(limits, 'build').id, 'build');
   assert.equal(limitOf(limits, 'Report 2 done').id, 'report');
@@ -75,6 +109,12 @@ test('the report lists finished jobs at or over the share of their limit', () =>
     limits,
     jobs: [
       job('Core (Python 3.12)', 21),
+      // A step with its own limit counts against it; steps without one, and skipped steps, do not.
+      job('Browser (Python 3.11)', 16, { steps: [
+        ['Set up job', 0.5], ['Run Web JavaScript tests', 12.3], ['Run Python browser tests', 3],
+        ['Run package build integration', 0, 'skipped'], ['Post Run Web JavaScript tests', 0.2]
+      ] }),
+      job('Web contracts (Python 3.11)', 28, { steps: [['Set up job', 0.5], ['Run fast Web JavaScript contracts', 14.5]] }),
       job('Core (Python 3.10)', 25 * WARNING_SHARE),
       job('Core (Python 3.11)', 19.9),
       job('Playwright functional (shard 1/8)', 45, { conclusion: 'cancelled' }),
@@ -84,22 +124,31 @@ test('the report lists finished jobs at or over the share of their limit', () =>
     ]
   });
   assert.deepEqual(times.map(({ name }) => name), [
-    'Core (Python 3.12)', 'Core (Python 3.10)', 'Core (Python 3.11)', 'Playwright functional (shard 1/8)', 'Renamed job'
+    'Core (Python 3.12)', 'Browser (Python 3.11)', 'Browser (Python 3.11) / Run Web JavaScript tests',
+    'Browser (Python 3.11) / Run Python browser tests', 'Web contracts (Python 3.11)',
+    'Web contracts (Python 3.11) / Run fast Web JavaScript contracts', 'Core (Python 3.10)', 'Core (Python 3.11)', 'Playwright functional (shard 1/8)', 'Renamed job'
   ]);
+  const stepTime = times.find(({ name }) => name.endsWith('/ Run Web JavaScript tests'));
+  assert.match(stepTime.url, /\/job\/\d+#step:2:1$/);
   const { summary, annotations } = formatJobTimeReport({ times });
   assert.deepEqual(annotations, [
     '::warning title=Job near its time limit::Playwright functional (shard 1/8) took 45.0 of its 45 minutes (100%25).',
+    '::warning title=Step near its time limit::Web contracts (Python 3.11) / Run fast Web JavaScript contracts took 14.5 of its 15 minutes (96%25).',
+    '::warning title=Job near its time limit::Web contracts (Python 3.11) took 28.0 of its 30 minutes (93%25).',
     '::warning title=Job near its time limit::Core (Python 3.12) took 21.0 of its 25 minutes (84%25).',
+    '::warning title=Step near its time limit::Browser (Python 3.11) / Run Web JavaScript tests took 12.3 of its 15 minutes (82%25).',
     '::warning title=Job near its time limit::Core (Python 3.10) took 20.0 of its 25 minutes (80%25).'
   ]);
-  assert.match(summary, /^## Job times against their limits\n\nJobs that used 80% or more of their `timeout-minutes`:\n\n- \[Playwright functional \(shard 1\/8\)\]\(https:[^)]+\): 45\.0 of 45 min \(100%\)\n/);
+  assert.match(summary, /^## Job times against their limits\n\nJobs and steps that used 80% or more of their `timeout-minutes`:\n\n- \[Playwright functional \(shard 1\/8\)\]\(https:[^)]+\): 45\.0 of 45 min \(100%\)\n/);
+  assert.match(summary, /\n- \[Browser \(Python 3\.11\) \/ Run Web JavaScript tests\]\([^)]+#step:2:1\): 12\.3 of 15 min \(82%\)\n/);
+  assert.doesNotMatch(summary, /Run Python browser tests/);
   assert.match(summary, /\n- \[Core \(Python 3\.10\)\]\([^)]+\): 20\.0 of 25 min \(80%\)\n/);
-  assert.doesNotMatch(summary, /3\.11/);
+  assert.doesNotMatch(summary, /Core \(Python 3\.11\)/);
   assert.match(summary, /\n- No workflow job matches: Renamed job\n/);
 
   const quiet = formatJobTimeReport({ times: jobTimes({ limits, jobs: [job('Core (Python 3.11)', 19.9), job('Lint', 1)] }) });
   assert.deepEqual(quiet.annotations, []);
-  assert.match(quiet.summary, /- No job used 80% or more of its `timeout-minutes`; the highest share: Core \(Python 3\.11\) took 19\.9 of its 25 minutes \(79%\)\./);
+  assert.match(quiet.summary, /- No job or step used 80% or more of its `timeout-minutes`; the highest share: Core \(Python 3\.11\) took 19\.9 of its 25 minutes \(79%\)\./);
 });
 
 const gatePlan = (profile) => createImpactPlan({
