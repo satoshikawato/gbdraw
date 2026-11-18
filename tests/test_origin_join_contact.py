@@ -25,6 +25,7 @@ from gbdraw.api.requests import (
 from gbdraw.features.factory import FeatureLayerMode, create_feature_layers
 from gbdraw.labels.circular_candidates import _candidate_segment
 from gbdraw.labels.coordinates import display_label_segment
+from gbdraw.svg.circular_features import circular_feature_parts
 from gbdraw.layout.record_coordinates import CirclePlace
 
 _LENGTH = 3000
@@ -87,8 +88,8 @@ def test_a_join_written_in_order_over_both_ends_draws_one_block_over_the_origin_
     # OV-3661: the whole view joined the two blocks; a display start drew them with a connector all round the ring.
     parts = _drawn_parts(InMemoryRecordSource(_record(_IN_ORDER)), start)
     assert parts["connector"] == 0
-    # The whole view draws one block; a display start draws two that meet at the origin.
-    assert parts["block"] == (1 if start is None else 2)
+    # Both views draw one block over the origin, with no seam where the parts meet (OV-3866).
+    assert parts["block"] == 1
 
 
 @pytest.mark.parametrize("start", [None, 1001])
@@ -218,7 +219,9 @@ def test_a_record_on_a_shared_circle_draws_a_join_in_order_as_written_inside_its
 
 
 def test_the_label_of_a_join_written_over_the_origin_of_a_record_on_a_shared_circle_stands_on_a_part():
-    # OV-3864: dev anchored the label at the middle of both parts, the record's arc end, under the next record.
+    # Review r1: the first head joined this pair on a shared circle and anchored its label at the record's arc end.
+    # (OV-3864, the label hidden under the next record's blocks in one-circle drawings, is a paint-order bug in the
+    # Circular assembler and is not guarded here.)
     feature = _on_a_shared_circle(_record(_OVER), None)["over"]
     assert not feature.joins_over_origin
     segment = display_label_segment(feature, 5200, circular=True)
@@ -234,6 +237,8 @@ def test_a_display_start_inside_a_record_on_a_shared_circle_joins_over_the_origi
     assert not any(part.kind == "line" for part in feature.display_parts)
     segment = display_label_segment(feature, 5200, circular=True)
     assert segment is not None and segment.span == 600
+    # One block on the circle, so the label at its middle stands on no seam (OV-3866).
+    assert [part["coord_type"] for part, _ in circular_feature_parts(feature, 5200)] == ["block"]
 
 
 def test_a_one_circle_drawing_keeps_the_connector_of_a_join_in_order_inside_the_record_arc():
@@ -249,3 +254,25 @@ def test_a_one_circle_drawing_keeps_the_connector_of_a_join_in_order_inside_the_
         if node.get("data-gbdraw-feature-part")
     )
     assert parts["connector"] == 1
+
+
+def _seams(feature, total_length: int, origin: int) -> list[tuple[int, int]]:
+    """The drawn blocks of ``feature`` that close at display offset ``origin`` (a stroked edge there)."""
+    return [
+        (int(part["coord_start"]), int(part["coord_end"]))
+        for part, _ in circular_feature_parts(feature, total_length)
+        if part["coord_type"] == "block"
+        and ((int(part["coord_end"]) % total_length == origin and not part["open_end"])
+             or (int(part["coord_start"]) % total_length == origin and not part["open_start"]))
+    ]
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+def test_a_join_over_the_origin_draws_no_seam_there_from_a_display_start(strand):
+    # Review r2 MEDIUM 1: from display start 1001 the two parts met at the origin as two stroked blocks, and the
+    # label at the middle of both stood on that seam. The origin lies at display offset 3000 - 1000 = 2000.
+    record = _record(("ends", _join((0, 300), (2700, 3000), strand=strand)))
+    feature = _features(record, "circular", 1001)["ends"]
+    assert _seams(feature, _LENGTH, 2000) == []
+    assert [part["coord_type"] for part, _ in circular_feature_parts(feature, _LENGTH)] == ["block"]
+
