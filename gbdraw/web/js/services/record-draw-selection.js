@@ -134,6 +134,15 @@ export const linearSeqRecordKey = (seq, index) => String(seq.uid || `record-${in
 export const cardHoldsRecordKey = (cardKey, recordKey) => recordKey === cardKey || recordKeyExpansion(recordKey, cardKey) !== null;
 
 /**
+ * The card of `cards` a request record is a record of: the card whose uid is its key, else the card it is a
+ * `<uid>:<k>` of; undefined for none. The one reading of a request record's card (`drawnRecordIdentities`,
+ * `committedRecordIdentitySources`).
+ * @param {string} recordKey @param {ReadonlyMap<string, unknown>} cards by card uid
+ */
+export const requestRecordCard = (recordKey, cards) => (cards.has(recordKey) ? recordKey
+  : [...cards.keys()].find((uid) => recordKeyExpansion(recordKey, uid) !== null));
+
+/**
  * A request record as `sameSelectedRecord` reads it: a selector names a record by its ID or its place in its file.
  * @typedef {{ cardinality?: string, selector?: CanonicalRecord['selector'] }} SelectingRecord
  */
@@ -659,8 +668,7 @@ export const drawnRecordIdentities = (records, sources) => {
   return records.flatMap((record) => {
     const recordKey = cleanKey(record?.recordKey);
     const cards = sources.cards;
-    const base = cards.has(recordKey) ? recordKey
-      : [...cards.keys()].find((uid) => recordKeyExpansion(recordKey, uid) !== null);
+    const base = requestRecordCard(recordKey, cards);
     const entries = base === undefined ? undefined : cards.get(base);
     if (base === undefined || !entries || entries.length === 0) return [];
     const identityOf = (/** @type {number} */ sourceIndex) => recordIdentity({

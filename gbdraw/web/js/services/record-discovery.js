@@ -9,12 +9,15 @@ import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { readRingScales } from './linear-units.js';
 import {
-  circularInputComplete, circularSourceInputs, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
+  circularInputComplete, circularSourceInputs, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
 } from './input-types.js';
-import { recordIdentity, recordSelectorNumber, resliceCardRows } from './record-draw-selection.js';
+import { recordIdentity, recordSelectorNumber, requestRecordCard, resliceCardRows } from './record-draw-selection.js';
 import { storedOneRecordIdKey, storedRecordIdOf } from './stored-leaf-readings.js';
-import { recordOrderSelector } from './record-options.js';
-import { sessionResourceReadOwner } from './session-resource-backing.js';
+import { buildDisambiguatedRecordEntries, recordOrderSelector } from './record-options.js';
+import {
+  adoptCurrentSessionResources, adoptedSessionResourceDescriptor, createSessionResourceFileView,
+  matchesSessionResourceDescriptor, sessionResourceReadOwner, sessionResourceSource
+} from './session-resource-backing.js';
 import { isRecordMajorDepthFileMatrix } from './depth-track-state.js';
 import {
   bytesToText,
@@ -25,7 +28,8 @@ import {
 } from './file-content-cache.js';
 
 import { isInputExpansionRefusal } from './session-resource-backing.js';
-/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable } from './session-resource-backing.js' */
+/** @import { IdentityRequestRecord, RecordIdentitySources } from './record-draw-selection.js' */
 /** @import { GenerationPayload } from './diagram-generation.js' */
 /** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 /** @import { RingGenomeFileLengths, RingGenomeInput, RingGenomeScales } from '../contracts/card-windows.generated.js' */
@@ -1248,6 +1252,54 @@ export const readStoredTokenRecordIds = async (requests, fileOf, known = new Map
     }
   }
   return recordIds;
+};
+
+/**
+ * The record lists the records of a committed request were drawn from, for its identities when none are kept with it
+ * (a Session Load; `drawnRecordIdentities`): each card a record of the request names lists the records of the file the
+ * request names for it. That is the card's list now (`sources`) while the card holds that file, else the records of the
+ * request's own file, read from the Session resource the request names. So a Replace made before a Save and Load moves
+ * the feature edits of each record at the next Generate by the rule a Replace in one sitting moves them by
+ * (`recordKeyMoves`, D-05), as the Depth rows moved at the read after the Replace (`circularDepthRowsAfterRead`). A
+ * card whose request file cannot be read keeps its list now.
+ * @param {{ records: readonly (IdentityRequestRecord & { source?: Readonly<Record<string, unknown>> | null })[],
+ *   resources: Readonly<Record<string, unknown>>, sources: RecordIdentitySources,
+ *   cards: readonly (Readonly<Partial<Record<import('./input-types.js').InputSlot, InputFileRef | null>>> & { uid: unknown })[],
+ *   inputType: unknown, inputFiles: Pick<import('./history-files.js').InputFileStore, 'fileOf'> }} committed
+ *   `records` and `resources`: the committed request's; `cards`: the drawing's cards now (its Circular source cards
+ *   or Linear cards), whose files `inputType` reads.
+ * @returns {Promise<RecordIdentitySources>}
+ */
+export const committedRecordIdentitySources = async ({ records, resources, sources, cards: drawingCards, inputType, inputFiles }) => {
+  /** @param {string} uid the files the card holds now, in the order its input type reads them */
+  const filesOf = (uid) => {
+    const card = drawingCards.find((entry) => String(entry.uid) === uid);
+    const { primaryFile, pairedFile } = inputSourceFiles(inputType, card ?? {});
+    return [primaryFile, pairedFile].map((ref) => inputFiles.fileOf(ref));
+  };
+  const cards = new Map(sources.cards);
+  /** @type {SessionResourceTable | null} */
+  let table = null;
+  const read = new Set();
+  for (const record of records) {
+    const uid = requestRecordCard(String(record.recordKey), sources.cards);
+    if (uid === undefined || read.has(uid)) continue;
+    read.add(uid);
+    const ids = storedRecordSourceResourceIds(record.source);
+    const held = filesOf(uid);
+    try {
+      table ??= adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (resources));
+      const own = /** @type {SessionResourceTable} */ (table);
+      if (ids.length > 0 && ids.every((id, index) => sessionResourceSource(held[index]) !== null
+        && matchesSessionResourceDescriptor(held[index], adoptedSessionResourceDescriptor(own, id)))) continue;
+      const [primaryFile, pairedFile] = ids.map((id) => createSessionResourceFileView(own, id));
+      const listed = await discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(record.source?.kind)), primaryFile, pairedFile ?? null);
+      cards.set(uid, buildDisambiguatedRecordEntries(listed));
+    } catch {
+      // The request's file cannot be read: the card keeps its list now.
+    }
+  }
+  return { ...sources, cards };
 };
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */

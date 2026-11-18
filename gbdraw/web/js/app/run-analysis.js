@@ -179,6 +179,7 @@ import {
   readCircularSourceRecords,
   readParsedSequenceRecords,
   circularDepthRowsAfterRead,
+  committedRecordIdentitySources,
   planRingScales
 } from '../services/record-discovery.js';
 import {
@@ -3211,10 +3212,14 @@ export const createRunAnalysis = ({
         filesData: { linearSeqs: drawing.linearSeqs.map((card) => ({ ...card, cardRecord: catalogRecordOf(card) })), circularSources: [...drawing.circularSources] }
       }) : null;
       if (identitySources && nextRecordPlan) {
-        // A committed request without kept identities reads them again from the current files.
+        // A committed request without kept identities (a Session Load) reads them again: the records it was drawn from
+        // are its own files' where a card no longer holds them (OV-3846).
         if (!previousRecordIdentities && previousRequestRecords.length > 0) recordStructuralMetric('recordIdentityFallbackCount');
         recordMoves = recordKeyMoves(
-          previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, identitySources),
+          previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, await committedRecordIdentitySources({
+            records: previousRequestRecords, resources: getCommittedCanonicalSession?.()?.resources ?? {}, sources: identitySources,
+            cards: drawing.mode === 'circular' ? drawing.circularSources : drawing.linearSeqs, inputType: drawing.inputType.value, inputFiles
+          })),
           drawnRecordIdentities(nextRecordPlan, identitySources),
           replacedRecordKeys
         );

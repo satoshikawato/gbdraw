@@ -40,8 +40,9 @@ setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: { overrides: payload.configOverrides } }));
 const { CANONICAL_REQUEST_SCHEMA, projectCanonicalSessionRequest } = await import('../../gbdraw/web/js/services/session-request.js');
-const { readStoredRecordIdPlaces, readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
-const { recordSelectorNumber } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+const { committedRecordIdentitySources, readStoredRecordIdPlaces, readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { drawnRecordIdentities, recordKeyMoves, recordSelectorNumber } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+const { buildDisambiguatedRecordEntries } = await import('../../gbdraw/web/js/services/record-options.js');
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -182,3 +183,28 @@ for (const keepsDraft of [false, true]) {
   });
 }
 
+
+// OV-3846: a Replace with the same records in the other order, saved and loaded before its Generate. The Load keeps
+// no identities of the committed request, so its records are read from the request's own file, and the next Generate
+// moves each record's rows to the record with its ID, as the Depth rows moved at the read after the Replace.
+test('after a Load, the committed request\'s records are read from its own file where the card holds another', async () => {
+  const resources = { then: descriptor(genbankOf(['first', 'second']), 'ab.gb') };
+  const records = [requestRecord('card:1', { kind: 'recordIndex', index: 0 }, 'then'), requestRecord('card:2', { kind: 'recordIndex', index: 1 }, 'then')];
+  const now = { mode: 'circular', cards: new Map([['card', buildDisambiguatedRecordEntries([{ recordId: 'second' }, { recordId: 'first' }])]]) };
+  const moves = (sources) => Object.fromEntries(recordKeyMoves(drawnRecordIdentities(records, sources), drawnRecordIdentities(records, now)));
+  // Read from the card's lists now, the records seem not to have changed: nothing moves (A's rows land on B).
+  assert.deepEqual(moves(now), {});
+  // The card holds a file the Replace picked; the store gives its bytes by ref.
+  const holding = (file) => ({ cards: [{ uid: 'card', gb: { fileId: 'picked' } }], inputType: 'gb', inputFiles: { fileOf: (ref) => (ref ? file : null) } });
+  const replaced = new File([genbankOf(['second', 'first'])], 'ba.gb', { type: 'text/plain' });
+  const then = await committedRecordIdentitySources({ records, resources, sources: now, ...holding(replaced) });
+  assert.deepEqual(then.cards.get('card').map(({ recordId }) => recordId), ['first', 'second']);
+  assert.deepEqual(moves(then), { 'card:1': 'card:2', 'card:2': 'card:1' });
+  // A card that still holds the request's file keeps its list now, with no read.
+  const held = createSessionResourceFileView(adoptCurrentSessionResources(resources), 'then');
+  const same = await committedRecordIdentitySources({ records, resources, sources: now, ...holding(held) });
+  assert.equal(same.cards.get('card'), now.cards.get('card'));
+  // A request file that cannot be read keeps the list now.
+  const unread = await committedRecordIdentitySources({ records: [requestRecord('card:1', null, 'missing')], resources, sources: now, ...holding(replaced) });
+  assert.equal(unread.cards.get('card'), now.cards.get('card'));
+});
