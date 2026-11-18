@@ -69,7 +69,7 @@ class DepthTrackStyle:
 class DepthTrackSpec:
     """One depth source for one displayed record and logical track.
 
-    ``table`` is a parsed file (read in ``format``), or an API table that ``depth_df`` converts. ``agg`` is the
+    ``table`` is a parsed file (its reader takes the file format), or an API table that ``depth_df`` converts. ``agg`` is the
     value of a window; ``style``, ``negative_color``, ``baseline`` and the value range ``min_value``/``max_value``
     (``DepthSeriesBound``) say how the series draws. Every default draws as before these fields existed.
     """
@@ -83,7 +83,6 @@ class DepthTrackSpec:
     large_tick_interval: float | None = None
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
-    format: DepthFileFormat = "auto"
     agg: DepthAggregation = "mean"
     style: SeriesStyle = "area"
     negative_color: str | None = None
