@@ -2593,6 +2593,25 @@ def test_refreshed_gallery_session_keeps_the_resources_only_a_kept_drawing_names
     refresh_gallery_sessions_module._write_session_file(tmp_path / "refreshed.gbdraw", refreshed)
 
 
+def test_refreshed_gallery_session_stores_written_file_metadata_in_a_kept_drawing() -> None:
+    """The refresh gives a kept drawing's files the metadata gbdraw's writer
+    stores, as it does the shown drawing's: the Web saved the reference
+    drawing with each upload's media type guess and modification time."""
+
+    from gbdraw.session_drawings import _drawing_view, write_session_drawings
+    from tests.test_gallery_session_file_metadata import machine_file_metadata
+
+    source = refresh_gallery_sessions_module._read_session_file(_session_path("vibrio_parahaemolyticus_pva1"))
+    reference, shown = source["drawings"]
+    reference["webFiles"]["bindings"]["linearSeqs"][0]["gb"].update(type="", lastModified=1794337444533)
+    finalized = write_session_drawings([_drawing_view(source, shown)], ids=[shown["id"]], names=[shown["name"]])
+    assert machine_file_metadata(source)
+
+    refreshed = refresh_gallery_sessions_module._with_source_drawings(finalized, source)
+
+    assert machine_file_metadata(refreshed) == []
+
+
 @pytest.mark.parametrize(
     ("active", "drawn", "message"),
     [

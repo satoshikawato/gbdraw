@@ -1365,13 +1365,15 @@ def _with_source_drawings(finalized: dict[str, Any], source: dict[str, Any]) -> 
     The publication writes the drawing it shows alone (``galleryPublicationDocument``).
     A tutorial that creates that drawing from another, as **Find in other
     files** does, replays its steps in the other one, so the refreshed Session
-    keeps it as :func:`_keep_render_of_shown_drawing` leaves it. A Session of
-    one drawing is ``finalized`` as it is.
+    keeps it as :func:`_keep_render_of_shown_drawing` leaves it, its files with
+    the metadata gbdraw's writer stores (:func:`_store_written_file_metadata`),
+    as the shown drawing's. A Session of one drawing is ``finalized`` as it is.
     """
 
     if len(source.get("drawings") or ()) < 2:
         return finalized
     _keep_render_of_shown_drawing(source)
+    _store_written_file_metadata(source)
     view, drawing_id = _gallery_view(finalized)
     assert drawing_id is not None
     return _gallery_document(source, view, drawing_id)

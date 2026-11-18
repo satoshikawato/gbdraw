@@ -430,9 +430,13 @@ def test_a_type_the_palette_does_not_list_is_drawn_and_listed_in_the_palette_def
 def test_every_gallery_session_passes_request_preparation(session_path: Path) -> None:
     # Decode and input preparation only: the render-time checks (depth, skew
     # slot and conservation default colors) are not reached by this test.
+    # Each drawn drawing's request; the drawing a tutorial starts in is kept undrawn, with none.
+    drawn = [drawing["id"] for drawing in read_session_payload(session_path)["drawings"] if drawing["renderRequest"]]
+    assert drawn
     document = load_session_document(session_path)
     with tempfile.TemporaryDirectory() as output, materialize_session(document, output_directory=output) as live:
-        _prepare_diagram_inputs(session_to_request(live))
+        for drawing in drawn:
+            _prepare_diagram_inputs(session_to_request(live, drawing=drawing))
 
 
 @pytest.mark.parametrize(
@@ -555,6 +559,8 @@ def test_a_gallery_session_stores_no_palette_row_in_its_default_colors(session_p
     # rows that differ from its palette.
     document = read_session_payload(session_path)
     for drawing in document["drawings"]:
+        if drawing["renderRequest"] is None:
+            continue  # the drawing a tutorial starts in, kept undrawn: it stores no request
         colors = drawing["renderRequest"]["diagramOptions"]["colors"]
         ref = colors.get("defaultColorsFile") or colors.get("defaultColors")
         if not ref:
