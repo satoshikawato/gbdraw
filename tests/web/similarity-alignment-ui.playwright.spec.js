@@ -153,6 +153,21 @@ const collinearSession = (testInfo, name) => pythonFixture(testInfo, name, (dire
   directory
 ], 'mixed.gbdraw');
 
+// The texts of the elements a control's aria-describedby names, present ones only.
+const describedBy = (control) => control.evaluate((element) => (element.getAttribute('aria-describedby') || '')
+  .split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent.trim() ?? '').filter(Boolean));
+const GENERATING_REASON = 'Generating diagram. Retry after generation finishes.';
+// The Generate's search waits for `window.__RELEASE_SEARCH__()`, then runs, single-threaded (the test server is not
+// cross-origin isolated).
+const holdNextSearch = (page) => page.evaluate(() => {
+  window.__GBDRAW_APP__.clearLosatCache();
+  window.__GBDRAW_APP__.losatExecution.executionMode = 'serial';
+  window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+    await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
+    return (await import('./js/services/losat.js')).runLosatPairsParallel(jobs, options);
+  };
+});
+
 const loadAmbiguousSession = async (page, testInfo) => {
   const source = collinearSession(testInfo, 'inparalog-fixture');
 
@@ -1392,16 +1407,7 @@ test('Align… and Review alignment options… are disabled while a Generate run
     await control.evaluate((element) => element.focus());
     await page.keyboard.press(key);
   };
-  // The Generate's search waits for the release, then runs, single-threaded (the test server is not cross-origin
-  // isolated).
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.clearLosatCache();
-    window.__GBDRAW_APP__.losatExecution.executionMode = 'serial';
-    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
-      await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
-      return (await import('./js/services/losat.js')).runLosatPairsParallel(jobs, options);
-    };
-  });
+  await holdNextSearch(page);
   await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
   await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 180000 });
 
@@ -1409,6 +1415,7 @@ test('Align… and Review alignment options… are disabled while a Generate run
     drawer.getByRole('button', { name: 'Review alignment options…' })];
   for (const button of drawerButtons) {
     await expect(button, 'the drawer button is disabled while the Generate runs').toBeDisabled();
+    expect(await describedBy(button), 'the disabled drawer button states why').toEqual([GENERATING_REASON]);
     await pressOn(button, 'Enter');
   }
   const b0FeatureId = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
@@ -1419,21 +1426,71 @@ test('Align… and Review alignment options… are disabled while a Generate run
   for (const button of [popup.getByRole('button', { name: 'Align…', exact: true }),
     popup.getByRole('button', { name: 'Review alignment options…' })]) {
     await expect(button, 'the popup button is disabled while the Generate runs').toBeDisabled();
+    expect(await describedBy(button), 'the disabled popup button states why').toContain(GENERATING_REASON);
     await pressOn(button, 'Enter');
   }
   expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentStatus), 'no key press starts an alignment').toBe('idle');
   await expect(page.getByRole('dialog', { name: 'Review alignment' })).toHaveCount(0);
 
-  // Started by code, the one-click Align resolves and its run is refused: no error, no step, no plan.
+  // Started by code, the one-click Align is refused before it resolves: no error, no review, no step, no plan.
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.startSimilarityAlignmentFromDrawer('og_1')))
-    .toEqual({ status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' });
+    .toEqual({ status: 'busy', reason: GENERATING_REASON });
   expect(await alignState()).toEqual({ error: null, alignError: null, plan: false, undoLabel: '' });
-  await page.evaluate(() => window.__GBDRAW_APP__.cancelSimilarityAlignmentDialog());
+  await expect(page.getByRole('dialog', { name: 'Review alignment' })).toHaveCount(0);
 
   await page.evaluate(() => window.__RELEASE_SEARCH__());
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 180000 });
   expect(await alignState(), 'the Generate commits its Result; no Align step').toEqual(
     { error: null, alignError: null, plan: false, undoLabel: 'Generate diagram' });
+  await expectNoUnhandledRejections(page);
+});
+
+// OV-2447 and carried (b), (c): a review opened before a Generate stays open with its choices. While the Generate
+// runs, Apply is disabled with the run's reason and Align by code is refused before it resolves, an ambiguous group
+// too; once the Generate commits another Result, Apply is disabled with the reason the refusal gives, and an Apply
+// that still runs fails with that recognized diagnostic, never UNKNOWN.
+test('a review open across a Generate disables Apply with the reason and a stale Apply names its cause', async ({ page }, testInfo) => {
+  test.setTimeout(420000);
+  await captureUnhandledRejections(page);
+  await loadAmbiguousSession(page, testInfo);
+  if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
+  const drawer = page.locator('.right-drawer');
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  await drawer.locator('[data-similarity-group-row="og_1"]').click();
+  const reference = await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1')
+    .find(({ anchor }) => anchor.recordKey === 'record_b')?.key || '');
+  await drawer.getByLabel('Exact reference record and feature').selectOption(reference);
+  await drawer.getByRole('button', { name: 'Review alignment options…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Review alignment' });
+  await expect(dialog).toBeVisible({ timeout: 180000 });
+  await dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().check();
+  const apply = dialog.getByRole('button', { name: 'Apply', exact: true });
+  const reason = page.locator('#similarity-alignment-apply-reason');
+  await expect(apply).toBeEnabled();
+
+  await holdNextSearch(page);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await page.waitForFunction(() => Boolean(window.__RELEASE_SEARCH__), null, { timeout: 180000 });
+  await expect(apply, 'Apply waits for the run').toBeDisabled();
+  await expect(reason).toHaveText(GENERATING_REASON);
+  // Align by code on the ambiguous group is refused as the one-click Align is: the open review is left as it was.
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.startSimilarityAlignmentFromDrawer('og_1')))
+    .toEqual({ status: 'busy', reason: GENERATING_REASON });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first(), 'the choice is kept').toBeChecked();
+
+  await page.evaluate(() => window.__RELEASE_SEARCH__());
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 180000 });
+  const stale = 'The diagram changed after this review opened. Start alignment again.';
+  await expect(dialog, 'the review stays open').toBeVisible();
+  await expect(apply).toBeDisabled();
+  await expect(reason).toHaveText(stale);
+  // An Apply that still reaches the check ends the review with the same words and a recognized code.
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.applySimilarityAlignmentDraft()))
+    .toMatchObject({ status: 'stale' });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.similarityAlignmentError?.code)).toBe('ALIGNMENT_STALE');
+  await expect(page.getByText(stale).first()).toBeVisible();
+  await expect(page.getByText('without recognized diagnostic information')).toHaveCount(0);
   await expectNoUnhandledRejections(page);
 });
 
