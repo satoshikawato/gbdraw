@@ -50,6 +50,16 @@ from .core.numeric import (
     JS_WHITESPACE,
     parse_ascii_nonnegative_integer,
 )
+from .core.js_values import (
+    JS_ARRAY_INDEX,
+    js_integer,
+    js_integral,
+    js_key_order,
+    js_number,
+    js_string,
+    js_text,
+    js_truthy,
+)
 from .io.input_text import GZIP_ERRORS, open_input_text
 from .exceptions import GbdrawError, ValidationError
 from .io.colors import is_user_color, named_color_hex, packaged_color_palettes
@@ -2231,30 +2241,6 @@ def _migrate_session_feature_placements(placements: object) -> object:
     return migrated
 
 
-# The Web readers' ``String(value ?? '')`` and ``.trim()`` (JS_WHITESPACE), so
-# the twins below read text as the Web does.
-
-
-def _js_string(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, str):
-        return value
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        return str(int(value)) if value.is_integer() and abs(value) < 1e21 else repr(value)
-    if isinstance(value, list):
-        return ",".join(_js_string(item) for item in value)
-    return "[object Object]"
-
-
-def _js_text(value: object) -> str:
-    return _js_string(value).strip(JS_WHITESPACE)
-
-
 def _feature_identity_key(scope: object, record_key: object, feature_id: object) -> str:
     """The draft key of one feature in one mode, or ``""`` for an invalid identity.
 
@@ -2301,7 +2287,7 @@ _FEATURE_EDIT_DRAFT_FIELDS = ("featureVisibility", "labelVisibility", "labelText
 
 
 def _rendered_id_without_part(rendered_id: object) -> str:
-    return _RENDERED_PART_SUFFIX.sub("", _js_text(rendered_id), count=1)
+    return _RENDERED_PART_SUFFIX.sub("", js_text(rendered_id), count=1)
 
 
 def _parse_rendered_id(rendered_id: object) -> tuple[str, int | None, int | None]:
@@ -2371,26 +2357,26 @@ def _catalog_feature_index(
     for item in _mapping_list(items):
         record_keys_value = item.get("recordKeys")
         record_keys = (
-            [_js_text(record_key) for record_key in record_keys_value]
+            [js_text(record_key) for record_key in record_keys_value]
             if isinstance(record_keys_value, list)
             else []
         )
         for feature in _mapping_list(item.get("features")):
             key = _feature_identity_key(
-                mode, _js_text(feature.get("recordKey")), _js_text(feature.get("biologicalFeatureId"))
+                mode, js_text(feature.get("recordKey")), js_text(feature.get("biologicalFeatureId"))
             )
             svg_id = _rendered_id_without_part(feature.get("svgId"))
             if key and svg_id:
                 rendered_by_id.setdefault(svg_id, {})[key] = None
         for feature in _mapping_list(item.get("biologicalFeatures")):
-            record_key = _js_text(feature.get("recordKey"))
-            feature_id = _js_text(feature.get("biologicalFeatureId"))
+            record_key = js_text(feature.get("recordKey"))
+            feature_id = js_text(feature.get("biologicalFeatureId"))
             key = _feature_identity_key(mode, record_key, feature_id)
             if key:
                 biological.append(
                     (
                         key,
-                        _js_text(feature.get("stableFeatureId")) or feature_id,
+                        js_text(feature.get("stableFeatureId")) or feature_id,
                         _safe_integer(feature.get("sourceFeatureIndex")),
                         record_keys.index(record_key) + 1 if record_key in record_keys else 0,
                     )
@@ -2403,7 +2389,7 @@ def _nonnegative_integer(value: object) -> int | None:
 
     if value is None or value == "":
         return None
-    number = _js_number(value)
+    number = js_number(value)
     if math.isfinite(number) and number.is_integer() and 0 <= number <= JS_MAX_SAFE_INTEGER:
         return int(number)
     return None
@@ -2465,7 +2451,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     )
 
     def describe(feature: Mapping[str, Any]) -> tuple[int | None, int | None, int | None, str, str]:
-        ordinal = _LINEAR_RECORD_SUFFIX.search(_js_text(_first(feature, "svg_id", "svgId")))
+        ordinal = _LINEAR_RECORD_SUFFIX.search(js_text(_first(feature, "svg_id", "svgId")))
         svg_ordinal = int(ordinal.group(1)) if ordinal else None
         file_index = _nonnegative_integer(feature.get("fileIdx"))
         if linear:
@@ -2498,8 +2484,8 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
             input_index,
             record_index,
             source_index,
-            _js_text(_first(feature, "stable_feature_id", "stableFeatureId", "stable_svg_id")),
-            _js_text(next((value for value in drawn_hashes if value is not None), None)),
+            js_text(_first(feature, "stable_feature_id", "stableFeatureId", "stable_svg_id")),
+            js_text(next((value for value in drawn_hashes if value is not None), None)),
         )
 
     def described(value: object) -> list[tuple[int, int, int | None, str, str]]:
@@ -2528,7 +2514,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
 
     def record_key_of(input_index: int, record_index: int) -> str:
         record = record_of(input_index, record_index)
-        record_key = _js_text(record.get("recordKey")) if record is not None else ""
+        record_key = js_text(record.get("recordKey")) if record is not None else ""
         if not record_key:
             return ""
         assert record is not None
@@ -2609,13 +2595,13 @@ def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeatu
     for item in _mapping_list(items):
         record_keys_value = item.get("recordKeys")
         record_keys = (
-            [_js_text(record_key) for record_key in record_keys_value]
+            [js_text(record_key) for record_key in record_keys_value]
             if isinstance(record_keys_value, list)
             else []
         )
         for feature in _mapping_list(item.get("features")):
-            record_key = _js_text(feature.get("recordKey"))
-            key = _feature_identity_key(mode, record_key, _js_text(feature.get("biologicalFeatureId")))
+            record_key = js_text(feature.get("recordKey"))
+            key = _feature_identity_key(mode, record_key, js_text(feature.get("biologicalFeatureId")))
             drawn_hash, record_ordinal, source_index = _parse_rendered_id(feature.get("svgId"))
             if not key or not drawn_hash:
                 continue
@@ -2633,7 +2619,7 @@ def _hash_selector_parts(value: object) -> tuple[bool, str, int | None, int | No
     position, and source index of its rendered ID (release 0.13.0 wrote the
     rendered ID, record and instance suffixes included)."""
 
-    text = _js_text(value)
+    text = js_text(value)
     anchored = _ANCHORED_SELECTOR_VALUE.fullmatch(text)
     return (anchored is not None, *_parse_rendered_id(anchored.group(1) if anchored else text))
 
@@ -2672,7 +2658,7 @@ def source_hash_selector_value(
     if len(sources) != 1:
         return None, len(sources)
     source = sources.pop()
-    if source.lower() == wanted and not _LINEAR_RECORD_SUFFIX.search(_js_text(value)):
+    if source.lower() == wanted and not _LINEAR_RECORD_SUFFIX.search(js_text(value)):
         return None, 1
     return (f"^{source}$" if anchored else source), 1
 
@@ -2708,10 +2694,10 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
         end = _nonnegative_integer(seq.get("region_end"))
         cropped = start is not None or end is not None
         reverse = bool(seq.get("region_reverse"))
-        record_id = _js_text(seq.get("region_record_id")).strip()
+        record_id = js_text(seq.get("region_record_id")).strip()
         records.append(
             {
-                "recordKey": _js_text(seq.get("uid")),
+                "recordKey": js_text(seq.get("uid")),
                 "cardinality": "exactly_one" if cropped or record_id else "all",
                 "region": (
                     {"start": start, "end": end, "reverseComplement": reverse} if cropped else None
@@ -2740,9 +2726,9 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
     return any(
         _nonnegative_integer(window["start"]) is not None
         or _nonnegative_integer(window["end"]) is not None
-        or _js_truthy(window["reverseComplement"])
+        or js_truthy(window["reverseComplement"])
         for window in stored_record_windows(record)
-    ) or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
+    ) or (isinstance(presentation, Mapping) and js_truthy(presentation.get("reverseComplement")))
 
 
 def has_hash_color_rules(rules: object) -> bool:
@@ -2750,7 +2736,7 @@ def has_hash_color_rules(rules: object) -> bool:
     """
 
     return isinstance(rules, list) and any(
-        isinstance(rule, Mapping) and _js_text(rule.get("qual")).lower() == "hash" for rule in rules
+        isinstance(rule, Mapping) and js_text(rule.get("qual")).lower() == "hash" for rule in rules
     )
 
 
@@ -2825,7 +2811,7 @@ def migrate_session_hash_rules(
     if not has_hash_color_rules(rules):
         return HashRuleMigration(rules, 0)
     assert isinstance(rules, list)
-    if _js_truthy(catalog):
+    if js_truthy(catalog):
         drawn = _drawn_features_of_index(_catalog_drawn_features(catalog, mode))
         drawn_hashes_unknown = False
     else:
@@ -2838,7 +2824,7 @@ def migrate_session_hash_rules(
     migrated: list[Any] = []
     for rule in rules:
         value = rule.get("val") if isinstance(rule, Mapping) else None
-        if not isinstance(rule, Mapping) or _js_text(rule.get("qual")).lower() != "hash" or not _js_text(value):
+        if not isinstance(rule, Mapping) or js_text(rule.get("qual")).lower() != "hash" or not js_text(value):
             migrated.append(rule)
             continue
         resolved, source_count = source_hash_selector_value(value, drawn)
@@ -2889,7 +2875,7 @@ def migrate_session_feature_edits(
     if any(non_empty_map(field) for field in RETIRED_RENDERED_ID_FEATURE_FIELDS):
         rendered_by_id, biological = (
             _catalog_feature_index(catalog, mode)
-            if _js_truthy(catalog)
+            if js_truthy(catalog)
             else ({}, _legacy_feature_index(legacy, mode))
         )
         by_hash: dict[str, dict[str, None]] | None = None
@@ -2933,7 +2919,7 @@ def migrate_session_feature_edits(
             return rows[key]
 
         def assign_feature_visibility(row: dict[str, Any], value: object) -> bool:
-            visibility = _FEATURE_VISIBILITY_EDIT_VALUES.get(_js_text(value).lower())
+            visibility = _FEATURE_VISIBILITY_EDIT_VALUES.get(js_text(value).lower())
             if visibility is None:
                 return False
             if row["featureVisibility"] is None:
@@ -2941,7 +2927,7 @@ def migrate_session_feature_edits(
             return True
 
         def assign_label_visibility(row: dict[str, Any], value: object) -> bool:
-            visibility = _js_text(value).lower()
+            visibility = js_text(value).lower()
             if visibility not in ("on", "off"):
                 return False
             if row["labelVisibility"] is None:
@@ -2949,7 +2935,7 @@ def migrate_session_feature_edits(
             return True
 
         def assign_label_text(row: dict[str, Any], value: object) -> bool:
-            label_text = re.sub(r"[\t\r\n\0]+", " ", _js_string(value))
+            label_text = re.sub(r"[\t\r\n\0]+", " ", js_string(value))
             if label_text.strip(JS_WHITESPACE):
                 if row["labelText"] is None:
                     row["labelText"] = label_text
@@ -2959,7 +2945,7 @@ def migrate_session_feature_edits(
             return True
 
         def assign_label_source_text(row: dict[str, Any], value: object) -> bool:
-            source_text = _js_string(value)
+            source_text = js_string(value)
             if not source_text or "\0" in source_text:
                 return False
             if row["labelSourceText"] is None:
@@ -2998,22 +2984,8 @@ def migrate_session_feature_edits(
     return FeatureEditMigration(migrated, dropped_count, narrowed_visibility_count)
 
 
-# A record selector's position is read as a JavaScript array index: the
-# canonical decimal text of the value.
-_JS_ARRAY_INDEX = re.compile(r"0|[1-9][0-9]*")
 _EXPANDED_RECORD_ORDINAL = re.compile(r"[1-9][0-9]*")
 _SOURCE_INDEX_SUFFIX = re.compile(r"~[0-9]+\Z")
-
-
-def _js_truthy(value: object) -> bool:
-    if value is None or isinstance(value, bool):
-        return bool(value)
-    if isinstance(value, (int, float)):
-        return value != 0 and value == value
-    if isinstance(value, str):
-        return value != ""
-    # Every JavaScript object and array is true, an empty one too.
-    return True
 
 
 def _drawn_transformed(record: Mapping[str, Any]) -> bool:
@@ -3026,9 +2998,9 @@ def _drawn_transformed(record: Mapping[str, Any]) -> bool:
     display = record.get("display")
     return (
         # A schema <= 9 region counts by JavaScript truthiness, as the Web reader reads it.
-        _js_truthy(record.get("region"))
+        js_truthy(record.get("region"))
         or bool(stored_record_windows(record))
-        or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
+        or (isinstance(presentation, Mapping) and js_truthy(presentation.get("reverseComplement")))
         or (isinstance(display, Mapping) and _safe_integer(display.get("startCoordinate")) is not None)
     )
 
@@ -3085,19 +3057,19 @@ def migrate_session_annotation_targets(
     for item in _mapping_list(items):
         item_record_keys = item.get("recordKeys")
         for record_key in item_record_keys if isinstance(item_record_keys, list) else ():
-            record_ids.setdefault(_js_text(record_key), set())
+            record_ids.setdefault(js_text(record_key), set())
         for feature in _mapping_list(item.get("biologicalFeatures")):
-            record_key = _js_text(feature.get("recordKey"))
-            feature_id = _js_text(feature.get("biologicalFeatureId"))
+            record_key = js_text(feature.get("recordKey"))
+            feature_id = js_text(feature.get("biologicalFeatureId"))
             if not record_key or not feature_id:
                 continue
             # A record listed only by a later item has no ID from this feature.
             if record_key in record_ids:
                 record_id = feature.get("record_id")
                 record_ids[record_key].add(
-                    _js_text(feature.get("recordId") if record_id is None else record_id)
+                    js_text(feature.get("recordId") if record_id is None else record_id)
                 )
-            source_hash = _js_text(feature.get("stableFeatureId")) or _SOURCE_INDEX_SUFFIX.sub(
+            source_hash = js_text(feature.get("stableFeatureId")) or _SOURCE_INDEX_SUFFIX.sub(
                 "", feature_id, count=1
             )
             features_by_hash.setdefault(source_hash, {})[(record_key, feature_id)] = None
@@ -3112,15 +3084,15 @@ def migrate_session_annotation_targets(
         if not isinstance(selector, Mapping):
             return ""
         if selector.get("kind") == "recordIndex":
-            index = _js_string(selector.get("index"))
-            position = int(index) if _JS_ARRAY_INDEX.fullmatch(index) else len(catalog_record_keys)
+            index = js_string(selector.get("index"))
+            position = int(index) if JS_ARRAY_INDEX.fullmatch(index) else len(catalog_record_keys)
             return catalog_record_keys[position] if position < len(catalog_record_keys) else ""
         if selector.get("kind") != "recordId":
             return ""
         # A record without catalog features has no known ID, so the binding is not certain.
         if any(len(record_ids[record_key]) != 1 for record_key in catalog_record_keys):
             return ""
-        record_id = _js_text(selector.get("value"))
+        record_id = js_text(selector.get("value"))
         matches = [record_key for record_key in catalog_record_keys if record_id in record_ids[record_key]]
         return matches[0] if len(matches) == 1 else ""
 
@@ -3132,7 +3104,7 @@ def migrate_session_annotation_targets(
         if not isinstance(selector, Mapping) or selector.get("key") != "hash":
             return None
         record_key = bound_record_key(target.get("record"))
-        matches = list(features_by_hash.get(_js_text(selector.get("value")), {}))
+        matches = list(features_by_hash.get(js_text(selector.get("value")), {}))
         if not record_key or len(matches) != 1 or matches[0][0] != record_key:
             return None
         request = next(
@@ -3290,7 +3262,7 @@ def _depth_slots(value: object) -> list[Any]:
     # depthFileSlotsFromValue: a list is the series slots; a value is one slot.
     if isinstance(value, list):
         return list(value)
-    return [value] if _js_truthy(value) else []
+    return [value] if js_truthy(value) else []
 
 
 def session_depth_source_widths(bindings: object) -> dict[DiagramMode, int]:
@@ -3317,7 +3289,7 @@ def session_depth_source_widths(bindings: object) -> dict[DiagramMode, int]:
     ]
 
     def width(rows: list[list[Any]]) -> int:
-        if not any(_js_truthy(slot) for row in rows for slot in row):
+        if not any(js_truthy(slot) for row in rows for slot in row):
             return 0
         return max(len(row) for row in rows)
 
@@ -3349,12 +3321,12 @@ def _normalize_palette_colors(colors: Mapping[str, Any]) -> dict[str, Any]:
     """The twin of ``normalizePaletteColors`` in the Web ``utils/color-utils.js``."""
 
     normalized = {key: value for key, value in colors.items() if not _INDEXED_COLLINEAR_BLOCK_COLOR.match(key)}
-    if _js_truthy(normalized.get("collinear_block_plus_max")) and not _js_truthy(
+    if js_truthy(normalized.get("collinear_block_plus_max")) and not js_truthy(
         normalized.get("collinear_block_plus")
     ):
         normalized["collinear_block_plus"] = normalized["collinear_block_plus_max"]
     for key, value in _DEFAULT_COMPARISON_COLORS.items():
-        if not _js_truthy(normalized.get(key)):
+        if not js_truthy(normalized.get(key)):
             normalized[key] = value
     return normalized
 
@@ -3367,7 +3339,7 @@ def _palette_colors(name: object) -> dict[str, Any]:
     ``gbdraw/data/color_palettes.toml``.
     """
 
-    palette = _js_text(name)
+    palette = js_text(name)
     colors = packaged_color_palettes().get(palette)
     if not colors:
         return {}
@@ -3378,7 +3350,7 @@ def _merges_override_colors(config: object) -> bool:
     colors = config.get("colors") if isinstance(config, Mapping) else None
     return (
         isinstance(config, Mapping)
-        and _js_truthy(config.get("colorsAreOverrides"))
+        and js_truthy(config.get("colorsAreOverrides"))
         and isinstance(colors, Mapping)
         and len(colors) > 0
     )
@@ -3395,7 +3367,7 @@ def mode_split_palette_colors(config: object) -> dict[str, Any] | None:
     if not _merges_override_colors(config):
         return None
     assert isinstance(config, Mapping)
-    return _palette_colors(_js_text(config.get("palette")) or "default")
+    return _palette_colors(js_text(config.get("palette")) or "default")
 
 
 def _with_resolved_override_colors(
@@ -3414,7 +3386,7 @@ def _with_resolved_override_colors(
         # ``normalizeColorMap``: each value trimmed (``resolveColorToHex`` keeps
         # a name it cannot resolve without a browser).
         colors = config["colors"]
-        overrides = {key: _js_text(value) if _js_truthy(value) else "" for key, value in colors.items()}
+        overrides = {key: js_text(value) if js_truthy(value) else "" for key, value in colors.items()}
         resolved["colors"] = _normalize_palette_colors({**(palette_colors or {}), **overrides})
     return resolved
 
@@ -3518,7 +3490,7 @@ def _split_setting(
     for mode in DIAGRAM_MODES:
         if row.migrate == "show-if-source":
             # ``show_depth && hasSource``
-            split[mode] = (widths[mode] > 0) if _js_truthy(value) else value
+            split[mode] = (widths[mode] > 0) if js_truthy(value) else value
         elif row.migrate == "depth" and isinstance(value, list):
             split[mode] = _json_clone(value[: max(1, widths[mode])])
         elif row.migrate == "by-scope" and isinstance(value, list):
@@ -3556,7 +3528,7 @@ def _optional_hex_color(value: object) -> str | None:
 
     if value is None or value == "":
         return None
-    text = _js_text(value)
+    text = js_text(value)
     if text and not text.startswith("#"):
         text = named_color_hex(text) or text
     short = _SHORT_HEX_COLOR.fullmatch(text)
@@ -3570,8 +3542,8 @@ def _stroke_width(value: object) -> int | float | None:
 
     if value is None or value == "":
         return None
-    number = _js_number(value)
-    return _js_integral(number) if math.isfinite(number) and number >= 0 else None
+    number = js_number(value)
+    return js_integral(number) if math.isfinite(number) and number >= 0 else None
 
 
 def _stroke_override_map(source: object) -> dict[str, Any]:
@@ -3580,9 +3552,9 @@ def _stroke_override_map(source: object) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     if not isinstance(source, Mapping):
         return normalized
-    for key in _js_key_order(source):
+    for key in js_key_order(source):
         value = source[key]
-        name = _js_text(key)
+        name = js_text(key)
         if not name or not isinstance(value, Mapping):
             continue
         override: dict[str, Any] = {}
@@ -3608,9 +3580,9 @@ def _legend_color_overrides(source: object) -> dict[str, str]:
     normalized: dict[str, str] = {}
     if not isinstance(source, Mapping):
         return normalized
-    for key in _js_key_order(source):
+    for key in js_key_order(source):
         value = source[key]
-        caption = _js_text(key)
+        caption = js_text(key)
         color = _optional_hex_color(value)
         if caption and color:
             normalized[caption] = color
@@ -3691,17 +3663,6 @@ class LegendEditRekey(_LegendEditRekeyRequired, total=False):
     slice: str
 
 
-def _js_key_order(record: Mapping[Any, Any]) -> list[Any]:
-    """The keys of a JSON object in the order JavaScript lists them: array
-    indexes ascending, then the other keys in insertion order."""
-
-    def is_index(key: object) -> bool:
-        return isinstance(key, str) and _JS_ARRAY_INDEX.fullmatch(key) is not None and int(key) < 2**32 - 1
-
-    indexes = sorted((key for key in record if is_index(key)), key=int)
-    return indexes + [key for key in record if not is_index(key)]
-
-
 def _session_46_legend_rows(legend: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
     """The rows a Session 46 Legend's edits reach, by the caption each shows,
     and the keys of the renamed rows; the twin of ``session46LegendRows`` in
@@ -3722,11 +3683,11 @@ def _session_46_legend_rows(legend: Mapping[str, Any]) -> tuple[dict[str, str], 
         for entry in entries if isinstance(entries, list) else ():
             if not isinstance(entry, Mapping):
                 continue
-            caption = _js_text(entry.get("caption") or "")
-            if not caption or not is_user_color(_js_text(entry.get("color"))) or caption in captions:
+            caption = js_text(entry.get("caption") or "")
+            if not caption or not is_user_color(js_text(entry.get("color"))) or caption in captions:
                 continue
             captions.add(caption)
-            key = _js_text(entry.get("originalCaption") or entry.get("caption") or "")
+            key = js_text(entry.get("originalCaption") or entry.get("caption") or "")
             found.append((caption, key, entry.get("dormant") is True))
         return found
 
@@ -3806,9 +3767,9 @@ def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], 
                                  "outcome": "unshown" if key in renamed_keys else "unmatched"})
         changed[store] = keyed
 
-    color_keys = _js_key_order(colors)
+    color_keys = js_key_order(colors)
     key_by_row("colorOverrides", colors, color_keys, False)
-    stroke_keys = _js_key_order(strokes)
+    stroke_keys = js_key_order(strokes)
     key_by_row("strokeOverrides", strokes,
                [key for key in color_keys if key in strokes] + [key for key in stroke_keys if key not in colors], True)
     return changed, outcomes
@@ -4005,16 +3966,10 @@ _LINEAR_TRACK_RENDERER_ALIASES = {
 }
 
 
-def _js_integer(value: object) -> bool:
-    return (isinstance(value, int) and not isinstance(value, bool)) or (
-        isinstance(value, float) and value.is_integer()
-    )
-
-
 def _current_option_value(value: object, fallback: str, supported: tuple[str, ...], label: str) -> str:
     """``requireCurrentValue`` in the Web ``services/current-option-values.js``."""
 
-    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or fallback
+    normalized = ("" if value is None else js_string(value)).strip(JS_WHITESPACE).lower() or fallback
     if normalized not in supported:
         raise ValidationError(
             f"{label} must be one of: {', '.join(supported)}.", diagnostic=_SESSION_FIELDS_INVALID
@@ -4023,13 +3978,13 @@ def _current_option_value(value: object, fallback: str, supported: tuple[str, ..
 
 
 def _migrated_linear_track_layout(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "middle"
+    normalized = ("" if value is None else js_string(value)).strip(JS_WHITESPACE).lower() or "middle"
     normalized = {"spreadout": "above", "tuckin": "below"}.get(normalized, normalized)
     return _current_option_value(normalized, "middle", ("above", "middle", "below"), "Linear track layout")
 
 
 def _migrated_linear_label_placement(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
+    normalized = ("" if value is None else js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
         "above_feature" if normalized == "on_feature" else normalized,
         "auto",
@@ -4039,7 +3994,7 @@ def _migrated_linear_label_placement(value: object) -> str:
 
 
 def _migrated_circular_multi_record_size_mode(value: object) -> str:
-    normalized = ("" if value is None else _js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
+    normalized = ("" if value is None else js_string(value)).strip(JS_WHITESPACE).lower() or "auto"
     return _current_option_value(
         LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES.get(normalized, normalized),
         "auto",
@@ -4092,9 +4047,9 @@ def _require_current_circular_track_slots(config: Mapping[str, Any]) -> None:
     if not isinstance(adv["circular_track_slots"], list):
         raise ValidationError("Custom Track Slots must be an array.", diagnostic=_SESSION_FIELDS_INVALID)
     schema = adv.get("circular_track_slots_schema_version")
-    if _js_integer(schema) and schema == _CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA:
+    if js_integer(schema) and schema == _CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA:
         return
-    if _js_integer(schema) and schema == _LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA:
+    if js_integer(schema) and schema == _LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA:
         raise SessionFormatError(
             "Custom Track Slots of Circular slot schema 3 cannot be migrated by Python; "
             "open and save the Session in the Web app first.",
@@ -4117,9 +4072,9 @@ def _without_legacy_null_circular_slot_spacing(config: Mapping[str, Any]) -> Map
     adv = config.get("adv")
     if (
         not isinstance(adv, Mapping)
-        or _js_truthy(adv.get("circular_track_slots_enabled"))
+        or js_truthy(adv.get("circular_track_slots_enabled"))
         or not (
-            _js_integer(adv.get("circular_track_slots_schema_version"))
+            js_integer(adv.get("circular_track_slots_schema_version"))
             and adv["circular_track_slots_schema_version"] == _CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA
         )
         or not isinstance(adv.get("circular_track_slots"), list)
@@ -4140,7 +4095,7 @@ def _without_legacy_null_circular_slot_spacing(config: Mapping[str, Any]) -> Map
 
 
 def _linear_track_renderer(value: object) -> str:
-    text = (_js_string(value) if _js_truthy(value) else "features").strip(JS_WHITESPACE).lower()
+    text = (js_string(value) if js_truthy(value) else "features").strip(JS_WHITESPACE).lower()
     renderer = _LINEAR_TRACK_RENDERER_ALIASES.get(text) or text
     return renderer if renderer in _LINEAR_TRACK_RENDERERS else "features"
 
@@ -4168,9 +4123,9 @@ def migrate_imported_linear_track_slots(config: object, source_version: object) 
     )
     supported = (_LEGACY_LINEAR_TRACK_SLOT_SCHEMA, _CURRENT_LINEAR_TRACK_SLOT_SCHEMA)
     stored = adv.get("linear_track_slots_schema_version", _ABSENT)
-    if stored is not _ABSENT and not (_js_integer(stored) and stored in supported):
+    if stored is not _ABSENT and not (js_integer(stored) and stored in supported):
         raise obsolete
-    if _js_integer(source_version) and cast(int, source_version) <= _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
+    if js_integer(source_version) and cast(int, source_version) <= _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
         schema: object = _LEGACY_LINEAR_TRACK_SLOT_SCHEMA
     else:
         schema = stored
@@ -4250,34 +4205,8 @@ def migrate_session_draft_values(config: object, source_version: int) -> object:
 _ANNOTATION_MARKS = ("line", "bracket", "band", "highlight")
 
 
-def _js_number(value: object) -> float:
-    """``Number(value)`` for JSON values (NaN for what JavaScript cannot read)."""
-
-    if value is None:
-        return 0.0
-    if isinstance(value, bool):
-        return 1.0 if value else 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        text = value.strip(JS_WHITESPACE)
-        if not text:
-            return 0.0
-        try:
-            return float(text) if not re.search(r"[^0-9eE.+-]", text) else math.nan
-        except ValueError:
-            return math.nan
-    if isinstance(value, list) and len(value) <= 1:
-        return _js_number(value[0]) if value else 0.0
-    return math.nan
-
-
-def _js_integral(value: float) -> int | float:
-    return int(value) if value.is_integer() else value
-
-
 def _clean_id(value: object, fallback: str) -> str:
-    return (_js_string(value) if _js_truthy(value) else "").strip(JS_WHITESPACE) or fallback
+    return (js_string(value) if js_truthy(value) else "").strip(JS_WHITESPACE) or fallback
 
 
 def _draft_annotation_target(target: object) -> dict[str, Any]:
@@ -4304,9 +4233,9 @@ def _draft_annotation_target(target: object) -> dict[str, Any]:
                 {
                     "key": None
                     if not isinstance(selector, Mapping) or selector.get("key") in (None, "")
-                    else _js_string(selector.get("key")),
-                    "value": _js_string(selector.get("value"))
-                    if isinstance(selector, Mapping) and _js_truthy(selector.get("value"))
+                    else js_string(selector.get("key")),
+                    "value": js_string(selector.get("value"))
+                    if isinstance(selector, Mapping) and js_truthy(selector.get("value"))
                     else "",
                 }
                 for selector in selectors
@@ -4316,13 +4245,13 @@ def _draft_annotation_target(target: object) -> dict[str, Any]:
             "envelope": envelope,
             "circularPath": circular_path,
         }
-    start = max(1.0, _js_number(source.get("start")) or 1.0)
-    end = max(1.0, _js_number(source.get("end")) or 1.0)
+    start = max(1.0, js_number(source.get("start")) or 1.0)
+    end = max(1.0, js_number(source.get("end")) or 1.0)
     return {
         "kind": "coordinateSpan",
         "record": source.get("record"),
-        "start": _js_integral(start),
-        "end": _js_integral(end),
+        "start": js_integral(start),
+        "end": js_integral(end),
         "coordinateSpace": "local" if source.get("coordinateSpace") == "local" else "source",
         "wrapsOrigin": start > end,
         "outOfBounds": source.get("outOfBounds") if source.get("outOfBounds") in ("skip", "error") else "clip",
@@ -4369,13 +4298,13 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
                 {
                     "id": item_id,
                     "target": _draft_annotation_target(target),
-                    "label": _js_string(item.get("label")) if _js_truthy(item.get("label")) else "",
+                    "label": js_string(item.get("label")) if js_truthy(item.get("label")) else "",
                     "mark": item.get("mark") if item.get("mark") in _ANNOTATION_MARKS else "bracket",
                     "lane": None
                     if lane is None or lane == ""
-                    else _js_integral(max(0.0, _js_number(lane) or 0.0)),
+                    else js_integral(max(0.0, js_number(lane) or 0.0)),
                     "style": None if item.get("style") is None else _draft_annotation_style(item.get("style")),
-                    "legendLabel": None if item.get("legendLabel") is None else _js_string(item.get("legendLabel")),
+                    "legendLabel": None if item.get("legendLabel") is None else js_string(item.get("legendLabel")),
                     "metadata": _json_clone(metadata) if isinstance(metadata, Mapping) else {},
                     **({"strand": item["strand"]} if item.get("strand") in {"+", "-"} else {}),
                 }
@@ -4385,7 +4314,7 @@ def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[d
                 "id": set_id,
                 "annotations": annotations,
                 "defaultStyle": _draft_annotation_style(source.get("defaultStyle")),
-                "legendLabel": None if legend_label is None else _js_string(legend_label),
+                "legendLabel": None if legend_label is None else js_string(legend_label),
                 **({"keepHighlightOverlay": True} if source.get("keepHighlightOverlay") is True else {}),
             }
         )

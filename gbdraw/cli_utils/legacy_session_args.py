@@ -24,6 +24,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.config.models.root import read_stored_font_size
 from gbdraw.contract_shapes import read_spelling
+from gbdraw.core.js_values import js_string, js_text, js_truthy
 from gbdraw.definition_line_styles import DEFINITION_LINE_KINDS
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import COMPARISON_SEQUENCE_SEPARATOR
@@ -37,9 +38,6 @@ from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     SessionFileBinding,
     SessionRunSpec,
-    _js_string,
-    _js_text,
-    _js_truthy,
     _mapping_list,
     _nonnegative_integer,
     _option_all_values,
@@ -829,7 +827,7 @@ def _append_common_gui_args(
 def _gui_color_table_cell(value: object) -> str:
     """One cell of a replay color table: tabs and line breaks read as a space."""
 
-    return re.sub(r"[\t\r\n]+", " ", _js_string(value)).strip()
+    return re.sub(r"[\t\r\n]+", " ", js_string(value)).strip()
 
 
 def _append_gui_color_args(
@@ -859,7 +857,7 @@ def _append_gui_color_args(
     if not isinstance(config, Mapping):
         return
     config = _with_resolved_override_colors(config, mode_split_palette_colors(config))
-    palette = current_palette_name(_js_text(config.get("palette")))
+    palette = current_palette_name(js_text(config.get("palette")))
     if palette and palette != "default" and palette in packaged_color_palettes():
         _append_pair(run_args, invocation_args, "-p", palette)
     colors = config.get("colors")
@@ -1347,7 +1345,7 @@ def _card_window_span(index: int, window: Mapping[str, object]) -> str:
     end = _nonnegative_integer(window.get("end"))
     if not start or not end:
         raise ValidationError(f"Linear sequence #{index + 1} has a window without a valid start and end.")
-    return region_text(start, end, _js_truthy(window.get('reverseComplement')))
+    return region_text(start, end, js_truthy(window.get('reverseComplement')))
 
 
 def _gui_linear_losat_program(config: Mapping[str, Any], adv: Mapping[str, Any]) -> str:
