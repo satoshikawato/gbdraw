@@ -316,6 +316,20 @@ def test_adjacent_row_pairs_exclude_same_row_records() -> None:
     )
 
 
+def test_adjacent_row_pairs_read_in_record_order_or_from_the_upper_row() -> None:
+    # Records 0 and 1 in row 1, records 2 and 3 in row 0, record 4 in row 2.
+    rows = (1, 1, 0, 0, 2)
+    assert record_pairs_between_adjacent_rows(rows) == ((0, 2), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4))
+    # The same pairs, each read from its upper-row record, by upper row and then by record.
+    assert record_pairs_between_adjacent_rows(rows, order="rows") == (
+        (2, 0), (2, 1), (3, 0), (3, 1), (0, 4), (1, 4),
+    )
+    # Rows in record order read the same either way.
+    assert record_pairs_between_adjacent_rows((0, 0, 1, 2), order="rows") == record_pairs_between_adjacent_rows(
+        (0, 0, 1, 2)
+    )
+
+
 def test_grid_display_pairs_are_the_adjacent_row_pairs_of_rows_that_hold_several_records() -> None:
     # Two records above one: both stand above it (OV-3248).
     assert grid_display_pairs((0, 0, 1)) == ((0, 2), (1, 2))
