@@ -1,9 +1,22 @@
 #!/usr/bin/env python3
-"""Qualify frozen browser LOSAT evidence for whole Lambda and DE3 genomes."""
+"""Qualify frozen browser LOSAT evidence for whole Lambda and DE3 genomes.
+
+The tutorial fixture manifest (``gbdraw/web/tutorial-data/manifest.json``) owns the frozen values: each evidence
+entry whose derivation names this script holds its search (``derivation.arguments``), the runtime that qualified it
+(``derivation.toolVersion``, ``derivation.toolSha256``) and what its TSV holds (``sizeBytes``, ``sha256``, the row
+counts, coordinate ranges and orientations).
+
+- No option: check, without a browser, that each TSV matches its entry and that its entry names the shipped serial
+  LOSAT file (``losat-build.json``).
+- ``--qualify``: run each search in Chromium with the shipped serial file and require the frozen bytes.
+- ``--write``: run each search in Chromium and write each TSV and its manifest entry together. Run it after the
+  LOSAT Wasm files change (``gbdraw/web/wasm/losat/README.md``).
+"""
 
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import threading
@@ -20,7 +33,6 @@ from Bio import SeqIO
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = REPO_ROOT / "gbdraw" / "web"
 FIXTURE_ROOT = WEB_ROOT / "tutorial-data"
-OUTPUT_ROOT = FIXTURE_ROOT / "lambda-de3-comparison"
 WASM_PATH = WEB_ROOT / "wasm" / "losat" / "losat.wasm"
 # The shipped serial file's build (tools/record_losat_wasm_build.py) and the runtime each frozen output was
 # qualified with (its derivation in the tutorial fixture manifest).
@@ -48,18 +60,33 @@ class RecordSpec:
 
 
 @dataclass(frozen=True)
-class ProgramSpec:
-    name: str
-    runtime_program: str
-    extra_args: tuple[str, ...]
-    expected_size: int | None
-    expected_sha256: str | None
-    expected_rows: int | None
-    expected_retained_rows: int | None
+class Evidence:
+    """One frozen TSV and its tutorial fixture manifest entry."""
+
+    file_id: str
+    entry: dict[str, Any]
 
     @property
     def output_path(self) -> Path:
-        return OUTPUT_ROOT / f"lambda-de3.{self.name}.tsv"
+        return FIXTURE_ROOT / self.entry["relativePath"]
+
+    @property
+    def runtime_program(self) -> str:
+        return str(self.entry["derivation"]["arguments"]["program"])
+
+    @property
+    def extra_args(self) -> list[str]:
+        """The search's options in the Web's raw-cache spelling, from its recorded arguments."""
+
+        arguments = self.entry["derivation"]["arguments"]
+        if self.runtime_program == "blastn":
+            return ["--task", str(arguments["task"])]
+        if self.runtime_program == "tblastx":
+            return [
+                "--query-gencode", str(arguments["queryGeneticCode"]),
+                "--db-gencode", str(arguments["subjectGeneticCode"]),
+            ]
+        raise ValueError(f"{self.file_id} records program {self.runtime_program}, which this script does not run")
 
 
 RECORDS = {
@@ -80,28 +107,6 @@ RECORDS = {
         browser_fasta_sha256="c89d0dbeeb4552822e7c79f166ae65a66abb578378d2a8189febb98ac1134117",
     ),
 }
-PROGRAMS = (
-    ProgramSpec(
-        name="losatn",
-        runtime_program="blastn",
-        extra_args=("--task", "megablast"),
-        expected_size=436,
-        expected_sha256="703b0ac749669152a8e6d5fa6fb246cf5973cb1a3e0ca9db2f346ee33628317c",
-        expected_rows=6,
-        expected_retained_rows=6,
-    ),
-    ProgramSpec(
-        name="tlosatx",
-        runtime_program="tblastx",
-        extra_args=("--query-gencode", "1", "--db-gencode", "1"),
-        expected_size=28_303,
-        expected_sha256="483e98f8b3dce172523cf00c82eb9d47e4faee13e4781b06f3d58ea4fb63532d",
-        expected_rows=397,
-        expected_retained_rows=266,
-    ),
-)
-
-
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -155,7 +160,7 @@ def _retained(row: tuple[str, ...]) -> bool:
     )
 
 
-def _summarize(data: bytes) -> dict[str, Any]:
+def _summarize(data: bytes, entry: dict[str, Any]) -> dict[str, Any]:
     rows = _parse_rows(data)
     retained = [row for row in rows if _retained(row)]
     orientations: Counter[str] = Counter()
@@ -177,11 +182,11 @@ def _summarize(data: bytes) -> dict[str, Any]:
         if not 1 <= sstart <= RECORDS[SUBJECT_ID].length or not 1 <= send <= RECORDS[SUBJECT_ID].length:
             raise ValueError(f"LOSAT row {line_number} is outside the complete DE3 record")
         orientations[("+" if qend >= qstart else "-") + ("+" if send >= sstart else "-")] += 1
-    return {
+    summary: dict[str, Any] = {
         "sizeBytes": len(data),
         "sha256": _sha256(data),
-        "rowCount": len(rows),
-        "retainedRowCount": len(retained),
+        "rawRowCount": len(rows),
+        "defaultRetainedRowCount": len(retained),
         "queryCoordinateRange": [
             min(min(int(row[6]), int(row[7])) for row in rows),
             max(max(int(row[6]), int(row[7])) for row in rows),
@@ -192,28 +197,132 @@ def _summarize(data: bytes) -> dict[str, Any]:
         ],
         "orientationCounts": dict(sorted(orientations.items())),
     }
-
-
-def _validate(spec: ProgramSpec, data: bytes, *, frozen: bool) -> dict[str, Any]:
-    summary = _summarize(data)
-    expected = {
-        "sizeBytes": spec.expected_size,
-        "sha256": spec.expected_sha256,
-        "rowCount": spec.expected_rows,
-        "retainedRowCount": spec.expected_retained_rows,
-    }
-    if frozen:
-        missing = [key for key, value in expected.items() if value is None]
-        if missing:
-            raise ValueError(f"{spec.name} has no frozen {', '.join(missing)}")
-        for key, value in expected.items():
-            if summary[key] != value:
-                raise ValueError(
-                    f"{spec.name} {key} changed: {summary[key]} != {value}"
-                )
-    if summary["retainedRowCount"] == 0:
-        raise ValueError(f"{spec.name} produced no displayed evidence")
+    minimum = entry["expectedSemantics"].get("tutorialMinimumAlignmentLength")
+    if minimum is not None:
+        summary["tutorialRetainedRowCount"] = sum(int(row[3]) >= minimum for row in rows)
     return summary
+
+
+def _frozen(entry: dict[str, Any]) -> dict[str, Any]:
+    """What the manifest entry records of its TSV, keyed as `_summarize` names it."""
+
+    semantics = entry["expectedSemantics"]
+    frozen = {"sizeBytes": entry["sizeBytes"], "sha256": entry["sha256"]}
+    for key in ("rawRowCount", "defaultRetainedRowCount", "queryCoordinateRange", "subjectCoordinateRange",
+                "orientationCounts", "tutorialRetainedRowCount"):
+        if key in semantics:
+            frozen[key] = semantics[key]
+    return frozen
+
+
+def _validate(evidence: Evidence, data: bytes, *, frozen: bool) -> dict[str, Any]:
+    summary = _summarize(data, evidence.entry)
+    if frozen:
+        for key, value in _frozen(evidence.entry).items():
+            if summary[key] != value:
+                raise ValueError(f"{evidence.file_id} {key} changed: {summary[key]} != {value}")
+    if summary["defaultRetainedRowCount"] == 0:
+        raise ValueError(f"{evidence.file_id} produced no displayed evidence")
+    return summary
+
+
+def _value_spans(text: str) -> dict[tuple[str | int, ...], tuple[int, int]]:
+    """Where each value of a JSON text starts and ends, by its path of keys and indexes."""
+
+    decoder = json.JSONDecoder()
+    spans: dict[tuple[str | int, ...], tuple[int, int]] = {}
+
+    def skip(index: int) -> int:
+        while text[index] in " \t\r\n":
+            index += 1
+        return index
+
+    def value(index: int, path: tuple[str | int, ...]) -> int:
+        start = index = skip(index)
+        if text[index] in "{[":
+            closing, position = ("}" if text[index] == "{" else "]"), 0
+            index = skip(index + 1)
+            while text[index] != closing:
+                key: str | int = position
+                if closing == "}":
+                    key, index = decoder.raw_decode(text, index)
+                    index = skip(index) + 1  # the colon
+                index = skip(value(index, (*path, key)))
+                position += 1
+                if text[index] == ",":
+                    index = skip(index + 1)
+            index += 1
+        else:
+            index = decoder.raw_decode(text, index)[1]
+        spans[path] = (start, index)
+        return index
+
+    value(0, ())
+    return spans
+
+
+def _changed_values(old: Any, new: Any, path: tuple[str | int, ...] = ()) -> list[tuple[tuple[str | int, ...], Any]]:
+    """The values that differ between two JSON documents of one shape, each at its deepest path that still exists in
+    both."""
+
+    if isinstance(old, dict) and isinstance(new, dict) and old.keys() == new.keys():
+        return [change for key in old for change in _changed_values(old[key], new[key], (*path, key))]
+    if isinstance(old, list) and isinstance(new, list) and len(old) == len(new):
+        return [change for index, item in enumerate(old) for change in _changed_values(item, new[index], (*path, index))]
+    return [] if old == new else [(path, new)]
+
+
+def _write_manifest(evidence: list[Evidence], build: dict[str, Any], runs: int) -> None:
+    """Record each evidence TSV as written into its manifest entry, changing only the values that differ, so the
+    manifest keeps its own layout."""
+
+    text = FIXTURE_MANIFEST_PATH.read_text(encoding="utf-8")
+    old = json.loads(text)
+    new = copy.deepcopy(old)
+    for item in evidence:
+        entry = new["files"][item.file_id]
+        _record(Evidence(item.file_id, entry), _summarize(item.output_path.read_bytes(), entry), build, runs)
+    spans = _value_spans(text)
+    for path, value in sorted(_changed_values(old, new), key=lambda change: spans[change[0]][0], reverse=True):
+        start, end = spans[path]
+        text = text[:start] + json.dumps(value) + text[end:]
+    if json.loads(text) != new:
+        raise ValueError(f"{FIXTURE_MANIFEST_PATH.name} could not be updated in place")
+    FIXTURE_MANIFEST_PATH.write_text(text, encoding="utf-8")
+
+
+def _evidence(manifest: dict[str, Any]) -> list[Evidence]:
+    """The manifest entries this script derives."""
+
+    script = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
+    found = [
+        Evidence(file_id, entry)
+        for file_id, entry in manifest["files"].items()
+        if (entry.get("derivation") or {}).get("script") == script
+    ]
+    if not found:
+        raise ValueError(f"{FIXTURE_MANIFEST_PATH.name} names no file derived by {script}")
+    return found
+
+
+def _record(evidence: Evidence, summary: dict[str, Any], build: dict[str, Any], runs: int) -> None:
+    """Write a qualified summary into its manifest entry: the TSV's bytes, its rows and the runtime."""
+
+    entry = evidence.entry
+    entry["sizeBytes"], entry["sha256"] = summary["sizeBytes"], summary["sha256"]
+    semantics = entry["expectedSemantics"]
+    for key in _frozen(entry):
+        if key in semantics:
+            semantics[key] = summary[key]
+    derivation = entry["derivation"]
+    derivation["toolVersion"] = build["version"]
+    derivation["toolSha256"] = build["files"][WASM_PATH.name]["sha256"]
+    derivation["arguments"]["runs"] = runs
+    statistics = derivation["outputStatistics"]
+    for key in ("rawRowCount", "defaultRetainedRowCount", "tutorialRetainedRowCount"):
+        if key in statistics:
+            statistics[key] = summary[key]
+    statistics["byteIdenticalRuns"] = True
 
 
 class _Handler(SimpleHTTPRequestHandler):
@@ -232,28 +341,28 @@ class _Handler(SimpleHTTPRequestHandler):
         return
 
 
-def _check_runtime(*, evidence: bool = True) -> None:
-    """The serial file must be the recorded build and, unless the evidence is being rewritten, the runtime that
-    qualified the frozen outputs."""
+def _load_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
-    build = json.loads(BUILD_MANIFEST_PATH.read_text(encoding="utf-8"))
+
+def _check_runtime(build: dict[str, Any], evidence: list[Evidence] | None) -> None:
+    """The serial file must be the recorded build and, unless the evidence is being rewritten (`evidence` None), the
+    runtime that qualified each frozen output."""
+
     shipped = build["files"][WASM_PATH.name]
     if _sha256(WASM_PATH.read_bytes()) != shipped["sha256"]:
         raise ValueError(f"{WASM_PATH.name} does not match {BUILD_MANIFEST_PATH.name}")
-    if not evidence:
-        return
-    fixtures = json.loads(FIXTURE_MANIFEST_PATH.read_text(encoding="utf-8"))["files"]
-    for spec in PROGRAMS:
-        derivation = fixtures[f"lambda-de3-{spec.name}"]["derivation"]
-        if derivation["toolSha256"] != shipped["sha256"]:
+    for item in evidence or []:
+        derivation = item.entry["derivation"]
+        if (derivation["toolVersion"], derivation["toolSha256"]) != (build["version"], shipped["sha256"]):
             raise ValueError(
-                f"frozen {spec.name} evidence was qualified with browser LOSAT {derivation['toolVersion']} "
+                f"frozen {item.file_id} evidence was qualified with browser LOSAT {derivation['toolVersion']} "
                 f"(sha256 {derivation['toolSha256']}); the shipped file is LOSAT {build['version']} "
                 f"(sha256 {shipped['sha256']}); qualify it again with --write"
             )
 
 
-def _run_browser(runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[float]]]:
+def _run_browser(evidence: list[Evidence], runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[float]]]:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as error:
@@ -266,8 +375,8 @@ def _run_browser(runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[floa
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     origin = f"http://127.0.0.1:{server.server_port}"
-    outputs = {spec.name: [] for spec in PROGRAMS}
-    timings = {spec.name: [] for spec in PROGRAMS}
+    outputs: dict[str, list[bytes]] = {item.file_id: [] for item in evidence}
+    timings: dict[str, list[float]] = {item.file_id: [] for item in evidence}
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
@@ -277,7 +386,7 @@ def _run_browser(runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[floa
                     f"{origin}/__lambda_de3_qualification__.html",
                     wait_until="domcontentloaded",
                 )
-                for spec in PROGRAMS:
+                for item in evidence:
                     for _ in range(runs):
                         result = page.evaluate(
                             """async ({ program, queryFasta, subjectFasta, extraArgs }) => {
@@ -293,14 +402,14 @@ def _run_browser(runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[floa
                                 return { text, elapsedMs: performance.now() - startedAt };
                             }""",
                             {
-                                "program": spec.runtime_program,
+                                "program": item.runtime_program,
                                 "queryFasta": query_fasta,
                                 "subjectFasta": subject_fasta,
-                                "extraArgs": list(spec.extra_args),
+                                "extraArgs": item.extra_args,
                             },
                         )
-                        outputs[spec.name].append(result["text"].encode("utf-8"))
-                        timings[spec.name].append(float(result["elapsedMs"]) / 1_000)
+                        outputs[item.file_id].append(result["text"].encode("utf-8"))
+                        timings[item.file_id].append(float(result["elapsedMs"]) / 1_000)
             finally:
                 browser.close()
     finally:
@@ -311,33 +420,37 @@ def _run_browser(runs: int) -> tuple[dict[str, list[bytes]], dict[str, list[floa
 
 
 def _check() -> dict[str, dict[str, Any]]:
-    _check_runtime()
+    """Check the frozen TSVs against their manifest entries and the shipped serial file, without a browser."""
+
+    evidence = _evidence(_load_json(FIXTURE_MANIFEST_PATH))
+    _check_runtime(_load_json(BUILD_MANIFEST_PATH), evidence)
     for spec in RECORDS.values():
         _load_record(spec)
-    return {
-        spec.name: _validate(spec, spec.output_path.read_bytes(), frozen=True)
-        for spec in PROGRAMS
-    }
+    return {item.file_id: _validate(item, item.output_path.read_bytes(), frozen=True) for item in evidence}
 
 
 def _qualify(*, runs: int, write: bool) -> dict[str, dict[str, Any]]:
     if runs < 2:
         raise ValueError("qualification requires at least two serial runs")
-    _check_runtime(evidence=not write)
-    outputs, timings = _run_browser(runs)
+    manifest = _load_json(FIXTURE_MANIFEST_PATH)
+    build = _load_json(BUILD_MANIFEST_PATH)
+    evidence = _evidence(manifest)
+    _check_runtime(build, None if write else evidence)
+    outputs, timings = _run_browser(evidence, runs)
     summaries: dict[str, dict[str, Any]] = {}
-    for spec in PROGRAMS:
-        candidates = outputs[spec.name]
+    for item in evidence:
+        candidates = outputs[item.file_id]
         if any(candidate != candidates[0] for candidate in candidates[1:]):
-            raise ValueError(f"{spec.name} was not byte-deterministic")
-        summary = _validate(spec, candidates[0], frozen=not write)
-        summary["serialRunSeconds"] = [round(value, 3) for value in timings[spec.name]]
-        summaries[spec.name] = summary
+            raise ValueError(f"{item.file_id} was not byte-deterministic")
+        summary = _validate(item, candidates[0], frozen=not write)
         if write:
-            OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-            spec.output_path.write_bytes(candidates[0])
-        elif spec.output_path.read_bytes() != candidates[0]:
-            raise ValueError(f"frozen {spec.name} evidence differs from the browser runtime")
+            item.output_path.parent.mkdir(parents=True, exist_ok=True)
+            item.output_path.write_bytes(candidates[0])
+        elif item.output_path.read_bytes() != candidates[0]:
+            raise ValueError(f"frozen {item.file_id} evidence differs from the browser runtime")
+        summaries[item.file_id] = {**summary, "serialRunSeconds": [round(value, 3) for value in timings[item.file_id]]}
+    if write:
+        _write_manifest(evidence, build, runs)
     return summaries
 
 

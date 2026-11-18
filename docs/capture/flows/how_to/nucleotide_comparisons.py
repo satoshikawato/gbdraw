@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -82,10 +83,13 @@ TLOSATX_REFERENCE_PATH = (
     / "lambda-de3-comparison"
     / EXPECTED_TLOSATX_TSV
 )
-TLOSATX_REFERENCE_SIZE = 28_303
-TLOSATX_REFERENCE_SHA256 = (
-    "483e98f8b3dce172523cf00c82eb9d47e4faee13e4781b06f3d58ea4fb63532d"
-)
+# The tutorial data manifest owns the frozen evidence's bytes
+# (tools/qualify_lambda_de3_comparison_fixture.py writes them).
+_TLOSATX_REFERENCE = json.loads(
+    (WEB_ROOT / "tutorial-data" / "manifest.json").read_text(encoding="utf-8")
+)["files"]["lambda-de3-tlosatx"]
+TLOSATX_REFERENCE_SIZE = _TLOSATX_REFERENCE["sizeBytes"]
+TLOSATX_REFERENCE_SHA256 = _TLOSATX_REFERENCE["sha256"]
 
 
 @dataclass(frozen=True)

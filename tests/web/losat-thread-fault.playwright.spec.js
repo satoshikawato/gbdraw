@@ -1,3 +1,6 @@
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 
@@ -37,11 +40,22 @@ const threadTrapJobModule = Buffer.from([
   ])
 ]);
 
+// The page compiles only the bytes its LOSAT build records (services/losat-runtime.js `compileLosatWasm`, OV-2440):
+// this page's build records the stand-in as its threaded file.
+const BUILD_MODULE = path.join(__dirname, '../../gbdraw/web/js/services/losat-build.generated.js');
+const standInBuild = () => {
+  const source = readFileSync(BUILD_MODULE, 'utf8');
+  const threaded = /("losat-threaded\.wasm": \{\s*"sha256": ")([0-9a-f]{64})(")/;
+  if (!threaded.test(source)) throw new Error('losat-build.generated.js records no threaded file digest');
+  return source.replace(threaded, `$1${createHash('sha256').update(threadTrapJobModule).digest('hex')}$3`);
+};
+
 test('a trapping WASI thread fails its threaded LOSAT job after bounded retries instead of stalling it', async ({ page }) => {
   test.setTimeout(60000);
   await routeCrossOriginIsolated(page.context(), {
     '/gbdraw/web/losat-thread-fault.html': { contentType: 'text/html', body: '<!doctype html><title>LOSAT thread fault</title>' },
-    '/gbdraw/web/wasm/losat/thread-trap.wasm': { contentType: 'application/wasm', body: threadTrapJobModule }
+    '/gbdraw/web/wasm/losat/thread-trap.wasm': { contentType: 'application/wasm', body: threadTrapJobModule },
+    '/gbdraw/web/js/services/losat-build.generated.js': { contentType: 'text/javascript', body: standInBuild() }
   });
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 4 });

@@ -11,6 +11,9 @@ const runtime = await import(new URL('js/services/losat-runtime.js', web).href);
 const { losatFailureRepeats, normalizeUserFacingError } = await import(new URL('js/utils/error-normalization.js', web).href);
 const { errorText } = await import(new URL('js/utils/error-text.js', web).href);
 const wasiShimUrl = new URL('vendor/browser_wasi_shim/dist/index.js', web).href;
+// Each message to a LOSAT worker names the page's LOSAT build (OV-2440).
+const { LOSAT_WASM_BUILD } = await import(new URL('js/services/losat-build.generated.js', web).href);
+const losatBuild = LOSAT_WASM_BUILD.version;
 
 const REFUSED = ['--searchsp', '99999999999999999999'];
 const pair = { program: 'blastn', queryFasta: '>q\nACGTACGTACGTACGTACGT\n', subjectFasta: '>s\nACGTACGTACGTACGTACGT\n' };
@@ -92,10 +95,10 @@ test('the serial pool worker posts what LOSAT reported', async (t) => {
   globalThis.self = { postMessage: (message) => posted.push(message) };
   await import(`${new URL('js/workers/losat-worker.js', web).href}?instance=${Date.now()}`);
   const wasmModule = await WebAssembly.compile(await readFile(new URL('wasm/losat/losat.wasm', web)));
-  await globalThis.self.onmessage({ data: { type: 'init', id: 'i', wasmModule, wasiShimUrl } });
+  await globalThis.self.onmessage({ data: { type: 'init', id: 'i', losatBuild, wasmModule, wasiShimUrl } });
   await globalThis.self.onmessage({
     data: {
-      type: 'run', id: 'r', job: { program: 'blastn', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: REFUSED },
+      type: 'run', id: 'r', losatBuild, job: { program: 'blastn', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: REFUSED },
       sequences: [{ key: 'q', fasta: pair.queryFasta }, { key: 's', fasta: pair.subjectFasta }]
     }
   });
@@ -195,10 +198,10 @@ test('the serial pool worker posts a LOSAT trap as one', async (t) => {
   globalThis.self = { postMessage: (message) => posted.push(message) };
   await import(`${new URL('js/workers/losat-worker.js', web).href}?instance=trap-${Date.now()}`);
   const wasmModule = await WebAssembly.compile(await readFile(new URL('wasm/losat/losat.wasm', web)));
-  await globalThis.self.onmessage({ data: { type: 'init', id: 'i', wasmModule, wasiShimUrl } });
+  await globalThis.self.onmessage({ data: { type: 'init', id: 'i', losatBuild, wasmModule, wasiShimUrl } });
   await globalThis.self.onmessage({
     data: {
-      type: 'run', id: 'r', job: { program: 'tblastx', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: TRAPPING.extraArgs },
+      type: 'run', id: 'r', losatBuild, job: { program: 'tblastx', querySequenceKey: 'q', subjectSequenceKey: 's', extraArgs: TRAPPING.extraArgs },
       sequences: [{ key: 'q', fasta: pair.queryFasta }, { key: 's', fasta: pair.subjectFasta }]
     }
   });

@@ -44,6 +44,10 @@
         "grow": 1,
         "atomic": 31220,
         "atomic_helpers": 1449
+      },
+      "guardTool": {
+        "path": "tests/wasi_shared_memory.js",
+        "sha256": "e53e9da86a52b41958c768567bf63dc7cf76a6a1e780d8ea981d08f0dccb3954"
       }
     }
   }

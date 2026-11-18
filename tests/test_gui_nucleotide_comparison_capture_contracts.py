@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -91,10 +92,10 @@ def test_linear_evidence_uses_whole_lambda_and_de3_records_only() -> None:
 
 def test_frozen_tlosatx_evidence_has_397_rows_and_seven_qualified_links() -> None:
     path = DATA_ROOT / "lambda-de3-comparison" / "lambda-de3.tlosatx.tsv"
-    assert path.stat().st_size == 28_303
-    assert _sha256(path) == (
-        "483e98f8b3dce172523cf00c82eb9d47e4faee13e4781b06f3d58ea4fb63532d"
-    )
+    # The tutorial data manifest owns the frozen bytes (tools/qualify_lambda_de3_comparison_fixture.py).
+    frozen = json.loads((DATA_ROOT / "manifest.json").read_text(encoding="utf-8"))["files"]["lambda-de3-tlosatx"]
+    assert path.stat().st_size == frozen["sizeBytes"]
+    assert _sha256(path) == frozen["sha256"]
     rows = _blast_rows(path)
     assert len(rows) == 397
     assert {len(row) for row in rows} == {12}

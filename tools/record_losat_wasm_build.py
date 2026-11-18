@@ -8,13 +8,19 @@ Record (after building both artifacts from one LOSAT checkout, see
 
 copies the two artifacts into ``gbdraw/web/wasm/losat/``, writes the build
 manifest ``losat-build.json`` beside them (LOSAT commit, build commands,
-toolchain, each file's sha256 and size), and writes the build identity the Web
-app records with each search into ``gbdraw/web/js/services/losat-build.generated.js``.
-The threaded file goes through LOSAT's shared-memory guard on the way: cargo's
-output is not guarded, and the Web app does not guard a module itself.
+toolchain, each file's sha256 and size), and writes the build the Web app runs
+into ``gbdraw/web/js/services/losat-build.generated.js``: the version it records
+with each search and each file's sha256, which the app checks before it compiles
+a file. The threaded file goes through LOSAT's shared-memory guard on the way:
+cargo's output is not guarded, and the Web app does not guard a module itself.
+The guard of the recorded commit is copied, byte for byte, to
+``tools/losat/wasi_shared_memory.js``, so that the check proves the shipped
+threaded file with LOSAT's own verifier.
 
-``--check`` fails when a Wasm file or the generated module does not match the
-manifest, or when the threaded file does not carry a current guard record.
+``--check`` fails when a Wasm file, the copied guard or the generated module does
+not match the manifest, or when LOSAT's verifier (``node
+tools/losat/wasi_shared_memory.js verify``) refuses the threaded file or counts
+other guarded instructions than the manifest records.
 """
 
 from __future__ import annotations
@@ -42,7 +48,7 @@ REPOSITORY = "https://github.com/satoshikawato/LOSAT"
 MANIFEST_SCHEMA = 1
 GUARDED_ARTIFACT = "losat-threaded.wasm"
 GUARD_TOOL = "tests/wasi_shared_memory.js"  # in LOSAT's crate
-GUARD_SECTION = "losat.shared_memory_guard"
+GUARD_TOOL_COPY = REPO_ROOT / "tools" / "losat" / "wasi_shared_memory.js"
 MINIMUM_GUARD_VERSION = 3  # version 3 guards memory.grow and atomic instructions as well as memory.copy and memory.fill
 
 
@@ -80,12 +86,22 @@ class MemoryPages(TypedDict):
 
 
 class SharedMemoryGuard(TypedDict):
+    """The record LOSAT's guard writes into the module it guarded (its custom section) and prints."""
+
     version: int
     fill: int
     copy: int
     grow: int
     atomic: int
     atomic_helpers: int
+
+
+class GuardTool(TypedDict):
+    """The guard that guarded the threaded file: its path in LOSAT's crate and its sha256, which is the sha256 of
+    ``tools/losat/wasi_shared_memory.js``."""
+
+    path: str
+    sha256: str
 
 
 class _FileRecordRequired(TypedDict):
@@ -100,6 +116,7 @@ class _FileRecordRequired(TypedDict):
 class FileRecord(_FileRecordRequired, total=False):
     memory: MemoryPages
     sharedMemoryGuard: SharedMemoryGuard
+    guardTool: GuardTool
 
 
 class BuildManifest(TypedDict):
@@ -154,46 +171,6 @@ def _sections(wasm: bytes) -> Iterator[tuple[int, int, int]]:
         yield section_id, body, offset
 
 
-def shared_memory_guard(wasm: bytes) -> SharedMemoryGuard | None:
-    """The record LOSAT's guard writes into a module it guarded, or None when there is no readable one."""
-
-    for section_id, body, end in _sections(wasm):
-        if section_id != 0:
-            continue
-        length, cursor = _leb128(wasm, body)
-        if wasm[cursor : cursor + length] != GUARD_SECTION.encode():
-            continue
-        try:
-            record = json.loads(wasm[cursor + length : end])
-        except ValueError:
-            return None
-        fields = SharedMemoryGuard.__annotations__
-        if not isinstance(record, dict) or not all(type(record.get(field)) is int for field in fields):
-            return None
-        return SharedMemoryGuard(
-            version=record["version"],
-            fill=record["fill"],
-            copy=record["copy"],
-            grow=record["grow"],
-            atomic=record["atomic"],
-            atomic_helpers=record["atomic_helpers"],
-        )
-    return None
-
-
-def guard_problem(wasm: bytes) -> str | None:
-    """Why a threaded module must not ship as it is, or None when its guard record is current."""
-
-    guard = shared_memory_guard(wasm)
-    if guard is None:
-        return "has no shared-memory guard record"
-    if guard["version"] < MINIMUM_GUARD_VERSION:
-        return f"guard version {guard['version']} is older than {MINIMUM_GUARD_VERSION}"
-    if guard["fill"] + guard["copy"] + guard["grow"] + guard["atomic"] == 0:
-        return "guard record guards nothing"
-    return None
-
-
 def imported_memory_pages(wasm: bytes) -> MemoryPages | None:
     """The page limits of the memory a Wasm module imports, or None when it imports none."""
 
@@ -234,6 +211,7 @@ def render_module(manifest: BuildManifest) -> str:
     identity = {
         "commit": manifest["commit"],
         "version": manifest["version"],
+        "files": {name: {"sha256": record["sha256"]} for name, record in sorted(manifest["files"].items())},
         "threadedMemoryPages": manifest["files"]["losat-threaded.wasm"]["memory"],
     }
     return (
@@ -243,12 +221,59 @@ def render_module(manifest: BuildManifest) -> str:
         "\n"
         "/**\n"
         " * The LOSAT build of the shipped Wasm files: the commit, the version the Web records with each\n"
-        " * search (the Cargo version and the commit), and the page limits of the memory the threaded file\n"
-        " * imports.\n"
-        " * @type {Readonly<{ commit: string, version: string, threadedMemoryPages: { initial: number, maximum: number } }>}\n"
+        " * search (the Cargo version and the commit), each file's sha256, which the app checks before it\n"
+        " * compiles the file, and the page limits of the memory the threaded file imports.\n"
+        " * @type {Readonly<{ commit: string, version: string, files: Readonly<Record<LosatWasmFile, { sha256: string }>>, threadedMemoryPages: { initial: number, maximum: number } }>}\n"
         " */\n"
         f"export const LOSAT_WASM_BUILD = Object.freeze({json.dumps(identity, indent=2)});\n"
+        "\n"
+        f"/** @typedef {{{' | '.join(repr(name) for name in sorted(manifest['files']))}}} LosatWasmFile A shipped LOSAT Wasm file. */\n"
     )
+
+
+def _guard_record(printed: dict[str, int]) -> SharedMemoryGuard:
+    return SharedMemoryGuard(
+        version=printed["version"],
+        fill=printed["fill"],
+        copy=printed["copy"],
+        grow=printed["grow"],
+        atomic=printed["atomic"],
+        atomic_helpers=printed["atomic_helpers"],
+    )
+
+
+def verified_guard(wasm: Path, guard_copy: Path = GUARD_TOOL_COPY) -> SharedMemoryGuard | str:
+    """The guard record of ``wasm`` as LOSAT's verifier counts it in the code, or why the verifier refuses it."""
+
+    result = subprocess.run(
+        ["node", str(guard_copy), "verify", str(wasm)], capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        return result.stderr.strip() or f"exit {result.returncode}"
+    return _guard_record(json.loads(result.stdout))
+
+
+def guard_threaded_file(crate: Path, built: Path, destination: Path) -> tuple[SharedMemoryGuard, GuardTool]:
+    """Write ``built`` through LOSAT's guard to ``destination`` and copy the guard to ``tools/losat/``.
+
+    The guard verifies what it writes and prints its record; this keeps the record, refuses a guard older than
+    ``MINIMUM_GUARD_VERSION`` or one that guarded nothing, and requires that the copy is the guard that ran.
+    """
+
+    GUARD_TOOL_COPY.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(crate / GUARD_TOOL, GUARD_TOOL_COPY)
+    printed = json.loads(_run(["node", GUARD_TOOL, "guard", str(built), str(destination)], crate))
+    guard = _guard_record(printed)
+    tool = GuardTool(path=GUARD_TOOL, sha256=_sha256(GUARD_TOOL_COPY))
+    if printed["guard_sha256"] != tool["sha256"]:
+        raise SystemExit(f"{GUARD_TOOL_COPY} is not the guard that ran (sha256 {printed['guard_sha256']})")
+    if printed["output_sha256"] != _sha256(destination):
+        raise SystemExit(f"{destination} is not the module the guard wrote")
+    if guard["version"] < MINIMUM_GUARD_VERSION:
+        raise SystemExit(f"guard version {guard['version']} is older than {MINIMUM_GUARD_VERSION}")
+    if guard["fill"] + guard["copy"] + guard["grow"] + guard["atomic"] == 0:
+        raise SystemExit(f"the guard guarded nothing in {built}; it would run unguarded in the Web app")
+    return guard, tool
 
 
 def record(losat_src: Path, target_dir: Path) -> BuildManifest:
@@ -263,8 +288,9 @@ def record(losat_src: Path, target_dir: Path) -> BuildManifest:
         built = target_dir / spec["target"] / "release" / spec["built"]
         destination = WASM_DIR / name
         command = ["cargo", "build", "--release", "--locked", "--target", spec["target"], *spec["cargo_args"]]
+        guarded: tuple[SharedMemoryGuard, GuardTool] | None = None
         if name == GUARDED_ARTIFACT:
-            _run(["node", GUARD_TOOL, "guard", str(built), str(destination)], crate)
+            guarded = guard_threaded_file(crate, built, destination)
             command += ["&&", "node", GUARD_TOOL, "guard", spec["built"], name]
         else:
             shutil.copyfile(built, destination)
@@ -280,12 +306,8 @@ def record(losat_src: Path, target_dir: Path) -> BuildManifest:
         memory = imported_memory_pages(wasm)
         if memory is not None:
             files[name]["memory"] = memory
-        if name == GUARDED_ARTIFACT:
-            problem = guard_problem(wasm)
-            guard = shared_memory_guard(wasm)
-            if problem is not None or guard is None:
-                raise SystemExit(f"{name} {problem}; it would run unguarded in the Web app")
-            files[name]["sharedMemoryGuard"] = guard
+        if guarded is not None:
+            files[name]["sharedMemoryGuard"], files[name]["guardTool"] = guarded
     manifest: BuildManifest = {
         "schema": MANIFEST_SCHEMA,
         "repository": REPOSITORY,
@@ -304,8 +326,12 @@ def record(losat_src: Path, target_dir: Path) -> BuildManifest:
     return manifest
 
 
-def check(wasm_dir: Path = WASM_DIR, module_path: Path = MODULE_PATH) -> list[str]:
-    """The differences between the Wasm files, the generated module and the manifest."""
+def check(wasm_dir: Path = WASM_DIR, module_path: Path = MODULE_PATH, guard_copy: Path = GUARD_TOOL_COPY) -> list[str]:
+    """The differences between the Wasm files, the copied guard, the generated module and the manifest.
+
+    Whether the threaded file is guarded is for LOSAT's verifier to say (the copied guard's ``verify``, which walks
+    the code): the record in the file's custom section alone proves nothing (OV-2441).
+    """
 
     manifest: BuildManifest = json.loads((wasm_dir / MANIFEST_PATH.name).read_text(encoding="utf-8"))
     problems = []
@@ -321,14 +347,19 @@ def check(wasm_dir: Path = WASM_DIR, module_path: Path = MODULE_PATH) -> list[st
         size, digest = path.stat().st_size, _sha256(path)
         wasm = path.read_bytes()
         if name == GUARDED_ARTIFACT:
-            problem = guard_problem(wasm)
-            if problem is not None:
-                problems.append(f"{name} {problem}")
-            elif shared_memory_guard(wasm) != expected.get("sharedMemoryGuard"):
-                problems.append(
-                    f"{name} carries guard record {shared_memory_guard(wasm)}; "
-                    f"the manifest records {expected.get('sharedMemoryGuard')}"
-                )
+            tool = expected.get("guardTool")
+            if tool is None or "sharedMemoryGuard" not in expected:
+                problems.append(f"the manifest records no guard of {name}")
+            elif not guard_copy.is_file() or _sha256(guard_copy) != tool["sha256"]:
+                problems.append(f"{guard_copy.name} is not the guard the manifest records (sha256 {tool['sha256']})")
+            else:
+                verified = verified_guard(path, guard_copy)
+                if isinstance(verified, str):
+                    problems.append(f"LOSAT's guard refuses {name}: {verified}")
+                elif verified != expected["sharedMemoryGuard"]:
+                    problems.append(
+                        f"LOSAT's guard counts {verified} in {name}; the manifest records {expected['sharedMemoryGuard']}"
+                    )
         memory = imported_memory_pages(wasm)
         if memory != expected.get("memory"):
             problems.append(f"{name} imports memory {memory}; the manifest records {expected.get('memory')}")
