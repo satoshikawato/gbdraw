@@ -5705,6 +5705,13 @@ const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = nul
 );
 
 /**
+ * `Array.isArray` alone narrows the readonly list to `any[]`; this keeps its element type.
+ * @param {WebFileBindings['linearCanonicalComparisons']} value
+ * @returns {value is NonNullable<WebFileBindings['linearCanonicalComparisons']>}
+ */
+const isAdoptedComparisonList = (value) => Array.isArray(value);
+
+/**
  * @param {Record<string, any>} files
  * @param {{ readonly bindings?: WebFileBindings } | null | undefined} webMetadata `webFiles`, its bindings checked
  * @param {Record<string, any> | null | undefined} resources
@@ -5789,8 +5796,9 @@ const applyWebFileBindings = (
   }
   // A Session 51 Linear drawing's adopted comparisons (OV-3826): the draft's, in place of the request's projection.
   // A generated pipeline has no file.
-  if (Array.isArray(bindings.linearCanonicalComparisons)) {
-    restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
+  const adopted = bindings.linearCanonicalComparisons;
+  if (isAdoptedComparisonList(adopted)) {
+    restored.linearCanonicalComparisons = adopted.map((comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       ...(Object.hasOwn(comparison, 'file')
         ? { file: webBindingValueAsLegacyFile(resources, comparison.file, resolveBinding, bindings.schema) } : {})
