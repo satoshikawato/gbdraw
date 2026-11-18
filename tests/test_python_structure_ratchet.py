@@ -258,7 +258,6 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/labels/filtering.py::_label_text": 65,
     "gbdraw/labels/linear.py::place_linear_label_row": 62,
     "gbdraw/layout/linear_multi_record.py::solve_linear_horizontal_layout": 63,
-    "gbdraw/layout/similarity_alignment.py::resolve_similarity_alignment": 86,
     "gbdraw/render/drawers/circular/annotations.py::circular_annotation_track_content": 68,
     "gbdraw/render/drawers/linear/annotations.py::linear_annotation_track_content": 83,
     "gbdraw/render/interactive_svg.py::enrich_svg": 96,
