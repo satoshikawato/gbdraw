@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { FRESH_GUARD_FILES, guardCommand } from '../../tools/ci-impact-fresh-guards.mjs';
+import { makeTempDirSync } from '../web/helpers/temp-dir.cjs';
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PYTHON_STRUCTURE_GUARD = 'tests/test_python_structure_ratchet.py';
@@ -57,25 +57,21 @@ test('the Python structure guard passes #1907 as its run tested it and fails it 
   assert.ok(FRESH_GUARD_FILES.includes(PYTHON_STRUCTURE_GUARD));
   assert.equal(git('merge-base', '--is-ancestor', MERGE_1876, HEAD_1907).status, 1);
   assert.equal(git('merge-base', '--is-ancestor', MERGE_1876, `${MERGE_1907}^1`).status, 0);
-  const root = mkdtempSync(join(tmpdir(), 'fresh-guards-'));
-  try {
-    const run = (commit) => {
-      const directory = join(root, commit);
-      for (const file of [PYTHON_STRUCTURE_GUARD, 'gbdraw/diagrams/circular/assemble.py']) {
-        const shown = git('show', `${commit}:${file}`);
-        assert.equal(shown.status, 0, shown.stderr);
-        mkdirSync(dirname(join(directory, file)), { recursive: true });
-        writeFileSync(join(directory, file), shown.stdout);
-      }
-      const [command, args] = guardCommand(PYTHON_STRUCTURE_GUARD);
-      return spawnSync(command, args, { cwd: directory, encoding: 'utf8', maxBuffer: 1 << 24 });
-    };
-    const tested = run(HEAD_1907);
-    assert.equal(tested.status, 0, tested.stdout + tested.stderr);
-    const fresh = run(MERGE_1907);
-    assert.equal(fresh.status, 1, fresh.stdout + fresh.stderr);
-    assert.match(fresh.stderr, /_draw_resolved_circular_slot: 59 statements \(limit 58/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  const root = makeTempDirSync('fresh-guards-');
+  const run = (commit) => {
+    const directory = join(root, commit);
+    for (const file of [PYTHON_STRUCTURE_GUARD, 'gbdraw/diagrams/circular/assemble.py']) {
+      const shown = git('show', `${commit}:${file}`);
+      assert.equal(shown.status, 0, shown.stderr);
+      mkdirSync(dirname(join(directory, file)), { recursive: true });
+      writeFileSync(join(directory, file), shown.stdout);
+    }
+    const [command, args] = guardCommand(PYTHON_STRUCTURE_GUARD);
+    return spawnSync(command, args, { cwd: directory, encoding: 'utf8', maxBuffer: 1 << 24 });
+  };
+  const tested = run(HEAD_1907);
+  assert.equal(tested.status, 0, tested.stdout + tested.stderr);
+  const fresh = run(MERGE_1907);
+  assert.equal(fresh.status, 1, fresh.stdout + fresh.stderr);
+  assert.match(fresh.stderr, /_draw_resolved_circular_slot: 59 statements \(limit 58/);
 });

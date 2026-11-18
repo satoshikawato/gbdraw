@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const sourceUrl = new URL('../../gbdraw/web/js/services/depth-track-state.js', import.meta.url);
 const displaySourceUrl = new URL('../../gbdraw/web/js/services/track-slot-display.js', import.meta.url);
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-depth-track-state-'));
+const tempDir = await makeTempDir('gbdraw-depth-track-state-');
 const tempModulePath = join(tempDir, 'services', 'depth-track-state.mjs');
 await mkdir(join(tempDir, 'services'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n');

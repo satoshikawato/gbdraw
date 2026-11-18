@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 
 import { RELEASE_GATE_JOB, runReleaseEvidenceCli } from '../../tools/check-release-evidence.mjs';
+import { makeTempDirSync } from '../web/helpers/temp-dir.cjs';
 
 const REPOSITORY = 'satoshikawato/gbdraw';
 
 // History: root A on main and dev; dev adds E (docs), R (runtime), H (docs); main merges H as
 // the tagged promotion commit T; dev then moves to D (runtime).
 const createHistory = () => {
-  const root = mkdtempSync(join(tmpdir(), 'release-evidence-'));
+  const root = makeTempDirSync('release-evidence-');
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {
     cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
   }).trim();
@@ -35,7 +35,7 @@ const createHistory = () => {
   git('switch', '-q', 'dev');
   const d = commit('gbdraw/draw.py', 'x = 3\n', 'D');
   git('update-ref', 'refs/remotes/origin/dev', d);
-  return { root, a, e, r, h, t, d, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, a, e, r, h, t, d };
 };
 
 let minute = 0;
@@ -90,9 +90,8 @@ const check = (history, gh) => {
   return { status, out, err, summaries };
 };
 
-test('a release-tier run on the promotion commit carries to the tag, whatever the run result', (t) => {
+test('a release-tier run on the promotion commit carries to the tag, whatever the run result', () => {
   const history = createHistory();
-  t.after(history.cleanup);
   // A report-only promotion audit job failed the run; its `Release / gate` passed.
   const gh = fakeGh({
     runs: [dispatch(11, history.h, { attempt: 2, conclusion: 'failure' })],
@@ -111,9 +110,8 @@ test('a release-tier run on the promotion commit carries to the tag, whatever th
   assert.deepEqual(result.summaries, [['summary.md', result.out]]);
 });
 
-test('an older release-tier run counts when a newer dispatch is dev tier and only documentation changed since', (t) => {
+test('an older release-tier run counts when a newer dispatch is dev tier and only documentation changed since', () => {
   const history = createHistory();
-  t.after(history.cleanup);
   const gh = fakeGh({
     runs: [dispatch(21, history.r), dispatch(22, history.h)],
     jobs: { 21: gate('success'), 22: gate('skipped') }
@@ -126,9 +124,8 @@ test('an older release-tier run counts when a newer dispatch is dev tier and onl
   assert.deepEqual(gh.calls.filter((call) => call.startsWith('run view')).map((call) => call.split(' ')[2]), ['22', '21']);
 });
 
-test('a release without carrying evidence stops before publication', (t) => {
+test('a release without carrying evidence stops before publication', () => {
   const history = createHistory();
-  t.after(history.cleanup);
   const cases = [
     // Evidence on E does not carry over the runtime change R.
     [{ runs: [dispatch(31, history.e)], jobs: { 31: gate('success') } }, /does not carry over the 2 changed paths/],
@@ -159,9 +156,8 @@ test('a release without carrying evidence stops before publication', (t) => {
   }
 });
 
-test('the check fails closed when gh fails or lists another kind of run', (t) => {
+test('the check fails closed when gh fails or lists another kind of run', () => {
   const history = createHistory();
-  t.after(history.cleanup);
   const failed = check(history, fakeGh({ runs: [], failList: true }));
   assert.equal(failed.status, 1);
   assert.match(failed.err, /\[GH_FAILED\].*Bad credentials/);

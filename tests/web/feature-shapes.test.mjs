@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-shapes-'));
+const tempDir = await makeTempDir('gbdraw-feature-shapes-');
 const modulePath = join(tempDir, 'feature-rendering.mjs');
 await writeFile(
   modulePath,

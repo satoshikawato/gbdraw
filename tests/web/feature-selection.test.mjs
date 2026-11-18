@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 globalThis.window = {
   Vue: {
@@ -17,7 +17,7 @@ globalThis.window = {
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-selection-'));
+const tempDir = await makeTempDir('gbdraw-feature-selection-');
 // A copy of the module tree: feature-selection.js and the modules it imports (svg-serialization.js resolves a
 // drawing's ID by its mode; services/region-axis.js orders a Shift+click range).
 await cp(sourceDir, tempDir, { recursive: true });

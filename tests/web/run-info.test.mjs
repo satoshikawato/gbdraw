@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { File } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
-import { cp, readFile, stat, writeFile, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, stat, writeFile } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import { delimiter, join } from 'node:path';
 import test from 'node:test';
@@ -11,9 +10,10 @@ import { pathToFileURL } from 'node:url';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { evaluatePython } from './helpers/python-evaluator.mjs';
 import { readSavedSession } from './helpers/session-documents.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-run-info-'));
+const tempDir = await makeTempDir('gbdraw-run-info-');
 await cp(join(repoRoot, 'gbdraw', 'web', 'js'), join(tempDir, 'js'), { recursive: true });
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
 const modulePath = join(tempDir, 'js', 'app', 'run-info.js');
@@ -137,7 +137,7 @@ const assertCliParserAccepts = async (recipe) => {
 
 // The recipe's files in a new folder: the generated ones and the session's resources under their recipe names.
 const materializeRecipe = async (session, recipe, info, fixture) => {
-  const runDir = await mkdtemp(join(tmpdir(), 'gbdraw-source-recipe-'));
+  const runDir = await makeTempDir('gbdraw-source-recipe-');
   const generatedFiles = Array.isArray(info.sourceRecipe.generatedFiles)
     ? info.sourceRecipe.generatedFiles
     : recipe.generatedFiles;
@@ -2147,7 +2147,7 @@ test('the download description counts its helper files', () => {
 // generated table) and `--canvas_padding`, and read back through the CLI's own readers to the same leaves; a hidden
 // row with an edited order of the others needs OV-2514. A leaf the table cannot carry makes the recipe unavailable.
 const legendLeavesReadBack = async (recipe) => {
-  const runDir = await mkdtemp(join(tmpdir(), 'gbdraw-legend-rows-'));
+  const runDir = await makeTempDir('gbdraw-legend-rows-');
   const args = [];
   for (const token of recipe.args) {
     const generated = recipe.generatedFiles.find((file) => file.path === token);
@@ -2649,7 +2649,7 @@ test('the Source recipe of a LOSATP Pairwise Generate runs the search with its c
 });
 
 test('the Source recipe of a loaded CLI -b Session gives its BLAST table', async () => {
-  const runDir = await mkdtemp(join(tmpdir(), 'gbdraw-cli-blast-session-'));
+  const runDir = await makeTempDir('gbdraw-cli-blast-session-');
   for (const name of ['BGC0000708', 'BGC0000709']) {
     await cp(join(repoRoot, 'tests', 'test_inputs', `${name}.gbk`), join(runDir, `${name}.gbk`));
   }

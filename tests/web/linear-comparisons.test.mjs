@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-comparisons-'));
+const tempRoot = await makeTempDir('gbdraw-linear-comparisons-');
 // The modules keep their js/ layout, so their relative imports resolve.
 for (const path of [
   'services/linear-comparisons.js', 'services/linear-comparison-retained.js', 'services/record-draw-selection.js', 'utils/download-names.js',

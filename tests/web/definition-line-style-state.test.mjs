@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { cp, writeFile, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-definition-line-style-state-'));
+const tempDir = await makeTempDir('gbdraw-definition-line-style-state-');
 await cp(join(repoRoot, 'gbdraw', 'web', 'js'), join(tempDir, 'js'), { recursive: true });
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
 const modulePath = join(tempDir, 'js', 'services', 'definition-line-style-state.js');

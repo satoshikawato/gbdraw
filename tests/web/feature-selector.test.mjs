@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-selector.js');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-selector-'));
+const tempDir = await makeTempDir('gbdraw-feature-selector-');
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'services'));
 await mkdir(join(tempDir, 'contracts'));

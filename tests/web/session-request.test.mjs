@@ -1,19 +1,19 @@
 import { gallerySessionDocument } from './helpers/session-documents.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 // The axis label style leaves every request states since D-24.
 const SCALAR_AXIS_LABEL_LEAVES = ['objects.depth.axis_labels', 'objects.gc_content.axis_labels'];
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-request-'));
+const tempRoot = await makeTempDir('gbdraw-session-request-');
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 

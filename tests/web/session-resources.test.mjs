@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { File } from 'node:buffer';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { bindingDrawings } from './helpers/input-files.mjs';
 import { CANONICAL_REQUEST_SCHEMA } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-resources-'));
+const tempRoot = await makeTempDir('gbdraw-session-resources-');
 await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 

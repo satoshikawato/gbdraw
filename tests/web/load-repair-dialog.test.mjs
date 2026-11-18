@@ -3,9 +3,8 @@
 // `utils/load-repairs.js` owns the wording (G1); the Load port answers.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
@@ -18,6 +17,7 @@ import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
 import { templateBinding } from './helpers/template-binding.mjs';
+import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 globalThis.window = {
   Vue: {
@@ -806,7 +806,7 @@ test('a Session older than 27 is refused as an old version (B51)', async () => {
 // Gallery publication never loads through the dialog and admits Sessions 46-51 only; a Session 39 with a row
 // Load would repair is refused with the way to convert it.
 test('Gallery publication refuses a Session 39 with a table row Load would repair', () => {
-  const out = join(mkdtempSync(join(tmpdir(), 'gbdraw-publish-')), 'session.json');
+  const out = join(makeTempDirSync('gbdraw-publish-'), 'session.json');
   const run = spawnSync(process.execPath, [
     new URL('../../tools/publish_gallery_session.mjs', import.meta.url).pathname, 'prepare',
     new URL('../fixtures/sessions/whitelist-tab-keyword.v39.gbdraw-session.json.gz', import.meta.url).pathname, out

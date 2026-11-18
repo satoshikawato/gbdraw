@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'zip.js');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-zip-'));
+const tempDir = await makeTempDir('gbdraw-zip-');
 const modulePath = join(tempDir, 'zip.mjs');
 await writeFile(modulePath, await readFile(sourcePath, 'utf8'), 'utf8');
 

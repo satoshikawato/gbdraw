@@ -2,11 +2,8 @@ const { test, expect } = require('@playwright/test');
 const { createHash } = require('node:crypto');
 const {
   existsSync,
-  mkdtempSync,
   readFileSync,
-  rmSync
 } = require('node:fs');
-const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
@@ -18,6 +15,7 @@ const {
 } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { readSessionFile } = require('./helpers/session-file.cjs');
+const { makeTempDirSync } = require('./helpers/temp-dir.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -644,7 +642,7 @@ const assertSvgGeometryParity = async (page, exportedPath) => {
 };
 
 test.beforeAll(async () => {
-  savedSessionDir = mkdtempSync(join(tmpdir(), 'gbdraw-losat-migration-'));
+  savedSessionDir = makeTempDirSync('gbdraw-losat-migration-');
   expect(existsSync(fixturePath)).toBe(true);
   const fixtureBytes = expandedSessionBytes(fixturePath);
   const fixture = JSON.parse(fixtureBytes.toString('utf8'));
@@ -652,10 +650,6 @@ test.beforeAll(async () => {
   expect(fixture.version).toBe(expected.sessionVersion);
   expect(fixture.renderRequest?.schema).toBe(expected.renderRequestSchema);
   expect(fixture.losatCache?.entries).toHaveLength(expected.storedRawEntries);
-});
-
-test.afterAll(async () => {
-  rmSync(savedSessionDir, { recursive: true, force: true });
 });
 
 test('SVG sanitizer preserves linear comparison row hooks', async ({ page }) => {

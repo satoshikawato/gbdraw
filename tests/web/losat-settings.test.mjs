@@ -1,10 +1,10 @@
 import { createTestInputStore } from './helpers/input-files.mjs';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 globalThis.window = {
   Vue: {
@@ -31,7 +31,7 @@ Object.defineProperty(globalThis, 'navigator', {
 });
 
 const sourceRoot = new URL('../../gbdraw/web/js/app/', import.meta.url);
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-losat-settings-'));
+const tempDir = await makeTempDir('gbdraw-losat-settings-');
 const tempModulePath = join(tempDir, 'losat-settings.mjs');
 const tempNormalizationPath = join(tempDir, 'losat-normalization.mjs');
 const source = await readFile(new URL('losat-settings.js', sourceRoot), 'utf8');

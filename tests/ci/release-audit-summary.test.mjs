@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { readArtifact, renderSummary } from '../../tools/audit/release-audit-summary.mjs';
+import { makeTempDirSync } from '../web/helpers/temp-dir.cjs';
 
 const workflow = readFileSync(new URL('../../.github/workflows/test.yml', import.meta.url), 'utf8');
 const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
 const AUDIT_JOBS = ['promotion-audit-recipes', 'promotion-audit-sweeps', 'promotion-audit-journeys', 'promotion-audit-random-walk'];
 
 const artifact = (files) => {
-  const dir = mkdtempSync(join(tmpdir(), 'audit-artifact-'));
+  const dir = makeTempDirSync('audit-artifact-');
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(join(dir, path, '..'), { recursive: true });
     writeFileSync(join(dir, path), typeof content === 'string' ? content : JSON.stringify(content));
@@ -38,7 +38,7 @@ test('an artifact counts failed tests, failed recipes, and parity replay differe
 });
 
 test('the summary lists each audit job with its artifact link and the uncovered capabilities', () => {
-  const root = mkdtempSync(join(tmpdir(), 'audit-artifacts-'));
+  const root = makeTempDirSync('audit-artifacts-');
   const journeys = join(root, 'promotion-audit-journeys-J1');
   mkdirSync(join(journeys, 'journeys'), { recursive: true });
   writeFileSync(join(journeys, 'report.json'), JSON.stringify({ stats: { unexpected: 0 } }));

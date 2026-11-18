@@ -3,8 +3,7 @@
 // and the review page data (tools/i18n/review-page-data.mjs).
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -15,13 +14,13 @@ import {
 import { reviewDraftText, reviewKeyId, reviewLocales, reviewPageData } from '../../tools/i18n/review-page-data.mjs';
 import { roleAt, sourceCalls, sourceKeys } from '../../tools/i18n/source-keys.mjs';
 import { previousKeyOf, runSync } from '../../tools/i18n/sync.mjs';
+import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 const { keys } = await sourceKeys();
 
 /** A copy of the catalogs that a test may change, and the sync tool run on it. */
 const scratch = (t) => {
-  const folder = mkdtempSync(join(tmpdir(), 'i18n-sync-'));
-  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  const folder = makeTempDirSync('i18n-sync-');
   const root = join(folder, 'catalogs');
   cpSync(CATALOG_ROOT, root, { recursive: true });
   // Start complete whatever dev's catalogs lack: a feature PR adds English only, and the batch before a release translates it.

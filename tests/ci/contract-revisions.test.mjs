@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { headingsOf } from '../../tools/generate_norms_index.mjs';
+import { makeTempDirSync } from '../web/helpers/temp-dir.cjs';
 
 // The Product Contract names each revision after its pull request and records it
 // in the section it changes, and numbers each new record after the pull request
@@ -170,17 +170,13 @@ test('pull requests that revise two neighbouring records merge without a conflic
     lines[index] = `${line} Revised by #${pullRequest}.`;
     return lines.join('\n');
   };
-  const directory = mkdtempSync(join(tmpdir(), 'contract-revisions-'));
-  try {
-    const [ours, original, theirs] = ['ours', 'base', 'theirs'].map((name) => join(directory, name));
-    writeFileSync(ours, revise('001', 9001));
-    writeFileSync(original, source);
-    writeFileSync(theirs, revise('002', 9002));
-    const merged = spawnSync('git', ['merge-file', '-p', ours, original, theirs], { encoding: 'utf8', maxBuffer: 1 << 26 });
-    assert.equal(merged.status, 0, `conflicting hunks: ${merged.status}`);
-    assert.deepEqual(revisionProblems(merged.stdout), []);
-    assert.equal(merged.stdout.split('\n#### Revision #900').length, 3);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const directory = makeTempDirSync('contract-revisions-');
+  const [ours, original, theirs] = ['ours', 'base', 'theirs'].map((name) => join(directory, name));
+  writeFileSync(ours, revise('001', 9001));
+  writeFileSync(original, source);
+  writeFileSync(theirs, revise('002', 9002));
+  const merged = spawnSync('git', ['merge-file', '-p', ours, original, theirs], { encoding: 'utf8', maxBuffer: 1 << 26 });
+  assert.equal(merged.status, 0, `conflicting hunks: ${merged.status}`);
+  assert.deepEqual(revisionProblems(merged.stdout), []);
+  assert.equal(merged.stdout.split('\n#### Revision #900').length, 3);
 });

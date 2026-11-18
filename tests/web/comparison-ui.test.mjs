@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-comparison-ui-'));
+const tempRoot = await makeTempDir('gbdraw-comparison-ui-');
 const appRoot = join(tempRoot, 'js', 'app');
 await mkdir(appRoot, { recursive: true });
 await Promise.all([

@@ -6,8 +6,7 @@
 // top-level request and `otherModeResult` (OV-670).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +22,7 @@ import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionDocumentOfViews } from '../../gbdraw/web/js/services/session-drawings-upgrade.js';
 import { gallerySessionDocument, sessionFileOf, sessionLoadEvent, readSavedSession } from './helpers/session-documents.mjs';
+import { makeTempDirSync } from './helpers/temp-dir.cjs';
 
 globalThis.window = {
   Vue: {
@@ -1019,18 +1019,14 @@ test('a request whose schema is no integer is unreadable (K22): settings only wi
 // Python API wrote keeps no settings apart from its request, so when Load
 // drops that request at its root (K22), `restoresNothing` refuses the file.
 test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is missing, unreadable or of no integer schema: nothing restored, nothing committed (E-OD21, E-OD22)', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'gbdraw-cli-47-'));
+  const directory = makeTempDirSync('gbdraw-cli-47-');
   let cliCurrent;
-  try {
-    const file = join(directory, 'cli.gbdraw');
-    execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
-      '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
-      cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
-    });
-    cliCurrent = await readSavedSession(new Blob([readFileSync(file)]));
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const file = join(directory, 'cli.gbdraw');
+  execFileSync('python', ['-m', 'gbdraw.cli', 'linear', '--gbk', fileURLToPath(new URL('tests/test_inputs/NC_001416.gb', REPO)),
+    '-o', join(directory, 'cli'), '-f', 'svg', '--session_output', file], {
+    cwd: directory, env: { ...process.env, PYTHONPATH: fileURLToPath(REPO) }, stdio: 'pipe'
+  });
+  cliCurrent = await readSavedSession(new Blob([readFileSync(file)]));
   const sessions = [
     ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
     ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],

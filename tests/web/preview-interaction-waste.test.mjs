@@ -2,12 +2,12 @@
 // work the user does not see (band-hover-perf-20261015, PR-A): each case pins
 // one removed waste with a counter and checks that what is shown is unchanged.
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const ref = (value) => ({ value });
@@ -18,7 +18,7 @@ const counts = {
 };
 globalThis.__PREVIEW_WASTE_COUNTS__ = counts;
 
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-waste-'));
+const tempDir = await makeTempDir('gbdraw-preview-waste-');
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { makeTempDir } from './helpers/temp-dir.cjs';
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-record-selector-'));
+const tempRoot = await makeTempDir('gbdraw-record-selector-');
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-record-selector.js'));
 await writeFile(join(tempRoot, 'linear-record-selector.js'), (await readFile(join(sourceRoot, 'linear-record-selector.js'), 'utf8'))
