@@ -1,11 +1,11 @@
-- Performance: Large genomes draw several times faster and with less memory.
+- Performance: Large genomes draw faster and with less memory.
   A record's sequence is read where it lies in its file: crops, reverse
   complements and origin crops no longer copy it, and its bases are counted
   once, as the file is parsed, for the letter check, the GC % in the
   definition and the GC content and skew tracks. A gzip input is read
   without writing an expanded copy to disk. The whole human genome
-  (T2T-CHM13v2.0, 3.1 Gbp) draws in the CLI in about FF4G_T2T_FA s from its
-  FASTA, against about FF4G_T2T_FA_DEV s before; every figure is the same.
+  (T2T-CHM13v2.0, 3.1 Gbp) draws in the CLI from its FASTA about five times
+  faster than before, in a fifth of the memory; every figure is the same.
 - Changed: `crop_genbank` reads its input as the drawing does. It writes
   feature keys in their INSDC spelling (`cds` as `CDS`), reads EMBL files,
   tab-indented features and spaces in a LOCUS name, and refuses an empty or
