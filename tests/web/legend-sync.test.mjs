@@ -100,7 +100,7 @@ assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
     `${name} writes no Legend row`
   ));
 assert.match(appSetupSource, /deleteLegendEntry: editEditorIntent\(msg\('Delete legend item'\), deleteLegendEntry, \{ domains: \[\.\.\.LEGEND_STRUCTURE_DOMAINS, \.\.\.STROKE_DOMAINS\] \}\)/);
-assert.match(editorIntentSource, /const restoreLegendItems = \(label, restore\) => runUndoable\(label,/);
+assert.match(editorIntentSource, /const restoreLegendItems = async \(label, restore\) => \{\n    await whenLegendFactsCurrent\(\);\n    return runUndoable\(label,/);
 [appSetupSource, editorIntentSource, resultBinderSource].forEach((source) => assert.doesNotMatch(
   source, /reconcileLegendEntries|prepareDisplayedResultLegend|hasRetiredResultLegend|legendChanged/
 ));
@@ -237,7 +237,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([
       { caption: 'Alpha', color: '#112233' },
@@ -429,7 +429,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
@@ -505,7 +505,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'r1.svg', content: 'unchanged' }, { name: 'r2.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
@@ -615,7 +615,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'r1.svg', content: 'unchanged' }, { name: 'r2.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
@@ -702,7 +702,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
@@ -744,7 +744,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#111111', featureIds: ['cds-1'] },
@@ -857,7 +857,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#112233' },
@@ -991,7 +991,7 @@ const mockLegendEntry = (caption, color, x) => {
       results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
       selectedResultIndex: ref(0),
       svgContainer: ref({ querySelector: () => svg }),
-      displayedResultMetadata: () => null, extractedFeatures: ref([]),
+      displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
       adv: {},
       legendEntries: ref(order.listed.map((caption) => ({ caption, originalCaption: caption, color: colors[caption] }))),
       deletedLegendEntries: ref([]),
@@ -1095,7 +1095,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([
@@ -1131,7 +1131,7 @@ const mockLegendEntry = (caption, color, x) => {
   const svg = new MockElement('svg');
   const state = {
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]), selectedResultIndex: ref(0),
-    svgContainer: ref({ querySelector: () => svg }), displayedResultMetadata: () => null, extractedFeatures: ref([]), adv: {},
+    svgContainer: ref({ querySelector: () => svg }), displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]), adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([{ caption: 'Phage', originalCaption: 'Phage', color: '#ff0000', featureIds: [] }]),
     dormantLegendEntries: ref([]), originalLegendOrder: ref(['CDS']), originalLegendColors: ref({ CDS: '#84b9ec' }),
@@ -1279,7 +1279,7 @@ const mockLegendEntry = (caption, color, x) => {
   svg.appendChild(legend);
   const state = {
     results: ref([]), selectedResultIndex: ref(0), svgContainer: ref({ querySelector: () => svg }), adv: {},
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     legendEntries: ref([{ caption: 'Alpha', originalCaption: 'Alpha', color: '#112233', featureIds: [] }]),
     deletedLegendEntries: ref([{ caption: 'Beta', originalCaption: 'Beta', color: '#112233', featureIds: [] }]),
     dormantLegendEntries: ref([]), originalLegendOrder: ref(['Alpha', 'Beta']), originalLegendColors: ref({}),
@@ -1317,7 +1317,7 @@ const mockLegendEntry = (caption, color, x) => {
     results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),

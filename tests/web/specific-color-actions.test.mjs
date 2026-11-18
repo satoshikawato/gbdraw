@@ -51,7 +51,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
     editableLabels: { value: [] }, manualPriorityRules: [],
     deletedLegendEntries: { value: [] }, dormantLegendEntries: { value: [] }, legendStrokeOverrides: {},
     specificRulePresets: [], selectedSpecificPreset: { value: '' }, specificRulePresetLoading: { value: false },
-    svgContainer: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }, displayedResultMetadata: () => null,
+    svgContainer: { value: null }, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} }, displayedResultMetadata: () => null, legendKeyIsStale: () => false,
     errorLog: { value: null }, selectedResultIndex: { value: 0 },
     biologicalFeatures: { value: [] }, mode: { value: 'circular' }, svgContent: { value: null }
   };
@@ -740,7 +740,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
   const state = {
     manualSpecificRules: [rule], svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000']]),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
     legendEntries: ref([
       { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
@@ -772,7 +772,7 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
     manualSpecificRules: [rule],
     // Python drew CDS in its palette color; its Legend color makes it the rule's swatch.
     svgContainer: mounted([['CDS', '#54bcf8'], ['CDS [#ff0000]', '#ff0000', { display: 'none', 'data-legend-merged': 'CDS' }]]),
-    displayedResultMetadata: () => null, extractedFeatures: ref([]),
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, extractedFeatures: ref([]),
     results: ref([]), selectedResultIndex: ref(0),
     // Rows of Python's hold no color (V-OD22): CDS's Legend color is its override.
     legendEntries: ref([
@@ -979,7 +979,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const state = {
     featureCatalog: { value: catalog }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
-    displayedResultMetadata: () => null, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},

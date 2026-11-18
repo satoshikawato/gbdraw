@@ -329,10 +329,17 @@ const normalizeLegendRowFacts = (legendRows, results) => {
   }));
 };
 
+// Whether Python reports Legend key `key` in the facts of one of the Results: as a row
+// it drew there, or as a row the draft removed there (suppressed). A key no Result
+// reports is stale: no row of Python's has it any more (a rule removed or recaptioned,
+// a row renamed while it was deleted). Admission and Restore read staleness here only.
+/** @param {readonly SvgLegendRowFacts[]} legendRows @param {string} key */
+const legendKeyReported = (legendRows, key) => legendRows.some((row) => row.drawn.has(key) || row.suppressed.has(key));
+
 // A required Legend row that Result `resultIndex` does not contain may be absent when
 // Python reports it as removed by the draft there (suppressed), or as belonging to
 // another Result of the batch (drawn or suppressed there). A row Python drew in this
-// Result must be present, and a key no Result reports is stale (OV-46, OV-63).
+// Result must be present, and a stale key stays required (OV-46, OV-63).
 /**
  * @param {readonly SvgLegendRowFacts[] | null | undefined} legendRows
  * @param {number} resultIndex
@@ -341,11 +348,8 @@ const normalizeLegendRowFacts = (legendRows, results) => {
  */
 const legendRowMayBeAbsent = (legendRows, resultIndex, caption) => {
   if (!legendRows) return false;
-  const own = legendRows[resultIndex];
-  if (own.drawn.has(caption)) return false;
-  if (own.suppressed.has(caption)) return true;
-  return legendRows.some((other, index) => index !== resultIndex
-    && (other.drawn.has(caption) || other.suppressed.has(caption)));
+  if (legendRows[resultIndex].drawn.has(caption)) return false;
+  return legendKeyReported(legendRows, caption);
 };
 
 /**
@@ -638,6 +642,25 @@ export const getCommittedSvgContent = (result) => {
 export const getCommittedSvgResultMetadata = (result) => (
   committedState(result)?.metadata || null
 );
+
+// Whether Legend key `key` is stale for the committed Results `results` (the drawing's):
+// none of them reports it (`legendKeyReported`). A Result without facts (admitted at
+// Load) reports nothing for certain, so with one among them no key is stale.
+/**
+ * @param {readonly SvgResultEntry[]} results
+ * @param {string} key
+ * @returns {boolean}
+ */
+export const isStaleLegendKey = (results, key) => {
+  /** @type {SvgLegendRowFacts[]} */
+  const facts = [];
+  for (const result of results) {
+    const metadata = getCommittedSvgResultMetadata(result);
+    if (!metadata || !metadata.legendRowFacts) return false;
+    facts.push(metadata.legendRowFacts);
+  }
+  return facts.length > 0 && !legendKeyReported(facts, key);
+};
 
 /** @param {SvgResultEntry | null | undefined} result */
 export const getCommittedSvgResultRuntimeIdentity = (result) => (

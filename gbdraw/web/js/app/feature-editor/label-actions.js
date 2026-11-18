@@ -785,6 +785,29 @@ const onLabelMissing = (drawing, drawn, labelled, catalogOf, hidden) => {
   });
 };
 
+// Resolves once `busy` (a Generate or the label rerender) is false; at once when it is, or without `watch`.
+/** @param {FeatureLabelActionsOptions['watch']} watch @param {{ readonly value: boolean }} busy */
+const untilIdle = (watch, busy) => (busy.value && watch ? /** @type {Promise<void>} */ (new Promise((resolve) => {
+  const stop = watch(busy, (running) => { if (!running) { stop(); resolve(); } });
+})) : Promise.resolve());
+
+// Resolves once no Generate or rerender runs (`busy`), so the committed Results, and Python's facts about them, are
+// those of the run that drew the edits made before it. A redraw owed when nothing runs (its rerender failed) is asked
+// for once on entry (OV-2412).
+/**
+ * @param {{ busy: { readonly value: boolean }, owed: () => boolean, requestAutomaticRerender: () => boolean,
+ *   watch: FeatureLabelActionsOptions['watch'], nextTick: () => Promise<unknown> }} ports
+ * @returns {Promise<void>}
+ */
+const untilRedrawn = async ({ busy, owed, requestAutomaticRerender, watch, nextTick }) => {
+  await nextTick();
+  if (!busy.value && owed() && requestAutomaticRerender()) await nextTick();
+  while (busy.value && watch) {
+    await untilIdle(watch, busy);
+    await nextTick();
+  }
+};
+
 /** @param {FeatureLabelActionsOptions} options */
 export const createFeatureLabelActions = ({
   state,
@@ -1564,15 +1587,7 @@ export const createFeatureLabelActions = ({
     const shownIdentity = () => getResultIdentity(state.results.value[selectedResultIndex.value]);
     const before = shownIdentity();
     await nextTick();
-    if (labelReflowProcessing.value && typeof watch === 'function') {
-      await /** @type {Promise<void>} */ (new Promise((resolve) => {
-        const stop = watch(labelReflowProcessing, (busy) => {
-          if (busy) return;
-          stop();
-          resolve();
-        });
-      }));
-    }
+    await untilIdle(watch, labelReflowProcessing);
     if (shownIdentity() === before) return null;
     const result = currentResults()[selectedResultIndex.value];
     if (!result || labelReflowLastError.value || state.processing.value
@@ -1818,6 +1833,10 @@ export const createFeatureLabelActions = ({
     isRedrawOwed,
     redrawShown,
     redrawRestored,
+    whenRedrawn: () => untilRedrawn({
+      busy: computed(() => state.processing.value || labelReflowProcessing.value),
+      owed: () => redrawOwed.has(state.activeDrawing()), requestAutomaticRerender, watch, nextTick
+    }),
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,
