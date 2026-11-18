@@ -10,13 +10,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from itertools import repeat
 from math import isfinite
 from numbers import Real
+from typing import TypeVar
 
 from gbdraw.exceptions import ValidationError
 
 
 SIMILARITY_ALIGNMENT_PLAN_SCHEMA = 2
+_Item = TypeVar("_Item")
 
 
 class AlignmentStrandRelation(str, Enum):
@@ -696,36 +699,6 @@ def _validate_known_alias(
         raise ValidationError(f"{description} conflicts with candidate identity aliases.")
 
 
-def _direct_rbh_candidates(
-    *,
-    group_id: str,
-    reference: AlignmentAnchorIdentity,
-    candidates: tuple[SimilarityAlignmentCandidate, ...],
-    edges: tuple[AlignmentEvidenceEdge, ...],
-) -> tuple[SimilarityAlignmentCandidate, ...]:
-    candidates_by_key = {
-        candidate.anchor.canonical_key: candidate for candidate in candidates
-    }
-    connected: set[tuple[str, str]] = set()
-    for edge in edges:
-        if edge.group_id != group_id or edge.edge_kind != "rbh":
-            continue
-        if edge.query.canonical_key == reference.canonical_key:
-            other = edge.subject.canonical_key
-        elif edge.subject.canonical_key == reference.canonical_key:
-            other = edge.query.canonical_key
-        else:
-            continue
-        if other in candidates_by_key:
-            connected.add(other)
-    return tuple(
-        sorted(
-            (candidates_by_key[key] for key in connected),
-            key=lambda item: item.anchor.sort_key,
-        )
-    )
-
-
 def _direct_evidence_kinds(
     *,
     group_id: str,
@@ -780,6 +753,200 @@ def _review_row(
     return AlignmentReviewRow(record_key=record_key, candidates=tuple(rows))
 
 
+def _typed_values(value: Sequence[_Item], item_type: type[_Item], name: str) -> tuple[_Item, ...]:
+    """The items of one sequence argument, each an ``item_type``; text is not a sequence here."""
+
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise ValidationError(f"{name} must be a sequence.")
+    values = tuple(value)
+    if not all(map(isinstance, values, repeat(item_type))):
+        raise ValidationError(f"{name} must contain {item_type.__name__} values.")
+    return values
+
+
+def _displayed_candidates(
+    candidates: Sequence[SimilarityAlignmentCandidate],
+    known_records: set[str],
+) -> tuple[
+    tuple[SimilarityAlignmentCandidate, ...],
+    dict[tuple[str, str], SimilarityAlignmentCandidate],
+]:
+    """The candidates, all of displayed records, and their index by canonical identity."""
+
+    candidate_values = _typed_values(
+        candidates, SimilarityAlignmentCandidate, "candidates"
+    )
+    unknown_candidate_records = sorted(
+        {
+            candidate.anchor.record_key
+            for candidate in candidate_values
+            if candidate.anchor.record_key not in known_records
+        }
+    )
+    if unknown_candidate_records:
+        raise ValidationError(
+            "Alignment candidates reference unknown displayed records: "
+            f"{unknown_candidate_records}."
+        )
+    return candidate_values, _validate_candidate_aliases(candidate_values)
+
+
+def _reference_candidate(
+    reference: AlignmentAnchorIdentity,
+    candidates_by_identity: dict[tuple[str, str], SimilarityAlignmentCandidate],
+    group_id: str,
+) -> SimilarityAlignmentCandidate:
+    """The usable group member that the exact reference names."""
+
+    reference_candidate = candidates_by_identity.get(reference.canonical_key)
+    if (
+        reference_candidate is None
+        or reference_candidate.group_id != group_id
+    ):
+        raise ValidationError(
+            "The exact reference is not a member of the selected Similarity Group."
+        )
+    if not _identities_agree(reference, reference_candidate.anchor):
+        raise ValidationError("Reference identity aliases conflict with group metadata.")
+    if not reference_candidate.is_usable_for(group_id):
+        raise ValidationError(
+            "The exact reference does not resolve uniquely inside the current crop."
+        )
+    return reference_candidate
+
+
+def _evidence_edges(
+    edges: Sequence[AlignmentEvidenceEdge],
+    candidates_by_identity: dict[tuple[str, str], SimilarityAlignmentCandidate],
+) -> tuple[AlignmentEvidenceEdge, ...]:
+    """The evidence edges, each endpoint agreeing with the candidate of its identity."""
+
+    edge_values = _typed_values(edges, AlignmentEvidenceEdge, "edges")
+    for edge in edge_values:
+        _validate_known_alias(
+            edge.query,
+            candidates_by_identity,
+            description="Evidence query endpoint",
+        )
+        _validate_known_alias(
+            edge.subject,
+            candidates_by_identity,
+            description="Evidence subject endpoint",
+        )
+    return edge_values
+
+
+def _choices_by_record(
+    choices: Sequence[AlignmentRecordChoice],
+    *,
+    known_records: set[str],
+    reference_record_key: str,
+    candidates_by_identity: dict[tuple[str, str], SimilarityAlignmentCandidate],
+) -> dict[str, AlignmentRecordChoice]:
+    """At most one explicit choice per displayed target record, keyed by its record."""
+
+    choice_by_record: dict[str, AlignmentRecordChoice] = {}
+    for choice in _typed_values(choices, AlignmentRecordChoice, "choices"):
+        if choice.record_key not in known_records:
+            raise ValidationError(
+                f"Explicit choice references unknown record {choice.record_key!r}."
+            )
+        if choice.record_key == reference_record_key:
+            raise ValidationError("The reference record cannot have a target choice.")
+        if choice.record_key in choice_by_record:
+            raise ValidationError(
+                f"Duplicate explicit choice for record {choice.record_key!r}."
+            )
+        if choice.anchor is not None:
+            _validate_known_alias(
+                choice.anchor,
+                candidates_by_identity,
+                description="Explicit choice",
+            )
+        choice_by_record[choice.record_key] = choice
+    return choice_by_record
+
+
+def _explicit_decision(
+    record_key: str,
+    choice: AlignmentRecordChoice,
+    usable: tuple[SimilarityAlignmentCandidate, ...],
+) -> AlignmentRecordDecision:
+    """A Skip, or the usable candidate a Select names exactly."""
+
+    if choice.kind is AlignmentChoiceKind.SKIP:
+        return AlignmentRecordDecision(
+            record_key=record_key,
+            status=AlignmentDecisionStatus.SKIPPED,
+            rationale=AlignmentResolutionRationale.SKIPPED_BY_USER,
+        )
+    chosen_anchor = choice.anchor
+    # AlignmentRecordChoice.__post_init__ requires an anchor for Select choices.
+    assert chosen_anchor is not None
+    selected = next(
+        (
+            candidate
+            for candidate in usable
+            if candidate.anchor.canonical_key == chosen_anchor.canonical_key
+            and _identities_agree(chosen_anchor, candidate.anchor)
+        ),
+        None,
+    )
+    if selected is None:
+        raise ValidationError(
+            f"Explicit choice for record {record_key!r} is stale or unusable."
+        )
+    return _aligned_decision(selected, AlignmentResolutionRationale.USER_SELECTED)
+
+
+def _target_outcome(
+    review_row: AlignmentReviewRow,
+    choice: AlignmentRecordChoice | None,
+) -> AlignmentResolutionRecord:
+    """One target record's outcome, decided from the facts of its review row.
+
+    The row's usable candidates and their direct evidence with the reference
+    are the facts the review shows, so the decision and the review read one
+    derivation.
+    """
+
+    record_key = review_row.record_key
+    usable = tuple(row.candidate for row in review_row.candidates if row.usable)
+    if choice is not None:
+        return _explicit_decision(record_key, choice, usable)
+    if not usable:
+        return AlignmentRecordDecision(
+            record_key=record_key,
+            status=AlignmentDecisionStatus.SKIPPED,
+            rationale=(
+                AlignmentResolutionRationale.SKIPPED_UNMAPPABLE
+                if review_row.candidates
+                else AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE
+            ),
+        )
+    if len(usable) == 1:
+        return _aligned_decision(
+            usable[0],
+            AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
+        )
+    # Sorted like ``usable``: the review row lists its candidates by sort key.
+    direct_rbh = tuple(
+        row.candidate
+        for row in review_row.candidates
+        if row.usable and "rbh" in row.direct_evidence
+    )
+    if len(direct_rbh) == 1:
+        return _aligned_decision(
+            direct_rbh[0],
+            AlignmentResolutionRationale.UNIQUE_DIRECT_RBH,
+        )
+    return AmbiguousAlignmentRecord(
+        record_key=record_key,
+        candidates=usable,
+        direct_rbh_candidates=tuple(candidate.anchor for candidate in direct_rbh),
+    )
+
+
 def resolve_similarity_alignment(
     *,
     record_keys: Sequence[str],
@@ -795,6 +962,9 @@ def resolve_similarity_alignment(
     direct RBH candidate, ambiguity, then unchanged when none is usable.
     """
 
+    # Refusals fire in this order: the record keys, the group, the reference,
+    # the candidates, the reference's membership, the edges, the choices, and
+    # then a stale choice in record order.
     order = _record_order(record_keys)
     known_records = set(order)
     resolved_group_id = _required_text(group_id, "group_id")
@@ -802,92 +972,25 @@ def resolve_similarity_alignment(
         raise ValidationError("reference must be AlignmentAnchorIdentity.")
     if reference.record_key not in known_records:
         raise ValidationError("Reference record is not a displayed record.")
-
-    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
-        raise ValidationError("candidates must be a sequence.")
-    candidate_values = tuple(candidates)
-    if any(
-        not isinstance(candidate, SimilarityAlignmentCandidate)
-        for candidate in candidate_values
-    ):
-        raise ValidationError(
-            "candidates must contain SimilarityAlignmentCandidate values."
-        )
-    unknown_candidate_records = sorted(
-        {
-            candidate.anchor.record_key
-            for candidate in candidate_values
-            if candidate.anchor.record_key not in known_records
-        }
+    candidate_values, candidates_by_identity = _displayed_candidates(
+        candidates, known_records
     )
-    if unknown_candidate_records:
-        raise ValidationError(
-            "Alignment candidates reference unknown displayed records: "
-            f"{unknown_candidate_records}."
-        )
-    candidates_by_identity = _validate_candidate_aliases(candidate_values)
-
-    reference_candidate = candidates_by_identity.get(reference.canonical_key)
-    if (
-        reference_candidate is None
-        or reference_candidate.group_id != resolved_group_id
-    ):
-        raise ValidationError(
-            "The exact reference is not a member of the selected Similarity Group."
-        )
-    if not _identities_agree(reference, reference_candidate.anchor):
-        raise ValidationError("Reference identity aliases conflict with group metadata.")
-    if not reference_candidate.is_usable_for(resolved_group_id):
-        raise ValidationError(
-            "The exact reference does not resolve uniquely inside the current crop."
-        )
-
-    if isinstance(edges, (str, bytes)) or not isinstance(edges, Sequence):
-        raise ValidationError("edges must be a sequence.")
-    edge_values = tuple(edges)
-    if any(not isinstance(edge, AlignmentEvidenceEdge) for edge in edge_values):
-        raise ValidationError("edges must contain AlignmentEvidenceEdge values.")
-    for edge in edge_values:
-        _validate_known_alias(
-            edge.query,
-            candidates_by_identity,
-            description="Evidence query endpoint",
-        )
-        _validate_known_alias(
-            edge.subject,
-            candidates_by_identity,
-            description="Evidence subject endpoint",
-        )
-
-    if isinstance(choices, (str, bytes)) or not isinstance(choices, Sequence):
-        raise ValidationError("choices must be a sequence.")
-    choice_values = tuple(choices)
-    if any(not isinstance(choice, AlignmentRecordChoice) for choice in choice_values):
-        raise ValidationError("choices must contain AlignmentRecordChoice values.")
-    choice_by_record: dict[str, AlignmentRecordChoice] = {}
-    for choice in choice_values:
-        if choice.record_key not in known_records:
-            raise ValidationError(
-                f"Explicit choice references unknown record {choice.record_key!r}."
-            )
-        if choice.record_key == reference_candidate.anchor.record_key:
-            raise ValidationError("The reference record cannot have a target choice.")
-        if choice.record_key in choice_by_record:
-            raise ValidationError(
-                f"Duplicate explicit choice for record {choice.record_key!r}."
-            )
-        if choice.anchor is not None:
-            _validate_known_alias(
-                choice.anchor,
-                candidates_by_identity,
-                description="Explicit choice",
-            )
-        choice_by_record[choice.record_key] = choice
+    reference_candidate = _reference_candidate(
+        reference, candidates_by_identity, resolved_group_id
+    )
+    reference_record_key = reference_candidate.anchor.record_key
+    edge_values = _evidence_edges(edges, candidates_by_identity)
+    choice_by_record = _choices_by_record(
+        choices,
+        known_records=known_records,
+        reference_record_key=reference_record_key,
+        candidates_by_identity=candidates_by_identity,
+    )
 
     records: list[AlignmentResolutionRecord] = []
     review_rows: list[AlignmentReviewRow] = []
     for record_key in order:
-        if record_key == reference_candidate.anchor.record_key:
+        if record_key == reference_record_key:
             review_rows.append(AlignmentReviewRow(record_key, ()))
             records.append(
                 AlignmentRecordDecision(
@@ -898,7 +1001,6 @@ def resolve_similarity_alignment(
                 )
             )
             continue
-
         group_candidates = tuple(
             sorted(
                 (
@@ -910,100 +1012,15 @@ def resolve_similarity_alignment(
                 key=lambda item: item.anchor.sort_key,
             )
         )
-        review_rows.append(
-            _review_row(
-                record_key=record_key,
-                group_id=resolved_group_id,
-                reference=reference_candidate,
-                candidates=group_candidates,
-                edges=edge_values,
-            )
-        )
-        usable = tuple(
-            candidate
-            for candidate in group_candidates
-            if candidate.is_usable_for(resolved_group_id)
-        )
-        explicit_choice = choice_by_record.get(record_key)
-        if explicit_choice is not None:
-            if explicit_choice.kind is AlignmentChoiceKind.SKIP:
-                records.append(
-                    AlignmentRecordDecision(
-                        record_key=record_key,
-                        status=AlignmentDecisionStatus.SKIPPED,
-                        rationale=AlignmentResolutionRationale.SKIPPED_BY_USER,
-                    )
-                )
-                continue
-            chosen_anchor = explicit_choice.anchor
-            # AlignmentRecordChoice.__post_init__ requires an anchor for Select choices.
-            assert chosen_anchor is not None
-            selected = next(
-                (
-                    candidate
-                    for candidate in usable
-                    if candidate.anchor.canonical_key == chosen_anchor.canonical_key
-                    and _identities_agree(chosen_anchor, candidate.anchor)
-                ),
-                None,
-            )
-            if selected is None:
-                raise ValidationError(
-                    f"Explicit choice for record {record_key!r} is stale or unusable."
-                )
-            records.append(
-                _aligned_decision(
-                    selected,
-                    AlignmentResolutionRationale.USER_SELECTED,
-                )
-            )
-            continue
-
-        if not usable:
-            records.append(
-                AlignmentRecordDecision(
-                    record_key=record_key,
-                    status=AlignmentDecisionStatus.SKIPPED,
-                    rationale=(
-                        AlignmentResolutionRationale.SKIPPED_UNMAPPABLE
-                        if group_candidates
-                        else AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE
-                    ),
-                )
-            )
-            continue
-        if len(usable) == 1:
-            records.append(
-                _aligned_decision(
-                    usable[0],
-                    AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
-                )
-            )
-            continue
-
-        direct_rbh = _direct_rbh_candidates(
+        review_row = _review_row(
+            record_key=record_key,
             group_id=resolved_group_id,
-            reference=reference_candidate.anchor,
-            candidates=usable,
+            reference=reference_candidate,
+            candidates=group_candidates,
             edges=edge_values,
         )
-        if len(direct_rbh) == 1:
-            records.append(
-                _aligned_decision(
-                    direct_rbh[0],
-                    AlignmentResolutionRationale.UNIQUE_DIRECT_RBH,
-                )
-            )
-            continue
-        records.append(
-            AmbiguousAlignmentRecord(
-                record_key=record_key,
-                candidates=usable,
-                direct_rbh_candidates=tuple(
-                    candidate.anchor for candidate in direct_rbh
-                ),
-            )
-        )
+        review_rows.append(review_row)
+        records.append(_target_outcome(review_row, choice_by_record.get(record_key)))
 
     resolution = SimilarityAlignmentResolution(
         group_id=resolved_group_id,
