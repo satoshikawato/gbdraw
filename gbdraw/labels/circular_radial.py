@@ -80,7 +80,7 @@ def _leader_anchor(label: CircularLabel, elbow: tuple[float, float]) -> tuple[fl
     """Where a radial leader ends: the point of its feature's outline edge facing the label nearest ``elbow``."""
     points = label.get("feature_edge_points")
     if not points:
-        return float(label.get("feature_anchor_x", 0.0)), float(label.get("feature_anchor_y", 0.0))
+        return float(label["feature_anchor_x"]), float(label["feature_anchor_y"])
     return min(points, key=lambda point: math.dist(point, elbow))
 
 
@@ -104,11 +104,11 @@ def _leader_aim_middle(label: CircularLabel, elbow_radius_px: float, total_lengt
     nearest its middle, within ``leader_aim_offsets_bp``, from which the leader to its feature's facing edge passes
     none of ``leader_obstacles``; its middle when none does or it has none. The positions step half a pixel of arc
     at the elbow."""
-    middle = float(label.get("middle", 0.0))
+    middle = float(label["middle"])
     obstacles = label.get("leader_obstacles")
     if not obstacles or elbow_radius_px <= 0.0:
         return middle
-    low, high = label.get("leader_aim_offsets_bp", (0.0, 0.0))
+    low, high = label["leader_aim_offsets_bp"]  # written with the obstacles
     step_bp = 0.5 * total_length / (_TAU * float(elbow_radius_px))
     offsets = sorted(
         (index * step_bp for index in range(int(low / step_bp), int(high / step_bp) + 1)),
@@ -116,12 +116,37 @@ def _leader_aim_middle(label: CircularLabel, elbow_radius_px: float, total_lengt
     )
     for offset in offsets:
         position = (middle + offset) % total_length
-        angle = position_turn_rad(position, total_length) - (0.5 * math.pi)
-        elbow = (elbow_radius_px * math.cos(angle), elbow_radius_px * math.sin(angle))
-        segment = (_leader_anchor(label, elbow), elbow)
-        if not any(_meets_outline(segment, outline) for outline in obstacles):
+        if _leader_passes(label, _elbow_at(position, elbow_radius_px, total_length)):
             return position
     return middle
+
+
+def _elbow_at(position_bp: float, elbow_radius_px: float, total_length: int) -> tuple[float, float]:
+    angle = position_turn_rad(position_bp, total_length) - (0.5 * math.pi)
+    return (elbow_radius_px * math.cos(angle), elbow_radius_px * math.sin(angle))
+
+
+def _leader_passes(label: CircularLabel, elbow: tuple[float, float]) -> bool:
+    """Whether the leader from ``elbow`` to its feature's facing edge passes the label's ``leader_obstacles``."""
+    segment = (_leader_anchor(label, elbow), elbow)
+    return not any(_meets_outline(segment, outline) for outline in label.get("leader_obstacles", ()))
+
+
+def _packed_under_obstacles(placed: Sequence[CircularLabel], total_length: int) -> int:
+    """The aimed labels the packing moved to where their leaders meet the features they were aimed past (OV-3841).
+
+    A label is aimed from its preferred position; packing may move it. Its leader at the packed angle must pass the
+    obstacles as it does at the preferred position, or the pass is not done. A label aimed where no position
+    passes (its preferred position is its middle) is not counted."""
+    count = 0
+    for label in placed:
+        if not label.get("leader_obstacles"):
+            continue
+        elbow = (float(label["middle_x"]), float(label["middle_y"]))
+        preferred = _elbow_at(_preferred_middle(label), math.hypot(*elbow), total_length)
+        if _leader_passes(label, preferred) and not _leader_passes(label, elbow):
+            count += 1
+    return count
 
 
 def _aim_side(labels: Sequence[CircularLabel], anchor_radius_px: float, *, is_inner: bool, total_length: int) -> bool:
@@ -166,7 +191,7 @@ def _leader_room_text_radius(label: CircularLabel, placed_angle_rad: float, *, i
 
 
 def _outer_base_anchor(label: CircularLabel, outer_reserved_radius_px: float, total_length: int) -> float:
-    elbow_radius = _radius_of_point(label.get("middle_x", 0.0), label.get("middle_y", 0.0))
+    elbow_radius = _radius_of_point(label["middle_x"], label["middle_y"])
     configured_minimum = float(label.get("min_outer_start_radius_px", 0.0))
     return max(
         elbow_radius + _RADIAL_CLEARANCE_PX,
@@ -177,7 +202,7 @@ def _outer_base_anchor(label: CircularLabel, outer_reserved_radius_px: float, to
 
 
 def _inner_base_anchor(label: CircularLabel, total_length: int) -> float:
-    elbow_radius = _radius_of_point(label.get("middle_x", 0.0), label.get("middle_y", 0.0))
+    elbow_radius = _radius_of_point(label["middle_x"], label["middle_y"])
     band_clear = _leader_room_text_radius(label, _preferred_angle_rad(label, total_length), is_inner=True)
     configured_maximum = float(label.get("max_inner_start_radius_px", band_clear))
     return max(0.0, min(elbow_radius - _RADIAL_CLEARANCE_PX, band_clear, configured_maximum))
@@ -489,10 +514,11 @@ def _place_side(
         leader_text_collisions = _leader_text_collision_count(placed)
         leader_crossings = leader_crossing_count(placed)
         order_violations = _order_violation_count(placed)
+        buried_leaders = _packed_under_obstacles(placed, total_length)
         awaiting_inner_preflight = is_inner and required_growth > RADIAL_GROWTH_TOLERANCE_PX
         if not collisions and (
             awaiting_inner_preflight
-            or (not leader_text_collisions and not leader_crossings and not order_violations)
+            or (not leader_text_collisions and not leader_crossings and not order_violations and not buried_leaders)
         ):
             return placed, required_growth
         radial_deficit = max(

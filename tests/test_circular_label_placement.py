@@ -4404,9 +4404,11 @@ def test_corner_legend_that_grows_the_canvas_does_not_move_labels(tmp_path: Path
 
 @pytest.mark.circular
 def test_corner_legend_that_fits_beside_the_circle_still_moves_labels(tmp_path: Path) -> None:
-    """The Legend takes the corner the label pass freed for it (C-MT-upper_left, on the tuckin lanes: on the middle
-    lanes ND4's label fits inside ND4 since OV-3649, the figure's left edge moves in and Upper Left no longer fits
-    beside the circle)."""
+    """The Legend takes the corner the label pass freed for it (C-MT-upper_left, on the tuckin lanes).
+
+    On the middle lanes ND4's label fits inside ND4 since OV-3649, the figure's left edge moves in, and Upper Left
+    no longer fits beside the circle: the canvas widens (OV-3905, to be pinned on the middle lanes when it is
+    fixed)."""
     import json
     import xml.etree.ElementTree as ET
 

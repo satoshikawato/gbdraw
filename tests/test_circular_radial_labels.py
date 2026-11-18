@@ -10,7 +10,7 @@ import pytest
 import gbdraw.labels.circular as circular_labels_module
 from gbdraw.api.config import apply_config_overrides, load_default_config
 from gbdraw.circular import _get_args, run_circular_from_namespace
-from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import ValidationError
 from gbdraw.labels.circular_leaders import leader_polyline
 from gbdraw.labels.circular_radial import place_radial_labels, radial_text_orientation
 
@@ -435,27 +435,63 @@ def test_radial_leaders_run_outside_the_feature_band(
     assert not buried, buried
 
 
-def test_radial_growth_holds_only_the_tracks_inside_the_inner_label_lanes(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+# Feature id of "AAA family ATPase" in lambda (NC_001416.gb).
+LAMBDA_AAA_ATPASE = "f53e02f57"
+
+
+def test_a_label_too_long_for_its_feature_stays_outside_in_the_two_slot_radial_figure(tmp_path: Path) -> None:
+    """OV-3646 and OV-3649: in the Owner's lambda figure (two features slots, radial labels on both sides, 8.5 pt),
+    "AAA family ATPase" is longer than its feature can hold, at any position along it: it stays outside."""
+
+    output = tmp_path / "radial"
+    run_circular_from_namespace(_get_args(_lambda_two_slot_argv("8.5", output)))
+
+    svg_text = output.with_suffix(".svg").read_text(encoding="utf-8")
+    texts = re.findall(
+        rf'<text [^>]*data-label-feature-id="{LAMBDA_AAA_ATPASE}"[^>]*>(<textPath[^>]*>)?([^<]*)', svg_text
+    )
+    assert texts == [("", "AAA family ATPase")]
+
+
+def _slot_markup(svg_text: str, slot_id: str) -> str:
+    """The markup of one track slot's group, up to the next top-level group."""
+
+    start = svg_text.index(f'data-gbdraw-slot-id="{slot_id}"')
+    end = svg_text.find('<g data-gbdraw-composition-role="primary"', start)
+    return svg_text[start : end if end >= 0 else len(svg_text)]
+
+
+def _path_point_radii(markup: str) -> list[float]:
+    """The radii of the points the paths in ``markup`` move, draw lines and arcs to (about the circle centre)."""
+
+    radii = []
+    for path_data in re.findall(r'<path d="([^"]+)"', markup):
+        command = ""
+        numbers: list[float] = []
+        for token in re.findall(r"[MLAZmlaz]|-?\d+(?:\.\d+)?(?:e-?\d+)?", path_data) + ["Z"]:
+            if not token[0].isalpha():
+                numbers.append(float(token))
+                continue
+            size = 7 if command == "A" else 2
+            radii.extend(
+                math.hypot(numbers[index + size - 2], numbers[index + size - 1])
+                for index in range(0, len(numbers) - size + 1, size)
+            )
+            command, numbers = token.upper(), []
+    return radii
+
+
+def test_radial_growth_holds_only_the_tracks_inside_the_inner_label_lanes(tmp_path: Path) -> None:
     """Growth for radial inner labels keeps the tracks inside the inner labels' lanes and moves the rest (OV-3841).
 
     In the lambda repro a scale stands between the two features slots. Held at its radius, it held the inner lanes
-    in place too, so growing the circle never widened the inner labels' room and the figure was refused.
+    in place too, so growing the circle never widened the inner labels' room and the figure was refused. Now the
+    figure draws: the scale stays outside the inner lanes, and the inner labels lie between those lanes and the
+    dinucleotide track inside them.
     """
 
-    import gbdraw.diagrams.circular.assemble as assemble_module
-
-    calls = []
-    original = assemble_module._slots_held_for_radial_growth
-
-    def captured(slots, resolved_slots, radius_px):
-        held = original(slots, resolved_slots, radius_px)
-        calls.append((list(slots), list(resolved_slots), held))
-        return held
-
-    monkeypatch.setattr(assemble_module, "_slots_held_for_radial_growth", captured)
     repository = Path(__file__).parents[1]
+    output = tmp_path / "lambda_growth"
     args = _get_args(
         [
             "--gbk", str(repository / "tests/test_inputs/NC_001416.gb"),
@@ -468,31 +504,24 @@ def test_radial_growth_holds_only_the_tracks_inside_the_inner_label_lanes(
             "--circular_track_slot", "gc_content:dinucleotide_content@side=inside,r=0.42,w=0.04",
             "--legend", "none",
             "--format", "svg",
-            "--output", str(tmp_path / "lambda_growth"),
+            "--output", str(output),
         ]
     )
-    refused = None
-    try:
-        run_circular_from_namespace(args)
-    except LabelsDoNotFitError as error:
-        refused = error
+    run_circular_from_namespace(args)  # growth widened the inner labels' room: no LabelsDoNotFitError
 
-    assert calls
-    slots, resolved_slots, held = calls[0]
-    resolved = {slot.id: slot for slot in resolved_slots}
-    held_by_id = {
-        resolved_slot.id: held_slot
-        for resolved_slot in resolved_slots
-        for index, held_slot in enumerate(held)
-        if int(resolved_slot.slot_index) == index
-    }
-    inner_lanes = resolved["features"].reserved_band_px
-    assert resolved["ticks"].reserved_band_px.inner_px >= inner_lanes.outer_px - 1e-6
-    assert held_by_id["ticks"].radius is None  # outside the inner lanes: it moves with the radius
-    assert resolved["gc_content"].reserved_band_px.outer_px <= inner_lanes.inner_px + 1e-6
-    assert held_by_id["gc_content"].radius is not None
-    assert held_by_id["gc_content"].radius.unit == "px"  # inside the inner lanes: it keeps its radius
-    assert refused is None, refused  # growth widened the inner labels' room
+    svg_text = output.with_suffix(".svg").read_text(encoding="utf-8")
+    inner_lanes = [math.hypot(*point) for outline in _block_outlines(_slot_markup(svg_text, "features")) for point in outline]
+    ticks = _path_point_radii(_slot_markup(svg_text, "ticks"))
+    dinucleotide = _path_point_radii(_slot_markup(svg_text, "gc_content"))
+    labels_text = svg_text[svg_text.index('id="label_text"') :]
+    inner_label_radii = [
+        radius
+        for x_coord, y_coord in re.findall(r'<text [^>]*data-label-feature-id="[^"]+"[^>]*x="([^"]+)" y="([^"]+)"', labels_text)
+        if (radius := math.hypot(float(x_coord), float(y_coord))) < min(inner_lanes)
+    ]
+    assert inner_lanes and ticks and dinucleotide and len(inner_label_radii) > 20
+    assert min(ticks) >= max(inner_lanes) - 1e-6  # outside the inner lanes: it moves with the radius
+    assert max(dinucleotide) < min(inner_label_radii)  # inside the inner labels: it keeps its radius
 
 
 def test_label_placement_reads_feature_blocks_where_they_are_drawn(
