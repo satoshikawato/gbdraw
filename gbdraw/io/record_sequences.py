@@ -658,14 +658,15 @@ class _SequenceTable:
     def read(self, start: int, stop: int) -> bytes:
         """Bases ``start``..``stop - 1`` (``0 <= start <= stop <= length``).
 
-        A read of ``_BLOCK_BYTES`` bases or more is decoded in bulk, around the cache:
-        it is a pass over a span (a digest, a crop written out), which keeps nothing.
-        A shorter read (a feature's bases) reads its chunks through the cache.
+        A read of the whole sequence, or of ``_BLOCK_BYTES`` bases or more, is decoded
+        in bulk, around the cache: it is a pass over a span (a copy handed to a caller,
+        a digest, a crop written out), which keeps nothing. A shorter read of a part (a
+        feature's bases) reads its chunks through the cache.
         """
 
         if start >= stop:
             return b""
-        if stop - start >= _BLOCK_BYTES:
+        if stop - start >= _BLOCK_BYTES or stop - start == self.length:
             return self._bulk(start, stop)
         index = self._chunk_at(start)
         starts = self.index.starts
@@ -1279,8 +1280,23 @@ def _line_aligned(raw: bytes, start: int, limit: int) -> int:
     return end + 2 if raw[end:end + 2] == b"\r\n" else end + 1
 
 
-# A line end followed by a line that does not start with a space.
-_NEXT_UNINDENTED = re.compile(rb"(?:\r\n|\r(?!\n)|\n)(?! )")
+# A line end followed by a line that does not start with a space (or by the end of the bytes): a "\n" (which also
+# ends "\r\n") and a "\r" alone, searched apart. A pattern with one first byte is searched as fast as ``bytes.find``;
+# one alternation of both was tried at every byte, 13 times slower over a feature table.
+_NEXT_UNINDENTED_LF = re.compile(rb"\n(?! )")
+_NEXT_UNINDENTED_CR = re.compile(rb"\r(?![\n ])")
+
+
+def _next_unindented(buf: bytes, pos: int) -> int:
+    """The end of the first line ending in ``buf[pos:]`` that a line not starting with a space follows, else -1."""
+
+    found = _NEXT_UNINDENTED_LF.search(buf, pos)
+    limit = len(buf) if found is None else found.start()
+    if buf.find(b"\r", pos, limit) >= 0:  # a "\r" alone may end a line before it
+        carriage = _NEXT_UNINDENTED_CR.search(buf, pos, limit + 1)
+        if carriage is not None and carriage.start() < limit:
+            return carriage.end()
+    return -1 if found is None else found.end()
 
 
 class _Lines:
@@ -1346,10 +1362,8 @@ class _Lines:
                 if pos < len(buf) or not self._fill():
                     return b""
                 continue
-            found = _NEXT_UNINDENTED.search(buf, pos)
-            if found is not None:
-                end = found.end()
-            else:
+            end = _next_unindented(buf, pos)
+            if end < 0:
                 end = max(buf.rfind(b"\n"), buf.rfind(b"\r", 0, len(buf) - 1)) + 1
                 if end <= pos:
                     if self._fill():

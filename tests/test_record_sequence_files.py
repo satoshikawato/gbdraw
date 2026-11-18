@@ -65,6 +65,43 @@ def test_records_given_to_callers_hold_their_sequences(tmp_path: Path) -> None:
     assert not any(_reads_its_file(record) for record in gbdraw.read_gff(gff, INPUTS / "NC_013668.fasta"))
 
 
+def test_a_whole_sequence_read_keeps_nothing_in_the_block_cache(tmp_path: Path) -> None:
+    """A read of a whole record sequence is a pass over it (a copy handed to a caller, a digest), so it is decoded
+    around the block cache however short the record: 100,000 small entries read by ``gbdraw.read_fasta`` left
+    about 98 MiB of decoded bases there, while each caller's record held its own copy (finishing round 5, N-B)."""
+
+    rng = random.Random(41)
+    bases = ["".join(rng.choice("ACGT") for _ in range(1_000)) for _ in range(200)]
+    path = tmp_path / "many.fasta"
+    path.write_text("".join(f">e{i}\n{seq[:600]}\n{seq[600:]}\n" for i, seq in enumerate(bases)), encoding="ascii")
+    cached = record_sequences._CACHE._bytes
+    records = gbdraw.read_fasta(path)
+    assert record_sequences._CACHE._bytes == cached
+    assert [str(record.seq) for record in records] == bases
+    [record] = read_flat_file_records(str(GENBANK))
+    whole = bytes(record.seq)
+    assert record_sequences._CACHE._bytes == cached
+    assert bytes(record.seq[100:200]) == whole[100:200]  # a part reads through the cache
+    assert record_sequences._CACHE._bytes > cached
+
+
+def test_an_indented_block_ends_at_the_first_line_end_an_unindented_line_follows() -> None:
+    """The end of an indented block (a feature table) is found by two searches that each start at one byte, a
+    "\\n" and a "\\r" alone, as fast as ``bytes.find``; they end it where one alternation of every line end did (13
+    times slower), for every string of line ends, spaces and letters up to 7 bytes and every start."""
+
+    import itertools
+    import re
+
+    one_pattern = re.compile(rb"(?:\r\n|\r(?!\n)|\n)(?! )")
+    for size in range(8):
+        for letters in itertools.product(b"\r\n a", repeat=size):
+            buf = bytes(letters)
+            for pos in range(size + 1):
+                found = one_pattern.search(buf, pos)
+                assert record_sequences._next_unindented(buf, pos) == (-1 if found is None else found.end()), (buf, pos)
+
+
 def test_the_render_path_reads_sequences_from_the_file() -> None:
     assert all(_reads_its_file(record) for record in read_flat_file_records(str(GENBANK)))
 
