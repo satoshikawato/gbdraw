@@ -5748,6 +5748,70 @@ def embedded_glyphs_outline_margin_px(
     return margin
 
 
+# How finely an embedded label's position is searched along its feature when its centred glyphs cross the outline:
+# this many steps over the block, then halving the step that crossed into the clear positions this many times.
+EMBEDDED_SLIDE_STEPS = 128
+EMBEDDED_SLIDE_REFINEMENTS = 12
+# A slid label stops where its glyphs clear the outline by this much more than the clearance: the search ends on
+# the edge of the clear positions, where the drawn arcs, read as chords, would come a thousandth of a pixel short.
+EMBEDDED_SLIDE_SPARE_PX = 0.1
+
+
+def embedded_label_middle(
+    glyphs: EmbeddedGlyphBox,
+    center_radius_px: float,
+    line_height_px: float,
+    middle_bp: float,
+    total_length: int,
+    outline_radii_at: Callable[[float], tuple[float, float]],
+    block_bp: tuple[float, float],
+    clearance_px: float,
+) -> float | None:
+    """Where an embedded label is drawn: centred on ``middle_bp`` when its glyphs clear its feature's drawn outline by
+    ``clearance_px``, else the nearest position along the block ``block_bp`` where they do; ``None`` when none does,
+    and the label goes outside (OV-3649).
+
+    Centred, the glyphs of a label near its feature's arrowhead can cross the narrowing outline while the rest of the
+    block holds them: the label slides toward the block's other end. The positions step over the block
+    (``EMBEDDED_SLIDE_STEPS``), and the first clear one moves back toward the centre while it stays clear
+    (``EMBEDDED_SLIDE_REFINEMENTS``), keeping ``EMBEDDED_SLIDE_SPARE_PX`` to spare.
+    """
+
+    def clear(position_bp: float, spare_px: float = EMBEDDED_SLIDE_SPARE_PX) -> bool:
+        return embedded_glyphs_outline_margin_px(
+            embedded_text_path(center_radius_px, line_height_px, position_bp, total_length),
+            glyphs,
+            position_bp,
+            total_length,
+            outline_radii_at,
+            block_bp,
+        ) >= clearance_px + spare_px
+
+    if clear(middle_bp, 0.0):
+        return float(middle_bp)
+    span_bp = (float(block_bp[1]) - float(block_bp[0])) % float(total_length)
+    span_px = 2 * math.pi * float(center_radius_px) * span_bp / float(total_length)
+    if glyphs.along_end_px - glyphs.along_start_px + 2 * clearance_px >= span_px:
+        return None
+    start_offset = ((float(block_bp[0]) - float(middle_bp) + 0.5 * total_length) % total_length) - 0.5 * total_length
+    step_bp = span_bp / EMBEDDED_SLIDE_STEPS
+    offsets = sorted(
+        (start_offset + step_bp * step for step in range(EMBEDDED_SLIDE_STEPS + 1)), key=lambda offset: (abs(offset), offset)
+    )
+    for offset in offsets:
+        if offset == 0.0 or not clear(float(middle_bp) + offset):
+            continue
+        near, far = offset - math.copysign(min(step_bp, abs(offset)), offset), offset
+        for _ in range(EMBEDDED_SLIDE_REFINEMENTS):
+            between = 0.5 * (near + far)
+            if clear(float(middle_bp) + between):
+                far = between
+            else:
+                near = between
+        return float(middle_bp) + far
+    return None
+
+
 class RadialLeaderEnds(NamedTuple):
     """Where a radial label's leader may end, and what it must pass when its feature's facing edge lies wholly under
     other features (OV-3841): their outlines grown by the leader's clearance, as polygons, and how far from its
@@ -6072,8 +6136,6 @@ def prepare_label_list(
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle
             label_as_feature_length = total_length * (1.1 * bbox_width_px) / (2 * math.pi * feature_center_radius)
-            label_start = label_middle - (label_as_feature_length / 2)
-            label_end = label_middle + (label_as_feature_length / 2)
             feature_angle_deg = position_angle(label_middle, total_length)
             feature_middle_x, feature_middle_y = circle_point(feature_center_radius, feature_angle_deg)
             feature_anchor_x: float = feature_middle_x
@@ -6119,11 +6181,12 @@ def prepare_label_list(
                 middle_x, middle_y = circle_point(middle_radius, feature_angle_deg)
             else:
                 middle_x, middle_y = circle_point(inner_radius_factor * radius, feature_angle_deg)
-            is_embedded = embedded_glyphs_outline_margin_px(
-                embedded_text_path(feature_center_radius, bbox_height_px, label_middle, total_length),
+            embedded_middle = None if label_rendering == "external_only" else embedded_label_middle(
                 embedded_glyph_box(
                     feature_label_text, font_family, font_size, candidate.font_style, bbox_width_px, bbox_height_px
                 ),
+                feature_center_radius,
+                bbox_height_px,
                 label_middle,
                 total_length,
                 partial(
@@ -6135,11 +6198,14 @@ def prepare_label_list(
                     shaft_width_ratio=arrow_shaft_width_ratio,
                 ),
                 (longest_segment_start, longest_segment_end),
-            ) >= outline_clearance_px
-            if label_rendering == "external_only":
-                is_embedded = False
-            elif label_rendering == "embedded_only" and not is_embedded:
+                outline_clearance_px,
+            )
+            is_embedded = embedded_middle is not None
+            if label_rendering == "embedded_only" and not is_embedded:
                 continue
+            label_middle = label_middle if embedded_middle is None else embedded_middle
+            label_start = label_middle - (label_as_feature_length / 2)
+            label_end = label_middle + (label_as_feature_length / 2)
             feature_id = feature_ids[stable_id]
             label_entry: CircularLabel = {
                 "track_id": track_id,

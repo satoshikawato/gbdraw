@@ -221,3 +221,22 @@ def test_a_label_whose_glyphs_clear_its_outline_is_drawn_inside_a_lane_inside_th
     assert HMMTDNA_ND6 in gaps
     assert gaps[HMMTDNA_ND6] > 0.0
     assert min(gaps.values()) > 0.0
+
+
+# Feature id of gp23 in the Staphylococcus aureus plasmid of the label-fit tests (NC_005856.1.gb).
+P1_GP23 = "f9ef2b7ed"
+
+
+def test_a_label_whose_centred_glyphs_cross_its_arrowhead_slides_along_its_feature(tmp_path: Path) -> None:
+    """OV-3649: at 14 pt the glyphs of gp23, centred on its feature, cross its arrowhead by 0.7 px. Drawn outside
+    instead, the inner labels no longer fit and the figure that drew before was refused; the label slides back
+    along its feature until its glyphs clear the outline."""
+
+    root = _draw(
+        tmp_path, "NC_005856.1.gb", "--separate_strands", "--track_type", "tuckin", "--labels", "both",
+        "--legend", "right", "--label_font_size", "14",
+    )
+    gaps = _embedded_glyph_gaps(root)
+
+    assert P1_GP23 in gaps
+    assert min(gaps.values()) > 0.0

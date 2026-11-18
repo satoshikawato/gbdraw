@@ -71,7 +71,9 @@ def test_radial_labels_that_collide_after_the_growth_stops_are_not_drawn(tmp_pat
 def test_inner_labels_over_the_definition_text_draw_and_warn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """DEF-WARN (OV-696): lambda at 10 pt prints two inner labels over its definition text (with the repair off).
 
-    9 pt did while labels were laid out in point-mode boxes; in their drawn boxes it covers it with one (OV-165)."""
+    9 pt did while labels were laid out in point-mode boxes; in their drawn boxes it covers it with one (OV-165).
+    24 of its inner labels do not fit since OV-3649: "integrase" slides along its feature clear of its arrowhead
+    and is drawn inside."""
 
     monkeypatch.setattr(circular_repair_module, "MAX_DEFECTS", 0)
     with pytest.warns(LabelLeadersCrossWarning) as caught:
@@ -87,7 +89,7 @@ def test_inner_labels_over_the_definition_text_draw_and_warn(tmp_path: Path, mon
     assert record.fit.definition_overlaps == 2
     assert [row.kind for row in report.rows] == ["smaller_font", "labels_out", "radial"]
     assert str(warning).startswith(
-        "NC_001416.1: 25 inner labels do not fit at 10 pt (0 label pairs overlap, 0 leader pairs cross, "
+        "NC_001416.1: 24 inner labels do not fit at 10 pt (0 label pairs overlap, 0 leader pairs cross, "
         "2 labels cover the definition text). The figure is drawn."
     )
 
@@ -119,11 +121,9 @@ def test_overlapping_inner_labels_are_not_drawn(tmp_path: Path, monkeypatch: pyt
 @pytest.mark.circular
 @pytest.mark.slow
 def test_inner_font_row_is_the_largest_font_that_fits(tmp_path: Path) -> None:
-    """INNER-3: P1 at 15 pt; with the local repair (LP-D57) the largest font that fits is 13.5 pt (inner labels stay in cyclic order since OV-1366).
+    """INNER-3: P1 at 15 pt; with the local repair (LP-D57) the largest font that fits is 14 pt (inner labels stay in cyclic order since OV-1366).
 
-    One point smaller (14 and 13 pt) while labels were laid out in point-mode boxes (OV-165). It was 14 pt until
-    OV-3649: at 14 pt the letters of "gp23" leave its drawn outline by 0.7 px, so that label goes outside and the
-    inner labels no longer fit at 14 pt."""
+    One point smaller (14 and 13 pt) while labels were laid out in point-mode boxes (OV-165)."""
 
     with pytest.raises(LabelsDoNotFitError) as raised:
         _draw(tmp_path, _both_args("NC_005856.1.gb", "--label_font_size", "15"))
@@ -135,7 +135,7 @@ def test_inner_font_row_is_the_largest_font_that_fits(tmp_path: Path) -> None:
         assert search is not None
         font = search.row("smaller_font")
     assert font.status == "found"
-    assert font.values == {path: 13.5 for path in FONT_SIZE_PATHS}
+    assert font.values == {path: 14.0 for path in FONT_SIZE_PATHS}
 
 
 @pytest.mark.circular
