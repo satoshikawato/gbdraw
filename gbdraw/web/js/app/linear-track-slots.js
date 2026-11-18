@@ -27,7 +27,7 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import { featureDensityTrackIds, nextFeatureDensitySlotTrack } from '../services/feature-density-tracks.js';
-import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterRowRemoval, axisIndexAfterRowsLeave, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import { OVERLAY_ANNOTATION_PARAMS, annotationSetForNewRow, annotationSetIdsOf, automaticAnnotationTrackSlots, axisIndexAfterReconcile, axisIndexAfterRowRemoval, axisIndexAfterRowsLeave, clampTrackAxisIndex, isUnsavedDefaultStack, nextCopyId, nextNumberedId, overlayAnnotationZ, paramsKeptOnRendererChange, parseOptionalPixel, placesTrackStack, prependMissingAnnotationTrackSlots, setOverlayAnnotationParam, trackAddBlockReason, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 /** @import { OverlaySlotReference } from '../services/track-slot-validation.js' */
 
 import {
@@ -226,6 +226,44 @@ const axisIndexForCurrentLinearSlots = (drawing, slots) => {
   const axis = currentLinearAxisIndex(drawing, slots);
   drawing.adv.linear_track_slots_axis_index = axis;
   return axis;
+};
+
+/**
+ * The stack normalized and, when `place`, placed: the sides its Axis index gives, the index pinned. Every edit of the
+ * stack places it; `refreshCurrentSlots` serves the changes that are no edit of it.
+ * @param {DrawingState} drawing
+ * @param {boolean} [place]
+ */
+const normalizeCurrentSlots = (drawing, place = true) => {
+  const normalized = normalizeLinearTrackSlots(drawing.adv.linear_track_slots, drawing.adv.nt, drawing.form.linear_track_layout);
+  if (place) {
+    const axis = axisIndexForCurrentLinearSlots(drawing, normalized);
+    syncLinearSlotsFromAxisIndex(normalized, axis);
+    drawing.adv.linear_track_slots_axis_index = enforceSingleLinearOnAxisSlot(
+      normalized,
+      axis
+    );
+  }
+  const identityPreserving = normalized.map((slot, index) => (
+    replaceObjectContents(drawing.adv.linear_track_slots[index], slot)
+  ));
+  drawing.adv.linear_track_slots.splice(
+    0,
+    drawing.adv.linear_track_slots.length,
+    ...identityPreserving
+  );
+};
+
+// A change that is no edit of the stack (a Depth source, a feature density track, a read) normalizes the stack and
+// places only a placed one, so a stack nobody placed stays as a new drawing holds it and as the Load gives it back
+// (`placesTrackStack`, OV-3696); an unset index of a placed one stays unset while the rows read as it
+// (`axisIndexAfterReconcile`).
+/** @param {DrawingState} drawing */
+const refreshCurrentSlots = (drawing) => {
+  const stored = drawing.adv.linear_track_slots_axis_index;
+  normalizeCurrentSlots(drawing, placesTrackStack(drawing.adv, 'linear'));
+  drawing.adv.linear_track_slots_axis_index = axisIndexAfterReconcile(stored, drawing.adv.linear_track_slots_axis_index,
+    inferLinearTrackAxisIndexFromSlots(drawing.adv.linear_track_slots));
 };
 
 /**
@@ -527,37 +565,6 @@ export const createLinearTrackSlotEditor = ({
     drawing.form.linear_track_layout
   );
 
-  /**
-   * The stack normalized and, when `place`, placed: the sides its Axis index gives, the index pinned. Every edit of the
-   * stack places it; `refreshCurrentSlots` serves the changes that are no edit of it.
-   * @param {DrawingState} drawing
-   * @param {boolean} [place]
-   */
-  const normalizeCurrentSlots = (drawing, place = true) => {
-    const normalized = normalizeLinearTrackSlots(drawing.adv.linear_track_slots, drawing.adv.nt, drawing.form.linear_track_layout);
-    if (place) {
-      const axis = axisIndexForCurrentLinearSlots(drawing, normalized);
-      syncLinearSlotsFromAxisIndex(normalized, axis);
-      drawing.adv.linear_track_slots_axis_index = enforceSingleLinearOnAxisSlot(
-        normalized,
-        axis
-      );
-    }
-    const identityPreserving = normalized.map((slot, index) => (
-      replaceObjectContents(drawing.adv.linear_track_slots[index], slot)
-    ));
-    drawing.adv.linear_track_slots.splice(
-      0,
-      drawing.adv.linear_track_slots.length,
-      ...identityPreserving
-    );
-  };
-
-  // A change that is no edit of the stack (a Depth source, a feature density track, a read) normalizes the stack and
-  // places only a placed one, so a stack nobody placed stays as a new drawing holds it and as the Load gives it back
-  // (`placesTrackStack`, OV-3696).
-  /** @param {DrawingState} drawing */
-  const refreshCurrentSlots = (drawing) => normalizeCurrentSlots(drawing, placesTrackStack(drawing.adv, 'linear'));
 
   const resetLinearTrackSlotsFromSimpleControls = () => {
     const drawing = state.activeDrawing();

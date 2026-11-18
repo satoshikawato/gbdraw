@@ -635,6 +635,12 @@ test('Save then Load gives back each track stack as saved, drawn or not', () => 
     const placed = stacks();
     assert.notEqual(placed[`${mode}_track_slots_axis_index`], null);
     assert.deepEqual(await saveThenLoadStacks(), placed, `${mode}: Load gives back a placed stack the drawing does not draw`);
+    // A drawn stack whose Axis index is unset (an older Session, a page that set none) keeps it unset through the
+    // reconciles that end the Load: the request builder reads it from the features row, as before the Save.
+    useCustomStack(true);
+    state.drawingOf(id).adv[`${mode}_track_slots_axis_index`] = null;
+    const unsetAxis = stacks();
+    assert.deepEqual(await saveThenLoadStacks(), unsetAxis, `${mode}: Load keeps the unset Axis index of a drawn stack`);
   }
 }));
 

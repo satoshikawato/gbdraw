@@ -60,6 +60,7 @@ import {
   annotationSetForNewRow,
   annotationSetIdsOf,
   automaticAnnotationTrackSlots,
+  axisIndexAfterReconcile,
   axisIndexAfterRowRemoval,
   axisIndexAfterRowsLeave,
   clampTrackAxisIndex,
@@ -547,6 +548,50 @@ const axisIndexForCurrentSlots = (drawing, slots) => {
   return axis;
 };
 
+/**
+ * The stack normalized and, when `place`, placed: the sides its Axis index gives, the index pinned. Every edit of the
+ * stack places it; `refreshSlots` serves the changes that are no edit of it.
+ * @param {DrawingState} drawing
+ * @param {boolean} [place]
+ */
+const normalizeSlots = (drawing, place = true) => {
+  const normalized = normalizeCircularTrackSlots(
+    drawing.adv.circular_track_slots,
+    drawing.adv.nt,
+    drawing.form.track_type
+  );
+  if (place) {
+    const axis = axisIndexForCurrentSlots(drawing, normalized);
+    syncSlotsFromAxisIndex(normalized, axis, drawing.form.track_type);
+    drawing.adv.circular_track_slots_axis_index = enforceSingleOnAxisSlot(
+      normalized,
+      axis,
+      drawing.form.track_type
+    );
+  }
+  const suppressed = applyCircularSuppressControlsToSlots(normalized, drawing.form, drawing.adv.nt);
+  const identityPreserving = suppressed.map((slot, index) => (
+    replaceObjectContents(drawing.adv.circular_track_slots[index], slot)
+  ));
+  drawing.adv.circular_track_slots.splice(
+    0,
+    drawing.adv.circular_track_slots.length,
+    ...identityPreserving
+  );
+};
+
+// A change that is no edit of the stack (Hide GC Content or Hide GC Skew, a Depth or comparison ring source, a
+// feature density track, a read) normalizes the stack and places only a placed one, so a stack nobody placed stays
+// as a new drawing holds it and as the Load gives it back (`placesTrackStack`, OV-3696); an unset index of a placed
+// one stays unset while the rows read as it (`axisIndexAfterReconcile`).
+/** @param {DrawingState} drawing */
+const refreshSlots = (drawing) => {
+  const stored = drawing.adv.circular_track_slots_axis_index;
+  normalizeSlots(drawing, placesTrackStack(drawing.adv, 'circular'));
+  drawing.adv.circular_track_slots_axis_index = axisIndexAfterReconcile(stored, drawing.adv.circular_track_slots_axis_index,
+    inferLegacyAxisIndexFromFeature(drawing.adv.circular_track_slots, drawing.form.track_type));
+};
+
 /** @param {DrawingState} drawing */
 const circularGeometryShortcutsForState = (drawing) => ({
   featureWidth: drawing?.adv?.feature_width_circular,
@@ -665,9 +710,11 @@ const commitManagedSlotMutation = (drawing, {
     );
     committed.splice(insertIndex, 0, ...additions);
   }
-  // Only a placed stack has its index written; a stack nobody placed keeps it unset, read from its features row.
+  // Only a placed stack has its index written, an unset one only when the rows no longer read as it; a stack nobody
+  // placed keeps it unset, read from its features row.
   if (placesTrackStack(drawing.adv, 'circular')) {
-    drawing.adv.circular_track_slots_axis_index = Math.min(axis, committed.length);
+    drawing.adv.circular_track_slots_axis_index = axisIndexAfterReconcile(drawing.adv.circular_track_slots_axis_index,
+      Math.min(axis, committed.length), inferLegacyAxisIndexFromFeature(committed, drawing.form.track_type));
   }
   drawing.adv.circular_track_slots.splice(
     0,
@@ -989,43 +1036,6 @@ export const createCircularTrackSlotEditor = ({
     return slot;
   };
 
-  /**
-   * The stack normalized and, when `place`, placed: the sides its Axis index gives, the index pinned. Every edit of the
-   * stack places it; `refreshSlots` serves the changes that are no edit of it.
-   * @param {DrawingState} drawing
-   * @param {boolean} [place]
-   */
-  const normalizeSlots = (drawing, place = true) => {
-    const normalized = normalizeCircularTrackSlots(
-      drawing.adv.circular_track_slots,
-      drawing.adv.nt,
-      drawing.form.track_type
-    );
-    if (place) {
-      const axis = axisIndexForCurrentSlots(drawing, normalized);
-      syncSlotsFromAxisIndex(normalized, axis, drawing.form.track_type);
-      drawing.adv.circular_track_slots_axis_index = enforceSingleOnAxisSlot(
-        normalized,
-        axis,
-        drawing.form.track_type
-      );
-    }
-    const suppressed = applyCircularSuppressControlsToSlots(normalized, drawing.form, drawing.adv.nt);
-    const identityPreserving = suppressed.map((slot, index) => (
-      replaceObjectContents(drawing.adv.circular_track_slots[index], slot)
-    ));
-    drawing.adv.circular_track_slots.splice(
-      0,
-      drawing.adv.circular_track_slots.length,
-      ...identityPreserving
-    );
-  };
-
-  // A change that is no edit of the stack (Hide GC Content or Hide GC Skew, a Depth or comparison ring source, a
-  // feature density track, a read) normalizes the stack and places only a placed one, so a stack nobody placed stays
-  // as a new drawing holds it and as the Load gives it back (`placesTrackStack`, OV-3696).
-  /** @param {DrawingState} drawing */
-  const refreshSlots = (drawing) => normalizeSlots(drawing, placesTrackStack(drawing.adv, 'circular'));
 
   // Reset is the preset reset for the current Track layout.
   const resetCircularTrackSlotsFromSimpleControls = () => {

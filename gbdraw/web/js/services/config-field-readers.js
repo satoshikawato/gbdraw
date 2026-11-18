@@ -39,10 +39,10 @@ import {
   createDefaultLosat, createDefaultLosatpHitLimits, readImportedTrackSlots, readLinearTypographyLinked
 } from './session-active-config-contract.js';
 import {
-  applyCircularTrackOrderPlacements, inferLegacyAxisIndexFromFeature, normalizeCircularTrackSlots
+  applyCircularTrackOrderPlacements, normalizeCircularTrackSlots
 } from './circular-track-slot-model.js';
 import {
-  LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
+  LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, normalizeLinearTrackSlots
 } from './linear-track-slot-model.js';
 import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { MODE_SLICE_CONTAINERS, OTHER_MODE_OWN_FIELDS, unscopedDraftRows } from './mode-scoped-migration.js';
@@ -1726,10 +1726,12 @@ export const configFieldRepairs = (targets, config, path, {
 /**
  * The track stacks a drawing's settings resolve to: each stack read, and a
  * placed stack (`placesTrackStack`: the request draws it or an edit placed it)
- * placed, with its axis index read or inferred (`applyConfigData`'s
- * `resolveTrackPlacements`). A stack nobody placed keeps its sides, lane
- * directions and axis index unset, as a new drawing and the page hold them
- * (OV-3696; resolving them belongs to the request builder, R11). Pure: Load reads the stacks it
+ * placed about its axis index (`applyConfigData`'s `resolveTrackPlacements`).
+ * The axis index is the one read: an unset one stays unset, and the placement
+ * and the request builder read it from the features row. A stack
+ * nobody placed keeps its sides, lane directions and axis index unset, as a
+ * new drawing and the page hold them (OV-3696; resolving them belongs to the
+ * request builder, R11). Pure: Load reads the stacks it
  * installs with it before the commit, and `losses` collects what the slot
  * readers replace (OV-758; `at` under the settings).
  * @param {Record<string, unknown>} adv The drawing's settings, read.
@@ -1749,15 +1751,13 @@ export const resolvedTrackStacks = (adv, form, losses = null) => {
   const nt = /** @type {string | undefined} */ (adv.nt);
   const trackType = /** @type {string | undefined} */ (form.track_type);
   const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, nt, trackType, circularLosses);
-  const importedAxis = clampTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
+  // The index read, an unset one unset (R11): the placement and the request builder read it from the features row.
+  const circularAxis = clampTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
   const circularPlaced = placesTrackStack(adv, 'circular');
-  // An unset index reads from the features row; the index of a stack nobody placed stays unset.
-  const circularAxis = circularPlaced ? importedAxis ?? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType) : null;
   const linearStack = /** @type {Parameters<typeof normalizeLinearTrackSlots>[0]} */ (adv.linear_track_slots);
   const normalizedLinearSlots = normalizeLinearTrackSlots(linearStack, nt, form.linear_track_layout, linearLosses);
-  const importedLinearAxis = clampTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses);
+  const linearAxis = clampTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses);
   const linearPlaced = placesTrackStack(adv, 'linear');
-  const linearAxis = linearPlaced ? resolveLinearTrackAxisIndex(normalizedLinearSlots, importedLinearAxis) : null;
   losses?.push(...[
     ...circularLosses.map((leaf) => ({ ...leaf, at: `adv.circular_track_slots${leaf.at}` })),
     ...circularAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.circular_track_slots_axis_index' })),

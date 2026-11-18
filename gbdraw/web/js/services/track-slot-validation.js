@@ -1391,6 +1391,19 @@ export const placesTrackStack = (adv, stack) => (
 );
 
 /**
+ * The Axis index of a placed Circular or Linear stack after a change that is no edit of the stack (a managed-row
+ * reconcile, Hide GC Content, a Depth or ring source, the reconciles that end a Load): the index it placed the rows
+ * about, except that an unset index stays unset while the rows read as that index from their features row, so Save and
+ * Load give it back unset and the request builder reads it as before (R11). Rows that join before the features row read
+ * as another index, so the index is set and no row crosses the Axis (R10).
+ * @param {unknown} stored The index before the change.
+ * @param {number | null} placed
+ * @param {number} readsAs The index the rows after the change read as.
+ * @returns {number | null}
+ */
+export const axisIndexAfterReconcile = (stored, placed, readsAs) => (isUnsetValue(stored) && placed === readsAs ? null : placed);
+
+/**
  * Whether a stored stack is one the Web holds when a Session saved none (`unsaved`, the mode's stacks for that case):
  * row for row the same ids, renderers, switches, sides and params as one of them. Use custom stack builds such a stack
  * again from the simple controls, with the feature density rows; it adds no row to any other stored stack, so rows a
