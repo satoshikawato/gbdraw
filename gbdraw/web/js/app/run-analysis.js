@@ -137,6 +137,7 @@ import { createZipBlob } from '../utils/zip.js';
 import { sessionDocumentOfViews } from '../services/session-drawings-upgrade.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { isUnsetValue } from '../utils/field-reading.js';
+import { appliedFeatureColors } from '../utils/color-utils.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { base64ToBytes, bytesToBase64, bytesToText, sha256Hex, textToBytes } from '../services/byte-utils.js';
 import { readConvertedResources, withConvertedResources } from '../services/main-session-comparison-frame.js';
@@ -1614,7 +1615,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null, held?: ReturnType<typeof selectHeldRenderState> }) => Promise<any>) | null} [generationExecutor] Test seam.
  * @property {typeof admitFeatureCatalog} [catalogAdmission]
  * @property {typeof prepareCandidateRenderCommit} [prepareCommit]
- * @property {Record<string, any>} [prepareCommitInput]
+ * @property {Omit<import('./candidate-render.js').EditorPlanOptions, 'catalogAdmission'>} prepareCommitInput The editor state the
+ *   commit compiles onto the new Results, with the type colors they are drawn in.
  * @property {((canonical: Record<string, any>, catalogState: any) => any) | null} [decorationContinuity]
  * @property {any[]} [timingEntries]
  * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
@@ -1639,7 +1641,7 @@ export const executeCanonicalRenderCandidate = async ({
   generationExecutor = null,
   catalogAdmission = admitFeatureCatalog,
   prepareCommit = prepareCandidateRenderCommit,
-  prepareCommitInput = {},
+  prepareCommitInput,
   decorationContinuity = null,
   timingEntries = [],
   resultNames = null,
@@ -5281,7 +5283,13 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: candidateRules
+          manualSpecificRules: candidateRules,
+          // The type colors the request draws in, which its commit applies.
+          typeColors: appliedFeatureColors({
+            paletteDefinitions: state.paletteDefinitions,
+            appliedPaletteName: { value: requestPaint.palette.name },
+            appliedPaletteColors: { value: requestPaint.palette.colors }
+          })
         },
         timingEntries: postGbdrawTimingEntries
       });
@@ -5883,7 +5891,9 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: paint.rules
+          manualSpecificRules: paint.rules,
+          // A render of the committed Session draws in the applied palette (`prepareCommittedPaintCandidate`).
+          typeColors: appliedFeatureColors(state)
         },
         timingEntries
       });
@@ -6268,7 +6278,9 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: candidateRules
+          manualSpecificRules: candidateRules,
+          // A render of the committed Session draws in the applied palette (`prepareCommittedPaintCandidate`).
+          typeColors: appliedFeatureColors(state)
         },
         timingEntries,
         resultNames: committedResultNames,

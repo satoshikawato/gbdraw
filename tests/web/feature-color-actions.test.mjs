@@ -1179,7 +1179,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.equal(gc.stateLegendEntries.value[1].originalCaption, 'GC content');
   assert.deepEqual(gc.originalOrder.value, ['CDS', 'GC content']);
   const gcPlan = compileDirectEditorMutationPlan({
-    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map(), renderedFeaturesByResult: [new Map()] },
     legendEntries: gc.stateLegendEntries.value,
     originalLegendOrder: gc.originalOrder.value
   });
@@ -1197,7 +1197,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   assert.notEqual(staleStyle.legendRenameDialog.show, true);
   assert.deepEqual(staleStyle.legendColorOverrides, { Zeta: '#7b2cbf', 'GC content': '#123123' }, 'a rename moves no style');
   const onRulePlan = compileDirectEditorMutationPlan({
-    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map(), renderedFeaturesByResult: [new Map()] },
     legendEntries: staleStyle.stateLegendEntries.value,
     originalLegendOrder: staleStyle.originalOrder.value,
     legendColorOverrides: staleStyle.legendColorOverrides,
@@ -1745,7 +1745,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual(keptBoth.stateLegendEntries.value.map((entry) => entry.caption),
       captions.map((caption, index) => (index === source ? target : caption)), `${name}: the renamed row keeps its place`);
     const plan = compileDirectEditorMutationPlan({
-      catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+      catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map(), renderedFeaturesByResult: [new Map()] },
       legendEntries: keptBoth.stateLegendEntries.value,
       originalLegendOrder: keptBoth.originalOrder.value
     });

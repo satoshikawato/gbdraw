@@ -2,7 +2,7 @@
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
 /** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
-/** @import { SpecificColorRule } from './specific-color-rules.js' */
+/** @import { DrawnLegendState, FeatureTypeColors, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { SvgSanitizer } from './svg-sanitization.js' */
 /** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
@@ -40,7 +40,7 @@ import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
-import { NO_DRAWN_FEATURES, otherFeatureRowKey, ruleLegendCaptions } from './specific-color-rules.js';
+import { captionedRuleRows, otherFeatureRowKey } from './specific-color-rules.js';
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1428,6 +1428,7 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {Record<string, string>} originalLegendColors
  * @property {string[]} originalLegendOrder The captions of the rows Python drew (the Legend inventory).
  * @property {readonly Partial<SpecificColorRule>[]} rules The color rules the mode's drawing loads, read as saved rules.
+ * @property {FeatureTypeColors} palette The drawing's type colors, in which its Results' rule rows are keyed.
  * @property {ReadonlyMap<PythonLegendKey, PythonLegendKey>} [legendRekeys] The rule rows whose key that reading
  *   changes (`savedRuleRowRekeys`, F2), old key to new; the other fields are already under the new keys.
  * @property {'circular' | 'linear'} mode
@@ -1672,16 +1673,16 @@ const rekeySavedRuleRows = (svg, rekeyed) => {
 // once, as Python names it now: the row whose key the key mirror allocates to
 // a loaded rule takes that rule's caption as its name, and the naming pass
 // draws the names. The key stays, so the edits saved under it stay on the row.
-// A row that has a name, or shows a rename, keeps it. Returns whether it
-// named a row.
+// A row that has a name, or shows a rename, keeps it. The rows are keyed in
+// what the Result draws (`drawn`: its features and the drawing's type
+// colors). Returns whether it named a row.
 const SAVED_COLOR_ID = / \[(?:#[0-9a-f]{6}|none)\]/;
-/** @param {SvgResultRoot} svg @param {SavedResultEdits} edits @returns {boolean} */
-const nameSavedRuleRows = (svg, edits) => {
-  const keyOf = ruleLegendCaptions({
-    rules: edits.rules, pythonRows: pythonLegendRows(svg), ...NO_DRAWN_FEATURES, originalLegendOrder: edits.originalLegendOrder
-  });
+/** @param {SvgResultRoot} svg @param {SavedResultEdits} edits @param {DrawnLegendState} drawn @returns {boolean} */
+const nameSavedRuleRows = (svg, edits, drawn) => {
   /** @type {Map<string, string>} */
-  const names = new Map(edits.rules.filter((rule) => text(rule.cap)).map((rule) => [keyOf(rule), text(rule.cap)]));
+  const names = new Map(captionedRuleRows({
+    rules: edits.rules, pythonRows: pythonLegendRows(svg), ...drawn, originalLegendOrder: edits.originalLegendOrder
+  }).map((row) => [row.key, row.name]));
   const keyRecord = resultBaseAttribute('data-legend-key');
   let named = false;
   namedLegends(svg).flatMap((legend) => Array.from(legend.querySelectorAll('g[data-legend-key]'))).forEach((row) => {
@@ -1748,7 +1749,9 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
           ? [(/** @type {SvgResultRoot} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),
         ...(renames.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => recordSavedLegendKeys(svg, renames)] : []),
-        ...(namesRuleRows(result) ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits)] : [])
+        ...(namesRuleRows(result) ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits, {
+          features: [...(catalogAdmission.renderedFeaturesByResult[resultIndex]?.values() ?? [])], palette: savedEdits.palette
+        })] : [])
       ];
       return transforms.length > 0
         ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })

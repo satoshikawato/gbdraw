@@ -74,7 +74,7 @@ const FUNCTION_STATEMENTS = {
   'app/align-at-feature.js::createFeatureAnchorAction': 94,
   'app/annotations.js::createAnnotationEditor': 218,
   'app/app-setup.js::createAppSetup': 1098,
-  'app/candidate-render.js::compilePlanBundle': 227,
+  'app/candidate-render.js::compilePlanBundle': 226,
   'app/circular-record-controls.js::createCircularSourceEdits': 86,
   'app/circular-track-slots.js::createCircularTrackSlotEditor': 857,
   'app/drawing-list.js::createDrawingList': 107,

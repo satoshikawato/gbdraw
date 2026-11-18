@@ -109,6 +109,8 @@ export const createEditorIntentShow = ({
   const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, domains = null, ruleRows = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     const svg = svgContainer.value?.querySelector?.('svg') || null;
+    // The type colors the displayed Results were drawn in.
+    const typeColors = appliedFeatureColors(state);
     // A Result without a catalog (a Session older than 40) is reached through
     // the features read from it and the fills it draws.
     const plan = compileDirectEditorMutationPlan({
@@ -128,10 +130,11 @@ export const createEditorIntentShow = ({
       legendColorOverrides: drawing.legendColorOverrides,
       legendStrokeOverrides: drawing.legendStrokeOverrides,
       manualSpecificRules: drawing.manualSpecificRules,
+      typeColors,
       replayDefaultLegendOrder,
       livePreview: domains ? {
         domains,
-        paletteColors: appliedFeatureColors(state),
+        paletteColors: typeColors,
         drawnTracks: readDrawnTracks(),
         ...legendRowsOf(displayedLegendRowContext(state, drawing)),
         drawnContext: domains.includes('featureVisibility')

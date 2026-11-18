@@ -520,7 +520,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         const next = { ...row, ...patch };
         revised.set(next, row);
         return next;
-      }, () => displayedDrawnFeatures(state, drawing));
+      }, () => displayedDrawnFeatures(state, drawing), () => displayedLegendRowContext(state, drawing));
       const answered = built && !Array.isArray(built) ? built : null;
       const rules = Array.isArray(built) ? built : answered ? answered.rules : null;
       if (!rules || contentChanged()) return false;
@@ -1136,9 +1136,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {PythonLegendKey | null} [joins]
    * @returns {SpecificRuleBuild}
    */
-  const groupColorRules = (features, color, caption, scope, joins = null) => async (current, _revise, drawnFeatures) => {
+  const groupColorRules = (features, color, caption, scope, joins = null) => async (current, _revise, drawnFeatures, legendRows) => {
     const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
-    const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, []);
+    const joined = joins === null ? null : joinedLegendRow(legendRowRules(joins, legendRows()), current, []);
     const { table, legend } = await synthesizeGroupRules({
       scope, features, labels, color, caption, joins: joined, drawn: drawnFeatures()
     }, current);
@@ -1159,10 +1159,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
    * @param {PythonLegendKey | null} joins
    * @returns {SpecificRuleBuild}
    */
-  const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures) => {
+  const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures, legendRows) => {
     const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
-    const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, rows);
-    if (!joined && revisesWholeRuleRows(current, next, rows, displayedRuleFills(state, state.activeDrawing()))) return next;
+    const joined = joins === null ? null : joinedLegendRow(legendRowRules(joins, legendRows()), current, rows);
+    if (!joined && revisesWholeRuleRows(current, next, rows, ruleFillsOf(legendRows()))) return next;
     const { table, legend } = await synthesizeGroupRules({
       scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: drawnFeatures()
     }, next);

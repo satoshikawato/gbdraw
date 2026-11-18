@@ -9,10 +9,10 @@
 import {
   getVisibleFeatureLegendGroup, isLegendOrderEdited, pythonLegendKey, pythonOrderedLegendRows, resultLegendRows
 } from './legend-svg.js';
-import { NO_DRAWN_FEATURES, ruleLegendCaptions } from './specific-color-rules.js';
+import { captionedRuleRows } from './specific-color-rules.js';
 import { refitFieldsBeforeStep } from './setting-application.js';
 /** @import { PythonLegendKey } from './legend-svg.js' */
-/** @import { SpecificColorRule } from './specific-color-rules.js' */
+/** @import { DrawnLegendState, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { CanvasPadding } from './drawing/canvas.js' */
 /** @import { HistoryChangeLike, RefitField } from './setting-application.js' */
 
@@ -178,9 +178,10 @@ export const LEGEND_EDIT_CONFIG_PATHS = Object.freeze(/** @type {const} */ ({
 /**
  * The draft a request projects into `LegendEditConfigLeaves`. `pythonRowKeys`: the keys of the rows Python drew, by
  * which a row is Python's and not the editor's; `originalLegendOrder` stays the shown Result's inventory, by which an
- * order is edited.
- * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], canvasPadding: Readonly<CanvasPadding>,
- *   pythonRowKeys: readonly string[] }} LegendEditDraft
+ * order is edited. `drawn`: the features the shown Result draws and its type colors, in which the rows of `rules` are
+ * keyed (`captionedRuleRows`; a rule of the type color value is keyed in its type's color).
+ * @typedef {DraftLegendLists & { rules: readonly Partial<SpecificColorRule>[], drawn: DrawnLegendState,
+ *   canvasPadding: Readonly<CanvasPadding>, pythonRowKeys: readonly string[] }} LegendEditDraft
  */
 
 /**
@@ -231,12 +232,11 @@ export const pythonLegendRowKeys = (inventory, results, parser = globalThis.DOMP
  * @param {LegendEditDraft} draft
  * @returns {LegendEditConfigLeaves}
  */
-export const legendEditConfigLeaves = ({ rules, canvasPadding, pythonRowKeys, ...legend }) => {
+export const legendEditConfigLeaves = ({ rules, drawn, canvasPadding, pythonRowKeys, ...legend }) => {
   const rows = draftLegendRows({ ...legend, originalLegendOrder: pythonRowKeys });
-  const ruleRowOf = ruleLegendCaptions({
-    rules: [...rules], pythonRows: new Map(), ...NO_DRAWN_FEATURES, originalLegendOrder: [...rows.originalCaptions]
-  });
-  const ruleRowKeys = new Set(rules.filter((rule) => text(rule?.cap)).map((rule) => ruleRowOf(rule)));
+  const ruleRowKeys = new Set(captionedRuleRows({
+    rules: [...rules], pythonRows: new Map(), ...drawn, originalLegendOrder: [...rows.originalCaptions]
+  }).map((row) => row.key));
   const pythonRows = rows.currentEntries.filter((entry) => rows.originalCaptions.has(entry.originalCaption));
   const key = (/** @type {NormalizedLegendEntry} */ entry) => /** @type {PythonLegendKey} */ (entry.originalCaption);
   // A dormant rename (OV-120) is sent too: Python names the row when it draws it, and a type's name names its
@@ -279,8 +279,10 @@ const drawnLegendKey = ({ legendEntries, deletedLegendEntries, dormantLegendEntr
     canvasPadding && typeof canvasPadding === 'object' ? canvasPadding : { top: 0, right: 0, bottom: 0, left: 0 });
   /** @type {readonly (Partial<SpecificColorRule> | null | undefined)[]} */
   const ruleRows = Array.isArray(rules) ? rules : [];
+  // No rules, so no rule row is keyed: the drawn state is read for none (`drawn` holds no feature).
   return JSON.stringify([legendEditConfigLeaves({
-    rules: [], canvasPadding: padding, legendEntries: listed, deletedLegendEntries: deleted, dormantLegendEntries: dormant,
+    rules: [], drawn: { features: [], palette: {} }, canvasPadding: padding,
+    legendEntries: listed, deletedLegendEntries: deleted, dormantLegendEntries: dormant,
     originalLegendOrder, pythonRowKeys
   }), ruleRows.map((rule) => [rule?.feat, rule?.qual, rule?.val, rule?.cap])]);
 };

@@ -68,6 +68,8 @@ import {
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
 import { LEGEND_EDIT_CONFIG_PATHS, legendEditConfigLeaves, pythonLegendRowKeys } from './legend-draft-rows.js';
+import { displayedDrawnState } from './feature-visibility.js';
+/** @import { DisplayedDrawnInputs } from './feature-visibility.js' */
 /** @import { LegendEditConfigLeaves } from './legend-draft-rows.js' */
 import { DEFAULT_LINEAR_OUTPUT_PREFIX, downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
@@ -3573,9 +3575,9 @@ export const requestLabelProjection = (state, drawing) => {
  * The config leaves of the drawing's Legend row edits and canvas padding (`legendEditConfigLeaves`): the one
  * projection Generate's request and the automatic rerender's write (issue #1427). The drawing is the shown one.
  * Python's rows are those of every Result of the drawing (`pythonLegendRowKeys`), so the leaves do not depend on
- * which Result of a batch is shown. The drawing view a Gallery publication rebuilds holds no paint or canvas slice,
- * and sends none of these leaves.
- * @param {RequestTableState} state
+ * which Result of a batch is shown. The rule rows are keyed in what the shown Result draws (`displayedDrawnState`).
+ * The drawing view a Gallery publication rebuilds holds no paint or canvas slice, and sends none of these leaves.
+ * @param {RequestTableState & DisplayedDrawnInputs} state
  * @param {RequestDrawing} drawing
  * @returns {LegendEditConfigLeaves}
  */
@@ -3589,6 +3591,7 @@ export const requestLegendEditLeaves = (state, drawing) => {
     originalLegendOrder: inventory,
     pythonRowKeys: pythonLegendRowKeys(inventory, state.results ? state.results.value : []),
     rules: drawing.manualSpecificRules,
+    drawn: displayedDrawnState(state, drawing),
     canvasPadding: drawing.canvasPadding
   });
 };
@@ -9334,7 +9337,7 @@ export const projectCommittedEditorIntent = ({
   retired.forEach((resourceId) => {
     if (!stillReferenced.has(resourceId)) delete candidate.resources[resourceId];
   });
-  replaceLegendEditLeaves(options, requestLegendEditLeaves(/** @type {RequestTableState} */ (state), drawing));
+  replaceLegendEditLeaves(options, requestLegendEditLeaves(/** @type {RequestTableState & DisplayedDrawnInputs} */ (state), drawing));
   const resources = createResourceBuilder();
   const labelProjection = requestLabelProjection(state, drawing);
   // Per-feature edits are live editor intent too (design Q4).

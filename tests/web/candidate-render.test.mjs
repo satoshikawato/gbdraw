@@ -412,6 +412,45 @@ test('a listed row of a caption written in two colors is its rule\'s row by its 
   }
 });
 
+// OV-3803: the rows of a rule of the type color value are keyed in the type
+// colors and the drawn types, live and at Generate (where the features each
+// Result renders and the type colors it was drawn in give them), as Python
+// keys them (tests/fixtures/legend_rule_keys.json): a rule for every type
+// draws a row per drawn type, and a caption also written in a literal color
+// takes the type's color in its key. The compile adds none of them.
+test('the rows of a rule of the type color value are its rule\'s rows by their keys, live and at Generate', () => {
+  const palette = { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' };
+  const rendered = new Map([['f0001', { type: 'rRNA', fill_color: '#71ee7d' }], ['f0002', { type: 'CDS', fill_color: '#54bcf8' }]]);
+  for (const [shape, rules, keys] of [
+    ['a rule for every type', [{ feat: '*', qual: 'product', val: 'x', color: 'palette', cap: 'Ribosomal' }],
+      ['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]']],
+    ['a caption also written in a literal color', [
+      { feat: 'rRNA', qual: 'product', val: 'x', color: 'palette', cap: 'small rRNA' },
+      { feat: 'rRNA', qual: 'product', val: 'x', color: '#ff00ff', cap: 'small rRNA' }
+    ], ['small rRNA [#71ee7d]', 'small rRNA [#ff00ff]']]
+  ]) {
+    const options = {
+      catalogAdmission: { ...admission(), renderedFeaturesByResult: [rendered] },
+      manualSpecificRules: rules,
+      typeColors: palette,
+      legendEntries: [
+        ...keys.map((key) => ({ caption: key, originalCaption: key, color: '#000000' })),
+        { caption: 'Mine', originalCaption: 'Mine', color: '#778899' }
+      ],
+      originalLegendOrder: ['CDS']
+    };
+    const live = {
+      drawnTracks: [], domains: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'], paletteColors: palette,
+      features: [...rendered.values()], drawnContext: null
+    };
+    for (const livePreview of [null, live]) {
+      const { legendAdds } = compileDirectEditorMutationPlan({ ...options, livePreview }).operationsByResult[0];
+      assert.deepEqual(legendAdds.map(({ caption }) => caption), ['Mine'],
+        `${shape}, ${livePreview ? 'live' : 'at Generate'}: only the editor row is added`);
+    }
+  }
+});
+
 // OV-46, OV-63: a Legend row with no known features is required by the plan in each
 // Result. Admission lets Python's Legend row facts excuse the absence (suppressed by
 // the draft, or drawn by another Result), so the plan carries no guess of its own.

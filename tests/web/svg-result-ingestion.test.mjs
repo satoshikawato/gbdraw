@@ -54,6 +54,8 @@ globalThis.window = { Vue: {
   computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { savedResultEdits } = await import('../../gbdraw/web/js/services/config.js');
+// A saved Result that draws no feature, in no type color: its rule rows are keyed as written.
+const NONE_DRAWN = Object.freeze({ features: [], palette: {} });
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -1508,7 +1510,7 @@ const loadSavedResults = (session, {
   featureCatalog = session.editorState.featureCatalog, patch = () => {}
 } = {}) => {
   const admission = admitFeatureCatalog(featureCatalog, results, { adopt: true, mode });
-  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, session.version, sessionSourceFactsOf(session.version, false)));
+  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN));
   return results.map((result, index) => {
     const svg = parseSvgText(result.content);
     patch(svg, index);
@@ -1539,7 +1541,7 @@ test('Load records Python\'s paint on a Session 44 Result saved without records'
   assert.equal(session.version, 44);
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false));
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN);
   const svg = parseSvgText(results[0].content);
   const paint = () => Object.fromEntries([
     ...svg.querySelectorAll('[data-gbdraw-feature-id]').filter((element) => element.getAttribute('data-gbdraw-feature-part') === 'block')
@@ -1637,10 +1639,10 @@ test('Load records Python\'s paint only on the Result of a Session older than 46
   const session = sessionFixture(FORCED_STROKES);
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false));
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN);
   assert.equal(edits.resultsRecordPythonPaint, false);
   assert.equal(createSavedResultPlan(results, admission, edits).kind, 'MUTATING');
-  const edits46 = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(46, false));
+  const edits46 = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(46, false), NONE_DRAWN);
   assert.deepEqual(createSavedResultPlan(results, admission, edits46), createEmptySvgMutationPlan(1));
   assert.deepEqual([46, 47, 48, 49].map((version) => sessionSourceFactsOf(version, false).resultsRecordPythonPaint),
     [true, true, true, true]);
@@ -1661,7 +1663,7 @@ test('Load names the color-rule rows of a Result an older build saved, by the lo
   const session = sessionFixture(RULE_CAPTIONS);
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), session.modes.circular.config.rules);
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN, session.modes.circular.config.rules);
   const svg = parseSvgText(results[0].content);
   const ruleRows = () => savedLegendRows(svg).filter(([key]) => key.startsWith('Complex'));
   const stroke = () => svg.querySelectorAll('g[data-legend-key]')
@@ -1686,6 +1688,24 @@ test('Load names the color-rule rows of a Result an older build saved, by the lo
   assert.deepEqual(createSavedResultPlan([{ ...results[0], content: '<svg/>' }], admission, edits), createEmptySvgMutationPlan(1));
 });
 
+// OV-3803: Load keys the loaded rules in the type colors of the drawing and
+// the types the Result draws, as Python keyed the saved rows: a rule of the
+// type color value of a caption also written in a literal color is the row
+// of its type's color.
+test('Load names a saved row of a rule of the type color value by its type\'s color (OV-3803)', () => {
+  const session = sessionFixture(RULE_CAPTIONS);
+  const results = normalizeLogicalResults(session.results);
+  const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
+  const saved = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN, session.modes.circular.config.rules);
+  const [cox1, cox2] = saved.rules;
+  const edits = { ...saved, rules: [{ ...cox1, color: 'palette' }, cox2], palette: { CDS: '#ffe700', default: '#d3d3d3' } };
+  const svg = parseSvgText(results[0].content);
+  const { callerTransforms } = createSavedResultPlan(results, admission, edits).operationsByResult[0];
+  assert.deepEqual(callerTransforms.map((transform) => transform(svg)), [true]);
+  assert.deepEqual(savedLegendRows(svg).filter(([key]) => key.startsWith('Complex IV')).map(([key, name]) => [key, name]),
+    [['Complex IV [#ffe700]', 'Complex IV'], ['Complex IV [#1f77b4]', 'Complex IV']]);
+});
+
 // The other allocated key: a rule named like a renderer row of another swatch
 // (`tRNA` in red beside the tRNA type row). A row this build named, a row a
 // rename shows under another key, and a row no loaded rule draws stay as saved.
@@ -1704,11 +1724,13 @@ test('Load names a saved rule row keyed for a renderer row of another swatch, an
   const edits = {
     featureColorOverrides: {}, featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
     originalLegendColors: {}, originalLegendOrder: ['tRNA', 'tRNA [#ff0000]', 'rRNA [#ff0000]'], mode: 'circular', resultsRecordPythonPaint: true,
-    rules: [{ feat: 'CDS', qual: 'gene', val: '^a$', color: '#ff0000', cap: 'tRNA' }]
+    rules: [{ feat: 'CDS', qual: 'gene', val: '^a$', color: '#ff0000', cap: 'tRNA' }], palette: {}
   };
+  // A Result whose catalog renders no feature (the rows read no type color).
+  const admission = { renderedFeaturesByResult: [new Map()] };
   const name = (svg) => {
     const results = [{ name: 'figure.svg', content: serializeNode(svg) }];
-    const { callerTransforms } = createSavedResultPlan(results, null, edits).operationsByResult[0];
+    const { callerTransforms } = createSavedResultPlan(results, admission, edits).operationsByResult[0];
     return callerTransforms.map((transform) => transform(svg));
   };
   const older = savedFigure(legendRow('tRNA', 7), ruleRow('tRNA [#ff0000]', 31), ruleRow('rRNA [#ff0000]', 55));
@@ -1736,12 +1758,12 @@ test('Load names a saved rule row keyed for a renderer row of another swatch, an
 const ONE_COLOR_CAPTION = (session) => JSON.parse(JSON.stringify(session).split('Complex IV [#1f77b4]').join('Complex III'));
 test('Load moves a one-color rule row saved under its color ID, with its stored Legend edits, to the key of the read caption (F2)', () => {
   const full = sessionFixture(RULE_CAPTIONS);
-  assert.equal(savedResultEdits(full, 'circular', full.editorState, full.version, sessionSourceFactsOf(full.version, false), full.modes.circular.config.rules).legendRekeys.size, 0,
+  assert.equal(savedResultEdits(full, 'circular', full.editorState, full.version, sessionSourceFactsOf(full.version, false), NONE_DRAWN, full.modes.circular.config.rules).legendRekeys.size, 0,
     'a caption in two colors keeps its keys');
   const session = ONE_COLOR_CAPTION(full);
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), session.modes.circular.config.rules);
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN, session.modes.circular.config.rules);
   assert.deepEqual([...edits.legendRekeys], [['Complex IV [#ffe700]', 'Complex IV']]);
   assert.deepEqual(edits.rules.map((rule) => rule.cap), ['Complex IV', 'Complex III', 'Complex I']);
   assert.deepEqual(Object.keys(edits.legendStrokeOverrides), ['Complex IV'], 'the stroke moves to the new key');
@@ -1832,7 +1854,7 @@ test('Load records no stroke Python is not known to have drawn', () => {
 // Python's paint on it the same way.
 test('Load records Python\'s paint on a Session 44 Result', () => {
   const session = sessionFixture('two-mode-project.v44.gbdraw-session.json.gz');
-  const edits = savedResultEdits(session, 'linear', session.editorState, session.version, sessionSourceFactsOf(session.version, false));
+  const edits = savedResultEdits(session, 'linear', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN);
   assert.deepEqual(Object.keys(edits.legendStrokeOverrides), ['tRNA_RENAMED']);
   assert.deepEqual(edits.legendColorOverrides, { CDS: '#112233' });
   assert.equal(Object.keys(edits.featureColorOverrides).length, 2);

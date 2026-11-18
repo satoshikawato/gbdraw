@@ -904,6 +904,43 @@ test('the popup list offers a rule for every feature type, and a pick joins a gr
   expect(await colorIdNames(page), 'Generate adds no color ID').toEqual([]);
 });
 
+// OV-3803: the rows of a rule of the type color value are keyed in the type
+// colors and the drawn types, as Python keys them: a rule for every type of
+// that value reads a fill per drawn type (CDS and repeat_region here), so its
+// caption, also written in a literal color, has the keys `Shared [<CDS color>]`
+// and `Shared [#7b2cbf]`. A Legend color on the rule's row recolors its rule
+// (its row is then keyed in that color), and a rename renames it, live as at
+// Generate; neither adds a row.
+test('a Legend color and a rename on the row of a rule for every type of the type color value, live = Generate (OV-3803)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: '*', qual: 'locus_tag', val: '^FL1$', color: 'palette', cap: 'Shared' });
+  await addColorRule(page, { feat: 'repeat_region', qual: 'note', val: '^RPT_ONE$', color: '#7b2cbf', cap: 'Shared' });
+  await generate(page);
+  // FL1 is drawn in its type's color.
+  const [cds] = (await featureFill(page, { locus_tag: 'FL1' })).map((fill) => String(fill).toLowerCase());
+  const keys = () => page.evaluate(() => window.__GBDRAW_APP__.legendEntries
+    .map((entry) => entry.originalCaption || entry.caption).filter((key) => key.startsWith('Shared')));
+  expect(await keys(), 'Python keys the rule rows in the CDS color and the literal color').toEqual([`Shared [${cds}]`, 'Shared [#7b2cbf]']);
+  await page.evaluate(({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === row), value);
+  }, { row: `Shared [${cds}]`, value: '#e63946' });
+  await settleLive(page);
+  const recolored = await keys();
+  expect(recolored, 'the recolored row is one row').toHaveLength(2);
+  await expectLiveEqualsGenerate(page, { label: 'a Legend color on the row of a rule for every type of the type color value' });
+  expect(await keys(), 'Generate adds no row').toEqual(recolored);
+  await evaluateWithRetainedPromise(page, async (row) => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === row), 'Renamed');
+  }, recolored.find((key) => key !== 'Shared [#7b2cbf]'));
+  await settleLive(page);
+  const renamed = await keys();
+  await expectLiveEqualsGenerate(page, { label: 'a rename of the row of a rule for every type of the type color value' });
+  expect(await keys(), 'Generate adds no row after the rename').toEqual(renamed);
+});
+
 // U3a (R14-8): Legend edits the Result executor shows live, without the
 // automatic rerender, combined with the edits of other domains. Each case
 // ends with live = Generate, in both modes. Auto Reflow decides only whether

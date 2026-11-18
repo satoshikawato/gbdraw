@@ -9,11 +9,11 @@ import { compileDirectEditorMutationPlan, displayedLegendRowColors } from '../..
 import { readFileSync } from 'node:fs';
 import {
   colorRuleLegendGroups, createRuleLegendCaptions, diffLegendIntents, joinedRuleColor, legendRowRules, listedRuleRowRemoval,
-  prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedResetTypeColors, savedRuleCaption,
-  savedSpecificRules, specificRuleHasQualifier
+  prepareSpecificColorImport, rekeyedRuleRows, revisesWholeRuleRows, ruleCommitLegendRows, ruleLegendCaptions, savedResetTypeColors,
+  savedRuleCaption, savedRuleRowRekeys, savedSpecificRules, specificRuleHasQualifier, captionedRuleRows
 } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { isTypeColorValue } from '../../gbdraw/web/js/utils/color-utils.js';
-import { legendRuleOrder } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { displayedLegendRowContext, legendRuleOrder } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { TYPE_COLOR_VALUE } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 // No type colors and no drawn types: rules of literal colors only.
@@ -1103,6 +1103,8 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   // leaves them in place, and Python's answer gives the old order (OV-2248,
   // Owner 2026-10-29).
   const revise = (row, patch) => ({ ...row, ...patch });
+  // The build reads the Legend state of the drawing whose table it builds, which the write passes.
+  const shownLegendRows = () => displayedLegendRowContext(state, state.activeDrawing());
   for (const [name, delta, table, legend] of [
     ['moved', '^(B)$', [['^(B)$', 'delta'], ['^(A)$', 'alpha'], ['^(Z)$', 'alpha']], ['delta', 'alpha']],
     ['kept in place (OV-2248)', '^(A|B)$', [['^(A)$', 'alpha'], ['^(A|B)$', 'delta'], ['^(Z)$', 'alpha']], ['alpha', 'delta']]
@@ -1110,7 +1112,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     const rows = [tagRule('A', 'beta'), { ...tagRule('B', 'delta'), val: delta, color: '#445566' }, tagRule('Z', 'alpha')];
     state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rows);
     const next = await actions.reviseColorRules([rows[0]], { cap: 'alpha', color: '#112233' }, 'alpha')([...rows], revise,
-      () => state.extractedFeatures.value);
+      () => state.extractedFeatures.value, shownLegendRows);
     assert.ok(next && !Array.isArray(next), name);
     assert.deepEqual(next.rules.map(({ val, cap }) => [val, cap]), table, name);
     // Python's Legend order of the table, by caption: the kept table keeps alpha first (OV-2248).
@@ -1121,7 +1123,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const after = [tagRule('Z', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }, tagRule('A', 'beta')];
   state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...after);
   const unmoved = await actions.reviseColorRules([after[2]], { cap: 'alpha', color: '#112233' }, 'alpha')([...after], revise,
-    () => state.extractedFeatures.value);
+    () => state.extractedFeatures.value, shownLegendRows);
   assert.ok(unmoved && !Array.isArray(unmoved), 'a join that moves no rule');
   assert.deepEqual(unmoved.rules.map(({ val, cap }) => [val, cap]), [['^(Z)$', 'alpha'], ['^(B)$', 'delta'], ['^(A)$', 'alpha']]);
   assert.deepEqual(unmoved.legend?.map((row) => (typeof row === 'string' ? row : unmoved.rules[row.rule].cap)), ['alpha', 'delta']);
@@ -1132,13 +1134,13 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const recolored = [tagRule('A', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }, tagRule('Z', 'alpha')];
   state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...recolored);
   const recolor = await actions.reviseColorRules([recolored[0]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored], revise,
-    () => state.extractedFeatures.value);
+    () => state.extractedFeatures.value, shownLegendRows);
   assert.ok(recolor && !Array.isArray(recolor), 'a revision that splits a row');
   assert.deepEqual(recolor.rules.map(({ val, color }) => [val, color]), [['^(A)$', '#abcdef'], ['^(B)$', '#445566'], ['^(Z)$', '#112233']]);
   assert.deepEqual(recolor.legend?.map((row) => (typeof row === 'string' ? row : `${recolor.rules[row.rule].cap} ${recolor.rules[row.rule].color}`)),
     ['alpha #abcdef', 'delta #445566'], 'Python\'s order of the rows the drawn features take (no feature has tag Z)');
   const whole = await actions.reviseColorRules([recolored[0], recolored[2]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored],
-    revise, () => state.extractedFeatures.value);
+    revise, () => state.extractedFeatures.value, shownLegendRows);
   assert.ok(Array.isArray(whole), 'a revision of whole rows is a plain table');
 });
 
@@ -1449,6 +1451,9 @@ for (const { name, rules, renderer_rows: rendererRows, rule_stroke: ruleStroke =
       rules, pythonRows, features: types.map((type) => ({ type })), palette, originalLegendOrder: rows.map((row) => row.caption)
     });
     assert.deepEqual(keysOf(lazy), keys);
+    // THE rows of the table (OV-3803): every row each captioned rule draws, by Python's key.
+    const context = { rules, pythonRows, features: types.map((type) => ({ type })), palette, originalLegendOrder: rows.map((row) => row.caption) };
+    assert.deepEqual(captionedRuleRows(context).map((row) => row.key), keys.filter((_, index) => rules[index].cap).flat());
   });
 }
 
@@ -1485,6 +1490,95 @@ test('a row of a palette rule for every type has its place by the key of each dr
   const fills = { palette: TYPE_COLORS, types: ['rRNA', 'CDS'] };
   const first = legendRuleOrder([{ ...smallLiteral, cap: 'Ribosomal' }, everyPalette], fills);
   assert.deepEqual(['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]', 'Ribosomal [#ff00ff]', 'Ribosomal'].map(first), [1, 1, 0, -1]);
+});
+// Review finding 5 (OV-3801): the commit reads Python's Legend order of its
+// next table as rule rows named by rule and type (`LegendOrderRuleRow`), so a
+// rule for every type of the type color value gives the row of each type its
+// key in that type's color.
+test('a commit orders the rows of a palette rule for every type by the key of each type (OV-3801)', async () => {
+  const { resultCatalogFeatures } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const anchorProfile = { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' };
+  const features = [['A', 'rRNA'], ['B', 'CDS']];
+  const catalog = { schema: 5, items: [{
+    resultIndex: 0, resultName: 'result-0.svg', recordKeys: ['REC1'],
+    biologicalFeatures: features.map(([id, type], index) => ({
+      recordKey: 'REC1', biologicalFeatureId: id, record_id: 'REC1', type, start: index * 100, end: index * 100 + 30,
+      strand: 1, anchorProfile, qualifiers: { product: ['x'] }
+    })),
+    features: features.map(([id]) => ({ svgId: `svg-${id}`, recordKey: 'REC1', biologicalFeatureId: id, fillColor: '#000000',
+      drawnSelector: { hash: `svg-${id}`, location: null, recordLocation: null } })),
+    orthogroups: [], annotations: [], comparisonMatches: []
+  }] };
+  const group = { querySelectorAll: () => [] };
+  const svg = { getElementById: (id) => (id === 'legend' ? { querySelector: (selector) => (selector === '#feature_legend' ? group : null) } : null) };
+  const state = {
+    featureCatalog: { value: catalog }, selectedResultIndex: { value: 0 },
+    results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
+    displayedResultMetadata: () => null, legendKeyIsStale: () => false, originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
+    manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
+    svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
+    legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
+    extractedFeatures: { value: [] }, labelReflowProcessing: { value: false }, errorLog: { value: null },
+    paletteDefinitions: { value: { default: TYPE_COLORS } }, appliedPaletteName: { value: 'default' }, appliedPaletteColors: { value: {} },
+    biologicalFeatures: { value: [] }, mode: 'circular', svgContent: { value: null }
+  };
+  state.extractedFeatures.value = [...resultCatalogFeatures(state, 'circular').renderedByIdentity.values()];
+  const drawingState = withDrawings(state);
+  /** @type {unknown[]} The Legend order each commit gives the Legend owner. */
+  const orders = [];
+  const actions = createFeatureRuleActions({
+    ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
+    ...ruleOwnerPorts(createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules, synthesisQualifiers: synthesisPythonQualifiers })),
+    runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
+    prepareFileLegendEntries: async (intents, options = {}) => {
+      orders.push(options.legendOrder ?? null);
+      const diff = diffLegendIntents(state.legendEntries.value, intents);
+      return { diff, isCurrent: () => true, apply: () => {
+        state.legendEntries.value = intents;
+        return { add: diff.add.map(({ caption, color }) => ({ caption, color })), retire: diff.remove.map(({ caption }) => caption) };
+      } };
+    },
+    readLegendRowColors: (drawing) => displayedLegendRowColors(drawingState, drawing, []),
+    projectPaletteAndRules: () => true, ports: { requestAutomaticRerender: () => true }
+  });
+  assert.equal(await actions.commitSpecificRules(() => ({
+    rules: [everyPalette], legend: [{ rule: 0, type: 'rRNA' }, { rule: 0, type: 'CDS' }]
+  }), 'Change specific color rules'), true);
+  assert.deepEqual(orders.at(-1), ['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]']);
+});
+// OV-3803: a rule for every type of the type color value has a row per drawn
+// type and none without one: its key is never read without the type.
+test('a palette rule for every type is keyed only for a type (OV-3803)', () => {
+  const fills = { palette: TYPE_COLORS, types: ['rRNA', 'CDS'] };
+  const keyOf = createRuleLegendCaptions([everyPalette], fills);
+  assert.equal(keyOf(everyPalette, 'CDS'), 'Ribosomal [#54bcf8]');
+  assert.throws(() => keyOf(everyPalette), /keyed per feature type/);
+  const context = { rules: [everyPalette], pythonRows: new Map(), features: [{ type: 'rRNA' }, { type: 'CDS' }], palette: TYPE_COLORS, originalLegendOrder: [] };
+  assert.deepEqual(captionedRuleRows(context), [{ key: 'Ribosomal [#71ee7d]', name: 'Ribosomal' }, { key: 'Ribosomal [#54bcf8]', name: 'Ribosomal' }]);
+  assert.deepEqual(captionedRuleRows({ ...context, features: [] }), [], 'a rule for every type draws no row while no type is drawn');
+});
+// Review finding 5: a revision keeps its rows whole only when no other rule
+// draws a row of a revised rule, each read in the fill it draws (D-28: a
+// palette rule whose type color is a literal rule's color draws one row with it).
+test('revising one of two rules a palette rule and a literal rule share a row with is not whole (OV-3801)', () => {
+  const fills = { palette: TYPE_COLORS, types: ['rRNA', 'CDS'] };
+  const palette = { feat: 'rRNA', qual: 'product', val: 'x', color: TYPE_COLOR_VALUE, cap: 'Shared' };
+  const literal = { feat: 'CDS', qual: 'product', val: 'x', color: '#71ee7d', cap: 'Shared' };
+  const recolored = { ...literal, color: '#000000' };
+  assert.equal(revisesWholeRuleRows([palette, literal], [palette, recolored], [literal], fills), false);
+  const other = { feat: 'CDS', qual: 'product', val: 'y', color: '#123456', cap: 'Other' };
+  assert.equal(revisesWholeRuleRows([palette, other], [palette, { ...other, color: '#000000' }], [other], fills), true,
+    'a rule alone in its row is revised whole');
+});
+// OV-3803: the reading of saved captions pairs each row a rule draws with the
+// same row of its reading, so a rule for every type re-keys its row of each type.
+test('the saved captions re-key the row of each type a palette rule for every type draws (OV-3803)', () => {
+  const savedLiteral = { feat: 'CDS', qual: 'product', val: 'y', color: '#54bcf8', cap: 'Ribosomal [#54bcf8]' };
+  const context = {
+    rules: [everyPalette, savedLiteral], pythonRows: new Map(), features: [{ type: 'rRNA' }, { type: 'CDS' }], palette: TYPE_COLORS,
+    originalLegendOrder: []
+  };
+  assert.deepEqual([...savedRuleRowRekeys(context)], [['Ribosomal [#54bcf8] (2)', 'Ribosomal [#54bcf8]']]);
 });
 // Bug C (review finding 5) and finding 4: the color "Use existing" shows and
 // writes for a feature joining the row of a rule of the caption it is named

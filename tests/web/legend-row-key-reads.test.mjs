@@ -27,6 +27,8 @@ globalThis.window = { Vue: {
   computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { savedResultEdits } = await import('../../gbdraw/web/js/services/config.js');
+// A saved Result that draws no feature, in no type color: its rule rows are keyed as written.
+const NONE_DRAWN = Object.freeze({ features: [], palette: {} });
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -162,7 +164,7 @@ const loadSavedResults = (session, {
   featureCatalog = session.editorState.featureCatalog, patch = () => {}
 } = {}) => {
   const admission = admitFeatureCatalog(featureCatalog, results, { adopt: true, mode });
-  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, session.version, sessionSourceFactsOf(session.version, false)));
+  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN));
   return results.map((result, index) => {
     const svg = parseSvgText(result.content);
     patch(svg, index);
@@ -264,7 +266,7 @@ test('Load names a saved rule row by its key and skips a row that carries a key 
   const session = sessionFixture('rule-captions-with-color-id.v46.gbdraw-session.json.gz');
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), session.modes.circular.config.rules);
+  const edits = savedResultEdits(session, 'circular', session.editorState, session.version, sessionSourceFactsOf(session.version, false), NONE_DRAWN, session.modes.circular.config.rules);
   const named = (patch) => {
     const svg = parseSvgText(results[0].content);
     patch(svg);

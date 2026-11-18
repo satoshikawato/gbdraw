@@ -28,7 +28,7 @@ import { createRuleLegendCaptions, featureLegendRows, ruleFillsOf, ruleRowFills 
 /** @import { AnnotationTarget } from './annotation-state.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
-/** @import { LegendRowContext, RuleFills, SpecificColorRule } from './specific-color-rules.js' */
+/** @import { DrawnLegendState, LegendRowContext, RuleFills, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { PythonLegendKey } from './legend-svg.js' */
 /** @import { WebState } from '../state.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
@@ -852,24 +852,38 @@ const NO_LEGEND_KEYS = new Set();
 export const displayedLegendRowContext = (state, drawing) => ({
   rules: drawing.manualSpecificRules,
   pythonRows: pythonLegendRows(state.svgContainer.value?.querySelector('svg')),
-  features: displayedDrawnFeatures(state, drawing),
-  palette: appliedFeatureColors(state),
+  ...displayedDrawnState(state, drawing),
   originalLegendOrder: state.originalLegendOrder.value,
   sharedLegendKeys: /** @type {ReadonlySet<PythonLegendKey> | undefined} */ (state.displayedResultMetadata()?.legendRowFacts?.suppressed)
     ?? NO_LEGEND_KEYS
 });
 
-// The type colors and drawn types of the shown drawing a rule of the type
-// color value is read with (`RuleFills`): the part of
-// `displayedLegendRowContext` that needs no Result's rows.
 /**
- * @param {DisplayedLegendState} state
+ * What `displayedDrawnState` reads of the app state.
+ * @typedef {Parameters<typeof displayedDrawnFeatures>[0] & Parameters<typeof appliedFeatureColors>[0]} DisplayedDrawnInputs
+ */
+
+// The drawn state of the shown drawing that a rule row's key reads
+// (`DrawnLegendState`): the features its displayed Result draws and the type
+// colors it applies; the part of `displayedLegendRowContext` that needs no
+// Result's rows.
+/**
+ * @param {DisplayedDrawnInputs} state
+ * @param {Parameters<typeof displayedDrawnFeatures>[1]} drawing
+ * @returns {DrawnLegendState}
+ */
+export const displayedDrawnState = (state, drawing) => ({
+  features: displayedDrawnFeatures(state, drawing), palette: appliedFeatureColors(state)
+});
+
+// The type colors and drawn types of the shown drawing a rule of the type
+// color value is read with (`RuleFills`).
+/**
+ * @param {DisplayedDrawnInputs} state
  * @param {Parameters<typeof displayedDrawnFeatures>[1]} drawing
  * @returns {RuleFills}
  */
-export const displayedRuleFills = (state, drawing) => ruleFillsOf({
-  features: displayedDrawnFeatures(state, drawing), palette: appliedFeatureColors(state)
-});
+export const displayedRuleFills = (state, drawing) => ruleFillsOf(displayedDrawnState(state, drawing));
 
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else
 // (unknown) whether the Result's catalog (`resultCatalogFeatures`) renders it,

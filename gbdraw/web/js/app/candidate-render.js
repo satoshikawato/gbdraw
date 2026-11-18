@@ -3,7 +3,7 @@
 /** @import { GenerationResponse } from '../services/diagram-generation.js' */
 /** @import { LegendStrokeOperation, SavedFeatureColorEdit, SavedStrokeEdit, SvgAdmissionRuntime, SvgResultEntry, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 /** @import { PythonLegendKey, PythonLegendRow, RenderedFeatureId, SwatchColor } from '../services/legend-svg.js' */
-/** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { FeatureTypeColors, LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
 /** @import { DrawingState, WebState } from '../state.js' */
 /** @import { ShownSetLegend } from '../services/artifact-slot.js' */
@@ -17,7 +17,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions, ruleRowFills } from '../services/specific-color-rules.js';
+import { captionedRuleRows, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions, ruleRowFills } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -49,6 +49,9 @@ import { draftLegendRows, normalizedLegendEntries } from '../services/legend-dra
  * @property {Record<string, unknown>} [legendColorOverrides]
  * @property {Record<string, SavedStrokeEdit>} [legendStrokeOverrides]
  * @property {readonly Partial<SpecificColorRule>[]} [manualSpecificRules]
+ * @property {FeatureTypeColors} typeColors The type colors the Results were drawn in (Generate's: its request's), in
+ *   which their rule rows are keyed with the features each Result renders (`captionedRuleRows`); a live preview keys
+ *   them in its own palette and features, read from the same owners.
  * @property {string[] | null} [replayDefaultLegendOrder]
  * @property {SvgResultTransform[]} [resultTransforms] One transform per Result, by index.
  * @property {SvgResultTransform | null} [transformSvg] A transform applied to every Result.
@@ -523,13 +526,52 @@ const identityTargets = (catalogAdmission, row) => (
 );
 
 
-// The keys of the rows the captioned rules draw (`rowOf`, a rule's row key).
+// The features every Result of an addressing renders, read when iterated (a
+// compile without a captioned rule reads none).
+/** @param {EditorAddressing} catalogAdmission @returns {Iterable<AddressedFeature>} */
+const renderedFeaturesOf = (catalogAdmission) => ({
+  * [Symbol.iterator]() {
+    for (const rendered of catalogAdmission.renderedFeaturesByResult) yield* rendered.values();
+  }
+});
+
+// The Legend state a compile keys its rule rows in: what the Results draw,
+// the live draft's displayed Result, else (Generate compiles before it reads
+// Python's rows) the features the Results render, in the type colors they
+// were drawn in. Without Python's rows, the key is the one the rule table
+// allocates, which is the key of every caption written in several fills.
 /**
  * @param {readonly Partial<SpecificColorRule>[]} rules
- * @param {(rule: Partial<SpecificColorRule>) => string} rowOf
- * @returns {Set<string>}
+ * @param {Iterable<string>} originalCaptions
+ * @param {LivePreview | null | undefined} livePreview
+ * @param {EditorAddressing} catalogAdmission
+ * @param {FeatureTypeColors} typeColors
+ * @returns {LegendRowContext}
  */
-const captionedRuleRowKeys = (rules, rowOf) => new Set(rules.filter((rule) => text(rule?.cap)).map((rule) => rowOf(rule)));
+const compiledRuleRowContext = (rules, originalCaptions, livePreview, catalogAdmission, typeColors) => ({
+  rules: [...rules], pythonRows: livePreview?.pythonRows ?? new Map(), originalLegendOrder: [...originalCaptions],
+  ...(livePreview
+    ? { features: livePreview.features ?? [], palette: livePreview.paletteColors }
+    : { features: renderedFeaturesOf(catalogAdmission), palette: typeColors })
+});
+
+// The rule rows of a compile in `context`: a rule's row key (`rowOf`),
+// `known` (the live draft's) else allocated when a color edit first names a
+// row (a compile without one reads no feature), and the keys of every row the
+// captioned rules draw (`keys`: a rule draws a row in each fill it draws,
+// one per drawn type for a rule for every type of the type color value).
+/**
+ * @param {LegendRowContext} context
+ * @param {ReturnType<typeof ruleLegendCaptions> | null} known
+ * @returns {{ rowOf: (rule: Partial<SpecificColorRule>) => PythonLegendKey, keys: () => Set<PythonLegendKey> }}
+ */
+const compiledRuleRows = (context, known) => {
+  let rowOf = known;
+  return {
+    rowOf: (rule) => (rowOf ||= ruleLegendCaptions(context))(rule),
+    keys: () => new Set(captionedRuleRows(context).map((row) => row.key))
+  };
+};
 
 /** @param {EditorPlanOptions} options */
 const compilePlanBundle = ({
@@ -547,6 +589,7 @@ const compilePlanBundle = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
+  typeColors,
   replayDefaultLegendOrder = null,
   resultTransforms = [],
   transformSvg = null,
@@ -693,17 +736,15 @@ const compilePlanBundle = ({
   });
   /** @param {PythonLegendKey} key */
   const draftRowColor = (key) => (draftRowColors ? draftRowColors.colorOf(key) : null);
-  // The key of the row a rule is drawn in: the live draft's, else (Generate
-  // compiles before it reads Python's rows) the key the rule table alone
-  // allocates, which is the key of every caption written in several colors.
-  const ruleRowOf = draftRowColors?.rowOf
-    || ruleLegendCaptions({ rules: [...rules], pythonRows: new Map(), ...NO_DRAWN_FEATURES, originalLegendOrder: [...originalCaptions] });
+  const tableRows = compiledRuleRows(compiledRuleRowContext(rules, originalCaptions, livePreview, catalogAdmission, typeColors),
+    draftRowColors ? draftRowColors.rowOf : null);
 
   runStage('legend', () => {
     // A listed row is a rule's row by its key, never by the rule's name: a
-    // caption written in several colors is the key of none of its rows (OV-643).
+    // caption written in several colors is the key of none of its rows
+    // (OV-643). A rule draws a row in each fill it draws (OV-3803).
     /** @type {Set<string>} */
-    const ruleRowKeys = captionedRuleRowKeys(rules, ruleRowOf);
+    const ruleRowKeys = tableRows.keys();
     /** @param {NormalizedLegendEntry} entry */
     const isRuleRow = (entry) => ruleRowKeys.has(entry.originalCaption);
     // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
@@ -806,7 +847,7 @@ const compilePlanBundle = ({
     const caption = text(edit?.caption);
     if (!caption) return;
     const named = namedLegendCaption(override, rules) === caption;
-    const row = named ? caption : ruleRowOf({ cap: caption, color: text(edit?.color) });
+    const row = named ? caption : tableRows.rowOf({ cap: caption, color: text(edit?.color) });
     const renderedIds = renderedIdsByEditRow.get(row) || new Set();
     resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
       if (!renderedId) return;

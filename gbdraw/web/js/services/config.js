@@ -217,7 +217,7 @@ import { storedLeafKey } from './stored-leaf-readings.js';
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import {
-  NO_DRAWN_FEATURES, applySpecificRuleProvenance, savedFeatureColorEdits, savedResetTypeColors, savedRuleRowRekeys, savedSpecificRules
+  applySpecificRuleProvenance, savedFeatureColorEdits, savedResetTypeColors, savedRuleRowRekeys, savedSpecificRules
 } from './specific-color-rules.js';
 import { recordedLegendColor, rekeyLegendRecords } from './legend-svg.js';
 import { editorStateOfLegendEditLeaves, readLegendEditLeaves } from './legend-draft-rows.js';
@@ -396,7 +396,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { CanonicalRenderEnvelope, RequestRecordDisplayRow, ResourceTexts } from './session-request.js' */
 /** @import { AddedResource, DerivedRegionDrawing, PastedRecords } from '../contracts/locate.generated.js' */
-/** @import { SpecificColorRule } from './specific-color-rules.js' */
+/** @import { DrawnLegendState, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { RecordDisplayDraft } from './record-display-model.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session51, SessionDrawing51, SourceFacts } from './session-drawings-upgrade.js' */
@@ -532,17 +532,22 @@ const paletteColorsFromDefinitions = (paletteName) => {
   return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
 
-// The type colors a stored drawing's config may have written a reset rule in
-// (`savedResetTypeColors`): the colors it draws with (`appliedFeatureColors`:
-// its palette's colors with its own Default colors over them), and those with
-// the rows its palette held in the release that wrote such rules. Load reads a
-// rule an older Reset fill color wrote by them (`savedSpecificRules`).
-/** @param {Readonly<Record<string, unknown>> | null | undefined} config @returns {() => readonly Readonly<Record<string, string>>[]} */
-const storedTypeColors = (config) => () => savedResetTypeColors(appliedFeatureColors({
+// The type colors a stored drawing's config draws with (`appliedFeatureColors`:
+// its palette's colors with its own Default colors over them). Load keys the
+// rule rows of its saved Results in them (`savedResultEdits`).
+/** @param {Readonly<Record<string, unknown>> | null | undefined} config @returns {Readonly<Record<string, string>>} */
+const storedFeatureColors = (config) => appliedFeatureColors({
   paletteDefinitions: state.paletteDefinitions,
   appliedPaletteName: { value: String(config?.palette || 'default') },
   appliedPaletteColors: { value: isPlainObject(config?.colors) ? /** @type {Record<string, string | null>} */ (config?.colors) : null }
-}), config?.palette);
+});
+// The type colors a stored drawing's config may have written a reset rule in
+// (`savedResetTypeColors`): the colors it draws with (`storedFeatureColors`),
+// and those with the rows its palette held in the release that wrote such
+// rules. Load reads a rule an older Reset fill color wrote by them
+// (`savedSpecificRules`).
+/** @param {Readonly<Record<string, unknown>> | null | undefined} config @returns {() => readonly Readonly<Record<string, string>>[]} */
+const storedTypeColors = (config) => () => savedResetTypeColors(storedFeatureColors(config), config?.palette);
 
 /** @param {unknown} source */
 const cloneStringMap = (source) => readStringMap(source).value;
@@ -3396,12 +3401,14 @@ const openedCommittedSession = (committed, openedWebFiles, sessionWebFiles) => {
  * @param {unknown} setEditorState
  * @param {number} sessionVersion The version of the Session `data` (the shape Load reads it in).
  * @param {SourceFacts} sourceFacts The source facts of the file `data` came from.
+ * @param {DrawnLegendState} drawn What the saved Results draw (their features) and the drawing's type colors
+ *   (`storedFeatureColors`), in which their rule rows are keyed.
  * @param {unknown} [storedRules]
  * @param {() => readonly Readonly<Record<string, string>>[]} [typeColors] The type colors of the drawing the rules
  *   are of (`storedTypeColors`), which read an older Reset fill color rule (`savedSpecificRules`).
  * @returns {SavedResultEdits}
  */
-export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sourceFacts, storedRules, typeColors) => {
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sourceFacts, drawn, storedRules, typeColors) => {
   // An entry that is no object is no rule (the rules' reader drops it, listed).
   const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
   const slice = versionKeepsModeSlices(sessionVersion)
@@ -3409,7 +3416,7 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
     : { editorState: data.editorState, features: data.features };
   const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});
   const kept = normalizeEditorStateData(isPlainObject(setEditorState) ? /** @type {Record<string, any>} */ (setEditorState) : {});
-  const legendRekeys = savedLegendRekeys(rules, kept.legend);
+  const legendRekeys = savedLegendRekeys(rules, kept.legend, drawn);
   const legend = rekeyLegendRecords({
     entries: [...edits.legend.entries, ...edits.legend.dormantEntries],
     colorOverrides: edits.legend.colorOverrides,
@@ -3426,6 +3433,7 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
     originalLegendColors: legend.originalColors,
     originalLegendOrder: legend.originalOrder,
     rules: savedSpecificRules(rules, typeColors),
+    palette: drawn.palette,
     legendRekeys,
     mode,
     resultsRecordPythonPaint: sourceFacts.resultsRecordPythonPaint
@@ -3434,13 +3442,15 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
 
 // The rule rows whose key the reading of the saved captions `rules` changes
 // (F2), allocated over the generated rows a saved Result set kept (`kept`: its
-// inventory and Python's colors; none for a mode without a Result).
+// inventory and Python's colors; none for a mode without a Result), in what
+// its Results draw (`drawn`).
 /**
  * @param {unknown} rules
  * @param {{ originalOrder: readonly PythonLegendKey[], originalColors: Record<string, string> }} kept
+ * @param {DrawnLegendState} drawn
  * @returns {Map<PythonLegendKey, PythonLegendKey>}
  */
-const savedLegendRekeys = (rules, kept) => {
+const savedLegendRekeys = (rules, kept, drawn) => {
   /** @type {Map<PythonLegendKey, PythonLegendRow>} */
   const pythonRows = new Map();
   kept.originalOrder.forEach((key) => {
@@ -3448,7 +3458,7 @@ const savedLegendRekeys = (rules, kept) => {
     if (color) pythonRows.set(key, { key, color: /** @type {PythonLegendRow['color']} */ (color) });
   });
   return savedRuleRowRekeys({
-    rules: Array.isArray(rules) ? rules : [], pythonRows, ...NO_DRAWN_FEATURES, originalLegendOrder: kept.originalOrder
+    rules: Array.isArray(rules) ? rules : [], pythonRows, ...drawn, originalLegendOrder: kept.originalOrder
   });
 };
 
@@ -7508,7 +7518,8 @@ export const prepareStoredDrawing = async ({ mode, renderRequest, resources, sou
   const part = /** @type {LoadedDraftPart} */ ({ slice: {}, at: '' });
   const { draft } = await readStoredDrawingDraft({
     id, mode, part, config,
-    legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }),
+    // A drawing that holds a request and no Result draws no feature.
+    legendRekeys: savedLegendRekeys(config.rules, { originalOrder: [], originalColors: {} }, { features: [], palette: storedFeatureColors(config) }),
     files, storedConservationBlasts: null, resolveTrackPlacements: true, validatedConfig: null,
     sourceSessionVersion: SESSION_VERSION, sliceVersion: SESSION_VERSION
   }, repairs);
@@ -8805,9 +8816,12 @@ const importSessionDocument = async (e, options = {}) => {
     const selectedFeatureTypes = currentSchemaSession
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
+    // The rule rows are keyed in what the saved Results draw: the features of their catalog (a Session without
+    // one, older than 40, has none here; it holds no rule of the type color value, so no key reads them).
     const committedSavedEdits = savedResultEdits(
-      data, generatedMode, data.editorState, sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(committedSetDrawingId)?.rules,
-      storedTypeColors(draftConfigOf(committedSetDrawingId))
+      data, generatedMode, data.editorState, sourceSessionVersion, upgrade.sourceFacts, {
+        features: currentCatalogFeatureState?.extractedFeatures ?? [], palette: storedFeatureColors(draftConfigOf(committedSetDrawingId))
+      }, draftConfigOf(committedSetDrawingId)?.rules, storedTypeColors(draftConfigOf(committedSetDrawingId))
     );
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
@@ -8862,7 +8876,9 @@ const importSessionDocument = async (e, options = {}) => {
     for (const { drawing, mode, at, catalog, set, webFiles } of storedSets) {
       // The drawing's own draft part, found by its ID.
       const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
-        sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(drawing.id)?.rules, storedTypeColors(draftConfigOf(drawing.id)));
+        sourceSessionVersion, upgrade.sourceFacts,
+        { features: featureStateFromCatalog(catalog, { mode }).extractedFeatures, palette: storedFeatureColors(draftConfigOf(drawing.id)) },
+        draftConfigOf(drawing.id)?.rules, storedTypeColors(draftConfigOf(drawing.id)));
       savedEditsOf.set(drawing.id, savedEdits);
       storedSetSlots.push(buildLoadedArtifactSlot(set, {
         ...slotOptions,
@@ -8878,10 +8894,12 @@ const importSessionDocument = async (e, options = {}) => {
       }));
     }
     // The rule rows of each drawing whose keys the reading of its saved
-    // captions changes (F2): its Result set's, else over no generated rows.
+    // captions changes (F2): its Result set's, else over no generated rows
+    // and no drawn feature (a drawing without a Result draws none).
     /** @param {DrawingId} drawingId @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
     const legendRekeysOf = (drawingId) => savedEditsOf.get(drawingId)?.legendRekeys
-      ?? savedLegendRekeys(draftConfigOf(drawingId)?.rules, { originalOrder: [], originalColors: {} });
+      ?? savedLegendRekeys(draftConfigOf(drawingId)?.rules, { originalOrder: [], originalColors: {} },
+        { features: [], palette: storedFeatureColors(draftConfigOf(drawingId)) });
     // The slot the Load opens: the shown drawing's set when it is not the committed one.
     const openingSlot = storedSetSlots.find((slot) => slot.drawingId === plan.activeDrawingId) ?? null;
 

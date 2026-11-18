@@ -22,7 +22,7 @@ const { readCanvasPadding } = await import('../../gbdraw/web/js/services/config-
 const row = (key, caption = key) => ({ caption, originalCaption: key, color: '#cccccc', xPos: 0, yPos: 0, featureIds: [] });
 const NO_PADDING = { top: 0, right: 0, bottom: 0, left: 0 };
 const leavesOf = (draft) => legendEditConfigLeaves({
-  legendEntries: [], deletedLegendEntries: [], originalLegendOrder: [], rules: [], canvasPadding: NO_PADDING,
+  legendEntries: [], deletedLegendEntries: [], originalLegendOrder: [], rules: [], drawn: { features: [], palette: {} }, canvasPadding: NO_PADDING,
   pythonRowKeys: draft.originalLegendOrder ?? [], ...draft
 });
 
@@ -46,6 +46,31 @@ test('a rule row is not renamed through the leaves (its rule caption carries the
     rules: [{ feat: 'CDS', qual: 'product', val: 'kinase', color: '#ff0000', cap: 'Kinase' }]
   });
   assert.deepEqual(leaves, { 'objects.legends.row_names': [['CDS', 'Genes']] });
+});
+
+// OV-3803: the rows of a rule of the type color value are keyed in the type
+// colors and drawn types of the shown Result, as Python keys them
+// (tests/fixtures/legend_rule_keys.json), so their renames are carried by the
+// rules too: a rule for every type draws a row per drawn type, and a caption
+// also written in a literal color is keyed in the type's color.
+test('the rows of a rule of the type color value are rule rows by Python\'s keys (OV-3803)', () => {
+  const drawn = { features: [{ type: 'rRNA' }, { type: 'CDS' }], palette: { rRNA: '#71ee7d', CDS: '#54bcf8', default: '#d3d3d3' } };
+  for (const [shape, rules, keys] of [
+    ['a rule for every type', [{ feat: '*', qual: 'product', val: 'x', color: 'palette', cap: 'Ribosomal' }],
+      ['Ribosomal [#71ee7d]', 'Ribosomal [#54bcf8]']],
+    ['a caption also written in a literal color', [
+      { feat: 'rRNA', qual: 'product', val: 'x', color: 'palette', cap: 'small rRNA' },
+      { feat: 'rRNA', qual: 'product', val: 'y', color: '#ff00ff', cap: 'small rRNA' }
+    ], ['small rRNA [#71ee7d]', 'small rRNA [#ff00ff]']]
+  ]) {
+    const leaves = leavesOf({
+      legendEntries: [...keys.map((key) => row(key, 'Renamed')), row('CDS', 'Genes')],
+      originalLegendOrder: [...keys, 'CDS'],
+      rules,
+      drawn
+    });
+    assert.deepEqual(leaves, { 'objects.legends.row_names': [['CDS', 'Genes']] }, shape);
+  }
 });
 
 test('a deleted row Python draws is a hidden_rows leaf; one the inventory lacks is not', () => {
