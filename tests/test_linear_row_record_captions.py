@@ -265,3 +265,41 @@ def test_the_web_reply_carries_the_warning_the_cli_logs(tmp_path: Path, caplog: 
     assert [item for item in warnings if item["code"] == "record_captions_overlap"] == [
         {"code": "record_captions_overlap", "message": cli_messages[0]}
     ]
+
+
+def test_a_caption_beside_a_caption_lifted_by_labels_is_left_out_along_the_row_whatever_its_height(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """OV-3869: captions are kept apart by their places along the row only. A short record beside a record whose
+    labels lift its caption stands far lower, yet its caption is left out: a height-aware rule would draw it across
+    the labels, as dev did."""
+
+    def record(record_id: str, length: int, spans: list[tuple[int, int]], labelled: bool) -> SeqRecord:
+        record = SeqRecord(Seq("ATGC" * (length // 4)), id=record_id, name=record_id, description=f"{record_id} test")
+        record.annotations["molecule_type"] = "DNA"
+        for index, (start, end) in enumerate(spans):
+            qualifiers = (
+                {"gene": [f"longgenename{index:02d}"], "product": ["a fairly long product name"]}
+                if labelled
+                else {"product": ["p"]}
+            )
+            record.features.append(SeqFeature(FeatureLocation(start, end, strand=1), type="CDS", qualifiers=qualifiers))
+        return record
+
+    caplog.set_level(logging.WARNING)
+    paths = _files(tmp_path, [
+        record("BIG00001.1", 60_000, [(start, start + 600) for start in range(0, 59_000, 3000)], False),
+        record("LABS0001.1", 3_000, [(0, 600), (1200, 1800), (2200, 2900)], True),
+        record("SMALL001.1", 1_200, [], False),
+    ])
+    captions = _captions(_draw_one_row(tmp_path, paths, "--show_labels", "all"))
+
+    assert set(captions) == {"BIG00001.1", "LABS0001.1"}
+    # SMALL001.1's caption would stand far below LABS0001.1's but meet it along the row.
+    _labs_left, _labs_right, labs_y, size = captions["LABS0001.1"]
+    _big_left, _big_right, big_y, _size = captions["BIG00001.1"]
+    assert big_y - labs_y > size  # the kept captions themselves stand at different heights
+    assert [message for message in _warnings(caplog) if "record captions" in message] == [
+        "1 of 3 record captions in row 1 were left out because they overlap; "
+        "to name the row once instead, give it a name (record_label) and hide Accession and Length."
+    ]
