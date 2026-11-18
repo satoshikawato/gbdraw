@@ -1679,12 +1679,12 @@ test('Save and Load keep what each Linear drawing\'s draft adopted: none after C
   assert.deepEqual(adopted('linear'), cli);
 });
 
-// Review 7 L5: the Web's own writer path. A Linear drawing that was never cleared holds what a Generate's commit
-// (`adoptCanonicalRenderArtifacts`) gave its draft, as new file views of the committed request's resources, not the
-// views Load made. Save writes them (each found by content, no resource added), Load gives them back, and the next
-// Generate reuses the stored results with no LOSAT run (`canReuseResolvedProteinArtifacts`' marker is still there).
-// A real Generate (worker, canvas) cannot run in this file: the draft is filled by the commit path Generate calls.
-test('a Linear drawing a Generate filled and nobody cleared keeps its stored results through Save and Load (OV-3826, review 7 L5)', async () => {
+// A draft re-projected from a loaded request: a Linear drawing that was never cleared holds what the commit path
+// (`adoptCanonicalRenderArtifacts`) gives its draft from the request Load committed. Save writes them (no resource
+// added), Load gives them back, and the marker that lets the next Generate reuse the stored results is still there.
+// The files here are views of the Session's stored resources; a drawing on uploaded files, through a real Generate,
+// Save, Load and Generate, is the losat-display-pair-reuse browser case "Save and Load keep the stored LOSATP results".
+test('a Linear draft re-projected from a loaded request keeps its stored results through Save and Load (OV-3826)', async () => {
   const { bindDrawingCanonicalComparisons } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { adoptCanonicalRenderArtifacts, getCommittedCanonicalSession } = await import('../../gbdraw/web/js/services/config.js');
   const { LOSATP_NO_SEARCH_MODE } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
