@@ -130,9 +130,9 @@ def crop_and_shift_features(
     Iterates over old features, crops/shifts them relative to the
     crop window (start_0, end_0), and returns a new list of features.
     ``coord_base``, ``coord_step`` and ``period`` are the coordinate map of
-    the record the features belong to. With ``record_length``, a part past
-    the record's end is read as the span over its origin it is
-    (``location_over_origin``; only a record drawn circular keeps one).
+    the record the features belong to. With ``record_length`` (given for a
+    record drawn circular only), a part past the record's end that fits it is
+    read as the span over its origin it is (``location_over_origin``).
     """
     new_features_list = []
     source_indexes = (

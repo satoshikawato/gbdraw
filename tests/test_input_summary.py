@@ -33,6 +33,9 @@ from gbdraw.linear_comparison import ComparisonTableTally
 from gbdraw.io.genome import parse_gff_fasta, read_flat_file_records
 from gbdraw.session import SessionDocument, build_session_document
 from tests.utils.session_files import embedded_session, load_session_mapping
+from tests.test_web_helper_prepared_lookup import (  # noqa: F401 - the Worker's Python helpers fixture
+    helpers,
+)
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs,
     render_embedded_canonical_web_request,
@@ -1454,9 +1457,13 @@ def test_a_set_linear_topology_wins_over_gff3_is_circular(tmp_path: Path) -> Non
     assert any("CDS 81..110 (over)" in line for line in _lines(run) if line.startswith("WARNING"))
 
 
-def test_circular_gc_of_a_gff3_record_stated_circular_wraps_as_genbank_circular(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("mode", "tracks"), [("circular", ()), ("linear", ("--gc", "--skew"))])
+def test_gc_of_a_gff3_record_stated_circular_wraps_as_genbank_circular(
+    tmp_path: Path, mode: str, tracks: tuple[str, ...]
+) -> None:
     """GC content and skew windows of a GFF3 record whose landmark says ``Is_circular=true`` wrap over the origin as
-    those of the same sequence in a circular GenBank record (r2 MEDIUM-1 c, an intended correction)."""
+    those of the same sequence in a circular GenBank record, in both modes (r2 MEDIUM-1 c and r3 MEDIUM-2, an
+    intended correction: dev read the record as not circular)."""
     sequence = ("gggggcccccaaaaattttt" * 3) + ("atatatatgc" * 4)
     (tmp_path / "rec.gff").write_text(
         _gff3_text(("rec", "region", 1, 100, "ID=rec;Is_circular=true"), cds=("rec", 10, 30)), encoding="utf-8")
@@ -1470,9 +1477,9 @@ def test_circular_gc_of_a_gff3_record_stated_circular_wraps_as_genbank_circular(
         "FEATURES             Location/Qualifiers\n     CDS             10..30\n"
         f"                     /locus_tag=\"over\"\nORIGIN\n{origin}//\n", encoding="utf-8")
 
-    gff = _gbdraw("circular", "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "-o", "gff", "-f", "svg",
+    gff = _gbdraw(mode, "--gff", "rec.gff", "--fasta", "rec.fa", "-k", "CDS", "-o", "gff", "-f", "svg", *tracks,
                   cwd=tmp_path)
-    genbank = _gbdraw("circular", "--gbk", "rec.gb", "-o", "genbank", "-f", "svg", cwd=tmp_path)
+    genbank = _gbdraw(mode, "--gbk", "rec.gb", "-o", "genbank", "-f", "svg", *tracks, cwd=tmp_path)
 
     assert gff.returncode == 0, gff.stderr
     assert genbank.returncode == 0, genbank.stderr
@@ -1497,3 +1504,95 @@ def test_a_past_end_cds_translates_and_extracts_its_whole_join(tmp_path: Path) -
                      _translate_cds_feature(record, feature)))
 
     assert len(read[0][0]) == 30 and read[0] == read[1]
+
+
+@pytest.mark.parametrize(("location", "expected"), [
+    (("81..110", 1), "join{[80:100](+), [0:10](+)}"),
+    (("81..110", -1), "join{[0:10](-), [80:100](-)}"),
+    # A past-end part once reversed (``reverse_records`` flips the location as written).
+    (("-9..20", 1), "join{[90:100](+), [0:20](+)}"),
+    (("121..240", 1), "[120:240](+)"),
+    (("101..110", 1), "[100:110](+)"),
+    (("51..200", 1), "[50:200](+)"),
+    (("21..90", 1), "[20:90](+)"),
+], ids=["past-plus", "past-minus", "reversed", "outside", "after-end", "longer", "inside"])
+def test_only_a_location_that_fits_over_the_origin_reads_as_its_join(location: tuple[str, int], expected: str) -> None:
+    """``location_over_origin`` splits a part at the origin only when it fits the record over its origin, as written
+    or reversed; a location outside the record or longer than it stays as it is, so no reader takes a feature that
+    does not fit at a place modulo the record's length (r3 MEDIUM-1 a, D-199's rejected option C)."""
+    from Bio.SeqFeature import SimpleLocation
+
+    from gbdraw.core.record_metadata import location_over_origin
+
+    text, strand = location
+    start, end = (int(value) for value in text.split(".."))
+    assert str(location_over_origin(SimpleLocation(start - 1, end, strand), 100)) == expected
+
+
+# r3 MEDIUM-1: linear records with a CDS that fits and one that does not (wholly outside; past the end), and a
+# circular record whose past-end CDS reads over its origin.
+_PROTEIN_RECORDS = {
+    "tiny3": ("linear", (("1..30", 'locus_tag="in"'), ("121..240", 'locus_tag="out"'))),
+    "wrapl": ("linear", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+    "overc": ("circular", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+}
+# The letters of each protein the drawing takes: 1..30, 21..40, and the 30 bases of the join over the origin.
+_DRAWN_PROTEINS = {"tiny3": [10], "wrapl": [6], "overc": [6, 10]}
+
+
+def _proteins(records: Sequence[object]) -> list[tuple[int, int, str]]:
+    from gbdraw.analysis.protein_colinearity import extract_cds_proteins
+
+    extraction = extract_cds_proteins(list(records), prefer_source_ids=False)  # type: ignore[arg-type]
+    return [(p.start, p.end, p.sequence) for proteins in extraction.proteins_by_record for p in proteins]
+
+
+@pytest.mark.parametrize("region", [None, "rec:1-100"], ids=["whole", "crop"])
+@pytest.mark.parametrize("name", sorted(_PROTEIN_RECORDS))
+def test_the_web_losatp_proteins_are_those_of_the_drawn_features(
+    tmp_path: Path, helpers: dict[str, object], name: str, region: str | None,  # noqa: F811 - the fixture
+) -> None:
+    """The Web LOSATP protein reader takes the features the Linear drawing takes: none for a CDS outside its linear
+    record or past its end, with or without a crop, and the CLI plan extracts the same proteins (r3 MEDIUM-1 b, c).
+    Before, the Web searched a protein of ``121..240`` read at 21..140 and the join of a linear record's ``81..110``."""
+    from gbdraw.api import plan_linear_request
+    from gbdraw.io.regions import RecordWindow
+
+    topology, locations = _PROTEIN_RECORDS[name]
+    path = tmp_path / f"{name}.gb"
+    path.write_text(_genbank_text("rec", topology, locations), encoding="utf-8")
+    load = helpers["_load_single_linear_record_for_proteins"]
+    web = _proteins([load(str(path), "genbank", region_spec=region)])  # type: ignore[operator]
+    plan = plan_linear_request(LinearDiagramRequest(
+        records=(RecordInput(GenBankInputSource(path), windows=(RecordWindow(1, 100),) if region else ()),),
+        options=LinearDiagramOptions(),
+    ))
+
+    assert [len(sequence) for *_span, sequence in web] == _DRAWN_PROTEINS[name]
+    assert web == _proteins(plan.records)
+
+
+def test_the_losatp_database_counts_only_the_proteins_of_the_drawn_features(tmp_path: Path) -> None:
+    """A LOSATP search's database size counts the proteins of the features the drawing takes, so a CDS outside its
+    record adds no letters and the e-values stay those of the drawn proteins (r3 MEDIUM-1 b). Before, ``121..240``
+    added 40 letters and a linear record's ``81..110`` 4 more."""
+    from gbdraw.api import LinearMultiRecordOptions, RecordPresentation, plan_linear_request
+    from gbdraw.api.options import LosatSearchOptions
+
+    records = []
+    for row, name in enumerate(("tiny3", "wrapl", "overc"), start=1):
+        topology, locations = _PROTEIN_RECORDS[name]
+        path = tmp_path / f"{name}.gb"
+        path.write_text(_genbank_text(name, topology, locations), encoding="utf-8")
+        records.append(RecordInput(GenBankInputSource(path), record_key=name, presentation=RecordPresentation(grid_row=row)))
+    plan = plan_linear_request(LinearDiagramRequest(
+        records=tuple(records),
+        layout=LinearMultiRecordOptions(),
+        options=LinearDiagramOptions(losat_search=LosatSearchOptions(program="losatp", losatp_mode="pairwise")),
+    ))
+    sizes = plan.losatp_database_sizes
+    assert sizes is not None
+    letters = [sum(len(sequence) for *_span, sequence in _proteins([record])) for record in plan.records]
+
+    # Each record is its own genome; ``proteins`` is what a search of a cropped or windowed genome passes LOSAT.
+    assert list(sizes.proteins) == letters == [10, 6, 16]

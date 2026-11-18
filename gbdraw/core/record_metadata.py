@@ -556,17 +556,32 @@ def _source_intervals(
     return ((low, high),) if high <= period else ((low, period), (0, high - period))
 
 
-def location_over_origin(location: Location, length: int) -> Location:
-    """``location`` on one turn of a circular record of ``length`` bases: a part past the origin (after the end, or,
-    once reversed, before the start) moves one turn, and a part across it is split there (``_source_intervals``)
-    into the part up to the end and the part from the start, in biological order, as a GenBank file writes
-    ``join(81..100,1..10)`` for GFF3's ``81..110`` on 100 bp (reversed, ``[-10:20]``). The cut points at the origin
-    are exact; the part's own ends keep their kind and fuzz. ``location`` itself when every part lies in the record.
+def _part_fits(start: int, end: int, length: int, over_origin: bool) -> bool:
+    return 0 <= start and (end <= length or over_origin and start < length and end - start <= length)
 
-    The one owner of reading a part past a record's origin as its join (OV-3724): crops, the Linear axis, display
-    projection, feature density and protein extraction read such a part through it. The feature keeps the location
-    as written, and so does a reversal, so selectors, hashes and the Circular drawing, which draws a part by its
-    angles in one arc, never see this form."""
+
+def location_fits_record(parts: Iterable[Location], length: int, *, over_origin: bool) -> bool:
+    """Whether a location fits in a record of ``length`` bases (OV-3678, OV-3724).
+
+    Each part lies in the record. On a record drawn as a circle (``over_origin``) a part may also start in the
+    record and run past its end, covering at most all of it: the GFF3 way to write a span over the origin, which
+    :func:`location_over_origin` writes as the join it is. A part that starts outside the record, is longer than it,
+    or runs past the end of a record not drawn as a circle cannot be drawn on it.
+    """
+
+    return all(_part_fits(int(part.start), int(part.end), length, over_origin) for part in parts)
+
+
+def location_on_one_turn(location: Location, length: int) -> Location:
+    """``location``, read round a circle of ``length`` bases from a place up to one turn past its origin (or before
+    it), on one turn: a part past the origin moves one turn, and a part across it is split there
+    (``_source_intervals``) into the part up to the end and the part from the start, in biological order. The cut
+    points at the origin are exact; the part's own ends keep their kind and fuzz. ``location`` itself when every
+    part lies on the turn. The inverse of ``gbdraw.io.regions._unwrapped_location``, which reads a crop across the
+    origin on two turns.
+
+    It moves any part, so it reads only a place known to lie on two turns (a crop across the origin); a feature's
+    location goes through :func:`location_over_origin`, which first checks that it fits."""
 
     if all(0 <= int(part.start) and int(part.end) <= length for part in location.parts):
         return location
@@ -587,6 +602,32 @@ def location_over_origin(location: Location, length: int) -> Location:
     if len(parts) == 1:
         return parts[0]
     return CompoundLocation(parts, operator=getattr(location, "operator", None) or "join")
+
+
+def location_over_origin(location: Location, length: int) -> Location:
+    """A feature's ``location`` on a circular record of ``length`` bases: a part that starts in the record and runs
+    past its end (at most one turn) is split at the origin into the part up to the end and the part from the start,
+    in biological order, as a GenBank file writes ``join(81..100,1..10)`` for GFF3's ``81..110`` on 100 bp; once
+    reversed (``[-10:20]``) alike (:func:`location_on_one_turn`). The cut points at the origin are exact; the part's
+    own ends keep their kind and fuzz.
+
+    Only a location that fits the record over its origin (:func:`location_fits_record` with ``over_origin``, as
+    written or as reversed) is read so; any other location, one that lies in the record or one that does not fit it,
+    is returned as it is, so no reader moves a feature outside its record to a place modulo its length (D-199).
+
+    The one owner of reading a part past a record's origin as its join (OV-3724): crops, the Linear axis, display
+    projection, feature density and protein extraction read such a part through it. The feature keeps the location
+    as written, and so does a reversal, so selectors, hashes and the Circular drawing, which draws a part by its
+    angles in one arc, never see this form."""
+
+    spans = [(int(part.start), int(part.end)) for part in location.parts]
+    if all(0 <= start and end <= length for start, end in spans):
+        return location
+    as_written = location_fits_record(location.parts, length, over_origin=True)
+    if not (as_written or all(_part_fits(length - end, length - start, length, True) for start, end in spans)):
+        return location
+    return location_on_one_turn(location, length)
+
 
 class RecordSourceMetadata(NamedTuple):
     organism: str

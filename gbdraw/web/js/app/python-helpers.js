@@ -601,10 +601,19 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         records = records[:1]
     else:
         raise ValueError(f"Unsupported format: {fmt}")
+    from gbdraw.io.genome import fit_features_to_record
+    from gbdraw.layout.record_transform import reads_over_origin
+
+    # The features the Linear drawing takes: none outside its record (OV-3678), by the rule record planning fits by.
+    display_circular = _web_display_circular(is_circular)
+    source_kind = "genbank" if fmt == "genbank" else "gff_fasta"
+    records = [
+        fit_features_to_record(record, over_origin=reads_over_origin(False, display_circular, record, source_kind)).record
+        for record in records
+    ]
     specs = parse_region_specs([region_spec]) if region_spec else []
     cropped = crop_then_reverse_records(
-        records, specs, [reverse] * len(records),
-        is_circular=_web_display_circular(is_circular), source_kind="genbank" if fmt == "genbank" else "gff_fasta",
+        records, specs, [reverse] * len(records), is_circular=display_circular, source_kind=source_kind,
     )[0]
     records = [unit for units in cropped for unit in units]
     if not records:

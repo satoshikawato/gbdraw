@@ -77,7 +77,7 @@ from gbdraw.io.regions import (
 )
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from gbdraw.layout.record_transform import detected_topology, drawn_circular
+from gbdraw.layout.record_transform import detected_topology, drawn_circular, reads_over_origin
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -2188,10 +2188,8 @@ def resolve_record_inputs(
                 source_record = filter_features_by_type(
                     source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
                 )
-            # A Circular diagram draws every record as a circle; a Linear one draws a record over its origin when
-            # it is drawn circular (its topology, or the one its display sets).
-            fitted = fit_features_to_record(source_record, over_origin=circle_diagram or drawn_circular(
-                record_input.display.is_circular, detected_topology(source_record, source_kind),
+            fitted = fit_features_to_record(source_record, over_origin=reads_over_origin(
+                circle_diagram, record_input.display.is_circular, source_record, source_kind,
             ))
             source_record = fitted.record
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))

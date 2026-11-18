@@ -448,7 +448,8 @@ def _crop_record_to_region(
         coord_base=coord_base,
         coord_step=coord_step,
         period=_source_period(record),
-        record_length=len(source.seq),
+        # Only a record drawn circular reads a feature part past its end as the span over its origin it is (OV-3724).
+        record_length=len(source.seq) if circular else None,
     )
     cropped_base = _wrap_source_base(coord_base + (coord_step * start_0), period)
     cropped_step = coord_step

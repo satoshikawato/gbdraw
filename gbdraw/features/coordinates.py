@@ -53,21 +53,6 @@ class _Span(Protocol):
     def end(self) -> int: ...
 
 
-def location_fits_record(parts: Sequence[_Span], length: int, *, over_origin: bool) -> bool:
-    """Whether a location fits in a record of ``length`` bases (OV-3678, OV-3724).
-
-    Each part lies in the record. On a record drawn as a circle (``over_origin``) a part may also start in the
-    record and run past its end, covering at most all of it: the GFF3 way to write a span over the origin, which
-    ``location_over_origin`` writes as the join it is. A part that starts outside the record, is longer than it, or
-    runs past the end of a record not drawn as a circle cannot be drawn on it.
-    """
-
-    def fits(start: int, end: int) -> bool:
-        return 0 <= start and (end <= length or over_origin and start < length and end - start <= length)
-
-    return all(fits(int(part.start), int(part.end)) for part in parts)
-
-
 class OriginCrossing(NamedTuple):
     """A location that crosses its record's origin: the record's length and the gap between its parts that the
     location does not cover (``uncovered_gap``)."""

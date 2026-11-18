@@ -34,9 +34,8 @@ from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
 from gbdraw.core.record_metadata import (
-    _copy_source_feature_identity, _feature_source_index_map, _read_coord_map, _source_period,
+    _copy_source_feature_identity, _feature_source_index_map, _read_coord_map, _source_period, location_fits_record,
 )
-from gbdraw.features.coordinates import location_fits_record
 from gbdraw.features.source import SourceFeatureCatalog, capture_source_features
 
 logger = logging.getLogger(__name__)

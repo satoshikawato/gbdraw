@@ -118,7 +118,7 @@ from gbdraw.io.regions import RecordWindow, RegionSpec, crop_record_to_region, r
 from gbdraw.io.comparisons import comparison_table_text, read_comparison_table
 from gbdraw.io.table_text import EXACT_FLOAT_READ_OPTIONS
 from gbdraw.core.record_metadata import (
-    location_over_origin,
+    location_on_one_turn,
     RecordOrigin,
     held_record_origin,
     _drawn_source_span,
@@ -1226,7 +1226,7 @@ def _with_crop_edits(source: SeqRecord, crop: SeqRecord, window: RecordWindow) -
             feature = reverse_records((SeqRecord(crop.seq, features=[feature]),), True)[0].features[0]
         shifted = feature._shift(start_0)
         if across_origin:
-            shifted.location = location_over_origin(shifted.location, len(source))
+            shifted.location = location_on_one_turn(shifted.location, len(source))
         return shifted
 
     # The crop's features cut from the source, by the source feature each was cut from; any other was added.

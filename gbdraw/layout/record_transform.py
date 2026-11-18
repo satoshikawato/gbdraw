@@ -44,6 +44,16 @@ def drawn_circular(is_circular: bool | None, topology: str) -> bool:
     return is_circular if is_circular is not None else topology == "circular"
 
 
+def reads_over_origin(circle_diagram: bool, is_circular: bool | None, record: SeqRecord, source_kind: str) -> bool:
+    """Whether a feature part that runs past ``record``'s end reads as a span over its origin (the ``over_origin`` of
+    ``gbdraw.io.genome.fit_features_to_record``): in a Circular diagram (``circle_diagram``), which draws every record
+    as a circle, or when the record is drawn circular (:func:`drawn_circular`, by its display option
+    ``is_circular``, else the topology its file of ``source_kind`` states). The one rule for record planning's fit,
+    the prepared-records cache key and the protein readers that take records outside record planning."""
+
+    return circle_diagram or drawn_circular(is_circular, detected_topology(record, source_kind))
+
+
 def unset_record_transform(record: SeqRecord) -> RecordDisplayTransform:
     """The transform of a record no plan bound one to: the one the record planner binds to the record given in
     memory with no display option (its coordinate map, the complete source length a crop recorded, and circular
