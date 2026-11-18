@@ -10,6 +10,7 @@ the number of inputs is not bounded by the files a process may hold open.
 from __future__ import annotations
 
 import gzip
+import io
 import os
 import random
 import shutil
@@ -17,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -65,24 +67,39 @@ def test_records_given_to_callers_hold_their_sequences(tmp_path: Path) -> None:
     assert not any(_reads_its_file(record) for record in gbdraw.read_gff(gff, INPUTS / "NC_013668.fasta"))
 
 
-def test_a_whole_sequence_read_keeps_nothing_in_the_block_cache(tmp_path: Path) -> None:
+def _cached_files() -> set[int]:
+    """The keys of the input files whose decoded chunks the block cache holds."""
+
+    return {key[0] for key in record_sequences._CACHE._blocks}
+
+
+def test_a_whole_sequence_read_keeps_nothing_in_the_block_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A read of a whole record sequence is a pass over it (a copy handed to a caller, a digest), so it is decoded
     around the block cache however short the record: 100,000 small entries read by ``gbdraw.read_fasta`` left
-    about 98 MiB of decoded bases there, while each caller's record held its own copy (finishing round 5, N-B)."""
+    about 98 MiB of decoded bases there, while each caller's record held its own copy (finishing round 5, N-B).
+    The cache is asked for the blocks of the file read here, by its key, whatever earlier reads left there."""
 
+    files: list[int] = []
+    opened = record_sequences._SequenceFile.__init__
+
+    def opening(self: record_sequences._SequenceFile, path: str) -> None:
+        opened(self, path)
+        files.append(self.key)
+
+    monkeypatch.setattr(record_sequences._SequenceFile, "__init__", opening)
     rng = random.Random(41)
     bases = ["".join(rng.choice("ACGT") for _ in range(1_000)) for _ in range(200)]
     path = tmp_path / "many.fasta"
     path.write_text("".join(f">e{i}\n{seq[:600]}\n{seq[600:]}\n" for i, seq in enumerate(bases)), encoding="ascii")
-    cached = record_sequences._CACHE._bytes
     records = gbdraw.read_fasta(path)
-    assert record_sequences._CACHE._bytes == cached
+    assert files and not _cached_files() & set(files)
     assert [str(record.seq) for record in records] == bases
     [record] = read_flat_file_records(str(GENBANK))
+    key = record.seq._data._bases.source.key
     whole = bytes(record.seq)
-    assert record_sequences._CACHE._bytes == cached
+    assert key not in _cached_files()
     assert bytes(record.seq[100:200]) == whole[100:200]  # a part reads through the cache
-    assert record_sequences._CACHE._bytes > cached
+    assert key in _cached_files()
 
 
 def test_an_indented_block_ends_at_the_first_line_end_an_unindented_line_follows() -> None:
@@ -100,6 +117,87 @@ def test_an_indented_block_ends_at_the_first_line_end_an_unindented_line_follows
             for pos in range(size + 1):
                 found = one_pattern.search(buf, pos)
                 assert record_sequences._next_unindented(buf, pos) == (-1 if found is None else found.end()), (buf, pos)
+
+
+def _genbank_with_a_line_end_at(where: str, position: int) -> str:
+    """A GenBank record (lines ending in ``\\n``) whose CRLF form has a ``\\r`` at ``position`` and its ``\\n`` after it,
+    on a line of the COMMENT continuations or of the feature table (``where``)."""
+
+    rng = random.Random(53)
+    bases = "".join(rng.choice("acgt") for _ in range(600))
+
+    def lines(pad: int) -> list[str]:
+        comment_pad, note_pad = (pad, 0) if where == "comment" else (0, pad)
+        comments = 15_000 if where == "comment" else 2
+        features = 1_300 if where == "features" else 3
+        text = [
+            "LOCUS       SPLIT1                   600 bp    DNA     linear   UNK 01-JAN-1980",
+            "DEFINITION  A record whose CRLF line end falls between two blocks.",
+            "ACCESSION   SPLIT1",
+            "VERSION     SPLIT1.1",
+            "COMMENT     " + "c" * comment_pad + " first comment line",
+            *(f"            continuation {i:07d} of the comment, long enough to fill lines" for i in range(comments)),
+            "FEATURES             Location/Qualifiers",
+            "     source          1..600",
+            '                     /mol_type="genomic DNA"',
+        ]
+        for i in range(features):
+            start = i % 500 + 1
+            text += [f"     CDS             complement({start}..{start + 59})" if i % 2 else f"     CDS             {start}..{start + 59}",
+                     f'                     /locus_tag="T{i:06d}"',
+                     '                     /note="' + ("n" * note_pad if i == 0 else "a note"),
+                     *(f"                     line {j:02d} of a note long enough to fill its lines" for j in range(11)),
+                     '                     ends here"']
+        text.append("ORIGIN")
+        text += [f"{i + 1:>9} " + " ".join(bases[j: j + 10] for j in range(i, i + 60, 10)) for i in range(0, 600, 60)]
+        return [*text, "//"]
+
+    def carriages(pad: int) -> list[int]:
+        ends, at = [], -1
+        for line in lines(pad):
+            at += len(line) + 2
+            ends.append(at - 1)
+        return ends
+
+    first = [end for end in carriages(0) if end <= position][-1]
+    text = "\n".join(lines(position - first)) + "\n"
+    crlf = text.replace("\n", "\r\n")
+    assert crlf[position: position + 2] == "\r\n"
+    assert crlf[crlf.rfind("\n", 0, position) + 1: position].startswith(" ")  # inside an indented block
+    return text
+
+
+@pytest.mark.parametrize("compressed", [False, True], ids=["plain", "gzip"])
+@pytest.mark.parametrize("where", ["comment", "features"])
+def test_a_crlf_line_end_split_between_two_blocks_reads_as_biopython_reads_it(
+    where: str, compressed: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A CRLF file read by the parse pass in blocks of ``_BLOCK_BYTES``, with a ``\\r`` ending one block and its
+    ``\\n`` starting the next inside an indented block (COMMENT continuations, the feature table): the record's
+    comment, features and bases equal Biopython's of the same text (review of the finishing round, N1)."""
+
+    size = record_sequences._BLOCK_BYTES
+    text = _genbank_with_a_line_end_at(where, size - 1)
+    data = text.replace("\n", "\r\n").encode("ascii")
+    path = tmp_path / ("split.gb.gz" if compressed else "split.gb")
+    # A gzip input expands in blocks of at most ``size``: two members, split there, end a block at the "\r".
+    path.write_bytes(gzip.compress(data[:size]) + gzip.compress(data[size:]) if compressed else data)
+    edges: list[tuple[bytes, bytes]] = []
+    blocks = record_sequences._SequenceFile.blocks
+
+    def seen(self: record_sequences._SequenceFile) -> Iterator[bytes]:
+        for block in blocks(self):
+            edges.append((block[:1], block[-1:]))
+            yield block
+
+    monkeypatch.setattr(record_sequences._SequenceFile, "blocks", seen)
+    [record] = read_flat_file_records(str(path))
+    assert any(last == b"\r" and first == b"\n" for (_, last), (first, _) in zip(edges, edges[1:])), edges
+    expected = SeqIO.read(io.StringIO(text), "genbank")
+    assert (record.id, record.annotations["comment"]) == (expected.id, expected.annotations["comment"])
+    assert [(f.type, str(f.location), f.qualifiers) for f in record.features] == [
+        (f.type, str(f.location), f.qualifiers) for f in expected.features]
+    assert bytes(record.seq) == bytes(expected.seq)
 
 
 def test_the_render_path_reads_sequences_from_the_file() -> None:
