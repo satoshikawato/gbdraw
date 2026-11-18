@@ -1,6 +1,6 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
-import { noteReplacedLeaf } from '../utils/field-reading.js';
+import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t } from '../utils/i18n.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
@@ -1331,6 +1331,19 @@ const TRACK_DESCRIPTION_PARAMS = new Set(['legend_label', 'label', 'color', 'fil
 export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntries(
   Object.entries(params && typeof params === 'object' && !Array.isArray(params) ? params : {})
     .filter(([key]) => !TRACK_DESCRIPTION_PARAMS.has(key) && paramsAllowedForRenderer(renderer, normalizedString(key)))
+);
+
+/**
+ * Whether a drawing's custom track stack of `stack` is placed: the request draws it (its Use custom stack is on), or an
+ * edit of the stack placed it (its Axis index is set). A stack neither placed is the stack a new drawing holds, with
+ * its sides and lane directions unset; the Load and every change that is no edit of the stack keep it so, and the
+ * request builder places it when it draws it (OV-3696).
+ * @param {Readonly<Record<string, unknown>>} adv The drawing's settings.
+ * @param {'circular' | 'linear'} stack
+ * @returns {boolean}
+ */
+export const placesTrackStack = (adv, stack) => (
+  adv[`${stack}_track_slots_enabled`] === true || !isUnsetValue(adv[`${stack}_track_slots_axis_index`])
 );
 
 /**

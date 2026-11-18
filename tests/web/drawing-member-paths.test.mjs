@@ -588,11 +588,12 @@ test('Undo of choosing one circle gives back no record of what one circle left, 
 }));
 
 // OV-3696: Load places a track stack only when the drawing draws it (its Use
-// custom stack is on), as Generate does. A stack the drawing does not draw
-// keeps the unset sides, lane directions and Axis index a new drawing holds,
+// custom stack is on), as Generate does, or an edit of the stack placed it. A
+// stack nobody placed keeps the unset sides, lane directions and Axis index a
+// new drawing holds,
 // so Track Preset, Add feature density track and Use custom stack act after a
-// Load as on a new drawing (PD-OI-126); a custom stack it draws comes back as
-// saved. In a Circular and a Linear drawing.
+// Load as on a new drawing (PD-OI-126); a custom stack it draws, or one an edit
+// placed, comes back as saved. In a Circular and a Linear drawing.
 const STACK_FIELDS = ['circular_track_slots_enabled', 'circular_track_slots_axis_index', 'circular_track_slots',
   'linear_track_slots_enabled', 'linear_track_slots_axis_index', 'linear_track_slots'];
 test('Save then Load gives back each track stack as saved, drawn or not', () => withBootPalettes(state, async () => {
@@ -617,11 +618,23 @@ test('Save then Load gives back each track stack as saved, drawn or not', () => 
     const fresh = stacks();
     assert.equal(fresh[`${mode}_track_slots_axis_index`], null, `${mode}: a new drawing's stack is not placed`);
     assert.deepEqual(await saveThenLoadStacks(), fresh, `${mode}: Load leaves the stacks the drawing does not draw as saved`);
-    if (mode === 'circular') app.setCircularTrackSlotsEnabled(true);
-    else app.setLinearTrackSlotsEnabled(true);
+    // Hide GC Content is no edit of the stack: it leaves the stack unplaced, and the Load gives it back so.
+    if (mode === 'circular') {
+      await app.setCircularGcSuppressed(true);
+      const hidden = stacks();
+      assert.equal(hidden.circular_track_slots_axis_index, null, 'Hide GC Content places no stack');
+      assert.deepEqual(await saveThenLoadStacks(), hidden, 'Load gives back the stack Hide GC Content left unplaced');
+    }
+    const useCustomStack = (enabled) => (mode === 'circular' ? app.setCircularTrackSlotsEnabled(enabled) : app.setLinearTrackSlotsEnabled(enabled));
+    useCustomStack(true);
     const drawn = stacks();
     assert.equal(drawn[`${mode}_track_slots_enabled`], true);
     assert.deepEqual(await saveThenLoadStacks(), drawn, `${mode}: Load gives back the custom stack the drawing draws`);
+    // A stack placed while it was drawn stays placed when it is turned off.
+    useCustomStack(false);
+    const placed = stacks();
+    assert.notEqual(placed[`${mode}_track_slots_axis_index`], null);
+    assert.deepEqual(await saveThenLoadStacks(), placed, `${mode}: Load gives back a placed stack the drawing does not draw`);
   }
 }));
 

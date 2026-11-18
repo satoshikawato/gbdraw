@@ -5698,7 +5698,7 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
     });
   }
   drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...fit.depthTracks);
-  // The fitted stacks as the settings resolve them: a stack the request draws placed, another as stored (OV-3696).
+  // The fitted stacks as the settings resolve them: a placed stack placed, one nobody placed left unplaced (OV-3696).
   const stacks = resolvedTrackStacks(
     { ...drawing.adv, circular_track_slots: fit.circularSlots, linear_track_slots: fit.linearSlots }, drawing.form
   );

@@ -845,7 +845,6 @@ const readDeferredCircularRecords = async (page) => {
 //   Product Contract PD-OI-044), so a Load that loses a value the read would
 //   rewrite (`adv.multi_record_positions`, `form.circular_record_selector`)
 //   fails; and after it.
-const UNSET = Object.freeze([null]);
 const RESTORING_KINDS = Object.freeze({
   undoRedo: { phase: 'Undo then Redo', by: 'drawings', settle: async () => {}, unread: {}, off: {} },
   load: {

@@ -27,6 +27,7 @@ import {
 import { IMPORTED_COMPARISON_ACTIONS } from './imported-comparison-intent.js';
 import { readCircularPlotTitlePosition } from './layout-preferences.js';
 import { isPlainObject } from './losat-cache.js';
+import { placesTrackStack } from './track-slot-validation.js';
 import {
   readCollinearAnchorMode, readCollinearColorMode, readCollinearMergeOrientation, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
 } from './losat-normalization.js';
@@ -1723,20 +1724,12 @@ export const configFieldRepairs = (targets, config, path, {
 };
 
 /**
- * Whether the request draws the drawing's custom track stack of `stack`: its
- * Use custom stack is on (the request builder reads only such a stack).
- * @param {Record<string, unknown>} adv
- * @param {'circular' | 'linear'} stack
- */
-const drawsTrackStack = (adv, stack) => adv[`${stack}_track_slots_enabled`] === true;
-
-/**
  * The track stacks a drawing's settings resolve to: each stack read, and a
- * stack the request draws (`drawsTrackStack`) placed, with its axis index read
- * or inferred (`applyConfigData`'s `resolveTrackPlacements`). A stack the
- * request does not draw keeps its sides, lane directions and axis index as
- * stored, unset ones unset, as a new drawing holds them (OV-3696; resolving
- * them belongs to the request builder, R11). Pure: Load reads the stacks it
+ * placed stack (`placesTrackStack`: the request draws it or an edit placed it)
+ * placed, with its axis index read or inferred (`applyConfigData`'s
+ * `resolveTrackPlacements`). A stack nobody placed keeps its sides, lane
+ * directions and axis index unset, as a new drawing and the page hold them
+ * (OV-3696; resolving them belongs to the request builder, R11). Pure: Load reads the stacks it
  * installs with it before the commit, and `losses` collects what the slot
  * readers replace (OV-758; `at` under the settings).
  * @param {Record<string, unknown>} adv The drawing's settings, read.
@@ -1756,17 +1749,15 @@ export const resolvedTrackStacks = (adv, form, losses = null) => {
   const nt = /** @type {string | undefined} */ (adv.nt);
   const trackType = /** @type {string | undefined} */ (form.track_type);
   const normalizedSlots = normalizeCircularTrackSlots(adv.circular_track_slots, nt, trackType, circularLosses);
-  const storedAxis = adv.circular_track_slots_axis_index;
-  const importedAxis = clampCircularTrackAxisIndex(storedAxis, normalizedSlots.length, circularAxisLosses);
-  const circularDrawn = drawsTrackStack(adv, 'circular');
-  // The index of a stack not drawn stays unset when it is unset (the clamp reads null as 0).
-  const circularAxis = circularDrawn ? importedAxis ?? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType)
-    : isUnsetValue(storedAxis) ? null : importedAxis;
+  const importedAxis = clampCircularTrackAxisIndex(adv.circular_track_slots_axis_index, normalizedSlots.length, circularAxisLosses);
+  const circularPlaced = placesTrackStack(adv, 'circular');
+  // The clamp reads an unset index as 0; the index of a stack nobody placed stays unset.
+  const circularAxis = circularPlaced ? importedAxis ?? inferLegacyAxisIndexFromFeature(normalizedSlots, trackType) : null;
   const linearStack = /** @type {Parameters<typeof normalizeLinearTrackSlots>[0]} */ (adv.linear_track_slots);
   const normalizedLinearSlots = normalizeLinearTrackSlots(linearStack, nt, form.linear_track_layout, linearLosses);
   const importedLinearAxis = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, normalizedLinearSlots.length, linearAxisLosses);
-  const linearDrawn = drawsTrackStack(adv, 'linear');
-  const linearAxis = linearDrawn ? resolveLinearTrackAxisIndex(normalizedLinearSlots, importedLinearAxis) : importedLinearAxis;
+  const linearPlaced = placesTrackStack(adv, 'linear');
+  const linearAxis = linearPlaced ? resolveLinearTrackAxisIndex(normalizedLinearSlots, importedLinearAxis) : null;
   losses?.push(...[
     ...circularLosses.map((leaf) => ({ ...leaf, at: `adv.circular_track_slots${leaf.at}` })),
     ...circularAxisLosses.map((leaf) => ({ ...leaf, at: 'adv.circular_track_slots_axis_index' })),
@@ -1775,10 +1766,10 @@ export const resolvedTrackStacks = (adv, form, losses = null) => {
   ]);
   return {
     circularAxis,
-    circularSlots: circularDrawn
+    circularSlots: circularPlaced
       ? applyCircularTrackOrderPlacements(adv.circular_track_slots, nt, trackType, circularAxis) : normalizedSlots,
     linearAxis,
-    linearSlots: linearDrawn
+    linearSlots: linearPlaced
       ? applyLinearTrackOrderPlacements(normalizedLinearSlots, linearAxis, nt, form.linear_track_layout) : normalizedLinearSlots
   };
 };

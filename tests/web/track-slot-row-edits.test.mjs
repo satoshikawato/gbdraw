@@ -1375,3 +1375,40 @@ test('Use custom stack builds a new Linear drawing\'s stack from the simple cont
     assert.deepEqual(ids, ['features', 'density_genes', 'gc_content', 'gc_skew'], `normalized first: ${normalizeFirst}`);
   }
 });
+
+// OV-3696: only an edit of a custom stack places it (pins its Axis index and the sides that index gives). Hide GC
+// Content, a Depth file, the stack editor's reads and the normalizer the other sections call leave a stack nobody
+// placed as a new drawing holds it, so the Load, which places only a stack the drawing draws or an edit placed, gives
+// it back as the page held it. An edit in the stack editor, such as Duplicate, places it.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: what is no edit of the stack leaves a stack nobody placed unplaced (OV-3696)`, async () => {
+    const opened = MODES[mode](createDefaultAdv(mode)[`${mode}_track_slots`]);
+    const drawing = opened.state.activeDrawing();
+    drawing.adv[`${mode}_track_slots_enabled`] = false;
+    drawing.adv[`${mode}_track_slots_axis_index`] = null;
+    const placements = () => ({
+      axis: drawing.adv[`${mode}_track_slots_axis_index`],
+      rows: opened.slots().filter(({ renderer }) => renderer !== 'depth')
+        .map(({ id, side, params }) => [id, side ?? null, params?.lane_direction ?? null])
+    });
+    const unplaced = placements();
+    if (mode === 'circular') {
+      await opened.editor.setCircularGcSuppressed(true);
+      opened.editor.circularTrackStackEntries();
+      opened.editor.canMoveCircularTrackSlotOutside(0);
+      opened.editor.canMoveCircularTrackSlot(0, 1);
+      opened.editor.normalizeCircularTrackSlots(drawing);
+      opened.editor.changeCircularDepthSources(drawing, () => { drawing.files.c_depth = [depthFile]; });
+    } else {
+      opened.editor.linearTrackStackEntries();
+      opened.editor.canMoveLinearTrackSlotAbove(0);
+      opened.editor.canMoveLinearTrackSlot(0, 1);
+      opened.editor.normalizeLinearTrackSlots(drawing);
+      opened.editor.changeLinearDepthSources(drawing, () => { opened.state.linearSeqs[0].depth = [depthFile]; });
+    }
+    assert.equal(opened.slots().some(({ renderer }) => renderer === 'depth'), true, `${mode}: the Depth file adds its row`);
+    assert.deepEqual(placements(), unplaced, `${mode}: nothing placed the stack`);
+    opened.duplicate(0);
+    assert.notEqual(drawing.adv[`${mode}_track_slots_axis_index`], null, `${mode}: a Duplicate places the stack`);
+  });
+}
