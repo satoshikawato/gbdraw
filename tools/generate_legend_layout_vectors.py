@@ -20,6 +20,7 @@ Usage:
   python tools/generate_legend_layout_vectors.py            # recompute expected values
   python tools/generate_legend_layout_vectors.py --check    # fail when stale
   python tools/generate_legend_layout_vectors.py --from-gallery  # rebuild inputs, then expected
+  python tools/generate_legend_layout_vectors.py --check --from-gallery  # also fail when the Gallery moved (tested)
 """
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ from gbdraw.layout.composition import (  # noqa: E402
 from gbdraw.layout.spatial import Aabb  # noqa: E402
 from gbdraw.legend.circular_layout import build_circular_legend_layout  # noqa: E402
 from gbdraw.legend.linear_layout import build_linear_legend_layout  # noqa: E402
-from gbdraw.legend.metrics import legend_caption_box  # noqa: E402
+from gbdraw.legend.metrics import GRADIENT_SCALE_NAME_ATTRIBUTES, legend_caption_box  # noqa: E402
 from gbdraw.session_container import SESSION_DOCUMENT_ENTRY  # noqa: E402
 
 SVG = "{http://www.w3.org/2000/svg}"
@@ -142,23 +143,38 @@ def _solid_rows(group: ET.Element) -> list[dict[str, Any]]:
     return rows
 
 
-def _gradient_rows(group: ET.Element | None) -> tuple[list[dict[str, Any]], str | None]:
+def _gradient_rows(group: ET.Element | None) -> list[dict[str, Any]]:
+    """The rows of a comparison or conservation block as the Web's Legend layout owner reads them
+    (``readGradientRows`` in ``gbdraw/web/js/app/legend/layout-actions.js``): a row with ``data-track-index`` is a
+    similarity ring (the color its own ramp ends at, none without a ramp); any other is a gradient row (its bar's
+    stroke; an annotation gradient names its scale's ends). Every row has the lowest identity the block's scale shows."""
     if group is None:
-        return [], None
+        return []
+    labels = [(label.text or "").strip() for label in group.iter(SVG + "text")]
+    minimum = next((label for label in labels if re.fullmatch(r"-?\d+(?:\.\d+)?%", label) and label != "100%"), None)
+    min_value = float(minimum[:-1]) if minimum else 0.0
     rows = []
-    labels = [label.text or "" for label in _children(group, "text")]
     for entry in _children(group, "g"):
         key = entry.get("data-legend-key")
         if key is None:
             continue
-        bar = _children(entry, "path")[0]
-        labels.extend(label.text or "" for label in _children(entry, "text")[1:])
-        rows.append({
-            "key": key, "type": "gradient", "stroke": bar.get("stroke") or "none",
-            "strokeWidth": float(bar.get("stroke-width") or 0),
-        })
-    min_label = next((label for label in labels if label.endswith("%") and label != "100%"), None)
-    return rows, min_label
+        bar = next((path for path in _children(entry, "path") if (path.get("fill") or "").startswith("url(")), None)
+        if entry.get("data-track-index") is not None:
+            stops = list(entry.iter(SVG + "stop"))
+            color = stops[-1].get("stop-color") if bar is not None and stops else None
+            rows.append({
+                "key": key, "type": "ring", "stroke": "none", "strokeWidth": 0.0, "minValue": min_value, "color": color,
+            })
+            continue
+        row = {
+            "key": key, "type": "gradient", "stroke": (bar.get("stroke") if bar is not None else None) or "none",
+            "strokeWidth": float((bar.get("stroke-width") if bar is not None else None) or 0), "minValue": min_value,
+        }
+        min_name, max_name = (entry.get(attribute) for attribute in GRADIENT_SCALE_NAME_ATTRIBUTES)
+        if min_name is not None and max_name is not None:
+            row.update({"minLabel": min_name, "maxLabel": max_name})
+        rows.append(row)
+    return rows
 
 
 def _box_from_payload(payload: dict[str, float]) -> list[float]:
@@ -184,17 +200,14 @@ def _gallery_cases() -> list[dict[str, Any]]:
             if linear:
                 horizontal = _by_id(root, "legend_horizontal")
                 solids = _solid_rows(_by_id(horizontal, "feature_legend_h"))
-                gradients, min_label = _gradient_rows(_by_id(horizontal, "pairwise_legend_h"))
+                gradients = _gradient_rows(_by_id(horizontal, "pairwise_legend_h"))
             else:
                 feature = _by_id(legend, "feature_legend")
                 solids = _solid_rows(feature if feature is not None else legend)
-                gradients, min_label = _gradient_rows(_by_id(legend, "conservation_identity_legend"))
+                gradients = _gradient_rows(_by_id(legend, "conservation_identity_legend"))
             family, size = solids[0].pop("_font")
             for row in solids[1:]:
                 row.pop("_font")
-            if gradients and min_label:
-                for row in gradients:
-                    row["minValue"] = float(min_label.rstrip("%"))
             auto = meta["primary"]["automaticTranslation"]
             final = meta["primary"]["finalBounds"]
             reflow = meta["legendReflow"]
