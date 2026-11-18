@@ -342,9 +342,9 @@ def test_an_embedded_label_fits_its_feature_at_the_radius_it_is_drawn_at(
     original = assemble.prepare_label_list
 
     def capture(*args, **kwargs):
-        labels = original(*args, **kwargs)
-        measured.append(labels)
-        return labels
+        placed = original(*args, **kwargs)
+        measured.append(placed.labels)
+        return placed
 
     monkeypatch.setattr(assemble, "prepare_label_list", capture)
     _draw(

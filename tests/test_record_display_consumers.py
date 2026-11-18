@@ -238,7 +238,7 @@ def test_plan_labels_select_projected_coverage_and_connect_leaders(mode, placeme
     def capture(*args, **kwargs):
         result = prepare(*args, **kwargs)
         # A Linear record's labels are placed in their row in place, after this returns.
-        captured.append((args[0], result if mode == "circular" else result.labels))
+        captured.append((args[0], result.labels))
         return result
     monkeypatch.setattr(owner, symbol, capture)
     intervals = {"ordinary": [(2000, 3000)], "cut": [(2000, 7000)],
@@ -420,7 +420,7 @@ def test_dense_rotated_labels_keep_collision_bounds_and_actual_leader_endpoints(
     captured = []
     def capture(*args, **kwargs):
         result = real(*args, **kwargs)
-        captured.append(result if mode == "circular" else result.labels)
+        captured.append(result.labels)
         return result
     monkeypatch.setattr(owner, symbol, capture)
     record = _record()

@@ -1400,7 +1400,7 @@ def test_final_svg_isolated_secondary_lane_keeps_empty_main(monkeypatch, mode, s
         for path in paths:
             x, y = map(float, re.search(rf"M\s*({number})[,\s]+({number})", path.get("d")).groups())
             assert lane.inner_px - PATH_ROUNDING <= math.hypot(x, y) <= lane.outer_px + PATH_ROUNDING
-        label = result[0]
+        label = result.labels[0]
         assert label["is_inner"] == (side == "inward")
         assert math.hypot(label["feature_middle_x"], label["feature_middle_y"]) == pytest.approx(lane.center_px)
         anchor = (label["feature_anchor_x"], label["feature_anchor_y"])
@@ -1453,7 +1453,7 @@ def test_radial_preflight_replans_final_slot_without_stale_assignment(monkeypatc
         return result
     def capture_labels(*args, **kwargs):
         result = real_labels(*args, **kwargs)
-        layouts.append((kwargs, result))
+        layouts.append((kwargs, result.labels))
         return result
     def capture_candidates(*args, **kwargs):
         result = real_candidates(*args, **kwargs)
