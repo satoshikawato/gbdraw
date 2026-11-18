@@ -159,6 +159,14 @@ class FeatureObject:
         self._feature_type = value
 
     @property
+    def drawn_location(self) -> FeatureLocation:
+        """The parts the feature is drawn with, in the drawing's coordinates: its display fragments when the record is
+        projected (a display start, a crop), else its location. Placement that avoids features reads these."""
+        if self.display_parts is None:
+            return self.location
+        return [part.location for part in self.display_parts]
+
+    @property
     def is_directional(self) -> bool:
         """Backward-compatible directionality derived from the stored glyph."""
 
