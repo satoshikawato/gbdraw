@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { makeTempDirSync } from './helpers/temp-dir.cjs';
@@ -57,6 +57,15 @@ const running = (pid) => {
   }
 };
 
+/** @param {number} group */
+const killGroup = (group) => {
+  try {
+    process.kill(-group, 'SIGKILL');
+  } catch {
+    // The group has ended.
+  }
+};
+
 /** A folder whose `tmp` folder serves as the TMPDIR of the fixtures of one case. */
 const makeRoot = () => {
   const root = makeTempDirSync('gbdraw-temp-dir-case-');
@@ -78,6 +87,8 @@ let reports = 0;
 /**
  * Starts the fixture in its own process group with `<root>/tmp` as its TMPDIR,
  * outside the test runner that runs this file. Resolves once its folders exist.
+ * A fixture that does not get there, or does not end when awaited, is killed so
+ * that a failing case does not leave it running for a minute.
  * @param {string} root
  * @param {string} end
  * @param {{ runner?: boolean }} [options]
@@ -91,18 +102,27 @@ const startFixture = async (root, end, { runner = true } = {}) => {
     stdio: 'ignore',
     detached: true
   });
-  const exited = new Promise((resolve) => child.once('exit', resolve));
-  await waitFor(() => existsSync(report), 'the fixture never made its folders');
+  const group = /** @type {number} */ (child.pid);
+  /** @param {() => boolean} done @param {string} message */
+  const waitOrKill = async (done, message) => {
+    try {
+      await waitFor(done, message);
+    } catch (error) {
+      killGroup(group);
+      throw error;
+    }
+  };
+  await waitOrKill(() => existsSync(report), 'the fixture never made its folders');
   /** @type {{ pid: number, made: string[], listeners: number }} */
   const made = JSON.parse(readFileSync(report, 'utf8'));
   return {
     ...made,
-    group: /** @type {number} */ (child.pid),
-    ended: async () => {
-      await exited;
-      // `node --test` may exit before the test-file process it ran.
-      await waitFor(() => !running(made.pid), 'the test-file process never ended');
-    }
+    group,
+    // `node --test` may exit before the test-file process it ran.
+    ended: () => waitOrKill(
+      () => (child.exitCode !== null || child.signalCode !== null) && !running(made.pid),
+      'the fixture never ended'
+    )
   };
 };
 
@@ -158,9 +178,41 @@ for (const [how, stop] of /** @type {Array<[string, (run: FixtureRun) => void]>}
 test('the folders of a running test process stay when another test process starts', async () => {
   const root = makeRoot();
   const alive = await startFixture(root, 'hang');
+  try {
+    const next = await startFixture(root, 'pass', { runner: false });
+    await next.ended();
+    assert.deepEqual(alive.made.filter((folder) => existsSync(folder)), alive.made);
+  } finally {
+    killGroup(alive.group);
+    await alive.ended();
+  }
+});
+
+test('a test process keeps its folders in a root of its user, in a folder named by its pid and start time', async () => {
+  const root = makeRoot();
+  const before = Date.now();
+  const run = await startFixture(root, 'pass', { runner: false });
+  const after = Date.now();
+  await run.ended();
+  const own = dirname(run.made[0]);
+  assert.equal(dirname(own), join(root, 'tmp', `gbdraw-tests-${process.getuid ? process.getuid() : 'user'}`));
+  const [, pid, started] = (/-(\d+)-(\d+)$/.exec(basename(own)) ?? []).map(Number);
+  assert.equal(pid, run.pid);
+  assert.ok(started >= before - 1 && started <= after, `start time ${started} not in [${before}, ${after}]`);
+});
+
+test('the next test process removes the folders of ended processes on its host and in its PID namespace only', async () => {
+  const root = makeRoot();
+  const ended = await startFixture(root, 'pass', { runner: false });
+  await ended.ended();
+  // This file's processes and the fixtures they start share a host and a PID namespace.
+  const own = dirname(makeTempDirSync('gbdraw-temp-dir-scope-'));
+  const scope = basename(own).replace(/-\d+-\d+$/, '');
+  const userRoot = join(root, 'tmp', basename(dirname(own)));
+  const sameScope = join(userRoot, `${scope}-${ended.pid}-1`);
+  const otherScope = join(userRoot, `other-${scope}-${ended.pid}-1`);
+  for (const folder of [sameScope, otherScope]) mkdirSync(join(folder, 'left'), { recursive: true });
   const next = await startFixture(root, 'pass', { runner: false });
   await next.ended();
-  assert.deepEqual(alive.made.filter((folder) => existsSync(folder)), alive.made);
-  process.kill(-alive.group, 'SIGKILL');
-  await alive.ended();
+  assert.deepEqual({ sameScope: existsSync(sameScope), otherScope: existsSync(otherScope) }, { sameScope: false, otherScope: true });
 });
