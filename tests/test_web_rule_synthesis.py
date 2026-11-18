@@ -12,6 +12,7 @@ import pytest
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
+from gbdraw.features.colors import TYPE_COLOR_VALUE
 from gbdraw.features.ids import feature_instance
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.web_support.rule_matching import evaluate_rules_json, exact_value_pattern, synthesize_color_rules_json
@@ -379,13 +380,15 @@ def test_a_reset_feature_another_rule_still_colors_takes_the_reset_color():
     first, twin = _instances(_cds(0, product="x"), "k1", "k2")
     current = [dict(feat="CDS", qual="hash", val=first["selector"]["hash"], color="#0000ff", cap="both"),
                dict(feat="CDS", qual="product", val="^x$", color="#00ff00", cap="x")]
-    answer = _synthesize([first, twin], [0], rules=current, scope="reset", color="#999999", caption="other proteins")
+    # The Web sends the type color value; the rule takes it without a caption
+    # (`caption` is not read), so the Legend reads the feature as one of no rule.
+    answer = _synthesize([first, twin], [0], rules=current, scope="reset", color=TYPE_COLOR_VALUE, caption="ignored")
     table = _next_table(answer, current)
-    assert _colors([first, twin], table) == ["#999999", "#0000ff"]
-    assert {"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(first)), "color": "#999999",
-            "cap": "other proteins"} in table
+    assert _colors([first, twin], table) == [TYPE_COLOR_VALUE, "#0000ff"]
+    assert {"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(first)), "color": TYPE_COLOR_VALUE,
+            "cap": ""} in table
     # Without another rule, the feature takes no row: it shows its palette color.
-    answer = _synthesize([first, twin], [0], rules=current[:1], scope="reset", color="#999999", caption="other proteins")
+    answer = _synthesize([first, twin], [0], rules=current[:1], scope="reset", color=TYPE_COLOR_VALUE, caption="")
     assert _colors([first, twin], _next_table(answer, current[:1])) == [None, "#0000ff"]
 
 
@@ -759,10 +762,10 @@ LARGE_RRNA = dict(feat="rRNA", qual="product", val="^l-rRNA$", color="#0055ff", 
 
 def _reset_small_rrna(rules: list[dict]) -> tuple[list[SeqFeature], list[dict], dict, list[dict]]:
     """Reset fill on s-rRNA, which `SMALL_RRNA` colors, as the Web asks it: the
-    palette color, no caption (Python names the row), the drawn features."""
+    type color value, no caption, the drawn features."""
     seqs = [_rrna(0, "s-rRNA"), _rrna(1, "l-rRNA")]
     features = [_payload(f, "rec") for f in seqs]
-    answer = _synthesize(features, [0], rules=rules, scope="reset", color=PALETTE_DEFAULT, caption="", drawn=[0, 1])
+    answer = _synthesize(features, [0], rules=rules, scope="reset", color=TYPE_COLOR_VALUE, caption="", drawn=[0, 1])
     return seqs, features, answer, _next_table(answer, rules)
 
 
@@ -776,14 +779,14 @@ def _generated(seqs: list[SeqFeature], features: list[dict], table: list[dict]) 
 
 
 def test_a_reset_that_leaves_no_other_rule_of_its_type_keeps_the_type_caption():
-    # OV-3350 (Owner D-15 = B, 2026-11-11): the reset row draws s-rRNA in the
-    # palette color under the name of the type's "other" row; while no other
-    # captioned rule draws an rRNA, the Legend keeps the type's own caption, in
-    # the answer and in Generate.
+    # OV-3350 (Owner D-15 = B, 2026-11-11): while no other captioned rule draws
+    # an rRNA, the Legend keeps the type's own caption, in the answer and in
+    # Generate. The reset row draws s-rRNA in the type's color, without a
+    # caption, so Generate reads it as a feature of no rule.
     seqs, features, answer, table = _reset_small_rrna([SMALL_RRNA])
-    assert _colors(features, table) == [PALETTE_DEFAULT, None]
-    assert dict(feat="rRNA", qual="hash", val=exact_value_pattern(_instance(features[0])), color=PALETTE_DEFAULT,
-                cap="other rRNAs") in table
+    assert _colors(features, table) == [TYPE_COLOR_VALUE, None]
+    assert dict(feat="rRNA", qual="hash", val=exact_value_pattern(_instance(features[0])), color=TYPE_COLOR_VALUE,
+                cap="") in table
     assert _answer_legend(answer, table) == _generated(seqs, features, table) == ["rRNA"]
     # A later edit that colors l-rRNA brings the "other" row back.
     later = _synthesize(features, [1], rules=table, color="#0055ff", caption="large rRNA", drawn=[0, 1])
@@ -794,9 +797,21 @@ def test_a_reset_that_leaves_no_other_rule_of_its_type_keeps_the_type_caption():
 
 def test_a_reset_beside_a_rule_that_still_colors_its_type_keeps_the_other_row():
     seqs, features, answer, table = _reset_small_rrna([SMALL_RRNA, LARGE_RRNA])
-    assert _colors(features, table) == [PALETTE_DEFAULT, "#0055ff"]
+    assert _colors(features, table) == [TYPE_COLOR_VALUE, "#0055ff"]
     assert _answer_legend(answer, table) == _generated(seqs, features, table)
     assert sorted(_answer_legend(answer, table)) == ["large rRNA", "other rRNAs"]
+
+
+def test_a_rule_named_like_the_other_row_in_the_type_color_keeps_its_own_row():
+    # A rule a user named "other rRNAs" in the type's palette color is a rule
+    # row of its own, as 0.14.5 drew it: no name and color is read as a reset.
+    # Its row and the type's "other rRNAs" row have one name and one fill, so
+    # the Legend draws them as one row, at the rule's place (the answer too).
+    seqs = [_rrna(0, "s-rRNA"), _rrna(1, "l-rRNA")]
+    palette_rrna = dict(feat="rRNA", qual="product", val="^s-rRNA$", color=PALETTE_DEFAULT, cap="other rRNAs")
+    answer = _synthesize([_payload(f, "rec") for f in seqs], [], rules=[palette_rrna], caption="", drawn=[0, 1])
+    assert answer["legend"] == [0]
+    assert _answer_legend(answer, [palette_rrna]) == _generate_legend(seqs, [palette_rrna]) == ["other rRNAs"]
 
 
 def test_a_rule_named_like_the_other_row_in_another_color_keeps_its_own_row():

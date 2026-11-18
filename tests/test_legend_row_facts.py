@@ -38,7 +38,7 @@ from gbdraw.layout.series_style import SeriesPaint
 from gbdraw.legend.sources import DepthLegendSource, GcContentLegendSource, GcSkewLegendSource, legend_slot_sources
 from gbdraw.diagrams.circular.assemble import _circular_legend_slots, _sync_legend_table_for_circular_slots
 from gbdraw.diagrams.linear.assemble import _sync_legend_table_for_linear_slots
-from gbdraw.legend.table import FeatureLegendRows, LegendTable, _generated_legend_rows
+from gbdraw.legend.table import FeatureLegendRows, LegendRuleRow, LegendTable, _generated_legend_rows
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA, _decode_track_slots
 from gbdraw.tracks.circular import normalize_circular_track_slots, parse_circular_track_slots
 from gbdraw.tracks.linear import default_linear_track_slots, normalize_linear_track_slots, parse_linear_track_slots
@@ -483,9 +483,10 @@ def test_each_drawn_feature_is_in_a_row_generate_draws(case):
     assert [answer(rows.row_of(*feature)) for feature in drawn] == case["feature_rows"]
     assert {feature_type: rows.type_row(feature_type) for feature_type in rows.present} == case["type_rows"]
     drawn_rows = list(rows.rows())
-    assert [rules.index(row) if isinstance(row, tuple) else row for row in drawn_rows] == case["rows"]
+    # A rule row by the first rule written as its rule is (rules of one caption and color are one row).
+    assert [rules.index(rules[row.rule]) if isinstance(row, LegendRuleRow) else row for row in drawn_rows] == case["rows"]
     grouped = {row for row in (rows.row_of(*feature) for feature in drawn) if row is not None}
-    assert grouped == {row[1:] if isinstance(row, tuple) else row for row in drawn_rows}
+    assert grouped == {row[1:] if isinstance(row, LegendRuleRow) else row for row in drawn_rows}
 
 
 # No feature drawn: the rows of the tracks alone.

@@ -71,6 +71,12 @@
       "value": "currentColor"
     },
     {
+      "value": "palette"
+    },
+    {
+      "value": "PALETTE"
+    },
+    {
       "value": "currentcolor"
     },
     {

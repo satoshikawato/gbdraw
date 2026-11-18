@@ -1,9 +1,12 @@
 {
-  "description": "Specific-color table color domain shared by the Web parser and the Python table reader. The Web resolves a color name to hex with the table Python uses, with or without a browser, and rejects the names that table lacks, including names only a browser knows (currentColor, system colors).",
+  "description": "Specific-color table color domain shared by the Web parser and the Python table reader. `palette` (any letter case) draws a feature in its type's color (gbdraw/features/colors.py::TYPE_COLOR_VALUE); Default colors never take it (tests/fixtures/default_color_domain.json). The Web resolves a color name to hex with the table Python uses, with or without a browser, and rejects the names that table lacks, including names only a browser knows (currentColor, system colors).",
   "valid": [
     { "value": "none", "normalized": "none" },
     { "value": "NONE", "normalized": "none" },
     { "value": "None", "normalized": "none" },
+    { "value": "palette", "normalized": "palette" },
+    { "value": "PALETTE", "normalized": "palette" },
+    { "value": " Palette ", "normalized": "palette" },
     { "value": "#abc", "normalized": "#abc" },
     { "value": "#A1B2C3", "normalized": "#a1b2c3" },
     { "value": "red", "normalized": "#ff0000" },

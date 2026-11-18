@@ -7,6 +7,8 @@ import {
   colorSwatchView,
   colorValueForMode,
   colorValueMode,
+  isTypeColorValue,
+  ruleFill,
   toNativeColorInputValue
 } from './utils/color-utils.js';
 
@@ -17,6 +19,7 @@ import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { limitedList, moreLine } from './utils/limited-list.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
+
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsScrollOwner, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, SETTING_NOTE_ONE_CIRCLE_CHANGE, settingApplicationNote, settingClassNote, settingClockLabel } from './services/setting-application.js';
@@ -1254,14 +1257,21 @@ export const SequenceReadLine = {
 // The Specific color rules rows: a child of the root, so a root update that
 // leaves the rules unchanged renders no row (OV-251). The root keeps the
 // actions; a row emits them with the arguments it passed before.
+// A rule of the type color value (Reset fill color writes one) shows its
+// type's color in the swatch and a "Palette color" tag beside its caption;
+// picking a color in the swatch writes that color (`typeColors`: the
+// drawing's type colors, `currentColors`).
 export const SpecificRuleRows = {
   template: '#specific-rule-rows-template',
   components: { OperationError, HelpTip },
-  props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId'],
+  props: ['rules', 'featureKeys', 'available', 'patternText', 'patternDraft', 'fieldId', 'typeColors'],
   emits: ['set-field', 'move-up', 'move-down', 'remove', 'edit-pattern', 'retry-pattern', 'revert-pattern'],
   // OV-2435: a row without a qualifier shows the reason the Add form gives, by the same check.
-  setup() {
-    return { specificRuleHasQualifier };
+  /** @param {{ typeColors?: Readonly<Record<string, string>> | null }} props */
+  setup(props) {
+    /** @param {{ feat?: unknown, color?: unknown }} rule @returns {string} */
+    const ruleSwatch = (rule) => toNativeColorInputValue(ruleFill(rule.color, rule.feat, props.typeColors || {}) ?? null);
+    return { specificRuleHasQualifier, ruleSwatch, followsTypeColor: (/** @type {{ color?: unknown }} */ rule) => isTypeColorValue(rule.color) };
   }
 };
 

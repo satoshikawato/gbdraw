@@ -460,10 +460,24 @@ def load_default_colors(
     return merged
 
 
-def _is_specific_table_color(color: str) -> bool:
-    """Specific-color table domain: none, an SVG color name, #RGB, or #RRGGBB."""
+# The values of a color table's color column, as an error names them.
+COLOR_TABLE_COLOR_FORMS = "none, palette, an SVG color name, #RGB, or #RRGGBB"
+
+
+def is_color_table_color(color: object) -> bool:
+    """The color column domain of a color table (``COLOR_TABLE_COLOR_FORMS``):
+    ``none``, ``TYPE_COLOR_VALUE`` (the feature's type color) and SVG color
+    names in any letter case, #RGB, or #RRGGBB. The Web reads the same domain
+    (tests/fixtures/specific_color_domain.json). Default colors never take
+    ``TYPE_COLOR_VALUE`` (``is_user_color``): it names a type's color."""
+
+    # Imported here: gbdraw.features reads colors from this module.
+    from gbdraw.features.colors import is_type_color_value
+
+    if not isinstance(color, str):
+        return False
     text = color.strip()
-    if text.lower() == "none" or text.lower() in _COLOR_NAME_MAP:
+    if text.lower() == "none" or text.lower() in _COLOR_NAME_MAP or is_type_color_value(text):
         return True
     try:
         normalize_hex_color(text)
@@ -582,10 +596,10 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         )
 
     for idx, color in df["color"].items():
-        if not _is_specific_table_color(color):
+        if not is_color_table_color(color):
             raise ValidationError(
                 f"Invalid color {color!r} in '{color_table_file}' at line {idx + 1}. "
-                "Use none, an SVG color name, #RGB, or #RRGGBB.",
+                f"Use {COLOR_TABLE_COLOR_FORMS}.",
                 diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": idx + 1},
             )
 
@@ -599,6 +613,7 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 __all__ = [
     "BUILTIN_COLOR_TABLES",
     "BUILTIN_COLOR_TABLE_PREFIX",
+    "COLOR_TABLE_COLOR_FORMS",
     "PALETTE_NAME_ALIASES",
     "builtin_color_table_data",
     "builtin_color_table_names",
@@ -606,6 +621,7 @@ __all__ = [
     "USER_COLOR_FORMS",
     "check_user_color",
     "current_palette_name",
+    "is_color_table_color",
     "is_user_color",
     "load_default_colors",
     "merge_default_colors",

@@ -1510,6 +1510,19 @@ for (const { name, caption, color, read } of savedCaptions) {
     assert.equal(savedRuleCaption(caption, color), read);
   });
 }
+// A saved Session's rule as Load reads it with its drawing's type colors: an
+// older Reset fill color rule reads as the type color value (Python's
+// `saved_rule_captions`, the same vector); without type colors, as written.
+const savedRules = JSON.parse(
+  readFileSync(new URL('../fixtures/saved_rule_captions.json', import.meta.url), 'utf8')
+).rules;
+for (const { name, rule, type_colors: typeColors, read } of savedRules) {
+  test(`saved rule: ${name}`, () => {
+    const [loaded] = savedSpecificRules([rule], () => typeColors);
+    assert.deepEqual([loaded.color, loaded.cap], [read.color, read.cap]);
+    assert.deepEqual(savedSpecificRules([rule])[0].color, rule.color, 'a file is read without type colors');
+  });
+}
 
 test('saved rules and an imported color table are read without the color IDs of their own rules', () => {
   const saved = [

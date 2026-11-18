@@ -7,7 +7,7 @@ import { isPlainObject, shapeViolations } from '../utils/contract-shape.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { createDrawingState, state, sessionOperationAvailability } from '../state.js';
 import {
-  buildPaletteColorOverrideRows,
+  appliedFeatureColors, buildPaletteColorOverrideRows,
   normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex, savedColorsOverPalette
 } from '../utils/color-utils.js';
 import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
@@ -529,6 +529,16 @@ const paletteColorsFromDefinitions = (paletteName) => {
   const colors = definitions[name];
   return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
+
+// The type colors a stored drawing's config draws with (`appliedFeatureColors`):
+// its palette's colors with its own Default colors over them. Load reads a
+// rule an older Reset fill color wrote by them (`savedSpecificRules`).
+/** @param {Readonly<Record<string, unknown>> | null | undefined} config @returns {() => Readonly<Record<string, string>>} */
+const storedTypeColors = (config) => () => appliedFeatureColors({
+  paletteDefinitions: state.paletteDefinitions,
+  appliedPaletteName: { value: String(config?.palette || 'default') },
+  appliedPaletteColors: { value: isPlainObject(config?.colors) ? /** @type {Record<string, string | null>} */ (config?.colors) : null }
+});
 
 /** @param {unknown} source */
 const cloneStringMap = (source) => readStringMap(source).value;
@@ -3383,9 +3393,11 @@ const openedCommittedSession = (committed, openedWebFiles, sessionWebFiles) => {
  * @param {number} sessionVersion The version of the Session `data` (the shape Load reads it in).
  * @param {SourceFacts} sourceFacts The source facts of the file `data` came from.
  * @param {unknown} [storedRules]
+ * @param {() => Readonly<Record<string, string>>} [typeColors] The type colors of the drawing the rules are of
+ *   (`storedTypeColors`), which read an older Reset fill color rule (`savedSpecificRules`).
  * @returns {SavedResultEdits}
  */
-export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sourceFacts, storedRules) => {
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sourceFacts, storedRules, typeColors) => {
   // An entry that is no object is no rule (the rules' reader drops it, listed).
   const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
   const slice = versionKeepsModeSlices(sessionVersion)
@@ -3409,7 +3421,7 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sou
     legendStrokeOverrides: legend.strokeOverrides,
     originalLegendColors: legend.originalColors,
     originalLegendOrder: legend.originalOrder,
-    rules: savedSpecificRules(rules),
+    rules: savedSpecificRules(rules, typeColors),
     legendRekeys,
     mode,
     resultsRecordPythonPaint: sourceFacts.resultsRecordPythonPaint
@@ -7368,8 +7380,9 @@ const readStoredDrawingDraft = async (view, repairs) => {
     code: 'setting-replaced', path: `${pathIn(at, 'config')}.linearComparisonPlan${edgeAt}`, effect: 'dropped'
   })));
   config = older.config;
-  // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
-  if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
+  // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2),
+  // and a rule an older Reset fill color wrote as the type color value, by the drawing's type colors.
+  if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules, storedTypeColors(config));
   // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
   if (mode === 'linear') config = withBoundLinearRecordsOff(config, files.linearSeqs);
   else {
@@ -8789,7 +8802,8 @@ const importSessionDocument = async (e, options = {}) => {
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
     const committedSavedEdits = savedResultEdits(
-      data, generatedMode, data.editorState, sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(committedSetDrawingId)?.rules
+      data, generatedMode, data.editorState, sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(committedSetDrawingId)?.rules,
+      storedTypeColors(draftConfigOf(committedSetDrawingId))
     );
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
@@ -8844,7 +8858,7 @@ const importSessionDocument = async (e, options = {}) => {
     for (const { drawing, mode, at, catalog, set, webFiles } of storedSets) {
       // The drawing's own draft part, found by its ID.
       const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
-        sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(drawing.id)?.rules);
+        sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(drawing.id)?.rules, storedTypeColors(draftConfigOf(drawing.id)));
       savedEditsOf.set(drawing.id, savedEdits);
       storedSetSlots.push(buildLoadedArtifactSlot(set, {
         ...slotOptions,

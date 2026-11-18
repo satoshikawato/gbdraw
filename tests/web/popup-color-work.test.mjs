@@ -14,6 +14,7 @@ import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 import { groupColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { TYPE_COLOR_VALUE } from '../../gbdraw/web/js/contracts/schema.generated.js';
 
 const ref = (value) => ({ value });
 
@@ -390,6 +391,7 @@ test('the popup Reset fill color after Auto resets to the applied palette color'
   setup_.stages.length = 0;
   await setup_.choices.reset('this_with_legend');
   assert.equal(setup_.stages.includes('commitSpecificRules'), true);
-  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === '^f0@record-1$' && rule.color === '#cccccc'),
+  // The reset writes the type color value, which draws the applied palette color (#cccccc).
+  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === '^f0@record-1$' && rule.color === TYPE_COLOR_VALUE),
     JSON.stringify(setup_.manualSpecificRules));
 });

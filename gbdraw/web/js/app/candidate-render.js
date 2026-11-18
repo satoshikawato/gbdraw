@@ -10,14 +10,14 @@
 /** @import { LegendCaption, UserLegendColor } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
-import { appliedFeatureColors, paletteFeatureColor, readCommittedPaint, samePaint } from '../utils/color-utils.js';
+import { appliedFeatureColors, paletteFeatureColor, readCommittedPaint, ruleFill, samePaint } from '../utils/color-utils.js';
 import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendKeyOrder, isLegendOrderEdited, ownLegendColor } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions, ruleRowFills } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -118,11 +118,13 @@ const normalizePaint = (value, label) => {
   throw new Error(`Invalid ${label} override in the committed editor state.`);
 };
 
-// A feature's palette fill (`paletteFeatureColor`); null keeps what Python
-// drew, for a palette with neither the type nor a `default`.
-/** @param {Readonly<Record<string, string>>} palette @param {unknown} type */
-const paletteFill = (palette, type) => {
-  const color = paletteFeatureColor(palette, type);
+// A feature's fill: the one its rule draws it in (`ruleFill`: a rule of the
+// type color value, its type's), else, without a rule, its palette fill
+// (`paletteFeatureColor`); null keeps what Python drew, for a palette with
+// neither the type nor a `default`.
+/** @param {Readonly<Record<string, string>>} palette @param {unknown} type @param {Partial<SpecificColorRule> | null} rule */
+const featureFill = (palette, type, rule) => {
+  const color = rule ? ruleFill(rule.color, type, palette) : paletteFeatureColor(palette, type);
   return color === undefined ? null : normalizePaint(color, 'feature fill');
 };
 
@@ -298,9 +300,14 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   // is never read as a miss.
   /** @type {(rule: Partial<SpecificColorRule>) => boolean} */
   const draws = ruleMatches ? (rule) => !ruleMatches.known || ruleMatches.rows.drawsRow(rule) : () => false;
+  // A rule of the type color value colors its row in its type's color (`ruleRowFills`).
+  const fills = { palette: paletteColors, types: [...drawnTypes] };
   rules.forEach((rule) => {
-    const key = text(rule?.cap) && draws(rule) ? rowOf(rule) : null;
-    if (key && !ruleColors.has(key)) ruleColors.set(key, text(rule.color));
+    if (!text(rule?.cap) || !draws(rule)) return;
+    ruleRowFills(rule, fills).forEach((row) => {
+      const key = rowOf(row);
+      if (!ruleColors.has(key)) ruleColors.set(key, text(row.color));
+    });
   });
   return {
     ruleCaptions: [...ruleColors.keys()],
@@ -603,7 +610,7 @@ const compilePlanBundle = ({
           operations.featureFills.push({ renderedId, color: null });
           return;
         }
-        const color = rule ? normalizePaint(rule.color, 'feature fill') : paletteFill(paletteColors, feature.type);
+        const color = featureFill(paletteColors, feature.type, rule);
         if (color && !samePaint(color, pythonFill(renderedId, feature))) operations.featureFills.push({ renderedId, color });
       });
     });

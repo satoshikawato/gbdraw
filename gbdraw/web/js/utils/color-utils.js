@@ -1,7 +1,7 @@
 // @ts-check
 import { namedColorHex } from './named-colors.js';
 import { t } from './i18n.js';
-import { PALETTE_NAME_ALIASES } from '../contracts/schema.generated.js';
+import { PALETTE_NAME_ALIASES, TYPE_COLOR_VALUE } from '../contracts/schema.generated.js';
 /**
  * @param {string} hex
  * @returns {{ r: number, g: number, b: number }}
@@ -169,8 +169,9 @@ export const normalizeOptionalHexColor = (value) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
 };
 
-// Specific-color table domain, shared with Python's read_color_table:
-// `none`, #RGB, #RRGGBB, or a color name of the table Python uses, resolved
+// Specific-color table domain, shared with Python's read_color_table
+// (`is_color_table_color`): `none`, `TYPE_COLOR_VALUE` (the feature's type
+// color), #RGB, #RRGGBB, or a color name of the table Python uses, resolved
 // to hex. Names only a browser knows are rejected as in Python (OV-271).
 /**
  * @param {unknown} colorValue
@@ -178,9 +179,14 @@ export const normalizeOptionalHexColor = (value) => {
  */
 export const normalizeSpecificRuleColor = (colorValue) => {
   const color = String(colorValue ?? '').trim().toLowerCase();
-  if (color === 'none' || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(color)) return color;
+  if (color === 'none' || color === TYPE_COLOR_VALUE || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(color)) return color;
   return namedColorHex(color)?.toLowerCase() || null;
 };
+
+// Whether a rule's color is the type color value (any letter case), as
+// Python's `is_type_color_value` reads it.
+/** @param {unknown} color @returns {boolean} */
+export const isTypeColorValue = (color) => typeof color === 'string' && color.trim().toLowerCase() === TYPE_COLOR_VALUE;
 
 // Default colors (-d) domain, shared with Python's is_user_color minus
 // svgwrite's other paint values (OV-272, OV-302): `none` or `transparent`, a
@@ -384,6 +390,21 @@ export const paletteFeatureColor = (colors, type) => {
   return Object.hasOwn(colors, 'default') && colors.default ? colors.default : undefined;
 };
 
+// The color a rule of `color` draws a feature of the type in: the type's
+// color in `colors` (`paletteFeatureColor`) for the type color value, else
+// `color` itself, as Python draws it (gbdraw/features/colors.py
+// `rule_color`; twin `concern:color-precedence`). Undefined for the type
+// color value when the palette has neither the type nor a `default`.
+/**
+ * @param {unknown} color
+ * @param {unknown} type
+ * @param {Readonly<Record<string, string>>} colors
+ * @returns {string | undefined}
+ */
+export const ruleFill = (color, type, colors) => (
+  isTypeColorValue(color) ? paletteFeatureColor(colors, type) : String(color ?? '')
+);
+
 // The applied palette's color of a feature type (`paletteFeatureColor`).
 /**
  * @param {Parameters<typeof appliedFeatureColors>[0]} state
@@ -393,6 +414,17 @@ export const paletteFeatureColor = (colors, type) => {
 export const appliedFeatureColorOf = (state, type) => (
   type === undefined ? undefined : paletteFeatureColor(appliedFeatureColors(state), type)
 );
+
+// The fill a rule color draws a feature of the type in with the applied
+// palette (`ruleFill`): the type color value draws the type's color; any
+// other color, or the type color value of a type without one, as written.
+/**
+ * @param {Parameters<typeof appliedFeatureColors>[0]} state
+ * @param {string} color
+ * @param {unknown} type
+ * @returns {string}
+ */
+export const appliedRuleFill = (state, color, type) => ruleFill(color, type, appliedFeatureColors(state)) ?? color;
 
 // One color, compared: case, a color name, and `#rgb` against `#rrggbb` (D-15).
 /** @param {unknown} colorValue */

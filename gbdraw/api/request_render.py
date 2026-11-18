@@ -185,6 +185,7 @@ from .diagram import (
     build_circular_multi_diagram,
     build_linear_diagram_result,
     label_fit_report,
+    resolve_default_colors,
     resolve_feature_inputs,
 )
 from .input_summary import InputSummary, summarize_inputs
@@ -363,6 +364,15 @@ def _default_color_overrides(colors: ColorOptions) -> DataFrame | None:
         read_default_color_overrides(colors.default_colors_file),
         colors.default_colors_file,
     )
+
+
+def request_type_colors(colors: ColorOptions) -> dict[str, str]:
+    """The color each feature type takes without a rule in a request of these colors, by type and ``default``
+    (``feature_type_color``): its Default colors table, else its palette with the rows of its Default colors file,
+    as the request is drawn (``_prepare_diagram_inputs``)."""
+
+    overrides = _default_color_overrides(colors) if colors.default_colors is None else None
+    return resolve_default_colors(colors.default_colors, overrides, colors.default_colors_palette, False)[1]
 
 
 def _resolve_request_option_tables(

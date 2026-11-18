@@ -437,6 +437,28 @@ test('HMMT Session: Editor focus, a feature hide and fill, a mode round trip, le
       await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
       await generate(page);
       expect(await rrnaRows({ source: 'result' })).toEqual(['rRNA']);
+      // OV-3464: the reset wrote the type color value, not the palette's hex,
+      // so a palette change recolors s-rRNA with l-rRNA, live and after
+      // Generate, and the Legend keeps one rRNA row.
+      const palette = await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        app.setPaletteInstantPreview(true);
+        const rrna = String(app.appliedPaletteColors.rRNA).toLowerCase();
+        const name = app.paletteNames.find((item) => item !== app.selectedPalette
+          && String(app.paletteDefinitions[item]?.rRNA || '').toLowerCase() !== rrna);
+        await app.selectPalette(name, 'palette');
+        return name;
+      });
+      await settle(page);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.appliedPaletteName)).toBe(palette);
+      const switched = await page.evaluate(() => window.__GBDRAW_APP__.appliedPaletteColors.rRNA);
+      expect(switched).not.toBe(rrnaDefault);
+      await expect.poll(() => fill('s-rRNA'), { timeout: 10_000 }).toBe(switched);
+      expect(await fill('l-rRNA')).toBe(switched);
+      await expect.poll(() => rrnaRows()).toEqual(['rRNA']);
+      await generate(page);
+      expect(await fill('s-rRNA')).toBe(switched);
+      expect(await rrnaRows({ source: 'result' })).toEqual(['rRNA']);
     });
 
     // OV-3350: a later rule that colors l-rRNA brings the "other" row back; a

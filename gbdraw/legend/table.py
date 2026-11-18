@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Callable, Hashable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass
@@ -16,14 +17,17 @@ from gbdraw.core.color import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import (
+    TYPE_COLOR_VALUE,
     RuleUse,
     TypeRuleUse,
     build_default_color_map,
     color_identity,
     feature_type_color,
-    is_other_row_rule,
+    is_type_color_value,
     legend_rule_use,
     other_feature_row_name,
+    rule_color,
+    rule_use,
 )
 from gbdraw.svg.result_records import LEGEND_MERGED_ROW, result_base_attribute
 from gbdraw.legend.sources import (
@@ -497,10 +501,35 @@ def saved_rule_caption(caption: str, color: object) -> str:
     return name if name.strip() else caption
 
 
-def saved_rule_captions(color_table: DataFrame) -> DataFrame:
-    """A saved color table with each caption read by ``saved_rule_caption``.
+def is_saved_reset_rule(
+    feature_type: str, qualifier_key: str, caption: str, color: object, type_colors: Callable[[], Mapping[str, str]]
+) -> bool:
+    """Whether a rule of a saved Session is one Reset fill color wrote before it
+    wrote ``TYPE_COLOR_VALUE``: a ``hash`` rule named like its type's "other"
+    Legend row (``other_feature_row_name``) in the type's color of the
+    Session's drawing (``feature_type_color`` of ``type_colors()``, called
+    only for a rule so named). The Web of
+    first-parent ``main`` since a6aa233f3 (0.14.5: color-actions.js
+    ``doResetFillColor``) wrote it for a feature another rule still colored.
+    The color must match: "This feature only" with the scope dialog's default
+    name writes such a name in a color the user picked."""
 
-    Returns ``color_table`` itself when no caption changes.
+    return (
+        qualifier_key.strip().lower() == "hash"
+        and caption == other_feature_row_name(feature_type)
+        and color_identity(color) == color_identity(feature_type_color(type_colors(), feature_type))
+    )
+
+
+def saved_rule_captions(
+    color_table: DataFrame, type_colors: Callable[[], Mapping[str, str]] | None = None
+) -> DataFrame:
+    """A saved color table with each caption read by ``saved_rule_caption``,
+    and, given the type colors of the saved drawing (a Session; a color table
+    file gives none), each rule ``is_saved_reset_rule`` names read as
+    ``TYPE_COLOR_VALUE`` without a caption.
+
+    Returns ``color_table`` itself when no rule changes.
     """
 
     if "caption" not in color_table:
@@ -509,9 +538,16 @@ def saved_rule_captions(color_table: DataFrame) -> DataFrame:
         saved_rule_caption(caption, color)
         for caption, color in zip(color_table["caption"], color_table["color"])
     ]
-    if captions == color_table["caption"].tolist():
+    colors = color_table["color"].tolist()
+    if type_colors is not None and "qualifier_key" in color_table:
+        palette = functools.cache(type_colors)
+        rows = zip(color_table["feature_type"], color_table["qualifier_key"])
+        for index, (feature_type, qualifier_key) in enumerate(rows):
+            if is_saved_reset_rule(str(feature_type), str(qualifier_key), captions[index], colors[index], palette):
+                captions[index], colors[index] = "", TYPE_COLOR_VALUE
+    if captions == color_table["caption"].tolist() and colors == color_table["color"].tolist():
         return color_table
-    return color_table.assign(caption=captions)
+    return color_table.assign(caption=captions, color=colors)
 
 
 def rule_legend_keys(
@@ -671,6 +707,16 @@ def series_legend_rows(name: str, paint: SeriesPaint) -> tuple[tuple[str, dict[s
 LegendRule = tuple[str, str, str]
 
 
+class LegendRuleRow(NamedTuple):
+    """A rule row of the feature rows of a Legend, for one drawn type: the
+    index of its rule in the table, its caption, and the fill the rule draws
+    features of that type in (``rule_color``)."""
+
+    rule: int
+    caption: str
+    fill: str
+
+
 @dataclass(frozen=True)
 class FeatureLegendRows:
     """THE owner of the feature rows of a Legend and of the row each drawn feature is in.
@@ -682,9 +728,9 @@ class FeatureLegendRows:
     features (``used`` None: every captioned rule counts as used, for callers
     that do not read the features). A rule is used for a type when features of
     that type take it (OV-3465), the same for explicit and ``*`` rules.
-    ``palette`` holds the type colors (``feature_type_color``): a rule drawn as
-    its type's "other" row draws its features in the type's own row while no
-    other captioned rule is used for the type (``is_other_row_rule``, OV-3350).
+    ``palette`` holds the type colors (``feature_type_color``), in which a rule
+    of ``TYPE_COLOR_VALUE`` draws each type (``rule_color``); such a rule
+    without a caption draws its features as features of no rule (``rule_use``).
     The Web's twin is ``featureLegendRows``
     (gbdraw/web/js/services/specific-color-rules.js); both answer
     tests/fixtures/legend_generated_rows.json (``feature_rows``).
@@ -700,9 +746,13 @@ class FeatureLegendRows:
     def of(
         cls, rules: Iterable[LegendRule], drawn: Sequence[tuple[str, RuleUse | None]], palette: Mapping[str, str]
     ) -> FeatureLegendRows:
-        """The rows of the drawn features, each given by its type and the rule it takes (None: no rule)."""
+        """The rows of the drawn features, each given by its type and the rule it takes, as written (None: no
+        rule)."""
 
-        used, default_types = legend_rule_use(drawn, palette)
+        used, default_types = legend_rule_use(
+            (feature_type, None if winner is None else rule_use(feature_type, *winner, palette))
+            for feature_type, winner in drawn
+        )
         return cls(
             tuple(rules),
             tuple(dict.fromkeys(feature_type for feature_type, _ in drawn)),
@@ -711,13 +761,30 @@ class FeatureLegendRows:
             palette,
         )
 
-    def type_rules(self, feature_type: str) -> list[LegendRule]:
-        """The captioned rules of a type, its own and those for every type, in table order."""
+    def type_rules(self, feature_type: str) -> list[LegendRuleRow]:
+        """The captioned rules of a type, its own and those for every type, in table order, each in the fill it
+        draws the type in."""
 
-        return [rule for rule in self.rules if rule[0] in (feature_type, "*") and str(rule[1] or "").strip()]
+        return [
+            LegendRuleRow(index, rule[1], rule_color(feature_type, rule[2], self.palette))
+            for index, rule in enumerate(self.rules)
+            if rule[0] in (feature_type, "*") and str(rule[1] or "").strip()
+        ]
 
-    def _drawn(self, feature_type: str, rule: LegendRule) -> bool:
-        return self.used is None or (feature_type, rule[1], rule[2]) in self.used
+    def rule_fills(self) -> Iterator[tuple[str, str]]:
+        """The caption and fill of each row the color table can draw, as the row keys read them
+        (``rule_legend_keys``): a rule of ``TYPE_COLOR_VALUE`` in its type's color, a ``*`` one in the color of
+        each drawn type."""
+
+        for feature_type, caption, color in self.rules:
+            if not is_type_color_value(color):
+                yield caption, color
+            else:
+                for each in self.present if feature_type == "*" else (feature_type,):
+                    yield caption, rule_color(each, color, self.palette)
+
+    def _drawn(self, feature_type: str, rule: LegendRuleRow) -> bool:
+        return self.used is None or (feature_type, rule.caption, rule.fill) in self.used
 
     def rules_draw(self, feature_type: str) -> bool:
         """Whether features of the type take a captioned rule of the type: its features of no rule then form an
@@ -740,26 +807,26 @@ class FeatureLegendRows:
         return _key_of_name(feature_type)
 
     def row_of(self, feature_type: str, winner: RuleUse | None) -> LegendRowKey | RuleUse | None:
-        """The row a feature of the type is in, by the rule it takes (None: no
-        rule): a captioned rule's row, as (caption, color), whose key the whole
-        table allocates (``rule_legend_keys``); else its type's row or its
-        "other" row; no row for an uncaptioned rule once captioned rules of the
-        type are used. A feature that is not drawn gets the row it would join;
-        one of a rule drawn as the "other" row is in its type's row while no
-        other captioned rule of the type is used (``legend_rule_use``)."""
+        """The row a feature of the type is in, by the rule it takes, as written
+        (None: no rule): a captioned rule's row, as (caption, the fill it draws
+        the type in), whose key the whole table allocates
+        (``rule_legend_keys``); else its type's row or its "other" row, also for
+        a rule of ``TYPE_COLOR_VALUE`` without a caption (``rule_use``); no row
+        for another uncaptioned rule once captioned rules of the type are used.
+        A feature that is not drawn gets the row it would join."""
 
-        if winner is not None and str(winner[0] or "").strip() and not (
-                is_other_row_rule(feature_type, winner, self.palette) and not self.rules_draw(feature_type)):
-            return winner
+        use = None if winner is None else rule_use(feature_type, *winner, self.palette)
+        if use is not None and use[0].strip():
+            return use
         if not self.rules_draw(feature_type):
             return _key_of_name(feature_type)
-        return _other_feature_legend_key(feature_type) if winner is None else None
+        return _other_feature_legend_key(feature_type) if use is None else None
 
-    def rows(self) -> Iterator[LegendRule | LegendRowKey]:
+    def rows(self) -> Iterator[LegendRuleRow | LegendRowKey]:
         """THE order of the feature rows of a legend: for each drawn type, in
         ``present`` order, its captioned rules in table order (a rule the
         features did not take has no row), then its renderer row. A rule row
-        comes as its rule; each renderer row comes once. The legend adds the
+        comes as a ``LegendRuleRow``; each renderer row comes once. The legend adds the
         rows in this order; rows of one name and one swatch are one row, at the
         first (``LegendTable``)."""
 
@@ -841,7 +908,7 @@ def prepare_legend_table(
         tuple(features_present),
         None if used_color_rules is None else frozenset(used_color_rules),
         frozenset(default_used_features or ()),
-        # The palette legend_rule_use read for ``used_color_rules`` (one source).
+        # The type colors the drawing read for ``used_color_rules`` (one source).
         features.default_color_map,
     )
     # The renderer's own rows (feature types, "other ..." and numeric tracks)
@@ -859,17 +926,16 @@ def prepare_legend_table(
         block_stroke=block_stroke,
     )
     rule_keys = rule_legend_keys(
-        ((caption, color) for _, caption, color in rules),
+        feature_rows.rule_fills(),
         {key: legend_swatch(entry) for key, entry in generated.items()},
         lambda fill: legend_swatch(_solid_legend_entry(fill, *block_stroke)),
     )
     for row in feature_rows.rows():
-        if isinstance(row, tuple):
-            _, caption, fill = row
+        if isinstance(row, LegendRuleRow):
             legend_table.add(
-                caption,
-                _solid_legend_entry(fill, *block_stroke),
-                key=rule_keys[caption, _legend_fill_identity(fill)],
+                row.caption,
+                _solid_legend_entry(row.fill, *block_stroke),
+                key=rule_keys[row.caption, _legend_fill_identity(row.fill)],
             )
         else:
             legend_table.add(row, generated.pop(row))

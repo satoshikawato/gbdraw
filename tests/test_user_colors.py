@@ -164,7 +164,7 @@ def test_accepted_colors_pass_every_entry_point(value: str) -> None:
     defaults = load_default_colors("")
     defaults.loc[defaults["feature_type"] == "CDS", "color"] = value
     # A color table without captions writes its colors as given; captions need
-    # a name or hex color (`_check_caption_colors`, gbdraw/api/diagram.py).
+    # a name or hex color (`_check_color_table_colors`, gbdraw/api/diagram.py).
     table = DataFrame(
         [["CDS", "product", "kinase", value]],
         columns=["feature_type", "qualifier_key", "value", "color"],
@@ -263,7 +263,7 @@ def test_the_check_accepts_everything_the_older_checks_accepted() -> None:
     for value in (*ACCEPTED, *REJECTED, *EMPTY):
         if svg.is_paint(value) and value not in left_the_domain:  # svgwrite's debug check let it through
             assert is_user_color(value), value
-        if color_io._is_specific_table_color(value):  # the -t file domain
+        if color_io.is_color_table_color(value):  # the -t file domain
             assert is_user_color(value), value
     for name in SVGWRITE_COLOR_NAMES:
         assert is_user_color(name) and is_user_color(name.upper()), name

@@ -10,12 +10,13 @@ import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { joinedLegendRow, runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { settleCommittedField } from '../committed-value.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, appliedFeatureColors, isTypeColorValue, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, drawnRuleMatches, legendColorCopies, legendRowRules, listedRuleRowRemoval,
-  prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, specificRuleHasQualifier
+  prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleFillsOf, ruleLegendCaptions, ruleRowColors, rulesInFills,
+  specificRuleHasQualifier
 } from '../../services/specific-color-rules.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
@@ -266,12 +267,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       rules: [...drawing.manualSpecificRules, ...candidateRules,
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
-    const currentCaption = createRuleLegendCaptions(drawing.manualSpecificRules, rendererRows);
+    // A rule of the type color value draws its rows in its type's color (`ruleRowFills`).
+    const fills = ruleFillsOf(displayed);
+    const currentCaption = createRuleLegendCaptions(rulesInFills(drawing.manualSpecificRules, fills), rendererRows);
     /** @type {SpecificColorRule[]} */
     const captioned = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap);
-    /** @param {SpecificColorRule} rule @returns {{ caption: PythonLegendKey, color: string }} */
-    const rowOf = (rule) => ({ caption: currentCaption(rule), color: rule.color });
-    const ruleRows = captioned.map(rowOf);
+    const ruleRows = ruleRowColors(captioned, fills, currentCaption);
     const currentMatches = drawnRuleMatches({ rules: drawing.manualSpecificRules, features: displayed.features, palette: displayed.palette });
     // OV-2265 (OV-61): a rule row with a Legend color of its own shows that
     // color, as Generate draws it, until a commit recolors the row's rule:
@@ -283,16 +284,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       return Object.hasOwn(overrides, row.caption) && current && resolveColorToHex(current.color) === resolveColorToHex(row.color)
         ? { ...row, color: overrides[row.caption] } : row;
     };
-    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.rows.drawsRow).map(rowOf) : ruleRows).map(shownRow);
+    const drawnRuleRows = (currentMatches.known ? ruleRowColors(captioned.filter(currentMatches.rows.drawsRow), fills, currentCaption) : ruleRows).map(shownRow);
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value;
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
     const shown = readLegendRowColors(drawing);
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
       .map(entry => ({ caption: legendEntryKey(entry), color: shown.listed(entry) }));
-    const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
+    const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows, undefined, fills).intents.map(intent => intent.caption));
     return {
-      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents.map(shownRow),
+      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule), fills).intents.map(shownRow),
       previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
       ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
@@ -1193,10 +1194,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const fills = { ...drawing.featureColorOverrides };
     if (migrateLegacyFeatureOverrides(fills, features).migrated > 0) replaceFeatureFills(drawing.slices.paint, fills);
 
+    // A rule of the type color value keeps no fill record: its feature's fill
+    // is its type's at each draw, which the rule gives (a record holds a paint).
     for (const feat of features) {
       const rule = ruleMatches.first(feat);
       const key = featureOverrideKey(feat);
-      if (key) setFeatureFill(drawing.slices.paint, key, rule ? { color: rule.color, caption: rule.cap } : null);
+      if (key) setFeatureFill(drawing.slices.paint, key, rule && !isTypeColorValue(rule.color) ? { color: rule.color, caption: rule.cap } : null);
     }
   };
 

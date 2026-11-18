@@ -345,8 +345,10 @@ with a `product` keeps its label. A row without the third cell, or with an
 empty `feature_type` or `qualifier`, is reported as a missing value. In this
 table, cells such as `NA` and `null` are values, not blanks.
 
-A Specific-colors `color` is `none` (no fill), an SVG color name, both in any
-letter case, `#RGB`, or `#RRGGBB`. Other values, including hex colors with
+A Specific-colors `color` is `none` (no fill), `palette` (the feature's type
+color: its palette color or Default colors entry when the figure is drawn), an
+SVG color name, all in any letter case, `#RGB`, or `#RRGGBB`. A Default colors
+`color` cannot be `palette`. Other values, including hex colors with
 alpha and names that only a browser knows, such as `currentColor` and system
 colors, are rejected with their line number. The Web app converts a color name to hex when
 it reads the table. In this table, cells such as `None`, `NA`, and `null` are

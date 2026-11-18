@@ -141,7 +141,6 @@ from gbdraw.configurators import (
 )
 from gbdraw.configurators.bundle import DiagramConfigurators
 from gbdraw.configurators.legend import LegendMeasurement, measure_legend
-from gbdraw.core.color import normalize_hex_color
 from gbdraw.core.figure_length import RequestedFigureSize
 from gbdraw.core.fonts import resolve_font_family
 from gbdraw.core.numeric import compensated_sum
@@ -172,18 +171,19 @@ from gbdraw.diagrams.linear.parts import (
     LinearTrackInputs,
 )
 from gbdraw.exceptions import LabelLayoutError, LabelsDoNotFitError, ValidationError
-from gbdraw.features.colors import build_default_color_map, build_specific_color_rules
+from gbdraw.features.colors import build_default_color_map, build_specific_color_rules, is_type_color_value
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
     read_feature_visibility_file,
 )
 from gbdraw.io.colors import (
+    COLOR_TABLE_COLOR_FORMS,
     check_user_color,
+    is_color_table_color,
     merge_default_colors,
     read_default_color_overrides,
     read_color_table,
-    resolve_color_to_hex,
 )
 from gbdraw.labels.circular_capacity import label_capacity_unchecked
 from gbdraw.labels.circular_fit import (
@@ -1783,43 +1783,43 @@ def _scale_circular_cfg(cfg: GbdrawConfig, *, scale: float) -> GbdrawConfig:
     return replace(cfg, canvas=scaled_canvas)
 
 
-def _check_feature_colors(table: DataFrame | None, label: str, *, by_row: bool) -> None:
-    """Check every color of a -t/-d table once, whether it came from a file or a DataFrame.
+def _check_default_colors(table: DataFrame) -> None:
+    """Check every color of the default colors once, whether it came from a file or a DataFrame.
 
-    Rows of the specific color table carry their position; default colors are
-    named by feature type (their rows merge the palette with the user's file).
+    They are named by feature type (their rows merge the palette with the user's file).
     """
 
-    if table is None or table.empty:
-        return
-    for row, (feature_type, color) in enumerate(zip(table["feature_type"], table["color"]), start=1):
+    for feature_type, color in zip(table["feature_type"], table["color"]):
         check_user_color(
             color,
-            where=f"for feature type {feature_type!r} in the {label}" + (f" (row {row})" if by_row else ""),
-            diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", **({"row": row} if by_row else {})},
+            where=f"for feature type {feature_type!r} in the default colors",
+            diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR"},
         )
 
 
-def _check_caption_colors(color_table: DataFrame | None) -> None:
-    """Check the colors of a color table with captions.
+def _check_color_table_colors(color_table: DataFrame | None) -> None:
+    """Check the colors of a color table (a file read by ``read_color_table``, or a DataFrame).
 
-    A caption groups legend rows by color (``gbdraw.legend.table``), so every
-    color of such a table is none, an SVG color name, #RGB, or #RRGGBB.
+    A table with captions takes the color table domain (``is_color_table_color``):
+    a caption groups legend rows by color (``gbdraw.legend.table``). A table
+    without captions takes any user color (``check_user_color``) or
+    ``TYPE_COLOR_VALUE``.
     """
 
-    if color_table is None or color_table.empty or "caption" not in color_table:
+    if color_table is None or color_table.empty:
         return
-    for row, color in enumerate((str(value).strip() for value in color_table["color"]), start=1):
-        if color.lower() == "none":
-            continue
-        try:
-            normalize_hex_color(resolve_color_to_hex(color))
-        except (ValueError, ValidationError) as exc:
+    captioned = "caption" in color_table
+    for row, (feature_type, color) in enumerate(zip(color_table["feature_type"], color_table["color"]), start=1):
+        diagnostic = {"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row}
+        if not captioned and not is_type_color_value(color):
+            check_user_color(color, where=f"for feature type {feature_type!r} in the color table (row {row})",
+                             diagnostic=diagnostic)
+        elif captioned and not is_color_table_color(color):
             raise ValidationError(
                 f"Invalid color {color!r} in the color table (row {row}). "
-                "A color table with captions uses none, an SVG color name, #RGB, or #RRGGBB.",
-                diagnostic={"code": "TABLE_INVALID", "field": "color", "reason": "COLOR", "row": row},
-            ) from exc
+                f"A color table with captions uses {COLOR_TABLE_COLOR_FORMS}.",
+                diagnostic=diagnostic,
+            )
 
 
 def resolve_default_colors(
@@ -1868,9 +1868,8 @@ def resolve_feature_inputs(
         default_colors_palette,
         load_comparison_colors,
     )
-    _check_feature_colors(color_table, "color table", by_row=True)
-    _check_feature_colors(default_colors, "default colors", by_row=False)
-    _check_caption_colors(color_table)
+    _check_color_table_colors(color_table)
+    _check_default_colors(default_colors)
     specific_color_rules = render_stage("color_rules", build_specific_color_rules, color_table)
     return ResolvedFeatureInputs(
         color_table=color_table,

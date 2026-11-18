@@ -1,5 +1,6 @@
 // @ts-check
-import { paletteFeatureColor, resolveColorToHex } from '../utils/color-utils.js';
+import { isTypeColorValue, paletteFeatureColor, resolveColorToHex, ruleFill } from '../utils/color-utils.js';
+import { TYPE_COLOR_VALUE } from '../contracts/schema.generated.js';
 import { markedRows, parseSpecificRules, withoutImportedRows } from './file-imports.js';
 import { legendColorIdentity as fillIdentity } from './legend-row-names.js';
 import { ruleMatcher } from './rule-matchers.js';
@@ -106,19 +107,47 @@ export const savedRuleCaption = (caption, color) => {
   const name = caption.endsWith(colorId) ? caption.slice(0, -colorId.length) : caption;
   return name.trim() ? name : caption;
 };
+// Whether a rule of a saved Session is one Reset fill color wrote before it
+// wrote the type color value: a `hash` rule named like its type's "other"
+// Legend row in the type's color of the Session's drawing (`typeColors()`,
+// called only for a rule so named). The Web of first-parent `main` since
+// a6aa233f3 (0.14.5) wrote it for a feature another rule still colored; "This
+// feature only" under the scope dialog's default name writes that name in a
+// picked color, so the color must match. Python's reading is
+// gbdraw/legend/table.py::is_saved_reset_rule; both answer
+// tests/fixtures/saved_rule_captions.json (`rules`).
 /**
- * Saved rules with each caption read by `savedRuleCaption`; an entry that is
- * no object stays (the rules' reader drops it, listed).
- * @template {{ readonly cap?: unknown, readonly color?: unknown }} Rule
+ * @param {{ readonly feat?: unknown, readonly qual?: unknown, readonly color?: unknown }} rule
+ * @param {string} caption The caption as `savedRuleCaption` reads it.
+ * @param {() => FeatureTypeColors} typeColors
+ */
+const isSavedResetRule = (rule, caption, typeColors) => {
+  const type = normalizeText(rule.feat);
+  return normalizeText(rule.qual).toLowerCase() === 'hash' && caption === otherFeatureRowKey(type)
+    && fillIdentity(rule.color) === fillIdentity(paletteFeatureColor(typeColors(), type));
+};
+/**
+ * Saved rules with each caption read by `savedRuleCaption`, and, given the
+ * type colors of the saved drawing (a Session; an imported file gives none),
+ * each rule `isSavedResetRule` names read as the type color value without a
+ * caption. An entry that is no object stays (the rules' reader drops it, listed).
+ * @template {{ readonly feat?: unknown, readonly qual?: unknown, readonly cap?: unknown, readonly color?: unknown }} Rule
  * @param {readonly Rule[]} rules
+ * @param {() => FeatureTypeColors} [typeColors]
  * @returns {Rule[]}
  */
-export const savedSpecificRules = (rules) => rules.map((rule) => {
-  if (!rule || typeof rule !== 'object') return rule;
-  const caption = String(rule.cap ?? '');
-  const read = savedRuleCaption(caption, rule.color);
-  return read === caption ? rule : { ...rule, cap: read };
-});
+export const savedSpecificRules = (rules, typeColors) => {
+  /** @type {FeatureTypeColors | null} */
+  let colors = null;
+  const colorsOnce = () => (colors ||= /** @type {() => FeatureTypeColors} */ (typeColors)());
+  return rules.map((rule) => {
+    if (!rule || typeof rule !== 'object') return rule;
+    const caption = String(rule.cap ?? '');
+    const read = savedRuleCaption(caption, rule.color);
+    if (typeColors && isSavedResetRule(rule, read, colorsOnce)) return { ...rule, cap: '', color: TYPE_COLOR_VALUE };
+    return read === caption ? rule : { ...rule, cap: read };
+  });
+};
 /**
  * The color of a per-feature color edit: an edit object's `color`, or an
  * older bare color.
@@ -252,10 +281,9 @@ export const legendRowType = (key, types) => typeOfRow(key, types) ?? key;
 // type whose features take a captioned rule draws its "other" row for its
 // features of no rule, and no row for its features of an uncaptioned rule;
 // any other type draws its own row (Legend contract 05A4-04 L-C2, L-C3). A
-// rule named like its type's "other" row in the type's palette color (the rule
-// Reset fill color writes) draws its features in the type's own row while no
-// other captioned rule is used for the type (Python's `is_other_row_rule`;
-// OV-3350, Owner 2026-11-11).
+// rule of the type color value (`TYPE_COLOR_VALUE`) draws each type in its
+// color (`ruleFill`); one without a caption draws its features as features of
+// no rule (Python's `rule_use`).
 /**
  * @param {readonly SpecificRuleInput[]} rules The rule table, in table order.
  * @param {Iterable<LegendRowUse>} drawn The drawn features.
@@ -268,27 +296,27 @@ export const featureLegendRows = (rules, drawn, palette) => {
   const use = (rule) => JSON.stringify([rule.cap, rule.color]);
   /** @param {string} type @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
   const typeUse = (type, rule) => JSON.stringify([type, rule.cap, rule.color]);
+  // A rule as the Legend reads a feature of the type that takes it: its
+  // caption and the fill it draws the type in; null for an uncaptioned rule
+  // of the type color value (Python's `rule_use`).
+  /** @param {string} type @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule @returns {Pick<SpecificColorRule, 'cap' | 'color'> | null} */
+  const useOf = (type, rule) => (isTypeColorValue(rule.color) && !rule.cap
+    ? null : { cap: rule.cap, color: normalizeColor(ruleFill(rule.color, type, palette)) });
   /** @type {Set<string>} The captioned rules the drawn features take, by `typeUse`. */
   const used = new Set();
   /** @type {Set<string>} */
   const defaultTypes = new Set();
   /** @type {Set<string>} */
   const present = new Set();
-  /** @param {string} type @param {Pick<SpecificColorRule, 'cap' | 'color'>} rule */
-  const isOtherRowRule = (type, rule) => rule.cap === otherFeatureRowKey(type)
-    && fillIdentity(rule.color) === fillIdentity(paletteFeatureColor(palette, type));
-  /** @type {Map<string, string>} The rules drawn as their type's "other" row, by `typeUse`, and their type. */
-  const otherRows = new Map();
   for (const { type, winner } of drawn) {
     present.add(type);
-    const rule = winner && normalizeSpecificRule(winner);
+    const rule = winner && useOf(type, normalizeSpecificRule(winner));
     if (!rule) defaultTypes.add(type);
-    else if (rule.cap) (isOtherRowRule(type, rule) ? otherRows.set(typeUse(type, rule), type) : used.add(typeUse(type, rule)));
+    else if (rule.cap) used.add(typeUse(type, rule));
   }
-  const ruled = new Set([...used].map((key) => JSON.parse(key)[0]));
-  otherRows.forEach((type, key) => (ruled.has(type) ? used.add(key) : defaultTypes.add(type)));
-  /** @param {string} type */
-  const typeRules = (type) => table.filter((rule) => (rule.feat === type || rule.feat === '*') && rule.cap);
+  /** @param {string} type The captioned rules of a type, its own and those for every type, in the fill each draws it in. */
+  const typeRules = (type) => table.filter((rule) => (rule.feat === type || rule.feat === '*') && rule.cap)
+    .map((rule) => /** @type {Pick<SpecificColorRule, 'cap' | 'color'>} */ (useOf(type, rule)));
   /** @type {Map<string, boolean>} */
   const drawsByType = new Map();
   /** @param {string} type */
@@ -306,15 +334,17 @@ export const featureLegendRows = (rules, drawn, palette) => {
     rulesDraw,
     typeRow,
     rowOf: (type, winner) => {
-      const rule = winner && normalizeSpecificRule(winner);
-      if (rule?.cap && !(isOtherRowRule(type, rule) && !rulesDraw(type))) return { cap: rule.cap, color: rule.color };
+      const rule = winner && useOf(type, normalizeSpecificRule(winner));
+      if (rule?.cap) return rule;
       if (!rulesDraw(type)) return captionRowKey(type);
       return rule ? null : otherFeatureRowKey(type);
     },
     drawsRow: (rule) => {
-      const group = normalizeSpecificRule(rule);
-      return Boolean(group.cap)
-        && [...present].some((type) => used.has(typeUse(type, group)) && typeRules(type).some((each) => use(each) === use(group)));
+      const normalized = normalizeSpecificRule(rule);
+      return Boolean(normalized.cap) && [...present].some((type) => {
+        const group = /** @type {Pick<SpecificColorRule, 'cap' | 'color'>} */ (useOf(type, normalized));
+        return used.has(typeUse(type, group)) && typeRules(type).some((each) => use(each) === use(group));
+      });
     },
     otherRowType: (key) => [...present].find((type) => key !== type && typeRow(type) === key) ?? null
   };
@@ -355,6 +385,44 @@ export const drawnRuleMatches = ({ rules = [], features = [], palette }) => {
   return { known, takenBy, rows: featureLegendRows(rules, drawn, palette) };
 };
 
+/**
+ * The type colors and the drawn types a rule of the type color value is read with (`ruleRowFills`).
+ * @typedef {{ palette: FeatureTypeColors, types: readonly string[] }} RuleFills
+ */
+
+// The drawn types of a Legend row context, in the order they first appear.
+/** @param {Pick<LegendRowContext, 'features' | 'palette'>} context @returns {RuleFills} */
+export const ruleFillsOf = ({ features = [], palette }) => ({
+  palette, types: [...new Set(Array.from(features, (feature) => normalizeText(feature.type)))]
+});
+
+// A rule as the rows it can draw read it, normalized: in its own color, or,
+// of the type color value, in its type's color, a rule for every type (`*`)
+// once in the color of each drawn type (Python's
+// `FeatureLegendRows.rule_fills`); as written without `fills`.
+/**
+ * @param {SpecificRuleInput} rule
+ * @param {RuleFills | undefined} fills
+ * @returns {SpecificColorRule[]}
+ */
+export const ruleRowFills = (rule, fills) => {
+  const normalized = normalizeSpecificRule(rule);
+  if (!fills || !isTypeColorValue(normalized.color)) return [normalized];
+  return (normalized.feat === '*' ? fills.types : [normalized.feat])
+    .map((type) => ({ ...normalized, color: normalizeColor(ruleFill(normalized.color, type, fills.palette)) }));
+};
+/** @param {readonly SpecificRuleInput[]} rules @param {RuleFills | undefined} fills */
+export const rulesInFills = (rules, fills) => rules.flatMap((rule) => ruleRowFills(rule, fills));
+// The rows of `rules`, each as its key (`keyOf` of the rule in that row's
+// fill) and the color it draws the row in (`ruleRowFills`).
+/**
+ * @param {readonly SpecificRuleInput[]} rules
+ * @param {RuleFills | undefined} fills
+ * @param {(rule: SpecificColorRule) => PythonLegendKey} keyOf
+ * @returns {{ caption: PythonLegendKey, color: string }[]}
+ */
+export const ruleRowColors = (rules, fills, keyOf) => rulesInFills(rules, fills).map((row) => ({ caption: keyOf(row), color: row.color }));
+
 // The Python rows N-06 does not compare a rule with, read from the displayed
 // features and their known rule matches (`drawnRuleMatches`; a match not
 // known yet colors no feature), only when a captioned rule may need them:
@@ -376,7 +444,7 @@ export const drawnRuleMatches = ({ rules = [], features = [], palette }) => {
  */
 const rowsLeftOut = (context, ruleMatches) => {
   const { rules = [], pythonRows, features = [] } = context;
-  const captioned = rules.map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
+  const captioned = rulesInFills(rules, ruleFillsOf(context)).filter((rule) => rule.cap);
   const typed = new Set(captioned.map((rule) => rule.feat).filter((feat) => feat === '*' || pythonRows.has(captionRowKey(feat))));
   /** @type {Map<string, string>} A caption naming a Python row of another color, and that row's fill. */
   const recolored = new Map();
@@ -428,9 +496,10 @@ const pythonRowsOf = (context, ruleMatches) => {
  * @param {LegendRowContext} context
  * @returns {RendererLegendRow[]}
  */
-const rendererRowsOf = (rows, { originalLegendOrder = [], rules = [] }) => {
+const rendererRowsOf = (rows, context) => {
+  const { originalLegendOrder = [], rules = [] } = context;
   const generated = new Set(originalLegendOrder.map(normalizeText).filter(Boolean));
-  const normalizedRules = rules.map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
+  const normalizedRules = rulesInFills(rules, ruleFillsOf(context)).filter((rule) => rule.cap);
   return rows.filter((row) => row.caption && generated.has(row.caption)
     && !normalizedRules.some((rule) => drawsRow(row, rule)));
 };
@@ -746,15 +815,22 @@ const namesRowOfAnotherSwatch = (rule, rows) => Boolean(rule.cap) && rows.some((
  */
 export const ruleLegendCaptions = (context, ruleMatches) => {
   const rows = pythonRowsOf(context, ruleMatches).compared;
+  // The rules in the fills they draw (`ruleRowFills`), as Python allocates the keys of their rows.
+  const fills = ruleFillsOf(context);
+  /** @type {SpecificColorRule[] | null} */
+  let table = null;
   /** @type {Map<string, Set<string>> | null} */
   let fillsOf = null;
   /** @type {((rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey) | null} */
   let allocated = null;
   return (rule) => {
-    const normalized = normalizeSpecificRule(rule);
-    fillsOf ||= captionFills((context.rules || []).map((each) => normalizeSpecificRule(each)));
+    // A rule of the type color value is read in its type's color; one for every type, in the color of a drawn
+    // type, comes resolved (`ruleRowFills`).
+    const normalized = ruleRowFills(rule, { ...fills, types: [] })[0] ?? normalizeSpecificRule(rule);
+    table ||= rulesInFills(context.rules || [], fills);
+    fillsOf ||= captionFills(table);
     if ((fillsOf.get(normalized.cap)?.size || 0) < 2 && !namesRowOfAnotherSwatch(normalized, rows)) return captionRowKey(normalized.cap);
-    allocated ||= createRuleLegendCaptions([...context.rules || []], rendererRowsOf(rows, context));
+    allocated ||= createRuleLegendCaptions(table, rendererRowsOf(rows, context));
     return allocated(normalized);
   };
 };
@@ -783,19 +859,22 @@ export const groupLegendRowKeys = (context) => {
  * @param {readonly Partial<SpecificColorRule>[] | null | undefined} rules
  * @param {RendererLegendRow[]} [rendererRows]
  * @param {(rule: Partial<SpecificColorRule>) => boolean} [draws]
+ * @param {RuleFills} [fills] The type colors and drawn types a rule of the type color value draws its rows in
+ *   (`ruleRowFills`); without them, such a rule's row is in that value.
  */
-export const buildLegendIntents = (rules, rendererRows = [], draws = () => true) => {
-  const legendCaption = createRuleLegendCaptions(rules, rendererRows);
+export const buildLegendIntents = (rules, rendererRows = [], draws = () => true, fills = undefined) => {
+  const legendCaption = createRuleLegendCaptions(rulesInFills(rules || [], fills), rendererRows);
   // An intent is a rule's Legend row: its key (`caption`), its color, and its
   // name (the rule's caption) where that is not the key, as `data-legend-name`.
   /** @type {Map<PythonLegendKey, RuleLegendIntent>} */
   const byCaption = new Map();
   for (const rule of rules || []) {
     if (!draws(rule)) continue;
-    const normalized = normalizeSpecificRule(rule);
-    const caption = legendCaption(normalized);
-    if (caption && !byCaption.has(caption)) {
-      byCaption.set(caption, { caption, color: normalized.color, ...(normalized.cap === caption ? {} : { name: normalized.cap }) });
+    for (const normalized of ruleRowFills(rule, fills)) {
+      const caption = legendCaption(normalized);
+      if (caption && !byCaption.has(caption)) {
+        byCaption.set(caption, { caption, color: normalized.color, ...(normalized.cap === caption ? {} : { name: normalized.cap }) });
+      }
     }
   }
   return { intents: [...byCaption.values()] };
@@ -813,8 +892,9 @@ export const legendRowRules = (key, context) => {
   const target = normalizeText(key);
   if (!target) return [];
   const rules = context.rules || [];
-  const legendCaption = createRuleLegendCaptions([...rules], rendererRowsOf(pythonRowsOf(context).compared, context));
-  return rules.filter((rule) => legendCaption(rule) === target);
+  const fills = ruleFillsOf(context);
+  const legendCaption = createRuleLegendCaptions(rulesInFills(rules, fills), rendererRowsOf(pythonRowsOf(context).compared, context));
+  return rules.filter((rule) => ruleRowFills(rule, fills).some((each) => legendCaption(each) === target));
 };
 
 /** @typedef {Record<string, any> & { caption: string, color: string }} DiffEntry A Legend entry with its caption and color normalized; its other fields are kept. */

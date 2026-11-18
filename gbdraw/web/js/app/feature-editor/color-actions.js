@@ -10,7 +10,8 @@ import { displayedLegendRowColors, draftLegendRowColors, LIVE_EDIT_DOMAINS, name
 import { draftLegendRows } from '../../services/legend-draft-rows.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, appliedFeatureColors, appliedRuleFill, resolveColorToHex } from '../../utils/color-utils.js';
+import { TYPE_COLOR_VALUE } from '../../contracts/schema.generated.js';
 import { getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue, literalPatternText, namedFeatureInstance } from '../../services/feature-selector.js';
 import {
@@ -599,8 +600,9 @@ export const createFeatureColorActions = ({
    * @returns {string | null}
    */
   const findExistingCaptionColor = (drawing, feat, caption) => {
-    const ruleColor = findExistingColorForCaption(feat, caption)?.color;
-    if (ruleColor) return ruleColor;
+    // A rule of the type color value gives the color it draws its row in (`appliedRuleFill`).
+    const existing = findExistingColorForCaption(feat, caption);
+    if (existing?.color) return appliedRuleFill(state, existing.color, existing.rule.feat === '*' ? feat.type : existing.rule.feat);
 
     const legendEntry = findScopeLegendRow(drawing, caption);
     const legendColor = listedRowColor(drawing, legendEntry);
@@ -768,10 +770,12 @@ export const createFeatureColorActions = ({
     )) {
       return false;
     }
-    if (!liveFeatureColorMatches(feature, color)) return false;
+    // The figure and the Legend show the fill the color draws (the type color value: the type's color).
+    const fill = appliedRuleFill(state, color, feature.type);
+    if (!liveFeatureColorMatches(feature, fill)) return false;
     if (!requireLegend) return true;
-    const legendEntry = findLegendRowOfName(drawing, /** @type {LegendRowName} */ (caption), color);
-    return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), color));
+    const legendEntry = findLegendRowOfName(drawing, /** @type {LegendRowName} */ (caption), fill);
+    return Boolean(legendEntry && colorsMatch(listedRowColor(drawing, legendEntry), fill));
   };
 
   // The popup shows the fill an edit gave its feature; scope dialogs leave it open (OV-1278).
@@ -1180,7 +1184,9 @@ export const createFeatureColorActions = ({
    */
   const applyColorToFeatureGroup = async (drawing, features, caption, color, scope = 'group') => {
     if (!features?.length || !normalizeCaption(caption)) return false;
-    const existingEntry = findLegendRowOfName(drawing, caption, color);
+    // The rules take `color`; the Legend and the popup show the fill it draws (`appliedRuleFill`).
+    const fill = appliedRuleFill(state, color, features[0].type);
+    const existingEntry = findLegendRowOfName(drawing, caption, fill);
     const contributors = getFeaturesForLegendCaption(caption);
     const captionOf = effectiveLegendCaptions();
     const selectedIds = new Set(features.map(feature => feature.svg_id));
@@ -1195,10 +1201,10 @@ export const createFeatureColorActions = ({
         if (replacesExistingGroup) {
           // An intent's `caption` is its row's key; its `name` the rule's caption.
           const intent = intents.find(entry => captionsMatch(entry.name ?? entry.caption, caption)
-            && colorsMatch(entry.color, color));
+            && colorsMatch(entry.color, fill));
           if (intent) setLegendColor(drawing.slices.paint, /** @type {PythonLegendKey} */ (intent.caption), intent.color);
         }
-        updateClickedFeatureLegendState(features, color);
+        updateClickedFeatureLegendState(features, fill);
       }
     });
   };
@@ -1718,20 +1724,21 @@ export const createFeatureColorActions = ({
     const feature = clickedFeature.value?.feat;
     if (!feature || choice === 'cancel') return false;
     const caption = getEffectiveLegendCaption(feature);
-    // The reset color is the palette default of the feature being reset.
-    const color = appliedFeatureColorOf(state, feature.type);
+    // The reset color is the type color value: the feature follows its type's
+    // color (palette and Default colors), also after either changes.
     // A type without a palette color has nothing to reset to.
+    const color = appliedFeatureColorOf(state, feature.type) ? TYPE_COLOR_VALUE : '';
     if (choice === 'this_with_legend') return color ? setFeatureColor(drawing, feature, color, legendRowName(caption)) : false;
     // "Reset all" resets the features of the row: the rules that draw it, by its key.
     const rowRules = new Set(getLegendRowRules(caption));
     // "This feature only" takes back the `hash` rules that name the feature, in
     // Python: a rule another copy of it shares keeps coloring that copy. A
-    // feature that another rule still colors takes its palette color by itself,
-    // under the name Python gives it (its type's "other" row, OV-3350).
+    // feature that another rule still colors takes the type color value by
+    // itself, without a caption: the Legend reads it as a feature of no rule.
     /** @type {SpecificRuleBuild} */
     const reset = choice === 'all'
       ? (current) => current.filter(rule => !rowRules.has(rule))
-      : groupColorRules([feature], color || '', '', 'reset');
+      : groupColorRules([feature], color, '', 'reset');
     const applied = await commitRuleWrite(reset, msg('Reset feature color'), { drawing });
     if (applied) clickedFeature.value = null;
     return applied;

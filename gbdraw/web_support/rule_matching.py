@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from pandas import DataFrame
 
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape, violations
-from gbdraw.features.colors import build_specific_color_rules, other_feature_row_name
+from gbdraw.features.colors import build_specific_color_rules, color_identity, feature_type_color
 from gbdraw.features.ids import exact_value_pattern, feature_instance
 from gbdraw.features.selector_values import ColorRuleList, iter_specific_color_rules
 from gbdraw.features.visibility import (
@@ -18,7 +18,7 @@ from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
 )
 from gbdraw.labels.filtering import DEFAULT_LABEL_PRIORITY, _build_label_override_rules, _resolve_label_override
-from gbdraw.legend.table import FeatureLegendRows
+from gbdraw.legend.table import FeatureLegendRows, LegendRuleRow
 
 
 class VisibilityRuleRow(TypedDict):
@@ -163,8 +163,8 @@ class SynthesizeColorRulesRequest(TypedDict):
     in the place of the rule that colored them (OV-2192); "features" colors each by itself (a `hash` rule naming the
     feature instance, as "This feature only" does); "reset" takes back the
     `hash` rows that name them and, when another rule still colors one and
-    `color` is not empty, gives it `color` by itself, named like its type's
-    "other" Legend row (``other_feature_row_name``; `caption` is not read). `labels`
+    `color` is not empty, gives it `color` by itself, without a caption (the
+    Web sends ``TYPE_COLOR_VALUE``: the type's color; `caption` is not read). `labels`
     holds, for each selected feature in the same order, the label texts it
     shows (its displayed and its annotation label). `rules` is the rule table
     at the write's turn, in order, with each row's color and caption.
@@ -452,14 +452,13 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
     them) gives way to a copy per instance of each of those features, with its
     color and caption, so they and the Legend keep it; a feature that another
     row colors takes no copy. A target that another rule still colors
-    then takes `color` by itself, unless `color` is empty, named like its
-    type's "other" Legend row (``other_feature_row_name``): the Legend draws it
-    in that row, or in its type's own row while no other captioned rule is used
-    for the type (``legend_rule_use``). The targets are of one type. A
+    then takes `color` by itself, unless `color` is empty, without a caption:
+    of ``TYPE_COLOR_VALUE``, the Legend draws it as a feature of no rule
+    (``rule_use``), in its type's own row, or in the type's "other" row while
+    a captioned rule of the type is used. The targets are of one type. A
     table that would change the winner of any other feature is refused."""
     rules = request["rules"]
-    types = {features[i]["type"] for i in request["selected"]}
-    if len(types) > 1:
+    if len({features[i]["type"] for i in request["selected"]}) > 1:
         raise ValueError("The rule synthesis resets the color of features of one type at a time.")
     hash_of, targets, holders = _hash_targets(features, request["selected"])
     old_winners = _winners(features, rules)
@@ -501,7 +500,7 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
     colored, colored_winners = _colored_table(SynthesizeColorRulesRequest(
         scope="features", features=request["features"], selected=request["selected"],
         labels=[[] for _ in request["selected"]], rules=rows, color=request["color"],
-        caption=other_feature_row_name(types.pop()), joins=None, drawn=None, palette=request["palette"]), features)
+        caption="", joins=None, drawn=None, palette=request["palette"]), features)
     return [table[entry] if isinstance(entry, int) else entry for entry in colored], colored_winners
 
 
@@ -514,9 +513,11 @@ def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeatur
     caption and color each drawn feature takes from its winning rule (none
     from an uncaptioned one), and the types of the drawn features no rule
     colors. A rule row is the index of its first rule of its type, caption and
-    color, once (rules of one caption and color draw one row). `winners` are
-    the rules of `rules` that color each feature of `features` (-1 for none),
-    and `palette` the type colors."""
+    color (a rule of ``TYPE_COLOR_VALUE`` draws in its type's color,
+    ``rule_color``). Rows of one name and one fill are one row, at the first, as
+    the Legend table adds them: a rule named like a renderer row in its color
+    is that row. `winners` are the rules of `rules` that color each feature of
+    `features` (-1 for none), and `palette` the type colors."""
     rows = FeatureLegendRows.of(
         [(rule["feat"], rule["cap"], rule["color"]) for rule in rules],
         [(features[i]["type"], None if winners[i] < 0 else (rules[winners[i]]["cap"], rules[winners[i]]["color"]))
@@ -526,8 +527,16 @@ def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeatur
     first: dict[tuple[str, str, str], int] = {}
     for index, rule in enumerate(rules):
         first.setdefault((rule["feat"], str(rule["cap"]), rule["color"]), index)
-    return list(dict.fromkeys(first[(row[0], str(row[1]), row[2])] if isinstance(row, tuple) else row
-                              for row in rows.rows()))
+    renderer_type = {rows.type_row(feature_type): feature_type for feature_type in rows.present}
+    order: dict[tuple[str, str], int | str] = {}
+    for row in rows.rows():
+        if isinstance(row, LegendRuleRow):
+            entry: int | str = first[(rules[row.rule]["feat"], str(row.caption), rules[row.rule]["color"])]
+            name, fill = str(row.caption), row.fill
+        else:
+            entry, name, fill = row, row, feature_type_color(palette, renderer_type[row])
+        order.setdefault((name, color_identity(fill)), entry)
+    return list(order.values())
 
 
 def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedColorRules:

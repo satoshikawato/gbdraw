@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { TYPE_COLOR_VALUE } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { featureLegendRows, isTrackLegendKey, legendRowType } from '../../gbdraw/web/js/services/specific-color-rules.js';
 
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/legend_generated_rows.json', import.meta.url), 'utf8'));
@@ -22,10 +23,14 @@ test('each drawn feature is in the row Python draws for it', () => {
       assert.equal(rows.otherRowType(other), typeRows[type] === other ? type : null, `${name}: ${other}`);
       assert.equal(rows.otherRowType(type), null, `${name}: ${type} is no "other" row`);
     }
-    // A captioned rule draws a row exactly when a drawn feature is in it.
+    // A captioned rule draws a row exactly when a drawn feature is in it, in a fill the rule draws a drawn type in
+    // (the type color value: each type's own color).
     const drawnRows = new Set(uses.map(({ type, winner }) => JSON.stringify(answer(rows.rowOf(type, winner)))));
     for (const rule of table.filter((each) => each.cap)) {
-      assert.equal(rows.drawsRow(rule), drawnRows.has(JSON.stringify([rule.cap, rule.color])), `${name}: ${rule.cap}`);
+      const fills = rule.color.toLowerCase() === TYPE_COLOR_VALUE
+        ? rows.present.filter((type) => rule.feat === '*' || rule.feat === type).map((type) => palette[type] ?? palette.default)
+        : [rule.color];
+      assert.equal(rows.drawsRow(rule), fills.some((fill) => drawnRows.has(JSON.stringify([rule.cap, fill]))), `${name}: ${rule.cap}`);
     }
   }
 });

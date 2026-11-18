@@ -38,6 +38,7 @@ from gbdraw.legend.table import (
     legend_swatch,
     rule_legend_keys,
     saved_rule_caption,
+    saved_rule_captions,
 )
 from gbdraw.session import (
     build_session_document,
@@ -410,6 +411,23 @@ def test_a_saved_caption_answers_the_shared_fixture(case):
     assert saved_rule_caption(case["caption"], case["color"]) == case["read"]
 
 
+SAVED_RULES = json.loads(
+    (Path(__file__).parent / "fixtures" / "saved_rule_captions.json").read_text(encoding="utf-8")
+)["rules"]
+
+
+@pytest.mark.parametrize("case", SAVED_RULES, ids=[case["name"] for case in SAVED_RULES])
+def test_a_saved_rule_answers_the_shared_fixture(case):
+    """A saved Session's rule read with its drawing's type colors: an older Reset fill color rule is read as the
+    type color value without a caption (the Web's `savedSpecificRules`); a color table file, as written."""
+    rule = case["rule"]
+    table = pd.DataFrame([[rule["feat"], rule["qual"], rule["val"], rule["color"], rule["cap"]]],
+                         columns=["feature_type", "qualifier_key", "value", "color", "caption"])
+    read = saved_rule_captions(table, lambda: case["type_colors"])
+    assert read[["color", "caption"]].values.tolist() == [[case["read"]["color"], case["read"]["cap"]]]
+    assert saved_rule_captions(table)["color"].tolist() == [rule["color"]]
+
+
 def test_a_color_table_file_is_read_without_the_color_ids_of_its_own_rules(tmp_path):
     path = tmp_path / "saved.tsv"
     path.write_text(
@@ -623,3 +641,88 @@ def test_a_feature_hash_rule_draws_its_feature_in_its_row_over_a_matching_captio
 
     assert drawn["Edited"] == ("Edited", "Edited", "#00bb00")
     assert "Ribosomal" not in drawn
+
+
+def _palette_rule_feature():
+    from Bio.SeqFeature import SeqFeature, SimpleLocation
+
+    return SeqFeature(SimpleLocation(0, 90, strand=1), type="CDS", qualifiers={"product": ["kinase"]})
+
+
+@pytest.mark.parametrize("caption", ["", "Kinases"])
+def test_a_palette_rule_draws_the_type_color_the_drawing_has(caption):
+    """A rule of the color `palette` draws its features in their type's color at each draw, so a palette or
+    Default colors change reaches them (OV-3464); without a caption, its features count as features of no rule."""
+    from gbdraw.features.colors import TYPE_COLOR_VALUE, build_specific_color_rules
+
+    table = pd.DataFrame([["CDS", "product", "kinase", TYPE_COLOR_VALUE.upper(), caption]],
+                         columns=["feature_type", "qualifier_key", "value", "color", "caption"])
+    rules = build_specific_color_rules(table)
+    for palette in ({"CDS": "#111111", "default": "#d3d3d3"}, {"CDS": "#222222", "default": "#d3d3d3"}):
+        assert get_color_with_info(_palette_rule_feature(), rules, palette, "record", instance=None) == (
+            palette["CDS"], caption or None)
+
+
+def test_the_color_table_domain_holds_palette_and_default_colors_do_not(tmp_path):
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.io.colors import COLOR_TABLE_COLOR_FORMS, is_user_color, read_color_table
+
+    path = tmp_path / "rules.tsv"
+    path.write_text("CDS\tproduct\tkinase\tPalette\t\nCDS\tproduct\tligase\tpalette\tLigases\n", encoding="utf-8")
+    assert read_color_table(str(path))["color"].tolist() == ["Palette", "palette"]
+    assert "palette" in COLOR_TABLE_COLOR_FORMS and not is_user_color("palette")
+    path.write_text("CDS\tproduct\tkinase\tpalettes\t\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="Use none, palette, an SVG color name"):
+        read_color_table(str(path))
+    defaults = pd.DataFrame([["CDS", "#cccccc"]], columns=["feature_type", "color"])
+    for columns in (["feature_type", "qualifier_key", "value", "color"],
+                    ["feature_type", "qualifier_key", "value", "color", "caption"]):
+        row = ["CDS", "product", "kinase", "palette", "Kinases"][:len(columns)]
+        resolve_feature_inputs(color_table=pd.DataFrame([row], columns=columns), default_colors=defaults,
+                               feature_visibility_table=None)
+    with pytest.raises(ValidationError, match="'CDS' in the default colors"):
+        resolve_feature_inputs(color_table=None, default_colors=defaults.assign(color="palette"),
+                               feature_visibility_table=None)
+
+
+def test_a_palette_rule_for_every_type_draws_a_row_in_each_type_color():
+    from gbdraw.legend.table import FeatureLegendRows
+
+    rows = FeatureLegendRows.of([("*", "Ribosomal", "palette")], [("rRNA", ("Ribosomal", "palette")),
+                                                                 ("CDS", ("Ribosomal", "palette"))],
+                                {"rRNA": "#71ee7d", "CDS": "#54bcf8", "default": "#d3d3d3"})
+    assert list(rows.rule_fills()) == [("Ribosomal", "#71ee7d"), ("Ribosomal", "#54bcf8")]
+    assert rule_legend_keys(rows.rule_fills(), {}, lambda fill: (fill,)) == {
+        ("Ribosomal", "#71ee7d"): "Ribosomal [#71ee7d]", ("Ribosomal", "#54bcf8"): "Ribosomal [#54bcf8]"}
+
+
+RESET_SESSION = SAVED_SESSION.with_name("HmmtDNA-reset-fill-color.v50-api0145.gbdraw-session.json.gz")
+# s-rRNA of HmmtDNA, as the fixture's reset rule names it (`^f24a47546@record-1$`).
+RESET_FEATURE = "f24a47546"
+
+
+@pytest.mark.parametrize("palette", ["default", "mint"])
+def test_a_reset_rule_of_a_0_14_5_session_replays_as_the_type_color(tmp_path, palette):
+    """v0.14.5's Reset fill color wrote s-rRNA's rule in the palette's rRNA color, named `other rRNAs`; the replay
+    reads it as a rule of the type color value without a caption, so s-rRNA takes the rRNA color of the palette it
+    is drawn with, and the Legend draws one rRNA row (HmmtDNA-reset-fill-color.v50-api0145.provenance.json)."""
+    from gbdraw.api.request_render import request_type_colors
+    from gbdraw.features.colors import TYPE_COLOR_VALUE
+
+    with materialize_session(load_session_document(RESET_SESSION), output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        colors = replace(request.options.colors, default_colors_palette=palette)
+        output = RenderOutputRequest(
+            formats=("interactive_svg",), output_directory=tmp_path, output_prefix=palette, overwrite=True
+        )
+        result = render_request(replace(request, options=replace(request.options, colors=colors), output=output))
+        svg = result.output_paths[0].read_text()
+    assert request.options.colors.color_table[["qualifier_key", "color", "caption"]].values.tolist() == [
+        ["product", "#ff00ff", "small rRNA"], ["hash", TYPE_COLOR_VALUE, ""]]
+    rrna = request_type_colors(colors)["rRNA"].lower()
+    fills = {node.get("fill").lower() for node in ET.fromstring(svg).iter()
+             if node.get("data-gbdraw-feature-id") == RESET_FEATURE and node.get("fill") not in (None, "none")}
+    assert fills == {rrna}
+    rows = legend_rows(result.output_paths[0])
+    assert [key for key in rows if "rRNA" in key] == ["rRNA"]
+    assert rows["rRNA"][2].lower() == rrna

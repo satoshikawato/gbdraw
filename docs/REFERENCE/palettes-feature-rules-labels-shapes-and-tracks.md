@@ -242,13 +242,26 @@ remainder row, and each type it colors none of keeps its caption. The same rule
 applies to Web regeneration after
 a **This feature only** color edit creates a specific rule: the default caption
 changes because its category now contains only the remaining members.
-**Reset fill color** in the Web app gives a feature its palette color back; when
-another rule still colors that feature, the reset writes a rule in the palette
-color named like the type's remainder row (`other proteins` for CDS,
-`other <feature type>s` for other types). Such a rule counts as the default
-color: while no other rule with a caption colors a drawn feature of the type,
-the legend keeps the plain caption (`rRNA`), and once one does, the feature
-belongs to the `other rRNAs` row.
+A rule whose color is `palette` (any letter case) draws the features it
+matches in their type's color: the palette's color for the type, or your
+Default colors entry for it, as the figure is drawn, so a later palette or
+Default colors change reaches those features too. Without a caption, its
+features count as features of no rule: while no other rule with a caption
+colors a drawn feature of the type, they are in the plain caption's row
+(`rRNA`), and once one does, in the remainder row (`other rRNAs`). With a
+caption, the rule's row is drawn in the type's color; a `*` rule with a
+caption draws a row in the color of each type it colors.
+
+**Reset fill color** in the Web app gives a feature its palette color back.
+When another rule still colors that feature, the reset writes a rule for it
+alone with the color `palette` and no caption. **This only + add legend
+entry** writes the same rule with the feature's legend row name as its
+caption. In the rule table, such a rule shows its type's color and the tag
+**Palette color**; picking a color there gives the rule that color instead.
+A Session saved by gbdraw 0.14.5 or earlier holds such a reset as a rule named
+like the remainder row (`other proteins` for CDS, `other <feature type>s` for
+other types) in the type's color; loading the Session reads it as a `palette`
+rule without a caption. A color table file is read as written.
 
 Legend rows that have one name follow one rule in the CLI, the Python API, and
 the Web app:

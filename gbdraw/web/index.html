@@ -5915,7 +5915,7 @@
                                     </div>
                                 </div>
 
-                                <specific-rule-rows :rules="manualSpecificRules" :feature-keys="featureKeys" :available="semanticMutationAvailable"
+                                <specific-rule-rows :rules="manualSpecificRules" :feature-keys="featureKeys" :available="semanticMutationAvailable" :type-colors="currentColors"
                                     :pattern-text="specificRulePattern" :pattern-draft="specificRulePatternDraft" :field-id="specificRulePatternFieldId"
                                     @set-field="setSpecificRuleField" @move-up="moveSpecificRuleUp" @move-down="moveSpecificRuleDown" @remove="removeSpecificRule"
                                     @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
@@ -10365,13 +10365,14 @@
 <script type="text/x-template" id="specific-rule-rows-template">
 <div class="space-y-1 mb-3">
     <div v-for="(rule, i) in rules" :key="fieldId(rule)" data-color-rule-row class="flex items-start gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
-        <input type="color" v-committed-value="rule.color" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="t('Color rule {n} color', { n: i + 1 })" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
+        <input type="color" v-committed-value="ruleSwatch(rule)" @change="$emit('set-field', i, 'color', $event.target.value, $event.target)" :aria-label="t('Color rule {n} color', { n: i + 1 })" class="h-6 w-6 shrink-0 p-0 border rounded cursor-pointer" :disabled="!available">
         <div class="min-w-0 flex-1">
         <details data-color-rule-editor>
             <summary class="flex min-w-0 cursor-pointer items-center gap-1 py-1 text-slate-700">
                 <span class="min-w-0 truncate"><span class="text-slate-500">{{ rule.feat }} ·</span> {{ rule.qual }} = <span class="font-mono">{{ patternText(rule) }}</span></span>
                 <span v-if="patternDraft(rule)" class="shrink-0 font-semibold text-amber-700">{{ t('Not applied') }}</span>
                 <span v-else-if="rule.cap" class="ml-auto max-w-[40%] shrink-0 truncate text-slate-500" :title="rule.cap">{{ rule.cap }}</span>
+                <span v-if="!patternDraft(rule) && followsTypeColor(rule)" data-type-color-tag class="shrink-0 rounded bg-slate-100 px-1 text-slate-600" :class="{ 'ml-auto': !rule.cap }">{{ t('Palette color') }}</span>
             </summary>
             <div class="mt-1 space-y-1">
                 <div class="grid grid-cols-2 gap-1">

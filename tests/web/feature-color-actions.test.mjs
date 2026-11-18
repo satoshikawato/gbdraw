@@ -1,4 +1,5 @@
 import { evaluatePythonRules, groupColorRulesOver, reviseColorRulesOver, synthesisPythonQualifiers, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
+import { TYPE_COLOR_VALUE } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import assert from 'node:assert/strict';
 import { cp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -972,7 +973,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     await resetActions.resetClickedFeatureFillColor();
     // Python takes the reset feature's rules back and names its instance (PD-OI-069 revision 2).
     const rrnaReset = committed.at(-1).find((rule) => rule.qual === 'hash' && rule.val === `^${rrna.svg_id}@record-1$`);
-    assert.equal(rrnaReset?.color, '#71ee7d', `Reset after a ${choice} dialog uses the rRNA default`);
+    // The rule follows the type color (the rRNA default) by the type color value, without a caption.
+    assert.deepEqual([rrnaReset?.color, rrnaReset?.cap], [TYPE_COLOR_VALUE, ''], `Reset after a ${choice} dialog uses the rRNA default`);
   }
   // OV-548: a type is file text. `constructor` is no palette key, so the Reset
   // button has no default to offer: no dialog, no rule write.

@@ -754,17 +754,19 @@ def _active_materialization(materialized: MaterializedSession) -> None:
 
 
 def _with_saved_rule_captions(request: DiagramRequest) -> DiagramRequest:
-    """The request of a saved Session with the captions of its color table read as saved.
+    """The request of a saved Session with the rules of its color table read as saved: their captions, and the
+    rules an older Reset fill color wrote, by the type colors of the request (``saved_rule_captions``).
 
-    A color table file of the request is read so by ``read_color_table``.
+    A color table file of the request is read by ``read_color_table``, as written.
     """
 
+    from gbdraw.api.request_render import request_type_colors
     from gbdraw.legend.table import saved_rule_captions
 
     colors = request.options.colors
     if colors is None or colors.color_table is None:
         return request
-    color_table = saved_rule_captions(colors.color_table)
+    color_table = saved_rule_captions(colors.color_table, lambda: request_type_colors(colors))
     if color_table is colors.color_table:
         return request
     options = replace(request.options, colors=replace(colors, color_table=color_table))
