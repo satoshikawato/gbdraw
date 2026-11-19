@@ -4414,6 +4414,7 @@ test('a gzip Circular reference stages for the LOSAT ring plan as Generate names
 
 // The first-use runtime preparation shows the Worker's whole line of a step, so a translation writes the sentence
 // (no fragment inserted into another sentence); English keeps "…: step 2 of 5, loading the package installer...".
+const isolated = (text) => text.replaceAll('⟨', '\u2068').replaceAll('⟪', '\u2067').replaceAll('⟩', '\u2069'); // dev's isolates of an inserted value (i18n.js)
 test('a runtime preparation step shows as one sentence of the UI language, with its step and total', async () => {
   const { readFile } = await import('node:fs/promises');
   const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
@@ -4426,7 +4427,7 @@ test('a runtime preparation step shows as one sentence of the UI language, with 
   try {
     await setUiLocale('ar', async () => ({ default: { [steps[1]]: 'تحضير بيئة التشغيل: الخطوة {step} من {total}، تحميل مثبّت الحزم…' } }));
     showDiagramProgress({ requestId: 1, stage: 'preparing-runtime', step: 2, total: 5, label: steps[1] }, overlay);
-    assert.equal(overlay.processingStatus.value, 'تحضير بيئة التشغيل: الخطوة 2 من 5، تحميل مثبّت الحزم…');
+    assert.equal(overlay.processingStatus.value, isolated('تحضير بيئة التشغيل: الخطوة ⟨2⟩ من ⟨5⟩، تحميل مثبّت الحزم…'));
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

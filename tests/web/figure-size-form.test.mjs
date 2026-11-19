@@ -99,6 +99,7 @@ test('the root size is read in px: a root in a requested unit reads its px viewB
   assert.equal(getSvgDimensions(null), null);
 });
 
+const isolated = (text) => text.replaceAll('⟨', '\u2068').replaceAll('⟪', '\u2067').replaceAll('⟩', '\u2069'); // dev's isolates of an inserted value (i18n.js)
 test('the field writes each side, keeps its unit as view state, and shows a value from elsewhere in its unit', async () => {
   const drawing = { id: 'circular', mode: 'circular', form: createDefaultForm() };
   const store = withDrawings(drawing);
@@ -152,7 +153,7 @@ test('the field writes each side, keeps its unit as view state, and shows a valu
       '{length} height': 'ارتفاع {length}'
     } }));
     shown = { ...shown };
-    assert.equal(field.figureSizeLarger.value, 'أكبر من ارتفاع 120 mm المطلوب بعد نقل مفتاح الشكل أو العنوان أو المقياس.');
+    assert.equal(field.figureSizeLarger.value, isolated('أكبر من ⟨⟪⟨ارتفاع ⟨120 mm⟩⟩⟩⟩ المطلوب بعد نقل مفتاح الشكل أو العنوان أو المقياس.'));
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
