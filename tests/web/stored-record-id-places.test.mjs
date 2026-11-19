@@ -260,7 +260,7 @@ test('after a Load, a committed file that cannot be read keeps a Replace\'s Dept
     inputs: [{ uid: 'card', spec: null, primaryFile: 'ba', pairedFile: null }],
     records: [[{ record_id: 'second' }, { record_id: 'first' }]],
     fileOf: () => null,
-    committed: async () => committedCardRecords(committed, sources.unread)
+    committed: async () => committedCardRecords({ identities: committed, unread: sources.unread })
   });
   assert.deepEqual(depth, { rows: null }, 'first\'s Depth file stays at place 1');
 });

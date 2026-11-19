@@ -3,21 +3,23 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { openApp, evaluateWithRetainedPromise, waitForAppShell, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 
-// OV-3846 (D-05): a Replace in the same File card continues each record by
-// its record ID when every ID of both files is unique, else by place. A file
-// with the same two records in the other order keeps each record's Depth file
-// and feature edit with that record: through a Session saved and loaded before
-// the next Generate (the Depth rows move at the read after the Replace, the
-// edits at that Generate, from the committed request's own file), and through a
-// Replace and Generate in one sitting. Two Replaces before one Generate (the
-// first to a file whose records have other IDs) move both from the records
-// that Generate drew, in one sitting and across a Save and Load between them.
-// A's Depth is never drawn on B.
+// OV-3846 (D-05, D-23): a Replace in the same File card continues each record
+// as the record of the new file with its accession (its record ID without the
+// version) or its record ID when every ID of both files is unique, else by
+// place. A file with the same two records in the other order keeps each
+// record's Depth file and feature edit with that record: through a Session
+// saved and loaded before the next Generate (the Depth rows move at the read
+// after the Replace, the edits at that Generate, from the committed request's
+// own file), and through a Replace and Generate in one sitting. Two Replaces
+// before one Generate (the first to new versions of the records, in the other
+// order) move both from the records that Generate drew, in one sitting and
+// across a Save and Load between them. A's Depth is never drawn on B.
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankA = readFileSync(join(repoRoot, 'tests/test_inputs/BGC0000708.gbk'), 'utf8');
 const genbankB = readFileSync(join(repoRoot, 'tests/test_inputs/BGC0000709.gbk'), 'utf8');
-// The same two records under other IDs (C, D), so a Replace with them continues each record by its place.
-const genbankCD = `${genbankA.replaceAll('BGC0000708', 'BGC0000718')}\n${genbankB.replaceAll('BGC0000709', 'BGC0000719')}`;
+// New versions of the two records (B.2, A.2), in the other order: a Replace with them continues each record by its
+// accession.
+const genbankNew = `${genbankB.replaceAll('BGC0000709', 'BGC0000709.2')}\n${genbankA.replaceAll('BGC0000708', 'BGC0000708.2')}`;
 const depthTsv = (recordId, length, depth) => ['reference_name\tposition\tdepth',
   ...Array.from({ length: Math.ceil(length / 1000) }, (_, index) => `${recordId}\t${Math.min(length, index * 1000 + 1)}\t${depth + (index % 3)}`),
   `${recordId}\t${length}\t${depth}`].join('\n');
@@ -139,11 +141,11 @@ test('a reordered Replace keeps each record\'s Depth file and feature edit throu
   expect(back).toEqual(withA(['BGC0000708', 'BGC0000709']));
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('EDIT_ON_A');
 
-  // Two Replaces before one Generate, in one sitting: (A, B) -> (C, D) moves the Depth rows by place, then (B, A)
-  // moves them from the records the Generate drew, as that Generate moves the edit. Step by step, A's Depth would go
-  // from C to B.
-  await replaceCardFile(page, 'cd.gbk', genbankCD);
-  await recordOrder(page, ['BGC0000718', 'BGC0000719']);
+  // Two Replaces before one Generate, in one sitting: (A, B) -> (B.2, A.2) moves the Depth rows by accession, then
+  // (B, A) moves them on from the records the Generate drew, as that Generate moves the edit.
+  await replaceCardFile(page, 'new.gbk', genbankNew);
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
+  await recordOrder(page, ['BGC0000709.2', 'BGC0000708.2']);
   await replaceCardFile(page, 'ba.gbk', `${genbankB}\n${genbankA}`);
   await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   await recordOrder(page, ['BGC0000709', 'BGC0000708']);
@@ -157,8 +159,9 @@ test('a reordered Replace keeps each record\'s Depth file and feature edit throu
 
   // The same with a Save and Load between the two Replaces: the loaded Session's committed request names its own
   // file, (B, A), from which both continue.
-  await replaceCardFile(page, 'cd.gbk', genbankCD);
-  await recordOrder(page, ['BGC0000718', 'BGC0000719']);
+  await replaceCardFile(page, 'new.gbk', genbankNew);
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
+  await recordOrder(page, ['BGC0000709.2', 'BGC0000708.2']);
   // The loaded list stays unread until a read needs it; the Replace reads the cards as loaded.
   await saveAndLoad(page);
   await replaceCardFile(page, 'ab.gbk', `${genbankA}\n${genbankB}`);

@@ -180,7 +180,7 @@ import {
   readCircularSourceRecords,
   readParsedSequenceRecords,
   circularDepthRowsAfterRead,
-  committedRecordIdentitySources,
+  committedRequestIdentities,
   planRingScales
 } from '../services/record-discovery.js';
 import {
@@ -2862,24 +2862,19 @@ export const createRunAnalysis = ({
 
   /**
    * The identities of the records `committed` drew (OV-1949, OV-3846): those its Generate kept with it, else (a
-   * Session Load) read from the files it was drawn from (`committedRecordIdentitySources`). The one reading of the
+   * Session Load) read from the files it was drawn from (`committedRequestIdentities`). The one reading of the
    * records a Replace's rows continue from: the feature edits a Generate moves (`recordKeyMoves`) and the Depth rows a
    * card edit moves (`committedCardRecordsOf`), with the cards whose request file could not be read (`unread`).
    * @param {CommittedCanonicalSession | null | undefined} committed @param {DrawingState} drawing
    * @param {RecordIdentitySources} sources the drawing's record lists now
-   * @returns {Promise<{ identities: readonly DrawnRecordIdentity[], unread: ReadonlySet<string> }>}
+   * @returns {Promise<import('../services/record-discovery.js').CommittedIdentities>}
    */
-  const committedIdentitiesOf = async (committed, drawing, sources) => {
-    const records = committed && committed.renderRequest.mode === drawing.mode ? committed.renderRequest.records || [] : [];
-    if (!committed || records.length === 0) return { identities: [], unread: new Set() };
-    const kept = committedRecordIdentities.get(committed.resources);
-    if (kept) return { identities: kept, unread: new Set() };
-    const read = await committedRecordIdentitySources({
-      records, resources: committed.resources, sources, inputType: drawing.inputType.value, inputFiles,
-      cards: drawing.mode === 'circular' ? drawing.circularSources : drawing.linearSeqs
-    });
-    return { identities: drawnRecordIdentities(records, read), unread: read.unread };
-  };
+  const committedIdentitiesOf = (committed, drawing, sources) => committedRequestIdentities({
+    records: committed && committed.renderRequest.mode === drawing.mode ? committed.renderRequest.records || [] : [],
+    kept: committed ? committedRecordIdentities.get(committed.resources) : undefined,
+    resources: committed ? committed.resources : {}, sources, inputType: drawing.inputType.value, inputFiles,
+    cards: drawing.mode === 'circular' ? drawing.circularSources : drawing.linearSeqs
+  });
 
   /**
    * The record IDs of each card's file as `drawing`'s committed request drew it (`CommittedCardRecords`), which a
@@ -2893,9 +2888,7 @@ export const createRunAnalysis = ({
     const committed = readOfDrawing(drawing.id, state.activeDrawingId.value, () => getCommittedCanonicalSession?.() ?? null,
       (slot) => slot.runtimeState?.canonical?.committedCanonicalSession ?? null);
     const lists = committed ? sources ?? await readDrawingRecordIdentities(drawing) : null;
-    if (!lists) return new Map();
-    const { identities, unread } = await committedIdentitiesOf(committed, drawing, lists);
-    return committedCardRecords(identities, unread);
+    return lists ? committedCardRecords(await committedIdentitiesOf(committed, drawing, lists)) : new Map();
   };
 
   // R13: Generate and the label reflow prepare the specific-color rules they

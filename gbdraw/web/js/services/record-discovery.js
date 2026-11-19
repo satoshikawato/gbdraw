@@ -11,7 +11,9 @@ import { readRingScales } from './linear-units.js';
 import {
   circularInputComplete, circularSourceInputs, inputSourceFiles, inputTypeOfSourceKind, inputTypeSpec, storedRecordSourceResourceIds
 } from './input-types.js';
-import { recordIdentity, recordSelectorNumber, requestRecordCard, resliceCardRows } from './record-draw-selection.js';
+import {
+  drawnRecordIdentities, recordIdentity, recordSelectorNumber, requestRecordCard, resliceCardRows
+} from './record-draw-selection.js';
 import { storedOneRecordIdKey, storedRecordIdOf } from './stored-leaf-readings.js';
 import { buildDisambiguatedRecordEntries, recordOrderSelector } from './record-options.js';
 import {
@@ -1347,6 +1349,27 @@ export const committedRecordIdentitySources = async ({ records, resources, sourc
     cards.set(uid, listed);
   }
   return { ...sources, cards, unread };
+};
+
+/**
+ * The identities of a committed request's records, with the cards whose request file could not be read.
+ * @typedef {{ identities: readonly import('./record-draw-selection.js').DrawnRecordIdentity[],
+ *   unread: ReadonlySet<string> }} CommittedIdentities
+ */
+
+/**
+ * The identities of the records a committed request drew (OV-1949, OV-3846): those its Generate kept with it
+ * (`kept`), else (a Session Load) read from the files it was drawn from (`committedRecordIdentitySources`). None for a
+ * request of no records (or of the other mode: its caller passes none).
+ * @param {Parameters<typeof committedRecordIdentitySources>[0]
+ *   & { kept: readonly import('./record-draw-selection.js').DrawnRecordIdentity[] | undefined }} committed
+ * @returns {Promise<CommittedIdentities>}
+ */
+export const committedRequestIdentities = async ({ kept, ...committed }) => {
+  if (committed.records.length === 0) return { identities: [], unread: new Set() };
+  if (kept) return { identities: kept, unread: new Set() };
+  const sources = await committedRecordIdentitySources(committed);
+  return { identities: drawnRecordIdentities(committed.records, sources), unread: sources.unread };
 };
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */

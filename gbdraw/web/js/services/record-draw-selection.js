@@ -842,10 +842,10 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
 /**
  * The `CommittedCardRecords` of the identities of a committed request's records (`drawnRecordIdentities`) and the
  * cards whose request file could not be read (`unread`, `committedRecordIdentitySources`).
- * @param {readonly DrawnRecordIdentity[]} identities @param {ReadonlySet<string>} unread
+ * @param {{ identities: readonly DrawnRecordIdentity[], unread: ReadonlySet<string> }} committed
  * @returns {CommittedCardRecords}
  */
-export const committedCardRecords = (identities, unread) => new Map([
+export const committedCardRecords = ({ identities, unread }) => new Map([
   ...identities.map(({ card, cardRecordIds }) => /** @type {[string, readonly string[] | null]} */ ([card, unread.has(card) ? null : cardRecordIds])),
   ...[...unread].map((uid) => /** @type {[string, readonly string[] | null]} */ ([uid, null]))
 ]);
