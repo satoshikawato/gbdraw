@@ -538,24 +538,20 @@ def _display_feature_svg_id_from_data(data, display_start, display_end, display_
 def _web_feature_view_hash_parts_index(record):
     if record is None:
         return {}
-    from gbdraw.core.record_metadata import _feature_source_index_map, _iter_source_features
+    from gbdraw.analysis.protein_colinearity import _location_parts
+    from gbdraw.core.record_metadata import _feature_source_index_map, _iter_source_features, location_over_origin
 
-    # Each feature's source feature index comes from its one owner, which the protein manifest reads too.
+    # Each feature's source feature index comes from its one owner, which the protein manifest reads too. Its parts
+    # are the location as the Linear drawing draws it, read as protein extraction reads it: a part past the origin is
+    # the join over it (location_over_origin, OV-3863).
     source_indexes = _feature_source_index_map(record.features)
-    indexed = {}
-    for feature in _iter_source_features(record.features):
-        location = getattr(feature, "location", None)
-        raw_parts = list(getattr(location, "parts", None) or [location])
-        indexed[source_indexes[id(feature)]] = tuple(
-            (
-                int(part.start),
-                int(part.end),
-                int(part.strand) if part.strand in (-1, 1) else None,
-            )
-            for part in raw_parts
-            if part is not None
+    length = len(record.seq)
+    return {
+        source_indexes[id(feature)]: (
+            () if feature.location is None else _location_parts(location_over_origin(feature.location, length))
         )
-    return indexed
+        for feature in _iter_source_features(record.features)
+    }
 
 def _web_feature_view_hash_parts(record, source_feature_position):
     if source_feature_position is None:

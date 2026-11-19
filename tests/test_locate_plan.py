@@ -17,7 +17,7 @@ from pathlib import Path
 import random
 
 from Bio.Seq import Seq
-from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 import pytest
 
@@ -714,6 +714,25 @@ def test_locate_query_writes_protein_or_coding_sequence_queries() -> None:
     assert [line.split()[0] for line in protein.fasta.splitlines() if line.startswith(">")] == [f">{i}" for i in ids]
     assert "MKV" in protein.fasta
     assert nucleotide.fasta == f">{ids[0]}\nATGAAAGTTTAA\n>{ids[1]}\nATGAAAGTTTAA\n"
+
+
+@pytest.mark.parametrize("form", ["join", "past_end"])
+def test_a_cds_over_the_origin_is_the_same_gene_and_query_in_either_written_form(form: str) -> None:
+    # A 40 bp circular record whose CDS runs over the origin, written as GenBank's join(35..40,1..6) or as GFF3's
+    # one part past the record's end, 35..46 (OV-3863): either way the gene is 35..6 and its query the whole CDS.
+    coding = "ATGAAAGTTTAA"
+    record = _protein_record("REF", coding[6:] + "C" * 28 + coding[:6], [], circular=True)
+    location = (
+        CompoundLocation([FeatureLocation(34, 40, 1), FeatureLocation(0, 6, 1)]) if form == "join"
+        else FeatureLocation(34, 46, 1)
+    )
+    record.features = [SeqFeature(location, type="CDS", qualifiers={"locus_tag": ["A1"], "translation": ["MKV"]})]
+    query = locate_query(record, file_key="ref.gbk", record_key="ref", windows=[RecordWindow(35, 6)], program="losatn")
+
+    assert [(gene.cds.start, gene.cds.end, gene.cds.strand, gene.cds.length_nt) for gene in query.reference.genes] == [
+        (35, 6, "+", 12),
+    ]
+    assert query.fasta == f">{query.reference.genes[0].protein_id}\n{coding}\n"
 
 
 def test_a_gene_without_a_gene_name_or_locus_tag_is_named_by_the_record_protein_id() -> None:

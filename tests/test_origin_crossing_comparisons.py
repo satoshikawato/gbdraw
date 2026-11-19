@@ -468,6 +468,26 @@ def test_web_rows_of_an_origin_cds_equal_the_cli_rows(
     assert all(abs(sstart - send) < LENGTH / 2 for _, _, sstart, send in rows)
 
 
+@pytest.mark.parametrize("form", ORIGIN_FORMS)
+@pytest.mark.parametrize("strand", [1, -1])
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reversed"])
+def test_web_display_id_of_an_origin_cds_is_the_drawn_feature_id(tmp_path, strand, reverse, form) -> None:
+    """The Web display map names each CDS by the drawn-location hash Python gives the drawn record's CDS, for both
+    written forms: the Worker reads the location as drawn through ``location_over_origin`` too (OV-3863)."""
+    helpers = _web_helpers()
+    _, subject = _web_records(strand, False, form)
+    path = tmp_path / "subject.gb"
+    SeqIO.write([subject], path, "genbank")
+    extracted = json.loads(helpers["extract_cds_protein_fasta"](str(path), "genbank", record_index=1, record_instance_key="r_2"))
+    assert "error" not in extracted
+    display = helpers["_build_display_web_cds_protein_map"](
+        json.loads(json.dumps(extracted["protein_map"])), {"length": extracted["record_length"], "reverse": reverse},
+    )
+    drawn = crop_then_reverse_records([SeqIO.read(path, "genbank")], [], [reverse], **IN_MEMORY)[0][0][0]
+    expected = {protein.locus_tag: protein.view_feature_svg_id for protein in extract_cds_proteins([drawn]).proteins_by_record[0]}
+    assert {protein.locus_tag: protein.view_feature_svg_id for protein in display.values()} == expected
+
+
 @pytest.mark.parametrize("mode", MODES)
 def test_web_rows_of_a_crop_equal_the_cli_rows(tmp_path, stage_web_losatp_transport, mode) -> None:
     rows = _web_conversion(tmp_path, stage_web_losatp_transport, mode, 1, subject_region="subject:1-400")
