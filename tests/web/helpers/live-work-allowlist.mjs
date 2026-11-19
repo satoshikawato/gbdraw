@@ -78,9 +78,13 @@ export const WORK_ALLOWLIST = [
   },
   { kind: 'Legend row stroke', stages: ['strokes'], compiles: 1, requests: [], run: (page) => legendRowStrokeColor(page, 'CDS', '#e63946') },
   // From here the drawing holds a Legend row stroke. The stroke reaches the
-  // features drawn in the row's color, and an edit of the fills can change
-  // them or the row's key, so every display of the fills also shows the
-  // strokes (OV-1985, OV-1986).
+  // features in the row, and an edit of the fills can change them or the
+  // row's key, so every display of the fills also shows the strokes (OV-1985,
+  // OV-1986). A feature's row is read from its rule matches, and Python draws
+  // no Legend row stroke: each rerender below prepares the matches of the
+  // rules it draws on the features of the catalog it admits, before its
+  // commit strokes them (one `evaluateRules`), so the edit after a rerender
+  // finds them prepared and asks for none.
   { kind: 'Legend row color (no rule)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#7b2cbf') },
   // The step restores the user's Legend color of a row of Python's, which only the color overrides
   // hold (the row's record holds none): Legend fills.
@@ -116,12 +120,13 @@ export const WORK_ALLOWLIST = [
     // The rule's caption CDS gets a second color, so Python splits the CDS
     // row in two and the automatic rerender draws the Result again (OV-43);
     // its compile is Generate's plan, and the commit's own compile shows the
-    // rows it adds. Requests: the commit's rule matches and the rerender. A
-    // caption written in two colors stays as written (the Legend numbers the
-    // names it draws), so no caption normalization request precedes the
-    // matches.
+    // rows it adds. Requests: the commit's rule matches, the rerender, and
+    // the rerender's matches on the catalog it admits (the held Legend row
+    // stroke). A caption written in two colors stays as written (the Legend
+    // numbers the names it draws), so no caption normalization request
+    // precedes the matches.
     kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
-    requests: ['evaluateRules', 'render'],
+    requests: ['evaluateRules', 'evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
   {
@@ -131,11 +136,10 @@ export const WORK_ALLOWLIST = [
   {
     // U2BFIX3 review L-A: the display a Save declined shows the Legend; the
     // fills follow in one more compile once the Save ends. The color rule
-    // commit's rerender left the rule matches to prepare: the display's
-    // preparation is discarded while the Save runs, so the repaint prepares
-    // them again.
+    // commit's rerender prepared the rule matches on the catalog it admitted,
+    // so neither the display nor the repaint asks.
     kind: 'Result display declined by Save, shown when Save ends', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
-    compiles: 2, requests: ['evaluateRules', 'evaluateRules'],
+    compiles: 2, requests: [],
     before: async (page) => { await showResult(page, 0); await legendRowColor(page, 'tRNA', '#2a9d8f'); },
     run: (page) => displayWhileSaveHeld(page, 1)
   },
@@ -155,9 +159,11 @@ export const WORK_ALLOWLIST = [
     // fits, so the table asks for the rerender; its one label follow places
     // the labels too, so one reflow runs (Auto Reflow on). Requests: the
     // table and the visibility rule's matches on the catalog Generate drew;
-    // the rerender's rules are Python's captions already (OV-238).
+    // the rerender's rules are Python's captions already (OV-238), and it
+    // prepares their matches on the catalog it admits (the held Legend row
+    // stroke).
     kind: 'Feature Edits TSV load (Embedded Only)', stages: ['visibility'], compiles: 1,
-    requests: ['readFeatureOverrideTable', 'evaluateRules', 'render'],
+    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules', 'render'],
     before: async (page) => {
       await generateEmbeddedOnly(page);
       await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
@@ -167,39 +173,45 @@ export const WORK_ALLOWLIST = [
   {
     // A label a table hides needs no fit decision: no rerender (Auto Reflow
     // off). The table keeps the label text it loaded before. Requests: the
-    // table, and the color and visibility rule matches on the catalog the
-    // rerender drew.
+    // table, and the visibility rule matches on the catalog the rerender
+    // drew; the rerender prepared the color rule matches there.
     kind: 'Feature Edits TSV load, label Off (Embedded Only)', stages: ['visibility'], compiles: 1,
-    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules'],
+    requests: ['readFeatureOverrideTable', 'evaluateRules'],
     before: (page) => page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; }),
     run: (page) => loadFeatureEdits(page, [[embeddedLabelFeatures[0], '', 'dup edited'], [embeddedLabelFeatures[1], 'off', '']])
   },
   {
-    // The rerender decides the fit; its rules are Python's captions already (OV-238).
-    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['render'],
+    // The rerender decides the fit; its rules are Python's captions already
+    // (OV-238). It prepares their matches on the catalog it admits, which the
+    // held Legend row stroke reads to stroke the features of its row.
+    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['evaluateRules', 'render'],
     run: (page) => popupEdit(page, embeddedLabelFeatures[0], { labelText: 'dup' })
   },
   // U3a (R14-8): the Legend edits. A row's edits show live in one compile; a
   // rule change asks for the automatic rerender only when the displayed
   // Result cannot show the rows it regroups (a split, or a row another batch
-  // Result draws). Captions with one color each send no caption request. An
-  // edit after a rerender first matches the rules on the features of the
-  // Result it drew (one `evaluateRules`). A History restore of a Result with a
-  // feature catalog installs the catalog's own features, which keep the rule
-  // matches recorded on them, so an edit after it asks for none (OV-3285).
+  // Result draws). Captions with one color each send no caption request. A
+  // rerender prepares the rule matches on the features of the Result it draws
+  // (the held Legend row stroke), so an edit after it asks for none; without
+  // a Legend row stroke that edit would ask once. A History restore of a
+  // Result with a feature catalog installs the catalog's own features, which
+  // keep the rule matches recorded on them, so an edit after it asks for none
+  // (OV-3285).
   {
-    kind: 'Legend rename, row without features', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: ['evaluateRules'],
+    kind: 'Legend rename, row without features', stages: ['legend', 'legendFills', 'strokes'], compiles: 1, requests: [],
     run: (page) => renameLegendRow(page, 'GC content', 'GC %')
   },
   {
-    // The rule takes one feature of the "other proteins" row of Result 1: a split.
+    // The rule takes one feature of the "other proteins" row of Result 1: a
+    // split. Requests: the commit's rule matches, the rerender, and the
+    // rerender's matches on the catalog it admits.
     kind: 'color rule commit that splits a row', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
-    requests: ['evaluateRules', 'render'],
+    requests: ['evaluateRules', 'evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^TESTA_0005$', color: '#2a9d8f', cap: 'Five' })
   },
   {
     kind: 'Legend rename, rule row one Result draws (whole row)', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'],
-    compiles: 1, requests: ['evaluateRules'], run: (page) => renameLegendRow(page, 'Five', 'Fifth')
+    compiles: 1, requests: [], run: (page) => renameLegendRow(page, 'Five', 'Fifth')
   },
   // The rename's History step holds the Result before and after it: Undo and
   // Redo restore the Result that shows the rows, so neither compiles nor asks.
@@ -219,17 +231,19 @@ export const WORK_ALLOWLIST = [
     }).then(() => settleLive(page))
   },
   {
-    // Result 2 draws the row too: Python draws it again there.
+    // Result 2 draws the row too: Python draws it again there, and the
+    // rerender prepares the rule matches on the catalog it admits.
     kind: 'Legend rename, rule row both Results draw', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
-    requests: ['render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
+    requests: ['evaluateRules', 'render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
   },
   {
     // OV-244 (c): a whole palette row's rename names the row only (Python's
     // row names, `objects.legends.row_names`), as the rename of a row without
     // features does: no rule is written, so Python synthesizes none and
-    // draws neither Result again; the rename is its own History step.
+    // draws neither Result again; the rename is its own History step. The
+    // rerender above prepared the rule matches: no request.
     kind: 'Legend rename, palette row with features', stages: ['legend', 'legendFills', 'strokes'], compiles: 1,
-    requests: ['evaluateRules'],
+    requests: [],
     run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },
   // A delete, its Undo and a Restore also show the strokes: a deleted row's
@@ -290,18 +304,21 @@ export const WORK_ALLOWLIST = [
     // R15-3 (OV-285): a rename onto a deleted row's caption asks; its Merge is
     // the Restore (which shows the row) and then the merge's rule commit, in
     // one History checkpoint. Each shows once: two compiles. The merge's
-    // rule commit prepares its candidate rules (one request) and, as a join,
-    // asks Python where the joined rows go (synthesisQualifiers names the
+    // rule commit reads its candidate rules' matches and, as a join, asks
+    // Python where the joined rows go (synthesisQualifiers names the
     // qualifiers it reads, synthesizeColorRules writes the rows); the rows
     // stay on the displayed Result. It runs after the Load, so it leaves the
     // rule preparation of the rows above as they were (OV-286). A Result
     // admitted at Load carries no Legend row facts, so before the Restore
-    // reads them it asks Python to draw the drawing once (OV-2412): the
-    // rerender prepares the committed request's rules (one more
-    // evaluateRules) and renders; its compile of Generate's plan is not a
-    // live compile.
+    // reads them it asks Python to draw the drawing once (OV-2412); its
+    // compile of Generate's plan is not a live compile. The features the Load
+    // admitted have no rule matches yet, so the Legend delete before this row
+    // shows the held Legend row stroke and asks for them once; the rerender
+    // prepares the matches on the catalog it admits (one `evaluateRules`)
+    // before its commit strokes them, and the merge's rule commit finds them
+    // prepared.
     kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules', 'strokes'],
-    compiles: 2, requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesisQualifiers', 'synthesizeColorRules'],
+    compiles: 2, requests: ['evaluateRules', 'render', 'synthesisQualifiers', 'synthesizeColorRules'],
     before: (page) => deleteLegendRow(page, 'Two'),
     run: async (page) => {
       await renameRow(page, 'Fifth', 'Two');
