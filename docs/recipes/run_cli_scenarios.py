@@ -250,6 +250,11 @@ _OUTPUT_INPUT_FILES = {
         "AP027133.gb",
         "AP027133.DRR394922.depth-1kb.tsv",
     },
+    ("T-CLI-05", "quantitative_genome_series.svg"): {
+        "AP027133.gb",
+        "AP027133.DRR394922.log2-ratio-1kb.bedgraph",
+        "AP027133.DRR394922.below-10x.bed",
+    },
     ("H-CLI-02", "record_table.svg"): {
         "HmmtDNA.gbk",
         "NC_002333.2.gb",
@@ -1764,6 +1769,87 @@ def _assert_quantitative_tracks(
         raise RecipeContractError(f"{scenario_id} numeric scale options changed.")
 
 
+def _assert_signed_and_count_series(output_path: Path, *, command: list[str], workdir: Path) -> None:
+    """T-CLI-05's third figure: the log2 depth ratio as a line on both sides of 0 and the count of bases below
+    10x as an area, in their own slots above GC content and GC skew."""
+
+    root = ElementTree.parse(output_path).getroot()
+    if _semantic_slots(root) != [
+        ("ticks", "ticks"),
+        ("features", "features"),
+        ("depth_1", "depth"),
+        ("depth_2", "depth"),
+        ("gc_content", "dinucleotide_content"),
+        ("gc_skew", "dinucleotide_skew"),
+    ]:
+        raise RecipeContractError("T-CLI-05 numeric series slot order changed.")
+
+    ratio_rows = [
+        line.split("\t")
+        for line in (workdir / "AP027133.DRR394922.log2-ratio-1kb.bedgraph").read_text(encoding="utf-8").splitlines()
+    ]
+    ratios = [float(row[3]) for row in ratio_rows]
+    low_rows = [
+        line.split("\t")
+        for line in (workdir / "AP027133.DRR394922.below-10x.bed").read_text(encoding="utf-8").splitlines()
+    ]
+    if (
+        len(ratio_rows) != 607
+        or [(int(row[1]), int(row[2])) for row in ratio_rows]
+        != [(start, min(start + 1000, 606_194)) for start in range(0, 606_194, 1000)]
+        or (min(ratios), max(ratios)) != (-0.68, 1.9)
+        or len(low_rows) != 447
+        or any(len(row) != 3 for row in low_rows)
+        or sum(int(row[2]) - int(row[1]) for row in low_rows) != 8297
+        or {row[0] for row in ratio_rows + low_rows} != {"AP027133.1"}
+    ):
+        raise RecipeContractError("T-CLI-05 numeric series fixture semantics changed.")
+
+    def drawn_paths(slot_id: str) -> list[dict[str, str]]:
+        slot = next(element for element in root.iter() if element.attrib.get("data-gbdraw-slot-id") == slot_id)
+        return [
+            child.attrib
+            for child in slot.iter()
+            if child.tag.rsplit("}", 1)[-1] == "path"
+            and child.attrib.get("fill") != "white"
+            and not (child.attrib.get("fill") == "none" and child.attrib.get("stroke") == "none")
+        ]
+
+    # The ratio is a line, blue above its baseline 0 and red below it; the count is an orange area.
+    ratio_paths, count_paths = drawn_paths("depth_1"), drawn_paths("depth_2")
+    if [(path.get("fill"), path.get("stroke")) for path in ratio_paths] != [("none", "#2563EB"), ("none", "#DC2626")]:
+        raise RecipeContractError("T-CLI-05 log2 ratio line or its negative colour changed.")
+    if not count_paths or count_paths[0].get("fill") != "#B45309":
+        raise RecipeContractError("T-CLI-05 low-depth count area changed.")
+    required_text = {
+        "[-1\u20132]",
+        "[0\u2013316 bp]",
+        "[10\u201355%]",
+        "DRR394922 log2(depth / median)",
+        "DRR394922 bases below 10x",
+        "GC content (%)",
+        "GC skew (+)",
+        "GC skew (-)",
+    }
+    if not required_text <= _text_nodes(root):
+        raise RecipeContractError("T-CLI-05 numeric series axes or legend changed.")
+
+    def values(option: str, count: int) -> list[str]:
+        index = command.index(option)
+        return command[index + 1 : index + 1 + count]
+
+    if (
+        values("--depth_track_format", 2) != ["bedgraph", "bed"]
+        or values("--depth_track_agg", 2) != ["mean", "sum"]
+        or values("--depth_track_style", 2) != ["line", "area"]
+        or values("--depth_track_baseline", 1) != ["0"]
+        or values("--depth_track_unit", 2) != ["", " bp"]
+        or values("--depth_window", 1) != ["1000"]
+        or values("--depth_step", 1) != ["1000"]
+    ):
+        raise RecipeContractError("T-CLI-05 numeric series options changed.")
+
+
 def _assert_annotation_slots(
     output_path: Path,
     *,
@@ -2612,6 +2698,8 @@ def run_scenario(
                             record_id="AP027133.1",
                             feature_count=576,
                         )
+                    elif output_name == "quantitative_genome_series.svg":
+                        _assert_signed_and_count_series(generated_path, command=command, workdir=workdir)
                     else:
                         _assert_quantitative_tracks(
                             generated_path,

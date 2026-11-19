@@ -13,8 +13,8 @@
     },
     "extended": {
       "maxUncompressedBytes": 16777216,
-      "actualUncompressedBytes": 7846853,
-      "fileCount": 20
+      "actualUncompressedBytes": 7876222,
+      "fileCount": 22
     }
   },
   "fixtures": {
@@ -384,10 +384,12 @@
     "depth-1kb": {
       "title": "Complete AP027133 genome with 1 kbp mean depth",
       "packageTier": "extended",
-      "sizeBudgetBytes": 1370000,
+      "sizeBudgetBytes": 1400000,
       "fileIds": [
         "ap027133-genbank",
-        "ap027133-drr394922-depth-1kb"
+        "ap027133-drr394922-depth-1kb",
+        "ap027133-drr394922-log2-ratio-1kb",
+        "ap027133-drr394922-below-10x"
       ],
       "fileReferences": [],
       "scenarioIds": [
@@ -1153,6 +1155,136 @@
         }
       },
       "scenarioIds": ["T-CLI-05", "T-GUI-12", "T-PY-11", "H-GUI-09", "H-CLI-02", "H-CLI-09", "H-PY-03"]
+    },
+    "ap027133-drr394922-log2-ratio-1kb": {
+      "fixtureId": "depth-1kb",
+      "relativePath": "depth-1kb/AP027133.DRR394922.log2-ratio-1kb.bedgraph",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "bedgraph",
+      "sizeBytes": 18288,
+      "sha256": "214e6fb82a35a1b04e8d22f6f22d6e087fe3dc49e01d835e89f651c0ab64d956",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "referenceName": "AP027133.1",
+        "sourceRun": "DRR394922",
+        "sourceRowCount": 606194,
+        "binSizeBp": 1000,
+        "binCount": 607,
+        "medianDepth": 20,
+        "minimumLog2Ratio": -0.68,
+        "maximumLog2Ratio": 1.9
+      },
+      "provenance": {
+        "sourceName": "Derived from the repository samtools-depth fixture of DDBJ SRA DRR394922 reads on AP027133.1",
+        "sourceUrl": "https://trace.ddbj.nig.ac.jp/DRASearch/run?acc=DRR394922",
+        "retrievedOn": "2026-11-19",
+        "repositoryAddedOn": "2026-11-19",
+        "repositoryAddedCommit": null,
+        "licenseNote": "This numerical summary is derived from the repository's public sequencing-depth fixture; consult the DDBJ run record for source metadata.",
+        "filenameNormalization": "The filename records the reference, run accession, value (log2 ratio) and 1 kbp bin size."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_depth_1kb_fixture.py",
+        "sourceFileIds": [
+          "ap027133-genbank"
+        ],
+        "sourceChecksums": [
+          "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6"
+        ],
+        "externalSources": [
+          {
+            "id": "repository-raw-depth-ap027133-drr394922",
+            "filename": "AP027133.DRR394922.depth.tsv",
+            "repositoryLocation": "unbundled test fixture",
+            "sizeBytes": 12610982,
+            "sha256": "dd685990decefbd52a392de160f2a4b4a146a1e470ae197ef7135aef16fc6080"
+          }
+        ],
+        "tool": "Python standard library and Biopython SeqIO",
+        "toolVersion": "Python 3.10+; Biopython 1.85",
+        "arguments": {
+          "binSizeBp": 1000,
+          "value": "log2 of the bin mean depth over the median per-base depth of the genome",
+          "bins": "consecutive non-overlapping",
+          "outputCoordinates": "0-based start, exclusive end (bedGraph)",
+          "decimalPlaces": 2
+        },
+        "outputStatistics": {
+          "sourceRowCount": 606194,
+          "binCount": 607,
+          "medianDepth": 20,
+          "minimumLog2Ratio": -0.68,
+          "maximumLog2Ratio": 1.9
+        }
+      },
+      "scenarioIds": [
+        "T-CLI-05"
+      ]
+    },
+    "ap027133-drr394922-below-10x": {
+      "fixtureId": "depth-1kb",
+      "relativePath": "depth-1kb/AP027133.DRR394922.below-10x.bed",
+      "role": "derived",
+      "mediaType": "text/plain",
+      "inputType": "bed",
+      "sizeBytes": 11081,
+      "sha256": "c0e83c2bdc75fa0d19280a00db4b056607f891c58f693b93bdef3bf535ea2fa1",
+      "packageTier": "extended",
+      "records": [],
+      "expectedSemantics": {
+        "referenceName": "AP027133.1",
+        "sourceRun": "DRR394922",
+        "sourceRowCount": 606194,
+        "depthBelow": 10,
+        "runCount": 447,
+        "baseCount": 8297
+      },
+      "provenance": {
+        "sourceName": "Derived from the repository samtools-depth fixture of DDBJ SRA DRR394922 reads on AP027133.1",
+        "sourceUrl": "https://trace.ddbj.nig.ac.jp/DRASearch/run?acc=DRR394922",
+        "retrievedOn": "2026-11-19",
+        "repositoryAddedOn": "2026-11-19",
+        "repositoryAddedCommit": null,
+        "licenseNote": "This numerical summary is derived from the repository's public sequencing-depth fixture; consult the DDBJ run record for source metadata.",
+        "filenameNormalization": "The filename records the reference, run accession and the depth the bases fall below."
+      },
+      "derivation": {
+        "status": "reproducible",
+        "script": "tools/build_depth_1kb_fixture.py",
+        "sourceFileIds": [
+          "ap027133-genbank"
+        ],
+        "sourceChecksums": [
+          "913af50dd9d37cc2107be5e46484b885c5d586fb414b4b501380fc8f17a659d6"
+        ],
+        "externalSources": [
+          {
+            "id": "repository-raw-depth-ap027133-drr394922",
+            "filename": "AP027133.DRR394922.depth.tsv",
+            "repositoryLocation": "unbundled test fixture",
+            "sizeBytes": 12610982,
+            "sha256": "dd685990decefbd52a392de160f2a4b4a146a1e470ae197ef7135aef16fc6080"
+          }
+        ],
+        "tool": "Python standard library and Biopython SeqIO",
+        "toolVersion": "Python 3.10+; Biopython 1.85",
+        "arguments": {
+          "depthBelow": 10,
+          "rows": "one 3-column BED row per run of consecutive bases with depth below 10",
+          "outputCoordinates": "0-based start, exclusive end (BED)"
+        },
+        "outputStatistics": {
+          "sourceRowCount": 606194,
+          "runCount": 447,
+          "baseCount": 8297
+        }
+      },
+      "scenarioIds": [
+        "T-CLI-05"
+      ]
     },
     "lambda-genbank": {
       "fixtureId": "lambda",

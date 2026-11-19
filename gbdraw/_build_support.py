@@ -56,6 +56,8 @@ _WEB_APP_PACKAGE_DATA = [
     "web/js/utils/*.js",
     "web/js/utils/*/*.js",
     "web/tutorial-data/*.json",
+    "web/tutorial-data/*/*.bed",
+    "web/tutorial-data/*/*.bedgraph",
     "web/tutorial-data/*/*.fna",
     "web/tutorial-data/*/*.gb",
     "web/tutorial-data/*/*.gbk",

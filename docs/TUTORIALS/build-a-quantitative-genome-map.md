@@ -18,6 +18,8 @@ PowerShell downloads.
 | --- | --- | --- | --- |
 | `AP027133.gb` | NCBI `AP027133.1`, MAG: Candidatus Hepatoplasma scabrum Ps-JP DNA, complete genome | 606,194 bp | [Record page](https://www.ncbi.nlm.nih.gov/nuccore/AP027133.1); [full GenBank file](https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=AP027133.1&rettype=gbwithparts&retmode=text); [Revision History snapshot](https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?tool=portal&save=file&db=nuccore&report=gbwithparts&id=AP027133.1&sat=3&satkey=69902298) |
 | `AP027133.DRR394922.depth-1kb.tsv` | Sequencing-depth means at 1 kbp intervals | 607 bins | [`AP027133.DRR394922.depth-1kb.tsv`](../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.depth-1kb.tsv) (select **Download raw file**) |
+| `AP027133.DRR394922.log2-ratio-1kb.bedgraph` | Command line only: log2 of each 1 kbp bin's mean depth over the genome's median depth | 607 bins | [`AP027133.DRR394922.log2-ratio-1kb.bedgraph`](../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.log2-ratio-1kb.bedgraph) (select **Download raw file**) |
+| `AP027133.DRR394922.below-10x.bed` | Command line only: the runs of bases whose depth is below 10x | 447 runs | [`AP027133.DRR394922.below-10x.bed`](../../gbdraw/web/tutorial-data/depth-1kb/AP027133.DRR394922.below-10x.bed) (select **Download raw file**) |
 
 The depth table contains 607 arithmetic means from consecutive 1 kbp bins.
 Its first column is `AP027133.1`, its positions run from 1 through 606,001, and
@@ -28,7 +30,7 @@ Each interface creates these files:
 | Interface | You create | gbdraw writes | Compare with |
 | --- | --- | --- | --- |
 | Web app | — | `quantitative_genome_map.svg`, saved in Step 4 | The figure above |
-| Command line | — | `quantitative_genome_baseline.svg` and `quantitative_genome_map.svg` | [`quantitative_genome_baseline.svg`](../images/t-cli-05/quantitative_genome_baseline.svg) and [`quantitative_genome_map.svg`](../images/t-cli-05/quantitative_genome_map.svg) |
+| Command line | — | `quantitative_genome_baseline.svg`, `quantitative_genome_map.svg`, and `quantitative_genome_series.svg` | [`quantitative_genome_baseline.svg`](../images/t-cli-05/quantitative_genome_baseline.svg), [`quantitative_genome_map.svg`](../images/t-cli-05/quantitative_genome_map.svg), and [`quantitative_genome_series.svg`](../images/t-cli-05/quantitative_genome_series.svg) |
 | Python | `quantitative_genome_map.py`, the program from Step 2 | `quantitative_genome_map.svg` | [`quantitative_genome_map.svg`](../images/t-py-11/quantitative_genome_map.svg) |
 
 For the command line and Python, install gbdraw with its standard plotting
@@ -98,7 +100,9 @@ Select **SVG** to save `quantitative_genome_map.svg`.
 ## On the command line
 
 You will make a baseline annotated genome, then add a blue depth series, GC
-content, and GC skew in three explicit inner slots.
+content, and GC skew in three explicit inner slots. A third figure draws the
+same depth in two other forms: a signed ratio on both sides of zero and a count
+of low-depth bases.
 
 ### Step 1: Prepare the inputs and track settings
 
@@ -111,7 +115,7 @@ mkdir gbdraw-cli-quantitative-map
 cd gbdraw-cli-quantitative-map
 ```
 
-Download both files from the table in [Before you start](#before-you-start).
+Download the four files from the table in [Before you start](#before-you-start).
 On macOS, Linux, or WSL, you can download them with `curl`:
 
 ```bash
@@ -119,6 +123,8 @@ ncbi_efetch="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 gbdraw_data_base="https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/tutorial-data"
 curl -L "${ncbi_efetch}?db=nuccore&id=AP027133.1&rettype=gbwithparts&retmode=text" -o AP027133.gb
 curl -L "$gbdraw_data_base/depth-1kb/AP027133.DRR394922.depth-1kb.tsv" -o AP027133.DRR394922.depth-1kb.tsv
+curl -L "$gbdraw_data_base/depth-1kb/AP027133.DRR394922.log2-ratio-1kb.bedgraph" -o AP027133.DRR394922.log2-ratio-1kb.bedgraph
+curl -L "$gbdraw_data_base/depth-1kb/AP027133.DRR394922.below-10x.bed" -o AP027133.DRR394922.below-10x.bed
 ```
 
 Confirm that the source record reports `VERSION     AP027133.1`:
@@ -132,7 +138,9 @@ The working directory should now contain:
 ```text
 gbdraw-cli-quantitative-map/
 ├── AP027133.gb
-└── AP027133.DRR394922.depth-1kb.tsv
+├── AP027133.DRR394922.below-10x.bed
+├── AP027133.DRR394922.depth-1kb.tsv
+└── AP027133.DRR394922.log2-ratio-1kb.bedgraph
 ```
 
 #### Configure the depth axis
@@ -156,7 +164,10 @@ GC content, and GC skew inside it in that order. The feature slot deliberately
 keeps gbdraw's default width; only the three quantitative series need explicit
 widths.
 
-### Step 2: Run both reproducible commands
+### Step 2: Run the three reproducible commands
+
+The first two commands draw the baseline and the quantitative map; Step 4
+explains the third.
 
 <!-- executable:T-CLI-05:start -->
 ```bash
@@ -202,14 +213,58 @@ gbdraw circular \
   --legend right \
   -o quantitative_genome_map \
   -f svg
+
+gbdraw circular \
+  --gbk AP027133.gb \
+  --depth_track AP027133.DRR394922.log2-ratio-1kb.bedgraph \
+  --depth_track AP027133.DRR394922.below-10x.bed \
+  --depth_track_label 'DRR394922 log2(depth / median)' 'DRR394922 bases below 10x' \
+  --depth_track_color '#2563EB' '#B45309' \
+  --depth_track_format bedgraph bed \
+  --depth_track_agg mean sum \
+  --depth_track_style line area \
+  --depth_track_baseline 0 \
+  --depth_track_negative_color '#DC2626' \
+  --depth_track_unit '' ' bp' \
+  --depth_track_min -1 auto \
+  --depth_track_max 2 auto \
+  --depth_track_large_tick_interval 1 100 \
+  --depth_window 1000 \
+  --depth_step 1000 \
+  --no_depth_log_scale \
+  --show_depth_axis \
+  --show_depth_ticks \
+  --gc \
+  --skew \
+  --window 1000 \
+  --step 1000 \
+  --gc_content_mode percent \
+  --gc_content_min_percent 10 \
+  --gc_content_max_percent 55 \
+  --show_gc_content_axis \
+  --show_gc_content_ticks \
+  --gc_content_large_tick_interval 10 \
+  --gc_content_small_tick_interval 5 \
+  --circular_track_slot 'ticks:ticks@side=outside,tick_label_layout=label_out_tick_in' \
+  --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
+  --circular_track_slot 'depth_1:depth@track_index=0,side=inside,w=52px,legend_label=DRR394922 log2(depth / median)' \
+  --circular_track_slot 'depth_2:depth@track_index=1,side=inside,w=40px,legend_label=DRR394922 bases below 10x' \
+  --circular_track_slot 'gc_content:dinucleotide_content@side=inside,w=42px,nt=GC,legend_label=GC content (%)' \
+  --circular_track_slot 'gc_skew:dinucleotide_skew@side=inside,w=34px,nt=GC,legend_label=GC skew' \
+  --separate_strands \
+  --labels none \
+  --legend right \
+  -o quantitative_genome_series \
+  -f svg
 ```
 <!-- executable:T-CLI-05:end -->
 
-### Step 3: Verify the two outputs
+### Step 3: Verify the first two outputs
 
 Expected output: the first command writes
-`quantitative_genome_baseline.svg`, and the second writes
-`quantitative_genome_map.svg`.
+`quantitative_genome_baseline.svg`, the second writes
+`quantitative_genome_map.svg`, and the third writes
+`quantitative_genome_series.svg`, which Step 4 checks.
 
 Open `quantitative_genome_baseline.svg`. Verify the `AP027133.1` identifier,
 `606,194 bp` length, and absence of depth, GC-content, or skew rings.
@@ -223,11 +278,53 @@ ring, and the two signed GC-skew fills.
 
 Your quantitative SVG should match the figure at the top of this page: the same record definition, track order, axes, tick labels, colors, and legend.
 
+### Step 4: Draw a signed series and a count series
+
+A numeric series need not be read depth. The third command draws the same
+sequencing run in two other forms, each from a file whose format it names with
+`--depth_track_format`:
+
+- `AP027133.DRR394922.log2-ratio-1kb.bedgraph` is a bedGraph: each row gives
+  one value to the bases from its start to its end. The value is log2 of a
+  1 kbp bin's mean depth over the median depth of the genome (20x), so 0 is
+  the median, 1 twice it, and -1 half of it.
+- `AP027133.DRR394922.below-10x.bed` is a BED file of three columns: one row
+  for each run of consecutive bases whose depth is below 10x. A BED row without
+  a score adds 1 to every base it covers, so `--depth_track_agg sum` counts
+  the bases below 10x in each window.
+
+Every per-series option takes one value for every series, or one value per
+series in the order of the `--depth_track` options:
+
+- `--depth_track_style line area` draws the ratio as a line and the count as a
+  filled area.
+- `--depth_track_baseline 0` draws both from 0. The ratio line is blue above 0
+  and takes the `--depth_track_negative_color` below it; the count never falls
+  below 0, so the colour does not show there.
+- `--depth_track_unit '' ' bp'` writes no unit after the ratio's numbers and
+  ` bp` after the count's, instead of the default `x` of coverage.
+- `--depth_track_min -1 auto` and `--depth_track_max 2 auto` give the ratio a
+  fixed -1 to 2 range and leave the count's range automatic.
+
+`--depth_window 1000 --depth_step 1000` reads both files in 1 kbp windows
+centred on each 1 kbp position: the ratio line shows the mean of the bedGraph
+values in each window, and the count area the number of bases below 10x in it.
+The 1 kbp mean table of Step 2 needs window `1` instead, which is why this
+figure draws the ratio in its place.
+
+Open `quantitative_genome_series.svg`. From outside to inside: ticks,
+features, the ratio line with its `[-1–2]` range label, the count area with its
+`[0–316 bp]` range label, GC content, and GC skew. The legend has one row for
+each series in its colour.
+
+![AP027133.1 with a log2 depth ratio line, a count of bases below 10x, GC content, and GC skew](../images/t-cli-05/quantitative_genome_series.svg)
+
 ### Check the source record
 
-The baseline and final figure use the same complete record. The second command
+The three figures use the same complete record. The second command
 adds one measured table and two derived tracks; it does not change feature
-coordinates or treat missing depth as zero.
+coordinates or treat missing depth as zero. The third command draws two files
+derived from the same run's depth.
 
 ## In Python
 
@@ -374,7 +471,7 @@ Your SVG should match the figure at the top of this page: the same record defini
 ## Next steps
 
 - [Review tracks, axes, and annotations](../REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations)
-- [Review the depth TSV schema](../REFERENCE/input-formats-and-tsv-schemas.md)
+- [Review the numeric series file formats](../REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables)
 - [Review Python layout and track options](../REFERENCE/python-api.md#layout-and-track-options)
 - Technical documentation for the [web app](../REFERENCE/web-app.md), the
   [command line](../REFERENCE/command-line.md), and [Python](../REFERENCE/python-api.md)
@@ -384,5 +481,12 @@ Your SVG should match the figure at the top of this page: the same record defini
 - `AP027133.gb` is NCBI `AP027133.1`. The Revision History snapshot link uses
   `sat=3` and `satkey=69902298` to pin the exact revision of the record; check
   the accession version (`.1`) in the `VERSION` line.
-- `AP027133.DRR394922.depth-1kb.tsv` is a gbdraw support file hosted in this
-  repository.
+- `AP027133.DRR394922.depth-1kb.tsv`,
+  `AP027133.DRR394922.log2-ratio-1kb.bedgraph`, and
+  `AP027133.DRR394922.below-10x.bed` are gbdraw support files hosted in this
+  repository. `tools/build_depth_1kb_fixture.py` derives all three from one
+  per-base `samtools depth` table of the DDBJ run
+  [DRR394922](https://trace.ddbj.nig.ac.jp/DRASearch/run?acc=DRR394922)
+  mapped to `AP027133.1`: the 1 kbp means, log2 of each bin's mean over the
+  median per-base depth (20x) rounded to two decimal places, and the 447 runs
+  of the 8,297 bases below 10x.
