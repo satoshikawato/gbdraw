@@ -45,6 +45,7 @@ import { cloneJsonData } from '../services/json-clone.js';
 import { msg, t } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
 import { ringRowsSwapCrossesAxis } from './circular-track-slots.js';
+import { searchedRingSources } from '../services/circular-conservation-keys.js';
 /** @import { SavedTrackLayout } from './feature-editor/placement-actions.js' */
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
@@ -193,24 +194,31 @@ const changeRingSourceFiles = (state, drawing, change, write) => {
 
 /**
  * After a Generate's adoption of its LOSAT result, Generate's own rings (`ringAdoption`, OV-3195): adopted ring k is the
- * ring it searched at k, so it takes that ring's genetic code, and its own colour or none and its scheme index
- * (PD-OI-110), which the request does not carry (it holds the colour each ring drew); and, while the draft's
- * rings are still those it searched (`builtFromDraft`), the stack row of the draft's ring at that ring's place (a ring's
- * genome files and, in a LOSAT-cache replay, its table sit at its place, `ringGenomePlaces`) moves to adopted ring k's
- * key. Every other ring row of the draft goes, so no row lands on another ring.
+ * ring it searched at k, so it takes that ring's label, genetic code, and its own colour or none and its scheme index
+ * (PD-OI-110), which the request does not carry (it holds the colour each ring drew); and, while the draft's rings are
+ * still those it searched (`builtFromDraft`), the stack row of the draft's ring at that ring's place (a ring's genome
+ * files and, in a LOSAT-cache replay, its table sit at its place, `ringGenomePlaces`) moves to adopted ring k's key.
+ * Every other ring row of the draft goes, so no row lands on another ring.
+ * Those values are the user's, not the search's: while the draft's rings are still those it searched, ring k takes
+ * them from the draft's ring of the same series identity (`draftRings`), so a value edited while the search ran stays
+ * (OV-3957, D-28); otherwise (`draftRings` empty: a ring's key may then name another ring) it takes them as searched.
  * @param {DrawingState} drawing
  * @param {readonly ConservationSourceDescriptor[]} draftSources The draft's ring sources before the adoption.
  * @param {SearchedRingAdoption} ringAdoption
+ * @param {SearchedRingAdoption['searched']} draftRings The draft's rings before the adoption as a search reads them
+ *   (`searchedRingSources`), or none when they are no longer those it searched.
  * @returns {RingKeyChanges}
  */
-const adoptedRingKeyChanges = (drawing, draftSources, ringAdoption) => {
+const adoptedRingKeyChanges = (drawing, draftSources, ringAdoption, draftRings) => {
   const { searched, builtFromDraft } = ringAdoption;
   drawing.circularConservation.series.forEach((/** @type {RawConservationSeriesEntry} */ entry, /** @type {number} */ index) => {
-    const ring = searched[index];
-    if (!ring) return;
+    const searchedRing = searched[index];
+    if (!searchedRing) return;
+    const ring = draftRings.find((draft) => draft.sourceKey === searchedRing.sourceKey) ?? searchedRing;
     entry.losat_gencode = ring.losat_gencode;
     entry.color = ring.ownColor;
     entry.schemeIndex = ring.schemeIndex;
+    entry.label = ring.label;
   });
   const { matched } = conservationSourcesOfSeries(circularRingSources(drawing), drawing.circularConservation);
   return new Map(draftSources.map((source) => {
@@ -426,7 +434,8 @@ export const createCircularConservationSources = ({
   /**
    * The one gate of the rings' adoption. Only a Generate that searched rings of this drawing (`ringAdoption` with
    * searched rings) asks `adopt` to install them (`adopt` says whether a LOSAT result did), then reconciles the rings
-   * with Generate's own rings (`adoptedRingKeyChanges`): each takes its searched ring's genetic code and stack row. Any
+   * with Generate's own rings (`adoptedRingKeyChanges`): each takes its searched ring's stack row, and keeps the label,
+   * colour and genetic code the draft holds for it, edits made while the search ran included (OV-3957). Any
    * other adoption (a Linear Generate, a Generate that searched no ring, a candidate of the committed request) leaves
    * the draft's rings unread and as they are, and answers none.
    * @param {DrawingState} drawing @param {(installRings: boolean) => boolean} adopt
@@ -440,7 +449,8 @@ export const createCircularConservationSources = ({
     }
     const before = captureAdoptedRings(drawing);
     const draftSources = conservationSourceDescriptors(circularRingSources(drawing));
-    if (adopt(true)) reconcileCircularConservation(drawing, adoptedRingKeyChanges(drawing, draftSources, ringAdoption));
+    const draftRings = ringAdoption.builtFromDraft ? searchedRingSources(drawing) : [];
+    if (adopt(true)) reconcileCircularConservation(drawing, adoptedRingKeyChanges(drawing, draftSources, ringAdoption, draftRings));
     return { before, after: captureAdoptedRings(drawing) };
   };
   // Session Load (`afterImport`): a Session whose Show Comparison Rings is not

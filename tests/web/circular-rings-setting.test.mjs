@@ -527,8 +527,10 @@ const placeReference = (drawing) => {
  * the request builder), adopted with the rings it searched: each ring's table is named after its first genome file,
  * as Generate names it, so three rings of `sequence.fasta` files give three tables of one name.
  * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
+ * @param {{ whileSearching?: () => void }} [options] `whileSearching`: edits made after the searches and the request read
+ *   the rings and before the adoption, as a user makes them while the Generate draws its figure.
  */
-const generateRings = async (drawing) => {
+const generateRings = async (drawing, { whileSearching = () => {} } = {}) => {
   const searched = searchedRingSources(drawing);
   const filesData = await sessionConfig.serializeActiveRenderFiles(state, drawing);
   const tables = searched.map((ring, index) => ({
@@ -539,6 +541,7 @@ const generateRings = async (drawing) => {
     state, drawing, filesData,
     resolvedCircularConservation: losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
   });
+  whileSearching();
   stackSources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
     adoptOwnedRequest: true, drawing, conservationPairs: NO_CONSERVATION_PAIRS, installRings
   }), { searched, builtFromDraft: true });
@@ -689,6 +692,54 @@ test('a rerender of the committed rings after a move keeps each ring\'s own gene
       await generateRings(drawing);
       assert.deepEqual(codes(), [['GB', 4], ['GC', 2], ['GA', 11]], `${files}: a Generate after a move`);
       assert.deepEqual(ringIdentityDefects(drawing), [], files);
+    });
+  }
+});
+
+// OV-3957 (D-28 B), OV-3959: a ring's colour, label, scheme colour or genetic code, and the ring width and gap, that the
+// user edits while a ring-search Generate runs stay when that Generate commits: the adoption writes what the search
+// produced (the tables, the rings' identities and rows), and a value the user changed since the run read it is the
+// user's. (The search reads the label, colour and code before it runs; the request reads the width and gap after the
+// searches, so this case edits after both, while the figure is drawn.)
+// An unedited ring keeps what the search read. Each ring's values are found by its series identity (`sourceKey`).
+test('a ring colour, label, code, width or gap edited while a ring-search Generate runs stays when it commits (OV-3957)', async () => {
+  for (const generated of [false, true]) {
+    await withStack(async (drawing) => {
+      await threeSequenceRings(drawing);
+      if (generated) await generateRings(drawing);
+      const when = generated ? 'a Generate after a Generate' : 'the first Generate';
+      const rings = () => ({
+        series: drawing.circularConservation.series.map((entry) => [entry.label, entry.color, entry.schemeIndex, entry.losat_gencode]),
+        widthAndGap: [drawing.circularConservation.ring_width, drawing.circularConservation.ring_gap],
+        rowLabels: stackRingRows().map(([, , label]) => label)
+      });
+      const searched = rings();
+      const { ring_width: width, ring_gap: gap } = drawing.circularConservation;
+      try {
+        await generateRings(drawing, {
+          whileSearching: () => {
+            const [first, second, third] = drawing.circularConservation.series;
+            first.color = '#abcdef';
+            second.label = 'Edited while searching';
+            Object.assign(third, { color: null, schemeIndex: 3, losat_gencode: 4 });
+            drawing.circularConservation.ring_width = 7;
+            drawing.circularConservation.ring_gap = 3;
+            stackSources.refreshCircularConservationSlots(drawing);
+          }
+        });
+        assert.deepEqual(rings(), {
+          series: [
+            ['GA', '#abcdef', searched.series[0][2], searched.series[0][3]],
+            ['Edited while searching', searched.series[1][1], searched.series[1][2], searched.series[1][3]],
+            ['GC', null, 3, 4]
+          ],
+          widthAndGap: [7, 3],
+          rowLabels: ['GA', 'Edited while searching', 'GC']
+        }, `${when}: the edits made during the search stay, the rest is what the search read`);
+        assert.deepEqual(ringIdentityDefects(drawing), [], when);
+      } finally {
+        Object.assign(drawing.circularConservation, { ring_width: width, ring_gap: gap });
+      }
     });
   }
 });

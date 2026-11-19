@@ -142,21 +142,27 @@ const finishHeldGenerate = async (page) => {
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
   await settleLive(page);
 };
-// What the edits below change: the order of the stack's other rows, Track type, Separate Strands, and a Wrap Rows
-// setting of the same drawing. (A ring's colour or label picked while the run searches is replaced by the adoption
-// itself, which installs the request's rings: OV-3957, reported separately.)
+// What the edits below change: the order of the stack's other rows, Track type, Separate Strands, a Wrap Rows
+// setting of the same drawing, and ring a's colour, ring b's label and the ring width, which the Generate's adoption
+// of its rings keeps as the user left them (OV-3957; the width is read by the request after the searches, so here it
+// guards only the History steps, and the node case of OV-3959 edits it after the request is built).
 const layoutEdits = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const drawing = state.activeDrawing();
+  const [ringA, ringB] = drawing.circularConservation.series;
   return {
     otherRows: drawing.adv.circular_track_slots.filter((slot) => slot.renderer !== 'sequence_conservation').map((slot) => slot.id),
     trackType: drawing.form.track_type,
     strands: drawing.form.separate_strands,
-    normalize: drawing.form.normalize_length
+    normalize: drawing.form.normalize_length,
+    ringAColor: ringA.color ?? null,
+    ringBLabel: ringB.label,
+    ringWidth: drawing.circularConservation.ring_width ?? null
   };
 });
 // One History step of each edit kind whose control stays enabled while a Generate runs.
-const LAYOUT_EDITS = ['a move of a stack row that is no ring', 'Track type', 'Separate Strands', 'Wrap Rows'];
+const LAYOUT_EDITS = ['a move of a stack row that is no ring', 'Track type', 'Separate Strands', 'Wrap Rows',
+  'Ring a colour', 'Ring b label', 'Ring width'];
 /** Makes each edit as its own History step; returns the edited values after each. */
 const editLayout = async (page) => {
   const states = [];
@@ -177,8 +183,14 @@ const editLayout = async (page) => {
           drawing.form.track_type = drawing.form.track_type === 'middle' ? 'tuckin' : 'middle';
         } else if (which === 'Separate Strands') {
           drawing.form.separate_strands = !drawing.form.separate_strands;
-        } else {
+        } else if (which === 'Wrap Rows') {
           drawing.form.normalize_length = !drawing.form.normalize_length;
+        } else if (which === 'Ring a colour') {
+          drawing.circularConservation.series[0].color = '#a1b2c3';
+        } else if (which === 'Ring b label') {
+          drawing.circularConservation.series[1].label = 'ring b edited while searching';
+        } else {
+          drawing.circularConservation.ring_width = 12;
         }
       });
       await window.__GBDRAW_HISTORY__.settlePendingIntent();

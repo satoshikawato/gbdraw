@@ -4976,12 +4976,12 @@ export const adoptCanonicalRenderArtifacts = (
     bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_sequence_sources', nextCircularState.sequenceSources);
     // Show Comparison Rings stays the drawing's: a Generate searched the rings
     // only while it was on, and an adopted committed request leaves a draft
-    // that turned it off since (OV-2818).
+    // that turned it off since (OV-2818). The ring width and gap stay the
+    // draft's too: the request read them from the draft, so they differ only
+    // by an edit made while the search ran, which stays (OV-3959).
     if (nextCircularState.projectedConservation) {
       drawing.circularConservation.source = 'losat';
       drawing.circularConservation.reference = nextCircularState.projectedConservation.reference;
-      drawing.circularConservation.ring_width = nextCircularState.projectedConservation.ring_width;
-      drawing.circularConservation.ring_gap = nextCircularState.projectedConservation.ring_gap;
       drawing.circularConservation.series.splice(
         0,
         drawing.circularConservation.series.length,

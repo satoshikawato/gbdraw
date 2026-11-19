@@ -14,3 +14,6 @@
   draws the rings in that order; each move is one Undo step. **Move series** never moves a ring across the Axis,
   as the stack's own arrows do not. A Session whose stack drew its rings in another order than its list opens with
   the list in the drawn order (OV-3852).
+- Fixed: Web app: a comparison ring's colour, name or genetic code changed while **Generate Diagram** searches
+  the rings, and the ring width and gap changed while it draws the figure, are kept when that Generate finishes,
+  instead of being set back to the values it read (OV-3957, OV-3959).
