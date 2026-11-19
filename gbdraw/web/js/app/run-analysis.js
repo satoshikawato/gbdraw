@@ -269,12 +269,14 @@ import {
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
 /** @import { AnnotationSetsData } from '../services/drawing/annotation-sets.js' */
+/** @import { AdoptedRings } from './circular-conservation.js' */
 /**
  * What a Generate's History step restores of the drawing's intent that its
- * artifact handle does not hold (DESIGN A2): the Feature placements and the
- * annotation sets. The per-feature edits and strokes travel with the artifact
+ * artifact handle does not hold (DESIGN A2): the Feature placements, the
+ * annotation sets, and what its adoption of a ring result writes (`AdoptedRings`,
+ * OV-2445). The per-feature edits and strokes travel with the artifact
  * handle, which Undo and Redo of the step install.
- * @typedef {AnnotationSetsData & { placements: FeaturePlacementDraft, removed: number }} GenerateIntentCheckpoint
+ * @typedef {AnnotationSetsData & { placements: FeaturePlacementDraft, removed: number, rings: AdoptedRings }} GenerateIntentCheckpoint
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
@@ -827,6 +829,9 @@ const sameNumber = (left, right) => Number(left) === Number(right);
  * @param {ResolvedProteinReuseActive} options.active
  * @param {ResourceTexts} [options.committedTexts] The committed tables' texts the caller read (`readEditorTableTexts`):
  *   a container Load's committed tables are copies, which this synchronous reader cannot read (OV-2733).
+ * @param {readonly unknown[]} [options.rawEntries] The raw searches of the committed run's LOSAT result rows
+ *   (`rawEntriesOfLosatRows`). One that the reuse rule would search again (`isReusableLosatEntry`: another LOSAT Wasm
+ *   build) declines reuse, so its stored result is not drawn without the search either (D-76).
  */
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
@@ -834,7 +839,8 @@ const canReuseResolvedProteinArtifacts = ({
   committedTexts,
   sequences,
   gridRows,
-  active
+  active,
+  rawEntries = []
 }) => {
   const committedRequest = committedSession?.renderRequest || null;
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
@@ -850,6 +856,7 @@ const canReuseResolvedProteinArtifacts = ({
   )));
   // A committed marker implies a committed request; the test only states it.
   if (!committedRequest || !persistedMarker || !committedMarker || !active) return false;
+  if (!rawEntries.every(isReusableLosatEntry)) return false;
   // Selected proteins follow the Feature visibility rules (CO-02).
   if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility, active.featureOverrides, committedTexts)) {
     return false;
@@ -933,6 +940,17 @@ const canReuseResolvedProteinArtifacts = ({
     && String(settings.collinearityColorMode || 'orientation') === active.colorMode
   );
 };
+
+/**
+ * The raw searches of a drawing's LOSAT result rows that `cacheMap` holds; a row whose search it lacks gives none.
+ * @param {readonly LosatCacheInfoEntry[]} rows
+ * @param {ReadonlyMap<string, RawLosatCacheEntry> | null | undefined} cacheMap
+ * @returns {RawLosatCacheEntry[]}
+ */
+const rawEntriesOfLosatRows = (rows, cacheMap) => rows.flatMap((row) => {
+  const entry = cacheMap?.get(row.key);
+  return entry ? [entry] : [];
+});
 
 /** @param {Record<string, unknown>} payload */
 const stripRuntimeCacheStats = (payload) => {
@@ -1801,6 +1819,10 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
  *   `ringAdoption` is a LOSAT Generate's own rings (`SearchedRingAdoption`); a candidate of the committed request (a
  *   rotation, an alignment, a placement) has none and leaves the draft's rings.
+ * @property {(drawing: DrawingState) => AdoptedRings} captureAdoptedRings The ring owner's copy of what a Generate's
+ *   adoption of a ring result writes in the drawing, which the Generate's History step holds before and after it.
+ * @property {(drawing: DrawingState, rings: AdoptedRings) => void} installAdoptedRings The ring owner's install of such
+ *   a copy as captured, by the Undo and Redo of that step.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
@@ -1888,6 +1910,8 @@ export const createRunAnalysis = ({
   isCurrentFeature,
   serializeCanonicalFiles, serializeInputFile, writeSessionDocumentFile,
   adoptCanonicalRenderArtifacts,
+  captureAdoptedRings,
+  installAdoptedRings,
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
   commitLiveSettingValues = () => {},
@@ -3824,6 +3848,7 @@ export const createRunAnalysis = ({
             gridRows: linearRecordGridRows(drawing, linearSeqs),
             committedSession,
             committedTexts: committedSession ? await readEditorTableTexts([committedSession.renderRequest], committedSession.resources) : undefined,
+            rawEntries: rawEntriesOfLosatRows(workingLosatCacheInfo, losatCache.value),
             active: {
               featureVisibility: featureVisibilityCacheKey,
               featureOverrides: proteinVisibilityRows(linearSeqs.map((sequence) => String(sequence?.uid || ''))),
@@ -5629,6 +5654,25 @@ export const createRunAnalysis = ({
     }
   };
 
+  /**
+   * The draft intent a Generate's History step holds before and after it (`GenerateIntentCheckpoint`).
+   * @param {DrawingState} drawing
+   * @returns {GenerateIntentCheckpoint}
+   */
+  const captureGenerateIntent = (drawing) => ({
+    placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
+    ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
+    removed: Number(featureEditRemovalCount.value) || 0,
+    rings: captureAdoptedRings(drawing)
+  });
+  /** @param {DrawingState} drawing @param {GenerateIntentCheckpoint} checkpoint */
+  const restoreGenerateIntent = (drawing, { placements, annotationSets, removed, rings }) => {
+    FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
+    ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
+    installAdoptedRings(drawing, rings);
+    featureEditRemovalCount.value = removed;
+  };
+
   // UJ-10: the Results a successful Generate showed and the draft it read.
   /** @type {{ results: any, signature: string } | null} */
   let shownGenerateDraft = null;
@@ -5738,22 +5782,17 @@ export const createRunAnalysis = ({
               shouldCommit: (result) => result?.status === 'ok',
               // A Generate that replaced a source removes the per-feature edits
               // it no longer resolves (Q3 = A), and every Generate moves the rows
-              // of the records whose key changed (OV-1949, DESIGN A2). They are
-              // draft intent, not part of the Result, so Undo and Redo restore
-              // them, and the removal count, with this step: the per-feature
-              // edits, strokes, and rules through the artifact handle, the
-              // placements and annotation sets through this checkpoint.
-              captureIntentCheckpoint: () => ({
-                placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
-                ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
-                removed: Number(featureEditRemovalCount.value) || 0
-              }),
+              // of the records whose key changed (OV-1949, DESIGN A2); a Generate
+              // that searched rings adopts them (their series keys, stack rows and
+              // replayed tables, OV-2445). They are draft intent, not part of the
+              // Result, so Undo and Redo restore them, and the removal count, with
+              // this step: the per-feature edits, strokes, and rules through the
+              // artifact handle, the placements, annotation sets and rings through
+              // this checkpoint.
+              captureIntentCheckpoint: () => captureGenerateIntent(drawing),
               // The checkpoint is what `captureIntentCheckpoint` above returned.
-              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ { placements, annotationSets, removed }) => {
-                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
-                ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
-                featureEditRemovalCount.value = removed;
-              },
+              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ checkpoint) => (
+                restoreGenerateIntent(drawing, checkpoint)),
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
                 historyRecovery = 'restore-failed';

@@ -806,14 +806,17 @@ export const createAppSetup = () => {
   /**
    * A mode panel's mutating handler: the session operation's busy result
    * first, then nothing when the shown drawing is not of `drawingMode`, else
-   * `action` on the shown drawing. One owner of the admission order.
+   * `action` on the shown drawing. One owner of the admission order. A control
+   * disabled while a run processes passes `'not-during-run'`, the predicate its
+   * `:disabled` reads, so its handler refuses then too (OV-2317).
    * @template T
    * @param {DiagramMode} drawingMode
    * @param {(drawing: DrawingState) => T} action
+   * @param {'mutation' | 'not-during-run'} [operation]
    * @returns {T | import('../state.js').SessionBusy | undefined}
    */
-  const shownAction = (drawingMode, action) => {
-    const busy = sessionOperationAvailability();
+  const shownAction = (drawingMode, action, operation = 'mutation') => {
+    const busy = sessionOperationAvailability(operation);
     if (busy) return busy;
     const drawing = shownDrawingOfMode(drawingMode);
     return drawing ? action(drawing) : undefined;
@@ -1801,7 +1804,7 @@ export const createAppSetup = () => {
   });
   const {
     setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
-    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
+    captureAdoptedRings, installAdoptedRings, askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
     state, editLosatRows: historySnapshots.editLosatRows, askingStackPorts,
@@ -1959,6 +1962,8 @@ export const createAppSetup = () => {
     adoptCanonicalRenderArtifacts: (canonical, { ringAdoption = null, ...options }) => adoptCircularRingResult(
       options.drawing, (installRings) => adoptCanonicalRenderArtifacts(canonical, { ...options, installRings }), ringAdoption
     ),
+    captureAdoptedRings,
+    installAdoptedRings,
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,

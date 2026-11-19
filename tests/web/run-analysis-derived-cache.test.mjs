@@ -278,6 +278,22 @@ assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
   };
   assert.equal(reuseWithoutStoredInference(true), true, 'an absent stored flag reads as on');
   assert.equal(reuseWithoutStoredInference(false), false, 'turning inference off declines reuse');
+
+  // The committed run's raw searches follow the one reuse rule (`isReusableLosatEntry`): a search of another LOSAT
+  // Wasm build is searched again, so its stored result is not drawn without a search either (D-76).
+  const { LOSAT_WASM_BUILD } = await import('../../gbdraw/web/js/services/losat-build.generated.js');
+  const reuseRaw = (rawEntries) => canReuseResolvedProteinArtifacts({
+    canonicalComparisons: comparisons, committedSession: sessionWith(null),
+    sequences: [{ uid: 'a', region_record_id: '', windows: [] }], gridRows: [null], active: active(''), rawEntries
+  });
+  const wasm = (version) => ({ program: 'blastp', runtime: { source: 'wasm', version } });
+  assert.equal(reuseRaw([]), true, 'no raw search of the committed run: the other checks decide');
+  assert.equal(reuseRaw([wasm(LOSAT_WASM_BUILD.version)]), true, 'a search of this build reuses');
+  assert.equal(reuseRaw([{ program: 'blastp', runtime: { source: 'explicit', version: '0.1.0' } }]), true, 'a CLI search reuses');
+  assert.equal(reuseRaw([{ program: 'blastp', runtime: { source: 'wasm', version: null } }]), true,
+    'a blastp search of the Wasm of gbdraw 0.14.4 and earlier reuses');
+  assert.equal(reuseRaw([wasm(LOSAT_WASM_BUILD.version), wasm('0.2.0+f62da7f6b505')]), false,
+    'a search of another LOSAT Wasm build declines reuse');
 }
 
 // A LOSATP search's E-value scale is its subject genome's proteins, and a genome is the files whose records share a

@@ -7,6 +7,9 @@
 // - OV-3199: a Generate that searched no ring, after a replay Load that lost every ring's genome, leaves the rings.
 // - OV-3193: a ring label with a comma names no later ring; OV-3200: nor does an older Session's label list in a replay.
 // - OV-3196: a ring edit clears only its drawing's LOSAT cache-info rows.
+// - OV-2317: while a run processes, the ring controls it would undo refuse in their handlers, as their controls are disabled.
+// - OV-2445: a Generate's History step holds its ring adoption (series, stack rows, replayed tables) before and after it,
+//   so the Undo of an earlier stack edit, past the Generate, finds the rows on their rings.
 // Generate runs as production builds it: the rings its ring keys read (`searchedRingSources`), the request's rings
 // (`losatRequestRings`) and the request builder (`buildCanonicalRenderRequest`), then the composition root's adoption.
 import assert from 'node:assert/strict';
@@ -58,7 +61,13 @@ const editLosatRows = (drawingId, edit) => { losatRowsByDrawing.set(drawingId, e
 
 const circular = () => modeDrawing(state, 'circular');
 sessionConfig.installShownDrawing('circular');
-const shownAction = (mode, action) => action(modeDrawing(state, mode));
+// The composition root's admission (`shownAction`): a handler that passes 'not-during-run' is refused while a run
+// processes (`running`), as `sessionOperationAvailability('not-during-run')` refuses it.
+let running = false;
+const RUN_BUSY = Object.freeze({ status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' });
+const shownAction = (mode, action, operation = 'mutation') => (
+  operation === 'not-during-run' && running ? RUN_BUSY : action(modeDrawing(state, mode))
+);
 const askingStackPorts = () => ({
   askChoice: async () => null, runUndoable: (_label, fn) => fn(), busy: () => false, rows: () => [], mode: 'circular'
 });
@@ -273,6 +282,71 @@ test('a Generate after a replay Load that lost every ring\'s genome leaves each 
   assert.deepEqual(view(), loadedRings, 'a Generate that searched no ring');
   assert.deepEqual(ringIdentityDefects(drawing), []);
   clearRings(drawing);
+});
+
+test('a Generate\'s History step gives back its ring adoption as one value, so an earlier step\'s Undo finds the rows on their rings (OV-2445)', async () => {
+  for (const same of [false, true]) {
+    const drawing = await threeRings(same);
+    // The History intent holds the stack rows as one array: a stack edit's Undo puts back the array its step began with.
+    const rowsBeforeEdit = structuredClone(drawing.adv.circular_track_slots);
+    const beforeEdit = draftRings(drawing);
+    ringRows(drawing)[0].width = '30px';
+    const rowsAfterEdit = structuredClone(drawing.adv.circular_track_slots);
+    const edited = draftRings(drawing);
+    // Generate: its step holds the rings before and after its adoption (`captureIntentCheckpoint`).
+    const before = sources.captureAdoptedRings(drawing);
+    await generate(drawing);
+    const after = sources.captureAdoptedRings(drawing);
+    const generated = draftRings(drawing);
+    assert.notDeepEqual(generated.rows.map((row) => row[2]), edited.rows.map((row) => row[2]), 'the Generate re-keyed the rows');
+    const where = same ? 'sequence.fasta x3' : 'distinct files';
+    // Undo the Generate, then the stack edit; Redo both; Undo both again.
+    sources.installAdoptedRings(drawing, before);
+    assert.deepEqual(draftRings(drawing), edited, `${where}: Undo of the Generate`);
+    drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...structuredClone(rowsBeforeEdit));
+    assert.deepEqual(draftRings(drawing), beforeEdit, `${where}: then Undo of the stack edit`);
+    assert.deepEqual(ringIdentityDefects(drawing), [], `${where}: after the Undos`);
+    drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...structuredClone(rowsAfterEdit));
+    sources.installAdoptedRings(drawing, after);
+    assert.deepEqual(draftRings(drawing), generated, `${where}: Redo of both`);
+    assert.deepEqual(ringIdentityDefects(drawing), [], `${where}: after the Redos`);
+    sources.installAdoptedRings(drawing, before);
+    drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...structuredClone(rowsBeforeEdit));
+    assert.deepEqual(ringIdentityDefects(drawing), [], `${where}: Undo of both again`);
+    // The next Generate searches the rings the rows are on.
+    await generate(drawing);
+    assert.deepEqual(ringIdentityDefects(drawing), [], `${where}: the next Generate`);
+    clearRings(drawing);
+  }
+});
+
+test('while a run processes, each ring control a Generate\'s adoption would undo refuses and changes no ring (OV-2317)', async () => {
+  const drawing = await threeRings(false);
+  await generate(drawing);
+  const replayed = draftRings(drawing);
+  const ringFile = () => ({ target: { files: [textFile('late.fasta', '>r\nTTTTT\n')], value: 'x' } });
+  const CONTROLS = {
+    'the source radio (Upload BLAST TSV)': () => panel.changeCircularConservationSource('upload'),
+    'Add comparison sequence': () => files.addCircularConservationComparisonFile(/** @type {any} */ (ringFile())),
+    'a ring row\'s Add file': () => files.addRingRowFiles(1, /** @type {any} */ (ringFile())),
+    'a ring row\'s file remove': () => files.removeRingRowFile(0, 0),
+    'Move series': () => panel.moveCircularConservationSeries(0, 1),
+    'Remove series': () => files.removeCircularConservationSource(1),
+    'Re-assign colors': () => panel.reassignCircularConservationColors()
+  };
+  running = true;
+  try {
+    for (const [name, control] of Object.entries(CONTROLS)) {
+      assert.deepEqual(await control(), RUN_BUSY, `${name} answers the run's busy reason`);
+      assert.deepEqual(draftRings(drawing), replayed, `${name} changes no ring while the run processes`);
+    }
+  } finally {
+    running = false;
+  }
+  await panel.changeCircularConservationSource('upload');
+  assert.equal(drawing.circularConservation.source, 'upload', 'after the run the radio applies');
+  clearRings(drawing);
+  drawing.circularConservation.source = 'losat';
 });
 
 test('a ring label with a comma names no later ring (#1777 review 7, OV-3193)', async () => {

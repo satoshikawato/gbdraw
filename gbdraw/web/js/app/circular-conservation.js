@@ -38,8 +38,12 @@ import {
 } from '../services/conservation-series.js';
 import { normalizeOptionalHexColor } from '../utils/color-utils.js';
 import { shownAfterSourceChange } from '../services/depth-track-state.js';
+import { restoreTrackLayout, saveTrackLayout } from './feature-editor/placement-actions.js';
+import { SETTINGS_SLICE } from '../services/drawing/settings.js';
+import { cloneJsonData } from '../services/json-clone.js';
 import { msg, t } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
+/** @import { SavedTrackLayout } from './feature-editor/placement-actions.js' */
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
 /** @import { ConservationSlotEntry } from './circular-track-slots.js' */
@@ -60,9 +64,17 @@ const { computed } = window.Vue;
 
 /**
  * A mode panel's mutating handler: the session's busy answer, nothing when the
- * shown drawing is of another mode, else `action` on the shown drawing.
- * @typedef {<T>(drawingMode: DiagramMode, action: (drawing: DrawingState) => T) => T | SessionBusy | undefined} ShownAction
+ * shown drawing is of another mode, else `action` on the shown drawing. With
+ * `'not-during-run'` the busy answer also refuses while a run processes.
+ * @typedef {<T>(drawingMode: DiagramMode, action: (drawing: DrawingState) => T, operation?: 'not-during-run') => T | SessionBusy | undefined} ShownAction
  */
+/**
+ * The admission of the ring controls that change the rings a running Generate searched and then adopts (the source
+ * radio, Add comparison sequence, a ring row's files, Move series, Remove series, Re-assign colors): their controls are
+ * disabled while a run processes (`sessionOperationAvailability('not-during-run')`, the predicate their `:disabled`
+ * reads), and their handlers refuse with its busy answer, so a call that reaches one changes nothing (OV-2317).
+ */
+const DURING_RUN_REFUSED = /** @type {const} */ ('not-during-run');
 /** @typedef {(drawingMode: DiagramMode) => DrawingState | null} ShownDrawingOfMode The shown drawing when it is of that mode. */
 /** @typedef {(drawing: DrawingState) => void} DrawingRingStep A ring transition of one drawing. */
 /**
@@ -92,6 +104,20 @@ const { computed } = window.Vue;
  * The LOSAT rings' genome files set to `lists`, one list per place, each ring kept at its place (Add Seq adds a place
  * after the others, a ring row's file edit changes the files at one).
  * @typedef {(drawing: DrawingState, lists: readonly (readonly InputFileRef[])[], change: DepthSourceChange) => void} SetRingGenomeLists
+ */
+/**
+ * What a Generate's adoption of its ring result writes in a drawing (`adoptCircularRingResult`): the ring settings and
+ * series, the custom stack's rows (the managed ring rows it re-keys, adds and takes out) with the stack's Axis index,
+ * and the ring files of the LOSAT-cache replay it binds. The Generate's History step holds them as one value before and
+ * after it (`captureAdoptedRings`, `installAdoptedRings`), so its Undo and Redo give the series and the rows back
+ * together, and an earlier step's Undo finds the rows on their rings (OV-2445).
+ * @typedef {object} AdoptedRings
+ * @property {unknown} conservation The drawing's `circularConservation`, copied.
+ * @property {SavedTrackLayout} layout The custom stacks, saved by their owner (`saveTrackLayout`): ring rows and the Axis.
+ * @property {InputFileRef[]} blasts
+ * @property {'losat-cache' | null} blastsSource
+ * @property {InputFileRef[][]} fastas
+ * @property {InputFileRef[][]} sequenceSources
  */
 
 /** @param {DrawingState} drawing */
@@ -343,6 +369,31 @@ export const createCircularConservationSources = ({
   // stand for the rings Generate searched): each entry takes the identity of
   // the table the matcher gives it, so after a Generate's adoption an entry
   // names its table as its row does, and the rows move only by `keyChanges`.
+  /**
+   * @param {DrawingState} drawing
+   * @returns {AdoptedRings}
+   */
+  const captureAdoptedRings = (drawing) => ({
+    conservation: cloneJsonData(drawing.circularConservation),
+    layout: saveTrackLayout(drawing),
+    blasts: [...drawing.files.c_conservation_blasts],
+    blastsSource: drawing.files.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null,
+    fastas: drawing.files.c_conservation_fastas.map((list) => [...list]),
+    sequenceSources: drawing.files.c_conservation_sequence_sources.map((list) => [...list])
+  });
+  /**
+   * Installs rings `captureAdoptedRings` captured, as captured (a History restore calls no reconcile, R11).
+   * @param {DrawingState} drawing @param {AdoptedRings} rings
+   */
+  const installAdoptedRings = (drawing, rings) => {
+    const inputs = drawing.slices.inputs;
+    bindDrawingInputFileList(state.inputFiles, inputs, 'c_conservation_blasts', rings.blasts);
+    setConservationBlastsSource(inputs, rings.blastsSource);
+    bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_fastas', rings.fastas);
+    bindDrawingInputFileTree(state.inputFiles, inputs, 'c_conservation_sequence_sources', rings.sequenceSources);
+    SETTINGS_SLICE.install(drawing.slices.settings, { circularConservation: rings.conservation });
+    restoreTrackLayout(drawing, rings.layout);
+  };
   /** @type {ReconcileRings} */
   const reconcileCircularConservation = (drawing, keyChanges = NO_RING_KEY_CHANGES) => {
     const reconciled = isDerivedCircularConservationReplay(drawing)
@@ -397,7 +448,7 @@ export const createCircularConservationSources = ({
   };
   return {
     setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
-    askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
+    captureAdoptedRings, installAdoptedRings, askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   };
 };
@@ -487,7 +538,7 @@ export const createCircularConservationSeriesPanel = ({
       refreshCircularConservationSlots(drawing);
       if (reassignRingColorsOnReorder(drawing)) refreshCircularConservationSlots(drawing);
     }
-  });
+  }, DURING_RUN_REFUSED);
   // Ring colors (PD-OI-110): the scheme, the re-assignment on reorder, the one-time re-assignment, a ring's own
   // colour, and 「方式の色に戻す」 (D-03). Each is one History step of its control; the card applies on Generate.
   /** @param {unknown} scheme */
@@ -501,7 +552,7 @@ export const createCircularConservationSeriesPanel = ({
   });
   const reassignCircularConservationColors = () => shownAction('circular', (drawing) => {
     if (reassignDrawnRingColors(drawing)) refreshCircularConservationSlots(drawing);
-  });
+  }, DURING_RUN_REFUSED);
   /** @param {number} index @param {unknown} value A colour picked for the ring: its own colour from now on. */
   const setCircularConservationRingColor = (index, value) => shownAction('circular', (drawing) => {
     const entry = drawing.circularConservation.series[Number(index)];
@@ -527,7 +578,7 @@ export const createCircularConservationSeriesPanel = ({
   const changeCircularConservationSource = (source) => shownAction('circular', (drawing) => {
     changeRingSourceFiles(state, drawing, RING_SOURCE_CHANGED, () => { drawing.circularConservation.source = source; });
     reconcileCircularConservation(drawing);
-  });
+  }, DURING_RUN_REFUSED);
   /** @param {boolean} shown */
   const setCircularConservationShown = (shown) => shownAction('circular', (drawing) => {
     drawing.circularConservation.enabled = shown;
@@ -623,7 +674,7 @@ const createRingRowFileEdits = ({ state, shownAction, setRingGenomeLists }) => {
     if (picked.length === 0) return;
     const added = picked.map((file) => /** @type {InputFileRef} */ (registerChosenComparisonFile(state, file)));
     setRingRowFiles(drawing, Number(rowIndex), [...(ringRowFiles(drawing)[Number(rowIndex)] || []), ...added], RING_FILE_REPLACED);
-  });
+  }, DURING_RUN_REFUSED);
   /**
    * Remove a file of a ring row. A LOSAT ring keeps at least one file (Remove
    * series removes the ring); an uploaded table's comparison sequence is
@@ -634,7 +685,7 @@ const createRingRowFileEdits = ({ state, shownAction, setRingGenomeLists }) => {
     const files = ringRowFiles(drawing)[Number(rowIndex)] || [];
     if (!canRemoveRingRowFile(drawing, files.length) || !(Number(fileIndex) in files)) return;
     setRingRowFiles(drawing, Number(rowIndex), files.filter((_, index) => index !== Number(fileIndex)), RING_SOURCE_CHANGED);
-  });
+  }, DURING_RUN_REFUSED);
   return { addRingRowFiles, removeRingRowFile };
 };
 
@@ -685,7 +736,7 @@ export const createCircularConservationComparisonFiles = ({
     setRingGenomeLists(drawing, [...ringGenomeFileLists(drawing.files.c_conservation_fastas), [selectedRef]], RING_FILE_ADDED);
     if (target) target.value = '';
     return step;
-  });
+  }, DURING_RUN_REFUSED);
   /** @param {number} index */
   const removeCircularConservationSource = (index) => shownAction('circular', (drawing) => {
     const idx = Number(index);
@@ -763,7 +814,7 @@ export const createCircularConservationComparisonFiles = ({
     return askRingSourceRemoval(
       drawing, keptFiles, seriesOfRingFiles(drawing, keptFiles, keptSeries, removedRow), msg('Remove series'), apply
     ) ?? apply();
-  });
+  }, DURING_RUN_REFUSED);
   return {
     settleComparisonRecordLabels, addCircularConservationComparisonFile, removeCircularConservationSource,
     ...createRingRowFileEdits({ state, shownAction, setRingGenomeLists })

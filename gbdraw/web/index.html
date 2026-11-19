@@ -4452,8 +4452,8 @@
                         <summary :aria-label="t('Pairwise Comparisons')"><settings-section-title section="pairwise-comparisons"></settings-section-title> <setting-note setting="pairwise-comparisons"></setting-note> <help-tip :text="t('Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits.')"></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="circularConservation.source === 'losat'" value="losat" @change="changeCircularConservationSource('losat')" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Run LOSAT') }}</label>
-                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="circularConservation.source === 'upload'" value="upload" @change="changeCircularConservationSource('upload')" class="text-blue-600" :disabled="!semanticMutationAvailable || processing"> {{ t('Upload BLAST TSV') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="circularConservation.source === 'losat'" value="losat" @change="changeCircularConservationSource('losat')" class="text-blue-600" :disabled="Boolean(sessionOperationAvailability('not-during-run'))"> {{ t('Run LOSAT') }}</label>
+                                <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="circularConservation.source === 'upload'" value="upload" @change="changeCircularConservationSource('upload')" class="text-blue-600" :disabled="Boolean(sessionOperationAvailability('not-during-run'))"> {{ t('Upload BLAST TSV') }}</label>
                             </div>
                             <div v-if="circularConservation.source === 'upload'" class="space-y-2">
                                 <file-uploader
@@ -4570,7 +4570,7 @@
                                     <label class="flex items-center gap-1 text-[10px]" :class="circularConservation.colorScheme === 'same' ? 'text-slate-400 cursor-not-allowed' : 'text-slate-700 cursor-pointer'">
                                         <input type="checkbox" class="form-checkbox" :checked="circularConservation.reassignOnReorder === true" @change="setCircularConservationReassignOnReorder($event.target.checked)" :disabled="!semanticMutationAvailable || circularConservation.colorScheme === 'same'" data-testid="circular-ring-colors-reassign-on-reorder"> {{ t('Re-assign colors when tracks are reordered') }}
                                     </label>
-                                    <button type="button" class="btn btn-secondary text-xs w-full" @click="reassignCircularConservationColors()" :disabled="!semanticMutationAvailable || processing || circularConservation.colorScheme === 'same'" data-testid="circular-ring-colors-reassign">{{ t('Re-assign colors in the current order') }}</button>
+                                    <button type="button" class="btn btn-secondary text-xs w-full" @click="reassignCircularConservationColors()" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || circularConservation.colorScheme === 'same'" data-testid="circular-ring-colors-reassign">{{ t('Re-assign colors in the current order') }}</button>
                                 </fieldset>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
@@ -4586,13 +4586,13 @@
                                             <span v-if="circularConservation.source === 'upload'" class="block text-[9px] text-slate-500">{{ t('Comparison sequence') }}</span>
                                             <div v-for="(name, fileIndex) in row.files" :key="`ring-file-${row.index}-${fileIndex}-${name}`" data-ring-row-file class="flex items-center gap-0.5 text-[9px] text-slate-600">
                                                 <span class="min-w-0 flex-1 truncate" :title="name">{{ name }}</span>
-                                                <button v-if="row.canRemoveFile" type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="removeRingRowFile(row.index, fileIndex)" :disabled="!semanticMutationAvailable || processing" :aria-label="t('Remove {name}', { name })" :title="t('Remove {name}', { name })"><i class="ph ph-x" aria-hidden="true"></i></button>
+                                                <button v-if="row.canRemoveFile" type="button" class="btn btn-secondary h-5 w-5 p-0 text-[9px]" @click="removeRingRowFile(row.index, fileIndex)" :disabled="Boolean(sessionOperationAvailability('not-during-run'))" :aria-label="t('Remove {name}', { name })" :title="t('Remove {name}', { name })"><i class="ph ph-x" aria-hidden="true"></i></button>
                                             </div>
                                             <input type="file" multiple class="hidden"
                                                    accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
                                                    :aria-label="t('Add file')"
-                                                   @change="addRingRowFiles(row.index, $event)" :disabled="!semanticMutationAvailable || processing">
-                                            <button type="button" data-history-ignore data-ring-row-file-add class="btn btn-secondary h-5 px-1 text-[9px]" @click="$event.currentTarget.previousElementSibling.click()" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
+                                                   @change="addRingRowFiles(row.index, $event)" :disabled="Boolean(sessionOperationAvailability('not-during-run'))">
+                                            <button type="button" data-history-ignore data-ring-row-file-add class="btn btn-secondary h-5 px-1 text-[9px]" @click="$event.currentTarget.previousElementSibling.click()" :disabled="Boolean(sessionOperationAvailability('not-during-run'))"><i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add file') }}</button>
                                         </div>
                                         <div v-if="circularConservation.source === 'losat' && circularConservation.losat_program === 'tblastx'" class="grid grid-cols-[minmax(0,1fr)_4.8rem] gap-1 items-center">
                                             <label class="text-[9px] text-slate-500 truncate">{{ t('Comparison gencode') }}</label>
@@ -4602,9 +4602,9 @@
                                     <!-- While a Generate runs, the controls that rewrite the ring series (these, Add Seq, and the source radios) are disabled: the overlay stops the pointer, not the keyboard (OV-2446). They sit beside the ring's name, apart from its file controls. -->
                                     <div class="flex items-center gap-0.5 self-start">
                                         <button v-if="row.handSet" :aria-label="t('Use the scheme color')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="useCircularConservationSchemeColor(row.index)" :title="t('Use the scheme color')" :disabled="!semanticMutationAvailable" data-testid="circular-ring-use-scheme-color"><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || processing || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                        <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="!semanticMutationAvailable || processing"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move series outward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || (!canMoveCircularConservationSeries(row.index, -1))" :title="t('Move series outward')"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Move series inward')" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="Boolean(sessionOperationAvailability('not-during-run')) || (!canMoveCircularConservationSeries(row.index, 1))" :title="t('Move series inward')"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                        <button :aria-label="t('Remove series')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" :title="t('Remove series')" :disabled="Boolean(sessionOperationAvailability('not-during-run'))"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
                                 <input
@@ -4615,8 +4615,8 @@
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*,.gz,application/gzip"
                                     @change="addCircularConservationComparisonFile"
                                     class="hidden"
-                                 :disabled="!semanticMutationAvailable || processing">
-                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable || processing">
+                                 :disabled="Boolean(sessionOperationAvailability('not-during-run'))">
+                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="Boolean(sessionOperationAvailability('not-during-run'))">
                                     <i class="ph ph-plus" aria-hidden="true"></i> {{ t('Add comparison sequence') }}
                                 </button>
                             </div>
