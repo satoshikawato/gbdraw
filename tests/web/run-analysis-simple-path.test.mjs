@@ -428,8 +428,7 @@ const generatedArtifactHandleOptions = {
   clearLabelBuildNotices: () => {},
   startLegendFactsDraw: () => () => {},
   moveDrawnPaint: () => {},
-  // The ring owner's ports (OV-2445); these tests search no comparison ring.
-  captureAdoptedRings: () => null,
+  // The ring owner's install (OV-2445); these tests search no comparison ring.
   installAdoptedRings: () => {},
   nextTick: window.Vue.nextTick,
   waitForAfterPaint: async () => {}

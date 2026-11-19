@@ -123,6 +123,116 @@ test.describe('OV-2445: Undo across a Generate that searched the rings', () => {
   }
 });
 
+// Hold the next Generate in its LOSAT search until `window.__RELEASE_SEARCH__()`.
+const holdSearch = (page) => page.evaluate(() => {
+  const search = window.__GBDRAW_LOSAT_EXECUTOR__;
+  window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+    await new Promise((resolve) => { window.__RELEASE_SEARCH__ = resolve; });
+    window.__GBDRAW_LOSAT_EXECUTOR__ = search;
+    return search(jobs);
+  };
+});
+const startHeldGenerate = async (page) => {
+  await page.evaluate(() => { window.__RUN__ = Promise.resolve(window.__GBDRAW_APP__.runAnalysis()).catch(() => null); });
+  await page.waitForFunction(() => window.__RELEASE_SEARCH__ && window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
+};
+const finishHeldGenerate = async (page) => {
+  await page.evaluate(() => window.__RELEASE_SEARCH__());
+  await page.evaluate(() => window.__RUN__);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 120000 });
+  await settleLive(page);
+};
+// What the edits below change: the order of the stack's other rows, Track type, Separate Strands, and a Wrap Rows
+// setting of the same drawing. (A ring's colour or label picked while the run searches is replaced by the adoption
+// itself, which installs the request's rings: OV-3957, reported separately.)
+const layoutEdits = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  const drawing = state.activeDrawing();
+  return {
+    otherRows: drawing.adv.circular_track_slots.filter((slot) => slot.renderer !== 'sequence_conservation').map((slot) => slot.id),
+    trackType: drawing.form.track_type,
+    strands: drawing.form.separate_strands,
+    normalize: drawing.form.normalize_length
+  };
+});
+// One History step of each edit kind whose control stays enabled while a Generate runs.
+const LAYOUT_EDITS = ['a move of a stack row that is no ring', 'Track type', 'Separate Strands', 'Wrap Rows'];
+/** Makes each edit as its own History step; returns the edited values after each. */
+const editLayout = async (page) => {
+  const states = [];
+  for (const edit of LAYOUT_EDITS) {
+    await evaluateWithRetainedPromise(page, async (which) => {
+      const { state } = await import('./js/state.js');
+      const app = window.__GBDRAW_APP__;
+      const drawing = state.activeDrawing();
+      await window.__GBDRAW_HISTORY__.runUndoable(which, () => {
+        if (which === 'a move of a stack row that is no ring') {
+          const slots = drawing.adv.circular_track_slots;
+          const ring = (slot) => slot.renderer === 'sequence_conservation';
+          const at = slots.findIndex((slot, index) => !ring(slot) && slots[index + 1] && !ring(slots[index + 1])
+            && app.canMoveCircularTrackSlot(index, 1));
+          if (at < 0) throw new Error('no movable row');
+          app.moveCircularTrackSlot(at, at + 1);
+        } else if (which === 'Track type') {
+          drawing.form.track_type = drawing.form.track_type === 'middle' ? 'tuckin' : 'middle';
+        } else if (which === 'Separate Strands') {
+          drawing.form.separate_strands = !drawing.form.separate_strands;
+        } else {
+          drawing.form.normalize_length = !drawing.form.normalize_length;
+        }
+      });
+      await window.__GBDRAW_HISTORY__.settlePendingIntent();
+    }, edit);
+    states.push(await layoutEdits(page));
+  }
+  return states;
+};
+
+// HIGH 1 of the review of 19062f0c6: the Generate's History step holds the rings as its adoption found and left them,
+// so an edit made while it searched stays through the Undo of the Generate and through a failed Generate's rollback,
+// and its own Undo step undoes it.
+test.describe('OV-2445: edits made while a Generate searches', () => {
+  for (const outcome of ['committed', 'failed']) {
+    test(`stay through the ${outcome === 'committed' ? 'Undo of the Generate' : 'rollback of a failed Generate'}, and each Undo undoes one`, async ({ browser }) => {
+      const page = await loadRings(browser);
+      const start = await undoCount(page);
+      const original = await layoutEdits(page);
+      await holdSearch(page);
+      if (outcome === 'failed') {
+        // History's finalization of the Generate throws after its adoption: the Generate rolls back.
+        await page.evaluate(() => {
+          window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: ({ name }) => {
+            if (name === 'history.finalization-started') throw new Error('finalization refused by the test');
+          } };
+        });
+      }
+      await startHeldGenerate(page);
+      const states = [original, ...await editLayout(page)];
+      const edited = states[LAYOUT_EDITS.length];
+      expect(edited.otherRows).not.toEqual(original.otherRows);
+      await finishHeldGenerate(page);
+      await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__; });
+      expect(await layoutEdits(page), 'after the Generate').toEqual(edited);
+      expect((await rings(page)).rowsOnSeries).toBe(true);
+      if (outcome === 'committed') {
+        expect(await undoCount(page)).toBe(start + LAYOUT_EDITS.length + 1);
+        await clickHistory(page, /^Undo/);
+        expect(await layoutEdits(page), 'the Undo of the Generate').toEqual(edited);
+        expect((await rings(page)).rowsOnSeries).toBe(true);
+      } else {
+        expect(await undoCount(page)).toBe(start + LAYOUT_EDITS.length);
+      }
+      for (let undone = 1; undone <= LAYOUT_EDITS.length; undone += 1) {
+        await clickHistory(page, /^Undo/);
+        expect(await layoutEdits(page), `the Undo of ${LAYOUT_EDITS[LAYOUT_EDITS.length - undone]}`)
+          .toEqual(states[LAYOUT_EDITS.length - undone]);
+      }
+      expect((await rings(page)).rowsOnSeries).toBe(true);
+      await page.context().close();
+    });
+  }
+});
+
 test.describe('OV-2317: ring handlers during a running Generate', () => {
   for (const kind of ['source radio', 'Add comparison sequence']) {
     test(`the ${kind} handler refuses while a Generate runs, and the Generate draws its rings`, async ({ browser }) => {

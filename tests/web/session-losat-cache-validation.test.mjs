@@ -1464,9 +1464,11 @@ test('a ring kept by a Remove keeps its fields through a Replace of the ring tab
   }
 });
 
-// A ring row the stack lacks goes in after the last ring row: an Add Seq, and a ring the series moved first while the
-// stack was off when Use custom stack turns on. The ring rows hold those places in the series order (one ring order,
-// OV-3852): the ring moved first takes the first of them. A Replace of the middle ring's table (uploaded, or the result
+// A ring row the stack lacks joins the ring rows: an Add Seq, and a ring the series moved first while the stack was off
+// when Use custom stack turns on. The ring rows stay one block at the ring places, in the series order (one ring order,
+// OV-3852): the ring moved first takes the first of them. (Where the new row went in before that order is not visible
+// here: with the ring rows in one block, a row put in after the last one and a row put in before the first give the same
+// block.) A Replace of the middle ring's table (uploaded, or the result
 // of a ring search) keeps the ring at its place, and its row with it (`keepRingsAtPlaces`).
 test('a ring row the stack lacks goes after the last ring row; a replaced table keeps its ring\'s row', async () => {
   const { moveConservationSeriesEntry } = await import('../../gbdraw/web/js/services/conservation-series.js');
@@ -1480,7 +1482,7 @@ test('a ring row the stack lacks goes after the last ring row; a replaced table 
   assert.ok(moveConservationSeries(added.circularConservation.series));
   ringSources.refreshCircularConservationSlots(added);
   assert.deepEqual(ringRowFiles(added), ['ringz.fna', 'ringa.fna', 'ringb.fna', 'ringc.fna'], 'Add Seq, the ring moved first');
-  assert.deepEqual(ringPlaces(added), [first, first + 1, first + 2, first + 3], 'Add Seq: the new row goes after the last ring row');
+  assert.deepEqual(ringPlaces(added), [first, first + 1, first + 2, first + 3], 'Add Seq: the ring rows stay one block at the ring places');
   ringStackEditor.setCircularTrackSlotsEnabled(false);
 
   const turnedOn = await ringStackDrawing(['ringa', 'ringb', 'ringc']);
@@ -1489,7 +1491,7 @@ test('a ring row the stack lacks goes after the last ring row; a replaced table 
   assert.ok(moveConservationSeries(turnedOn.circularConservation.series));
   ringStackEditor.setCircularTrackSlotsEnabled(true);
   assert.deepEqual(ringRowFiles(turnedOn), ['ringz.fna', 'ringa.fna', 'ringb.fna', 'ringc.fna'], 'Use custom stack on after the move');
-  assert.deepEqual(ringPlaces(turnedOn), [first, first + 1, first + 2, first + 3], 'the new row goes after the last ring row');
+  assert.deepEqual(ringPlaces(turnedOn), [first, first + 1, first + 2, first + 3], 'Use custom stack on: the ring rows stay one block at the ring places');
   ringStackEditor.setCircularTrackSlotsEnabled(false);
 
   const { setConservationBlastsSource, bindDrawingInputFileList } = await import('../../gbdraw/web/js/services/drawing/inputs.js');

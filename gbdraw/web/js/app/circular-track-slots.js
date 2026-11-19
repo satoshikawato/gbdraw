@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
+/** @import { DrawingState, SessionBusy } from '../state.js' */
 /** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 /** @import { AskChoice } from './app-messages.js' */
 /** @import { DepthSourceChange } from '../services/depth-track-state.js' */
@@ -439,12 +439,19 @@ const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || 
 
 /**
  * One ring order (OV-3852): the managed ring rows, new ones too, take the series order (`entryOrderByKey`, by ring key)
- * in the places they hold.
- * @param {CircularTrackSlot[]} slots Reordered in place.
+ * in the places they hold on their side of the Axis; no row changes its side by it (D-24).
+ * @param {DrawingState} drawing Its stack's rows are reordered in place.
  * @param {ReadonlyMap<string, number>} entryOrderByKey
  */
-const orderRingRowsBySeries = (slots, entryOrderByKey) => orderInOwnPlaces(slots, (slot) => (
-  isManagedConservationSlot(slot) ? entryOrderByKey.get(managedConservationSlotKey(slot)) : undefined));
+const orderRingRowsBySeries = (drawing, entryOrderByKey) => {
+  /** @type {CircularTrackSlot[]} */
+  const slots = drawing.adv.circular_track_slots;
+  const outside = new Set(slots.slice(0, currentAxisIndex(drawing, slots)));
+  for (const onOutside of [true, false]) {
+    orderInOwnPlaces(slots, (slot) => (isManagedConservationSlot(slot) && outside.has(slot) === onOutside
+      ? entryOrderByKey.get(managedConservationSlotKey(slot)) : undefined));
+  }
+};
 
 /**
  * Where a ring row the stack lacks goes in: after the last ring row, else after the features row.
@@ -560,6 +567,62 @@ const currentAxisIndex = (drawing, slots) => (
   clampTrackAxisIndex(drawing.adv.circular_track_slots_axis_index, slots.length)
     ?? inferLegacyAxisIndexFromFeature(slots, drawing.form.track_type)
 );
+
+/** @param {DrawingState} drawing */
+const normalizedSlotsForCurrentState = (drawing) => applyCircularTrackOrderPlacements(
+  drawing.adv.circular_track_slots,
+  drawing.adv.nt,
+  drawing.form.track_type,
+  drawing.adv.circular_track_slots_axis_index
+);
+
+/**
+ * The stack's rule for a move of the row at `fromIndex` to `toIndex`: true when it would cross the Axis (or the row is
+ * on the Axis, or a place is out of range), which the stack refuses.
+ * @param {DrawingState} drawing @param {unknown} fromIndex @param {unknown} toIndex
+ */
+const wouldCircularTrackSlotMoveCrossAxis = (drawing, fromIndex, toIndex) => {
+  const from = Number(fromIndex);
+  const to = Number(toIndex);
+  const normalized = normalizedSlotsForCurrentState(drawing);
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= normalized.length ||
+    to >= normalized.length ||
+    from === to
+  ) {
+    return true;
+  }
+
+  const axis = currentAxisIndex(drawing, normalized);
+  const movedPlacement = effectiveSlotPlacement(normalized[from], drawing.form.track_type);
+  if (movedPlacement === 'overlay') return true;
+  return (from < axis) !== (to < axis);
+};
+
+/**
+ * Whether a swap of two rings in the series would swap their managed stack rows across the Axis. With Use custom stack
+ * on the rows take the series order in their places (one ring order, OV-3852), so Move series swaps the two rings'
+ * rows, and it follows the stack's own rule for a move (`wouldCircularTrackSlotMoveCrossAxis`): a ring never changes its
+ * side of the Axis by a move of the list (D-24). A ring without a row, and a stack that is off, move no row.
+ * @param {DrawingState} drawing
+ * @param {string} leftKey @param {string} rightKey The two rings' keys (`sourceKey`, a row's `series_key`).
+ * @returns {boolean}
+ */
+export const ringRowsSwapCrossesAxis = (drawing, leftKey, rightKey) => {
+  if (drawing.adv.circular_track_slots_enabled !== true) return false;
+  /** @type {CircularTrackSlot[]} */
+  const slots = drawing.adv.circular_track_slots;
+  /** @param {string} key */
+  const placeOf = (key) => slots.findIndex((slot) => isManagedConservationSlot(slot) && managedConservationSlotKey(slot) === key);
+  const left = placeOf(leftKey);
+  const right = placeOf(rightKey);
+  if (left < 0 || right < 0) return false;
+  return wouldCircularTrackSlotMoveCrossAxis(drawing, left, right) || wouldCircularTrackSlotMoveCrossAxis(drawing, right, left);
+};
 
 // An edit of the stack pins the index it reads, which places the stack.
 /** @param {DrawingState} drawing @param {CircularTrackSlot[]} slots */
@@ -820,14 +883,6 @@ export const createCircularTrackSlotEditor = ({
     }
     return key;
   };
-
-  /** @param {DrawingState} drawing */
-  const normalizedSlotsForCurrentState = (drawing) => applyCircularTrackOrderPlacements(
-    drawing.adv.circular_track_slots,
-    drawing.adv.nt,
-    drawing.form.track_type,
-    drawing.adv.circular_track_slots_axis_index
-  );
 
   /** @param {DrawingState} drawing */
   const annotationSetIds = (drawing) => annotationSetIdsOf(drawing.annotationSets);
@@ -1192,8 +1247,11 @@ export const createCircularTrackSlotEditor = ({
     });
 
     commitManagedSlotMutation(drawing, { nextSlots, newSlots: missingSlots, preferredInsertIndex: ringRowInsertIndex(nextSlots) });
-    orderRingRowsBySeries(drawing.adv.circular_track_slots, entryOrderByKey);
+    orderRingRowsBySeries(drawing, entryOrderByKey);
     refreshSlots(drawing);
+    // A series that puts a ring outside the Axis after one inside it (moved while Use custom stack was off) takes the
+    // rows' order, so the list and the drawn rings keep one order (D-14) and no ring changes its side (D-24, OV-3958).
+    if (orderSeriesByRingRows(drawing.circularConservation.series, drawing.adv.circular_track_slots)) syncConservationSlots(drawing);
   };
 
   /** @param {DrawingState} drawing @param {unknown} preset */
@@ -1309,33 +1367,26 @@ export const createCircularTrackSlotEditor = ({
     normalizeSlots(drawing);
   };
 
-  /** @param {DrawingState} drawing @param {unknown} fromIndex @param {unknown} toIndex */
-  const wouldCircularTrackSlotMoveCrossAxis = (drawing, fromIndex, toIndex) => {
-    const from = Number(fromIndex);
-    const to = Number(toIndex);
-    const normalized = normalizedSlotsForCurrentState(drawing);
-    if (
-      !Number.isInteger(from) ||
-      !Number.isInteger(to) ||
-      from < 0 ||
-      to < 0 ||
-      from >= normalized.length ||
-      to >= normalized.length ||
-      from === to
-    ) {
-      return true;
-    }
-
-    const axis = currentAxisIndex(drawing, normalized);
-    const movedPlacement = effectiveSlotPlacement(normalized[from], drawing.form.track_type);
-    if (movedPlacement === 'overlay') return true;
-    return (from < axis) !== (to < axis);
+  /**
+   * The admission of a stack move of the row at `index`. A managed ring row's move moves its ring in the series too
+   * (one ring order, OV-3852), so it refuses while a run processes, as Move series does (D-25); any other row's move
+   * refuses only while a Session operation holds the inputs. The row's arrows and Axis items read the same answer.
+   * @param {DrawingState} drawing @param {unknown} index
+   * @returns {SessionBusy | null}
+   */
+  const stackMoveAvailability = (drawing, index) => state.sessionOperationAvailability?.(
+    isManagedConservationSlot(drawing.adv.circular_track_slots[Number(index)]) ? 'not-during-run' : 'mutation'
+  ) ?? null;
+  /** @param {unknown} index */
+  const circularTrackSlotMoveAvailability = (index) => {
+    const drawing = shownCircularDrawing();
+    return drawing === null ? null : stackMoveAvailability(drawing, index);
   };
 
   /** @param {unknown} fromIndex @param {unknown} toIndex */
   const moveCircularTrackSlot = (fromIndex, toIndex) => moveSlotOf(state.activeDrawing(), fromIndex, toIndex);
   const moveSlotOf = reassigningRingColors((/** @type {DrawingState} */ drawing, /** @type {unknown} */ fromIndex, /** @type {unknown} */ toIndex) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = stackMoveAvailability(drawing, fromIndex);
     if (sessionBusy) return sessionBusy;
     if (wouldCircularTrackSlotMoveCrossAxis(drawing, fromIndex, toIndex)) return;
     normalizeSlots(drawing);
@@ -1415,7 +1466,7 @@ export const createCircularTrackSlotEditor = ({
   };
 
   const moveCircularTrackSlotToPlacement = reassigningRingColors((/** @type {DrawingState} */ drawing, /** @type {unknown} */ index, /** @type {unknown} */ placement) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
+    const sessionBusy = stackMoveAvailability(drawing, index);
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.circular_track_slots.length) return;
@@ -1482,14 +1533,14 @@ export const createCircularTrackSlotEditor = ({
   const moveCircularTrackSlotOutside = (index) => {
     const drawing = state.activeDrawing();
     if (!canMoveSlotOutsideOf(drawing, index)) return;
-    moveCircularTrackSlotToPlacement(drawing, index, 'outside');
+    return moveCircularTrackSlotToPlacement(drawing, index, 'outside');
   };
 
   /** @param {unknown} index */
   const moveCircularTrackSlotInside = (index) => {
     const drawing = state.activeDrawing();
     if (!canMoveSlotInsideOf(drawing, index)) return;
-    moveCircularTrackSlotToPlacement(drawing, index, 'inside');
+    return moveCircularTrackSlotToPlacement(drawing, index, 'inside');
   };
 
   /** @param {unknown} index */
@@ -2036,6 +2087,7 @@ export const createCircularTrackSlotEditor = ({
     circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress,
     circularTrackSlotSuppressMessage,
+    circularTrackSlotMoveAvailability,
     canMoveCircularTrackSlot,
     canMoveCircularTrackSlotOutside,
     canMoveCircularTrackSlotInside,

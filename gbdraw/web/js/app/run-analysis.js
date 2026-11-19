@@ -269,14 +269,19 @@ import {
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
 /** @import { AnnotationSetsData } from '../services/drawing/annotation-sets.js' */
-/** @import { AdoptedRings } from './circular-conservation.js' */
+/** @import { AdoptedRings, AdoptedRingsChange } from './circular-conservation.js' */
 /**
  * What a Generate's History step restores of the drawing's intent that its
- * artifact handle does not hold (DESIGN A2): the Feature placements, the
- * annotation sets, and what its adoption of a ring result writes (`AdoptedRings`,
- * OV-2445). The per-feature edits and strokes travel with the artifact
+ * artifact handle does not hold (DESIGN A2): the Feature placements and the
+ * annotation sets. The per-feature edits and strokes travel with the artifact
  * handle, which Undo and Redo of the step install.
- * @typedef {AnnotationSetsData & { placements: FeaturePlacementDraft, removed: number, rings: AdoptedRings }} GenerateIntentCheckpoint
+ * @typedef {AnnotationSetsData & { placements: FeaturePlacementDraft, removed: number }} GenerateDraftIntent
+ */
+/**
+ * A Generate's History checkpoint: its draft intent (`GenerateDraftIntent`) and, when it adopted a ring result, the
+ * rings as that adoption found them (`before`) or left them (`after`), taken in the adoption (`AdoptedRingsChange`,
+ * OV-2445); null when it adopted none, so its Undo and Redo leave the rings.
+ * @typedef {GenerateDraftIntent & { rings: AdoptedRings | null }} GenerateIntentCheckpoint
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
@@ -951,6 +956,42 @@ const rawEntriesOfLosatRows = (rows, cacheMap) => rows.flatMap((row) => {
   const entry = cacheMap?.get(row.key);
   return entry ? [entry] : [];
 });
+
+/**
+ * The History hooks of one Generate's step (`GenerateIntentCheckpoint`). History takes the `before` checkpoint when the
+ * run starts, before its searches; the rings' part of it is filled by the run's adoption of its ring results
+ * (`ringsAdopted`), which answers the rings right before and after it wrote. An edit made while the run searched (a
+ * stack row, Track type, a Wrap Rows setting) is then in both, so the step's Undo, Redo and a failed Generate's
+ * rollback give back the adoption alone, and that edit's own step still undoes it (OV-2445).
+ * @param {() => GenerateDraftIntent} captureDraft The drawing's draft intent now.
+ * @param {(intent: GenerateDraftIntent) => void} restoreDraft
+ * @param {(rings: AdoptedRings) => void} installRings The ring owner's install of rings an adoption answered.
+ */
+const generateIntentHooks = (captureDraft, restoreDraft, installRings) => {
+  /** @type {GenerateIntentCheckpoint | null} */
+  let before = null;
+  /** @type {AdoptedRings | null} */
+  let adoptedAfter = null;
+  return {
+    /** @param {AdoptedRingsChange | null} change The adoption's answer; null when it adopted no ring result. */
+    ringsAdopted: (change) => {
+      if (!change) return;
+      if (before) before.rings = change.before;
+      adoptedAfter = change.after;
+    },
+    /** @param {{ phase?: string }} capture @returns {GenerateIntentCheckpoint} */
+    captureIntentCheckpoint: ({ phase } = {}) => {
+      const checkpoint = { ...captureDraft(), rings: phase === 'after' ? adoptedAfter : null };
+      if (phase === 'before') before = checkpoint;
+      return checkpoint;
+    },
+    /** @param {GenerateIntentCheckpoint} checkpoint The value `captureIntentCheckpoint` returned. */
+    restoreIntentCheckpoint: (checkpoint) => {
+      restoreDraft(checkpoint);
+      if (checkpoint.rings) installRings(checkpoint.rings);
+    }
+  };
+};
 
 /** @param {Record<string, unknown>} payload */
 const stripRuntimeCacheStats = (payload) => {
@@ -1815,14 +1856,13 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  * @property {WriteSessionDocumentFile} writeSessionDocumentFile The Session file writer (`writeSessionDocumentFile`),
  *   which writes the exact replay Session of the reproducibility files with the inputs Generate described (OV-2612, OV-2695).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, ringAdoption?: SearchedRingAdoption | null,
- *   drawing: DrawingState, conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
+ *   drawing: DrawingState, conservationPairs: AdoptedConservationPairs }) => AdoptedRingsChange | null} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
  *   `ringAdoption` is a LOSAT Generate's own rings (`SearchedRingAdoption`); a candidate of the committed request (a
- *   rotation, an alignment, a placement) has none and leaves the draft's rings.
- * @property {(drawing: DrawingState) => AdoptedRings} captureAdoptedRings The ring owner's copy of what a Generate's
- *   adoption of a ring result writes in the drawing, which the Generate's History step holds before and after it.
- * @property {(drawing: DrawingState, rings: AdoptedRings) => void} installAdoptedRings The ring owner's install of such
- *   a copy as captured, by the Undo and Redo of that step.
+ *   rotation, an alignment, a placement) has none and leaves the draft's rings. It answers the rings before and after
+ *   an adoption of ring results (`AdoptedRingsChange`), else null.
+ * @property {(drawing: DrawingState, rings: AdoptedRings) => void} installAdoptedRings The ring owner's install of the
+ *   rings an adoption answered, as captured, by the Undo and Redo of the Generate's step.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
@@ -1910,7 +1950,6 @@ export const createRunAnalysis = ({
   isCurrentFeature,
   serializeCanonicalFiles, serializeInputFile, writeSessionDocumentFile,
   adoptCanonicalRenderArtifacts,
-  captureAdoptedRings,
   installAdoptedRings,
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
@@ -2927,8 +2966,10 @@ export const createRunAnalysis = ({
    * @param {DrawingState} drawing
    * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
    *   generatedArtifactHandle?: HistoryArtifactHandle | null, comparisonExecution?: Record<string, any> | null,
-   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean, legendFactsDrawn: () => void }} options
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean, legendFactsDrawn: () => void,
+   *   onRingsAdopted?: (change: AdoptedRingsChange | null) => void }} options
    *   `legendFactsDrawn`: started before the run reads the drawing's edits (`startLegendFactsDraw`, OV-2412).
+   *   `onRingsAdopted` takes the answer of the run's adoption of its ring results, for its History step.
    */
   const runAnalysisInternal = async (drawing, {
     legendFactsDrawn,
@@ -2937,7 +2978,8 @@ export const createRunAnalysis = ({
     generatedArtifactHandle = null,
     comparisonExecution = null,
     isCurrentOperation = () => true,
-    isCurrentAlert = () => true
+    isCurrentAlert = () => true,
+    onRingsAdopted = () => {}
   }) => {
     /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
@@ -5604,14 +5646,14 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, {
+        onRingsAdopted(adoptCanonicalRenderArtifacts(canonical, {
           adoptOwnedRequest: true,
           drawing,
           conservationPairs,
           // The rings it searched. The ring controls are disabled during a Generate (index.html), but a change from
           // outside them may still have changed the draft's rings since the searches.
           ringAdoption: requestRings === null ? null : { searched: searchedRings, builtFromDraft: requestRings === ringsOfDrawing(drawing) }
-        });
+        }));
       }
       // The identities of this request's records stay with it (DESIGN A1); History restores them with it.
       if (identitySources) {
@@ -5655,21 +5697,19 @@ export const createRunAnalysis = ({
   };
 
   /**
-   * The draft intent a Generate's History step holds before and after it (`GenerateIntentCheckpoint`).
+   * The draft intent a Generate's History step holds before and after it (`GenerateDraftIntent`).
    * @param {DrawingState} drawing
-   * @returns {GenerateIntentCheckpoint}
+   * @returns {GenerateDraftIntent}
    */
   const captureGenerateIntent = (drawing) => ({
     placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
     ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
-    removed: Number(featureEditRemovalCount.value) || 0,
-    rings: captureAdoptedRings(drawing)
+    removed: Number(featureEditRemovalCount.value) || 0
   });
-  /** @param {DrawingState} drawing @param {GenerateIntentCheckpoint} checkpoint */
-  const restoreGenerateIntent = (drawing, { placements, annotationSets, removed, rings }) => {
+  /** @param {DrawingState} drawing @param {GenerateDraftIntent} intent */
+  const restoreGenerateIntent = (drawing, { placements, annotationSets, removed }) => {
     FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
     ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
-    installAdoptedRings(drawing, rings);
     featureEditRemovalCount.value = removed;
   };
 
@@ -5764,6 +5804,8 @@ export const createRunAnalysis = ({
         comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
         comparisonExecution = prepared.comparisonExecution;
       }
+      const intentHooks = generateIntentHooks(() => captureGenerateIntent(drawing),
+        (intent) => restoreGenerateIntent(drawing, intent), (rings) => installAdoptedRings(drawing, rings));
       /** @param {HistoryArtifactHandle | null} handle */
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
@@ -5771,7 +5813,8 @@ export const createRunAnalysis = ({
         runDraftIsShown = readRunDraftIsShown();
         return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
-          comparisonExecution, isCurrentOperation, isCurrentAlert, legendFactsDrawn: startLegendFactsDraw(drawing)
+          comparisonExecution, isCurrentOperation, isCurrentAlert, legendFactsDrawn: startLegendFactsDraw(drawing),
+          onRingsAdopted: intentHooks.ringsAdopted
         });
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
@@ -5787,12 +5830,10 @@ export const createRunAnalysis = ({
               // replayed tables, OV-2445). They are draft intent, not part of the
               // Result, so Undo and Redo restore them, and the removal count, with
               // this step: the per-feature edits, strokes, and rules through the
-              // artifact handle, the placements, annotation sets and rings through
-              // this checkpoint.
-              captureIntentCheckpoint: () => captureGenerateIntent(drawing),
-              // The checkpoint is what `captureIntentCheckpoint` above returned.
-              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ checkpoint) => (
-                restoreGenerateIntent(drawing, checkpoint)),
+              // artifact handle, the placements, annotation sets and the rings the
+              // adoption changed through this checkpoint (`generateIntentHooks`).
+              captureIntentCheckpoint: intentHooks.captureIntentCheckpoint,
+              restoreIntentCheckpoint: intentHooks.restoreIntentCheckpoint,
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
                 historyRecovery = 'restore-failed';

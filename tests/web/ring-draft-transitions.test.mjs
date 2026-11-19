@@ -106,11 +106,19 @@ const ringRows = (drawing) => drawing.adv.circular_track_slots.filter((slot) => 
 const bases = async (file) => (await readFileText(state.inputFiles.fileOf(file))).split('\n')[1];
 
 /**
+ * What the last `generate` adoption changed (`adoptCircularRingResult`'s answer): the rings right before and right after
+ * it wrote, which its Generate's History step holds (OV-2445).
+ * @type {{ before: unknown, after: unknown } | null}
+ */
+let adopted = null;
+/**
  * A LOSAT Generate of the draft's rings as production runs it: the rings its ring keys read, their tables, the request's
  * rings and the request builder, then the composition root's adoption of the request with Generate's own rings.
+ * `duringSearch` is an edit made while the run searches: after the request is built, before the adoption.
  * @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing
+ * @param {(drawing: import('../../gbdraw/web/js/state.js').DrawingState) => void} [duringSearch]
  */
-const generate = async (drawing) => {
+const generate = async (drawing, duringSearch = () => {}) => {
   const searched = ringKeys.searchedRingSources(drawing);
   const before = JSON.stringify(searched.map((ring) => ring.sourceKey));
   const filesData = await sessionConfig.serializeActiveRenderFiles(state, drawing);
@@ -123,9 +131,10 @@ const generate = async (drawing) => {
     resolvedCircularConservation: ringKeys.losatRequestRings(searched, tables, ringGenomeFileLists(filesData.c_conservation_fastas))
   });
   // Like production, a Generate with no ring genome searches no ring and adopts no ring result.
+  duringSearch(drawing);
   const ringAdoption = searched.length === 0 ? null
     : { searched, builtFromDraft: before === JSON.stringify(ringKeys.searchedRingSources(drawing).map((ring) => ring.sourceKey)) };
-  sources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
+  adopted = sources.adoptCircularRingResult(drawing, (installRings) => sessionConfig.adoptCanonicalRenderArtifacts(canonical, {
     adoptOwnedRequest: true, drawing, conservationPairs: ringKeys.NO_CONSERVATION_PAIRS, installRings
   }), ringAdoption);
   assert.equal(drawing.files.c_conservation_blasts_source, 'losat-cache', 'the Generate adopted a LOSAT-cache result');
@@ -293,10 +302,9 @@ test('a Generate\'s History step gives back its ring adoption as one value, so a
     ringRows(drawing)[0].width = '30px';
     const rowsAfterEdit = structuredClone(drawing.adv.circular_track_slots);
     const edited = draftRings(drawing);
-    // Generate: its step holds the rings before and after its adoption (`captureIntentCheckpoint`).
-    const before = sources.captureAdoptedRings(drawing);
+    // Generate: its step holds the rings as its adoption found and left them (`adoptCircularRingResult`'s answer).
     await generate(drawing);
-    const after = sources.captureAdoptedRings(drawing);
+    const { before, after } = /** @type {NonNullable<typeof adopted>} */ (adopted);
     const generated = draftRings(drawing);
     assert.notDeepEqual(generated.rows.map((row) => row[2]), edited.rows.map((row) => row[2]), 'the Generate re-keyed the rows');
     const where = same ? 'sequence.fasta x3' : 'distinct files';
@@ -318,6 +326,45 @@ test('a Generate\'s History step gives back its ring adoption as one value, so a
     assert.deepEqual(ringIdentityDefects(drawing), [], `${where}: the next Generate`);
     clearRings(drawing);
   }
+});
+
+// Review of 19062f0c6, HIGH 1: the adoption's answer holds the rings as the adoption found and left them, not as the run
+// found them, so an edit made while the run searched (a stack row that is no ring, Track type, Separate Strands, a Wrap
+// Rows setting) is in both, and the Undo of the Generate, or a failed Generate's rollback, keeps it.
+test('a Generate\'s adoption answers the rings as it found and left them, so an edit made during the search stays (OV-2445)', async () => {
+  const drawing = await threeRings(false);
+  const layout = () => ({
+    otherRows: drawing.adv.circular_track_slots.filter((slot) => !isManagedConservationSlot(slot)).map((slot) => slot.id),
+    trackType: drawing.form.track_type, strands: drawing.form.separate_strands, normalize: drawing.form.normalize_length
+  });
+  const original = layout();
+  const editedRows = draftRings(drawing).rows;
+  await generate(drawing, () => {
+    const slots = drawing.adv.circular_track_slots;
+    const at = slots.findIndex((slot, index) => !isManagedConservationSlot(slot) && slots[index + 1]
+      && !isManagedConservationSlot(slots[index + 1]) && editor.canMoveCircularTrackSlot(index, 1));
+    assert.ok(at >= 0, 'a stack row that is no ring moves');
+    editor.moveCircularTrackSlot(at, at + 1);
+    drawing.form.track_type = drawing.form.track_type === 'middle' ? 'tuckin' : 'middle';
+    drawing.form.separate_strands = !drawing.form.separate_strands;
+    drawing.form.normalize_length = !drawing.form.normalize_length;
+  });
+  const edited = layout();
+  assert.notDeepEqual(edited, original);
+  assert.ok(adopted, 'a Generate that searched rings answers its adoption');
+  const generatedRows = draftRings(drawing).rows;
+  assert.notDeepEqual(generatedRows.map((row) => row[2]), editedRows.map((row) => row[2]), 'the adoption re-keyed the rows');
+  sources.installAdoptedRings(drawing, adopted.before);
+  assert.deepEqual(layout(), edited, 'the Undo of the Generate keeps the edits made during its search');
+  assert.deepEqual(draftRings(drawing).rows.map((row) => row[2]), editedRows.map((row) => row[2]), 'and gives the rows their keys back');
+  assert.deepEqual(ringIdentityDefects(drawing), [], 'after the Undo');
+  sources.installAdoptedRings(drawing, adopted.after);
+  assert.deepEqual(layout(), edited, 'the Redo keeps them');
+  assert.deepEqual(draftRings(drawing).rows, generatedRows, 'and gives the adopted rows back');
+  const canonical = await generate(drawing);
+  assert.equal(rerender(drawing, canonical), null, 'a rerender of the committed request adopts no ring and answers none');
+  Object.assign(drawing.form, { track_type: original.trackType, separate_strands: original.strands, normalize_length: original.normalize });
+  clearRings(drawing);
 });
 
 test('while a run processes, each ring control a Generate\'s adoption would undo refuses and changes no ring (OV-2317)', async () => {
@@ -347,6 +394,108 @@ test('while a run processes, each ring control a Generate\'s adoption would undo
   assert.equal(drawing.circularConservation.source, 'upload', 'after the run the radio applies');
   clearRings(drawing);
   drawing.circularConservation.source = 'losat';
+});
+
+/** The stack as rings (by label) and other rows (by id), with `|` at the Axis: the rows before it are outside. */
+const stackSides = (drawing) => {
+  const byKey = new Map(drawing.circularConservation.series.map((entry) => [String(entry.sourceKey), String(entry.label)]));
+  const names = drawing.adv.circular_track_slots.map((slot) => (
+    isManagedConservationSlot(slot) ? byKey.get(String(slot.params.series_key)) ?? `?${slot.id}` : slot.id));
+  names.splice(Number(drawing.adv.circular_track_slots_axis_index), 0, '|');
+  return names;
+};
+/** Rings GA, GB, GC with GA's row outside the Axis (Row actions: Move outside Axis) and Ticks between GB's and GC's rows. */
+const ringsAcrossAxis = async () => {
+  const drawing = await threeRings(false);
+  const at = (id) => drawing.adv.circular_track_slots.findIndex((slot) => slot.id === id);
+  const [ringA, , ringC] = ringRows(drawing).map((slot) => slot.id);
+  editor.moveCircularTrackSlotOutside(at(ringA));
+  editor.moveCircularTrackSlot(at('ticks'), at(ringC));
+  assert.deepEqual(stackSides(drawing), ['GA', '|', 'features', 'GB', 'ticks', 'GC', 'gc_content', 'gc_skew']);
+  return drawing;
+};
+
+// Review of 19062f0c6, MEDIUM 2 (D-24 A): Move series follows the stack's rule. A move that would swap a ring row across
+// the Axis is refused, as the stack's arrows refuse a move across it (one predicate); on one side the list, the rows and
+// the drawn rings keep one order (D-14), and a row that is no ring keeps its place. With Use custom stack off no row
+// draws, so the list moves freely.
+test('Move series never moves a ring across the Axis; on one side the list and the stack rows keep one order (D-24)', async () => {
+  const drawing = await ringsAcrossAxis();
+  const labels = () => drawing.circularConservation.series.map((entry) => entry.label);
+  assert.equal(panel.canMoveCircularConservationSeries(0, 1), false, 'GA (outside) and GB (inside): Move series inward is disabled');
+  assert.equal(panel.canMoveCircularConservationSeries(1, -1), false, 'and GB\'s Move series outward too');
+  panel.moveCircularConservationSeries(0, 1);
+  panel.moveCircularConservationSeries(1, -1);
+  assert.deepEqual(labels(), ['GA', 'GB', 'GC'], 'the refused moves leave the list');
+  assert.deepEqual(stackSides(drawing), ['GA', '|', 'features', 'GB', 'ticks', 'GC', 'gc_content', 'gc_skew'], 'and the stack');
+  assert.equal(panel.canMoveCircularConservationSeries(1, 1), true, 'GB and GC are both inside');
+  panel.moveCircularConservationSeries(1, 1);
+  assert.deepEqual(labels(), ['GA', 'GC', 'GB']);
+  assert.deepEqual(stackSides(drawing), ['GA', '|', 'features', 'GC', 'ticks', 'GB', 'gc_content', 'gc_skew'],
+    'the rows take the list order in their places; Ticks keeps its place');
+  assert.deepEqual(ringIdentityDefects(drawing), [], 'after the moves');
+  drawing.adv.circular_track_slots_enabled = false;
+  assert.equal(panel.canMoveCircularConservationSeries(0, 1), true, 'with Use custom stack off the list moves freely');
+  drawing.adv.circular_track_slots_enabled = true;
+  clearRings(drawing);
+});
+
+// OV-3958 (found in the review fixes, D-24 applied): a Move series made while Use custom stack is off may put a ring that
+// the stack holds outside the Axis after one inside it. Turning the stack on again keeps each row on its side; the rows
+// take the list order on each side, and the list takes the rows' order, so the list, the rows and the drawn rings
+// keep one order.
+test('turning Use custom stack on after a Move series made while it was off keeps each ring on its side of the Axis (OV-3958)', async () => {
+  const drawing = await ringsAcrossAxis();
+  editor.setCircularTrackSlotsEnabled(false);
+  panel.moveCircularConservationSeries(0, 1);
+  panel.moveCircularConservationSeries(2, -1);
+  assert.deepEqual(drawing.circularConservation.series.map((entry) => entry.label), ['GB', 'GC', 'GA'], 'the list moved freely');
+  editor.setCircularTrackSlotsEnabled(true);
+  assert.deepEqual(stackSides(drawing), ['GA', '|', 'features', 'GB', 'ticks', 'GC', 'gc_content', 'gc_skew'],
+    'GA stays outside; GB and GC take the list order inside');
+  assert.deepEqual(drawing.circularConservation.series.map((entry) => entry.label), ['GA', 'GB', 'GC'], 'the list takes the rows\' order');
+  assert.deepEqual(ringIdentityDefects(drawing), [], 'after the stack is on again');
+  clearRings(drawing);
+});
+
+// Review of 19062f0c6, LOW 3 (D-25 A): a stack move of a ring row also moves its ring in the list (one ring order), so
+// while a run processes it refuses with the run's reason, as Move series does; the template's arrows and Axis items of
+// that row read the same answer. A row that is no ring still moves.
+test('while a run processes, a stack move of a ring row is refused as Move series is; another row still moves (D-25)', async () => {
+  const drawing = await ringsAcrossAxis();
+  const before = { list: drawing.circularConservation.series.map((entry) => entry.label), stack: stackSides(drawing) };
+  const at = (label) => stackSides(drawing).filter((name) => name !== '|').indexOf(label);
+  state.processing.value = true;
+  try {
+    for (const [name, move] of [
+      ['Move inward', () => editor.moveCircularTrackSlot(at('GB'), at('GB') + 1)],
+      ['Move outward', () => editor.moveCircularTrackSlot(at('GC'), at('GC') - 1)],
+      ['Move inside Axis', () => editor.moveCircularTrackSlotInside(at('GA'))],
+      ['Move outside Axis', () => editor.moveCircularTrackSlotOutside(at('GB'))]
+    ]) {
+      assert.match(String(move()?.reason), /Generating diagram/, `${name} of a ring row answers the run's reason`);
+      assert.ok(editor.circularTrackSlotMoveAvailability(at('GB')), `${name}: the row's controls read the same answer`);
+      assert.deepEqual({ list: drawing.circularConservation.series.map((entry) => entry.label), stack: stackSides(drawing) }, before, name);
+    }
+    assert.equal(editor.circularTrackSlotMoveAvailability(at('gc_content')), null, 'a row that is no ring is not refused');
+    editor.moveCircularTrackSlot(at('gc_content'), at('gc_content') + 1);
+    assert.deepEqual(stackSides(drawing).slice(-2), ['gc_skew', 'gc_content'], 'and moves');
+  } finally {
+    state.processing.value = false;
+  }
+  assert.equal(editor.circularTrackSlotMoveAvailability(at('GB')), null, 'after the run');
+  clearRings(drawing);
+});
+
+test('the Track stack row arrows and Axis items read the row\'s move answer (D-25)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  for (const control of ['Move outward', 'Move inward']) {
+    assert.match(html, new RegExp(`aria-label="t\\('Circular track slot \\{id\\} ${control}'[^>]*:disabled="Boolean\\(circularTrackSlotMoveAvailability\\(entry\\.index\\)\\) \\|\\|`), control);
+  }
+  for (const item of ['Move outside Axis', 'Move inside Axis']) {
+    assert.match(html, new RegExp(`label: t\\('${item}'\\), icon: '[^']+', disabled: Boolean\\(circularTrackSlotMoveAvailability\\(entry\\.index\\)\\) \\|\\|`), item);
+  }
 });
 
 test('a ring label with a comma names no later ring (#1777 review 7, OV-3193)', async () => {

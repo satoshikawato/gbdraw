@@ -44,6 +44,7 @@ import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { msg, t } from '../utils/i18n.js';
 import { askTrackSourceRemoval } from './track-slot-edits.js';
+import { ringRowsSwapCrossesAxis } from './circular-track-slots.js';
 /** @import { SavedTrackLayout } from './feature-editor/placement-actions.js' */
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { AskingStackPorts, SwitchedTrackRow } from './track-slot-edits.js' */
@@ -109,9 +110,7 @@ const DURING_RUN_REFUSED = /** @type {const} */ ('not-during-run');
 /**
  * What a Generate's adoption of its ring result writes in a drawing (`adoptCircularRingResult`): the ring settings and
  * series, the custom stack's rows (the managed ring rows it re-keys, adds and takes out) with the stack's Axis index,
- * and the ring files of the LOSAT-cache replay it binds. The Generate's History step holds them as one value before and
- * after it (`captureAdoptedRings`, `installAdoptedRings`), so its Undo and Redo give the series and the rows back
- * together, and an earlier step's Undo finds the rows on their rings (OV-2445).
+ * and the ring files of the LOSAT-cache replay it binds, copied as one value (`installAdoptedRings` installs it).
  * @typedef {object} AdoptedRings
  * @property {unknown} conservation The drawing's `circularConservation`, copied.
  * @property {SavedTrackLayout} layout The custom stacks, saved by their owner (`saveTrackLayout`): ring rows and the Axis.
@@ -119,6 +118,14 @@ const DURING_RUN_REFUSED = /** @type {const} */ ('not-during-run');
  * @property {'losat-cache' | null} blastsSource
  * @property {InputFileRef[][]} fastas
  * @property {InputFileRef[][]} sequenceSources
+ */
+/**
+ * The answer of a Generate's adoption of its ring result: the rings right before and right after it wrote, taken in
+ * the adoption, so an edit made while the run searched is in both. The Generate's History step holds them, so its Undo
+ * and Redo give the series and the rows back together, and change nothing else (OV-2445).
+ * @typedef {object} AdoptedRingsChange
+ * @property {AdoptedRings} before
+ * @property {AdoptedRings} after
  */
 
 /** @param {DrawingState} drawing */
@@ -383,7 +390,7 @@ export const createCircularConservationSources = ({
     sequenceSources: drawing.files.c_conservation_sequence_sources.map((list) => [...list])
   });
   /**
-   * Installs rings `captureAdoptedRings` captured, as captured (a History restore calls no reconcile, R11).
+   * Installs rings an adoption's answer holds, as captured (a History restore calls no reconcile, R11).
    * @param {DrawingState} drawing @param {AdoptedRings} rings
    */
   const installAdoptedRings = (drawing, rings) => {
@@ -421,14 +428,20 @@ export const createCircularConservationSources = ({
    * searched rings) asks `adopt` to install them (`adopt` says whether a LOSAT result did), then reconciles the rings
    * with Generate's own rings (`adoptedRingKeyChanges`): each takes its searched ring's genetic code and stack row. Any
    * other adoption (a Linear Generate, a Generate that searched no ring, a candidate of the committed request) leaves
-   * the draft's rings unread and as they are.
+   * the draft's rings unread and as they are, and answers none.
    * @param {DrawingState} drawing @param {(installRings: boolean) => boolean} adopt
    * @param {SearchedRingAdoption | null} ringAdoption
+   * @returns {AdoptedRingsChange | null}
    */
   const adoptCircularRingResult = (drawing, adopt, ringAdoption) => {
-    if (!ringAdoption || ringAdoption.searched.length === 0) return void adopt(false);
+    if (!ringAdoption || ringAdoption.searched.length === 0) {
+      adopt(false);
+      return null;
+    }
+    const before = captureAdoptedRings(drawing);
     const draftSources = conservationSourceDescriptors(circularRingSources(drawing));
     if (adopt(true)) reconcileCircularConservation(drawing, adoptedRingKeyChanges(drawing, draftSources, ringAdoption));
+    return { before, after: captureAdoptedRings(drawing) };
   };
   // Session Load (`afterImport`): a Session whose Show Comparison Rings is not
   // a setting (`ringSettingStored` false: before Session 51, the drawings
@@ -454,7 +467,7 @@ export const createCircularConservationSources = ({
   };
   return {
     setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
-    captureAdoptedRings, installAdoptedRings, askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
+    installAdoptedRings, askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   };
 };
@@ -523,24 +536,33 @@ export const createCircularConservationSeriesPanel = ({
       handSet: ringOwnColor(entry) !== null
     }));
   });
-  /** @param {number} index @param {number} direction */
-  const canMoveCircularConservationSeries = (index, direction) => {
-    const drawing = shownDrawingOfMode('circular');
-    if (!drawing) return false;
+  /**
+   * Whether the ring at `index` can swap places with its neighbour in `direction`: both in the list, and their stack rows
+   * on one side of the Axis (`ringRowsSwapCrossesAxis`, the stack's own rule, D-24).
+   * @param {DrawingState} drawing @param {number} index @param {number} direction
+   */
+  const canMoveSeriesOf = (drawing, index, direction) => {
+    const { series } = drawing.circularConservation;
     const idx = Number(index);
     const target = idx + Math.sign(Number(direction));
     return (
-      Array.isArray(drawing.circularConservation.series) &&
+      Array.isArray(series) &&
       Number.isInteger(idx) &&
       idx >= 0 &&
-      idx < drawing.circularConservation.series.length &&
+      idx < series.length &&
       target >= 0 &&
-      target < drawing.circularConservation.series.length
+      target < series.length &&
+      !ringRowsSwapCrossesAxis(drawing, String(series[idx].sourceKey || ''), String(series[target].sourceKey || ''))
     );
   };
   /** @param {number} index @param {number} direction */
+  const canMoveCircularConservationSeries = (index, direction) => {
+    const drawing = shownDrawingOfMode('circular');
+    return drawing !== null && canMoveSeriesOf(drawing, index, direction);
+  };
+  /** @param {number} index @param {number} direction */
   const moveCircularConservationSeries = (index, direction) => shownAction('circular', (drawing) => {
-    if (moveConservationSeriesEntry(drawing.circularConservation.series, index, direction)) {
+    if (canMoveSeriesOf(drawing, index, direction) && moveConservationSeriesEntry(drawing.circularConservation.series, index, direction)) {
       refreshCircularConservationSlots(drawing);
       if (reassignRingColorsOnReorder(drawing)) refreshCircularConservationSlots(drawing);
     }

@@ -1804,7 +1804,7 @@ export const createAppSetup = () => {
   });
   const {
     setRingGenomeLists, setCircularConservationSourceFiles, replaceCircularConservationBlasts, adoptCircularRingResult,
-    captureAdoptedRings, installAdoptedRings, askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
+    installAdoptedRings, askRingSourceRemoval, reconcileCircularConservation, rederiveCircularConservation, reconcileLoadedCircularConservation,
     refreshCircularConservationSlots
   } = createCircularConservationSources({
     state, editLosatRows: historySnapshots.editLosatRows, askingStackPorts,
@@ -1957,12 +1957,12 @@ export const createAppSetup = () => {
     showNotice,
     // Only a Generate that searched its drawing's rings installs them, and the
     // rings' reconcile pairs them with the rings it searched
-    // (`adoptCircularRingResult`); a Linear Generate, a Generate that searched no
-    // ring and a candidate of the committed request leave them.
+    // (`adoptCircularRingResult`, which answers the rings before and after it
+    // wrote); a Linear Generate, a Generate that searched no ring and a
+    // candidate of the committed request leave them.
     adoptCanonicalRenderArtifacts: (canonical, { ringAdoption = null, ...options }) => adoptCircularRingResult(
       options.drawing, (installRings) => adoptCanonicalRenderArtifacts(canonical, { ...options, installRings }), ringAdoption
     ),
-    captureAdoptedRings,
     installAdoptedRings,
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
@@ -3926,6 +3926,7 @@ export const createAppSetup = () => {
     moveCircularTrackSlotOutside: circularTrackSlotEditor.moveCircularTrackSlotOutside,
     moveCircularTrackSlotInside: circularTrackSlotEditor.moveCircularTrackSlotInside,
     moveCircularTrackSlotToAxis: circularTrackSlotEditor.moveCircularTrackSlotToAxis,
+    circularTrackSlotMoveAvailability: circularTrackSlotEditor.circularTrackSlotMoveAvailability,
     canMoveCircularTrackSlotOutside: circularTrackSlotEditor.canMoveCircularTrackSlotOutside,
     canMoveCircularTrackSlotInside: circularTrackSlotEditor.canMoveCircularTrackSlotInside,
     canMoveCircularTrackSlotToAxis: circularTrackSlotEditor.canMoveCircularTrackSlotToAxis,
