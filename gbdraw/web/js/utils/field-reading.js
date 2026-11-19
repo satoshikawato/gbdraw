@@ -59,6 +59,7 @@ const optionalNumber = (accepts) => (value) => {
 };
 export const positiveNumberOrNull = optionalNumber((numeric) => numeric > 0);
 export const nonNegativeNumberOrNull = optionalNumber((numeric) => numeric >= 0);
+export const finiteNumberOrNull = optionalNumber(() => true);
 
 /** @param {number} numeric */
 export const isPositiveInteger = (numeric) => Number.isInteger(numeric) && numeric > 0;

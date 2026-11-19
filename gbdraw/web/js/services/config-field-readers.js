@@ -7,7 +7,7 @@ import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import { readLinearSeqWindows, readStoredCardGencode } from './drawing/inputs.js';
 import { readCanonicalRecordTranslations, readCanonicalSimilarityAlignmentPlan } from './linear-record-layout.js';
 import {
-  changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
+  changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, finiteNumberOrNull, nonNegativeNumberOrNull, numberOr, onlyTrue,
   positiveNumberOrNull, textChoice, trueUnlessFalse, truthy
 } from '../utils/field-reading.js';
 import { loadRepair } from '../utils/load-repairs.js';
@@ -664,12 +664,13 @@ const advRows = (mode) => Object.freeze([
   row('gc_content_small_tick_interval', positiveNumberOrNull),
   row('gc_content_tick_font_size', positiveNumberOrNull),
   row('center_reserved_radius', readNonNegativeNumberOrNull),
-  row('depth_min', readNonNegativeNumberOrNull),
+  // Any finite number (a signed series' range may be negative); Python's `check_depth_range` owns the range rule.
+  row('depth_min', finiteNumberOrNull),
   {
     field: 'depth_max',
     // Below the minimum: unset.
     read: (value, adv) => {
-      const reading = readNonNegativeNumberOrNull(value);
+      const reading = finiteNumberOrNull(value);
       return typeof adv.depth_min === 'number' && reading.value !== null && adv.depth_min > reading.value
         ? { value: null, lost: true } : reading;
     }

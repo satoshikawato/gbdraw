@@ -341,3 +341,20 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
   assert.notEqual(depthTrackConfigForEdit([], 0, 0), null);
   assert.equal(depthTrackConfigForEdit([], 1, 0), null);
 }
+
+{
+  // Review r1 H1: the global Depth Min and Max may be negative (a signed series, Python's `check_depth_range`), so a
+  // Load, an Undo or an import keeps them; a Max below the Min is still unset.
+  const { defaultSettingsContainers, installStoredSettings } = await import('../../gbdraw/web/js/services/config-field-readers.js');
+  for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const read = (adv) => {
+      const targets = defaultSettingsContainers(mode);
+      const { losses } = installStoredSettings(targets, { adv }, mode);
+      return [targets.adv.depth_min, targets.adv.depth_max, losses.filter(({ at }) => at.startsWith('adv.depth_m')).map(({ at }) => at)];
+    };
+    assert.deepEqual(read({ depth_min: -3, depth_max: 2 }), [-3, 2, []], mode);
+    assert.deepEqual(read({ depth_min: -3, depth_max: -0.5 }), [-3, -0.5, []], `${mode}: an all-negative range`);
+    assert.deepEqual(read({ depth_min: 2, depth_max: -3 }), [2, null, ['adv.depth_max']], `${mode}: a Max below the Min`);
+    assert.deepEqual(read({ depth_min: 'x', depth_max: 'auto' }), [null, null, ['adv.depth_min']], `${mode}: no number`);
+  }
+}
