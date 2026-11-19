@@ -224,23 +224,20 @@ def _band_paint(
 
 
 def _label_boxes(
-    track: ResolvedAnnotationTrack,
-    placement: PlacedRegionAnnotation,
+    annotation: ResolvedRegionAnnotation,
     style: RegionAnnotationStyle,
+    lane: tuple[float, float],
     *,
-    row: int,
-    lane_height: float,
-    padding_px: float,
     scale: float,
     segments: Sequence[tuple[int, int]],
 ) -> tuple[Aabb, ...]:
     """The filled rectangles of a mark a label may sit inside (LP-D75): a band or highlight
-    with a solid fill; a hatched, unfilled, bracket or line mark has none."""
+    with a solid fill, as ``_band_part`` draws its parts in its ``lane`` (middle y and height, ``_mark_lane``);
+    a hatched, unfilled, bracket or line mark has none."""
 
-    annotation = placement.annotation
     if annotation.mark not in {"band", "highlight"} or style.hatch or _solid_fill(annotation, style) == "none":
         return ()
-    lane_center = _lane_center(track, placement, row, lane_height, padding_px)
+    lane_center, lane_height = lane
     boxes: list[Aabb] = []
     for start, end in segments:
         x, y, width, height = _band_rect(annotation.mark, lane_center, lane_height, float(start) * scale, float(end) * scale)
@@ -532,12 +529,18 @@ def linear_annotation_labels(
                 else tuple(
                     box.translated(0.0, shift_y)
                     for box in _label_boxes(
-                        track,
-                        placement,
+                        annotation,
                         style,
-                        row=row,
-                        lane_height=lane_height,
-                        padding_px=params.padding_px,
+                        _mark_lane(
+                            track,
+                            placement,
+                            placements,
+                            row=row,
+                            y_offset_px=0.0,
+                            frame=frame,
+                            lane_height=lane_height,
+                            params=params,
+                        ),
                         scale=scale,
                         segments=segments,
                     )

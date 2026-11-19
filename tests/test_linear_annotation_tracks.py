@@ -2158,6 +2158,63 @@ def _label_candidates(svg: str) -> dict[str, str]:
     return found
 
 
+@pytest.mark.parametrize("stranded", [True, False], ids=["separated", "shared"])
+@pytest.mark.parametrize("track_layout", ["middle", "above", "below"])
+@pytest.mark.parametrize("mark", ["highlight", "band"])
+def test_a_label_box_is_the_rectangle_its_mark_draws(
+    monkeypatch: pytest.MonkeyPatch, mark: str, track_layout: str, stranded: bool
+) -> None:
+    """The box a label may sit in (LP-D75) is its band's or highlight's drawn rectangle, also where a region
+    with a strand is drawn in its strand's lane of the feature track it covers (PD-OI-117)."""
+
+    from gbdraw.diagrams.linear import annotation_labels
+
+    record = SeqRecord(Seq("ACGT" * 2500), id="rec1", name="rec1")
+    record.features = [
+        SeqFeature(FeatureLocation(300, 1500, strand=1), type="CDS"),
+        SeqFeature(FeatureLocation(5000, 6200, strand=-1), type="CDS"),
+    ]
+    style = RegionAnnotationStyle(fill="#c8607e", stroke="#c8607e", label_font_size=10.0)
+    rows = (
+        RegionAnnotation("p", CoordinateSpan(None, 401, 1400), label="plus hit", mark=mark, style=style, strand="+"),
+        RegionAnnotation("m", CoordinateSpan(None, 5101, 6100), label="minus hit", mark=mark, style=style, strand="-"),
+        RegionAnnotation("n", CoordinateSpan(None, 8000, 9000), label="no strand", mark=mark, style=style),
+    )
+    boxes: dict[str, tuple] = {}
+    labels_of = annotation_labels.linear_annotation_labels
+
+    def recorded(*args, **kwargs):
+        labels = labels_of(*args, **kwargs)
+        boxes.update({label.annotation_id: label.boxes for label in labels})
+        return labels
+
+    monkeypatch.setattr(annotation_labels, "linear_annotation_labels", recorded)
+    drawing = build_linear_diagram([record], options=LinearDiagramOptions(
+        annotations=AnnotationOptions(sets=(AnnotationSet("hits", rows),)),
+        config_overrides={"canvas.strandedness": stranded, "canvas.linear.track_layout": track_layout},
+        tracks=LinearTrackOptions(linear_track_slots=(
+            "features:features",
+            "hits:annotations@side=overlay,set_id=hits,anchor_slot=features,cover_anchor=true,z=5",
+        )),
+    ))
+    root = ElementTree.fromstring(drawing.tostring())
+    drawn = {}
+    for group in root.iter():
+        annotation_id = group.attrib.get("data-gbdraw-annotation-id")
+        if annotation_id in {"p", "m", "n"}:
+            rect = next(child for child in group if child.tag.endswith("rect"))
+            x, y, width, height = (float(rect.attrib[key]) for key in ("x", "y", "width", "height"))
+            drawn[annotation_id] = (x, y, x + width, y + height)
+
+    assert set(drawn) == {"p", "m", "n"}
+    for annotation_id, rect in drawn.items():
+        assert [(box.min_x, box.min_y, box.max_x, box.max_y) for box in boxes[annotation_id]] == [
+            pytest.approx(rect, abs=1e-3)
+        ], annotation_id
+    if stranded:  # The strands' lanes lie apart, so the boxes do too.
+        assert drawn["p"][3] <= drawn["m"][1] or drawn["m"][3] <= drawn["p"][1]
+
+
 # The OV-1155 matrix drew these region labels at 10 pt (their size before they took the feature label size).
 _HMMTDNA_REGIONS = (
     "set_id\tid\tmark\tstart\tend\tlabel\tfill\tfill_opacity\tstroke\tstroke_width\tlegend_label\tlabel_font_size\n"
