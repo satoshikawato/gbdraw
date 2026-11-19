@@ -68,7 +68,7 @@ from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, FeatureLayerMode, create_feature_layers
 from ...features.objects import FeatureObject
-from ...labels.label_ink import circular_label_ink
+from ...labels.label_ink import FeatureLabelInk, circular_label_drawn_ink, circular_label_ink
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
@@ -83,7 +83,6 @@ from ...labels.circular import (
     circular_label_shape,
     minimum_bbox_gap_px,
     circular_label_radii,
-    inner_labels_newly_over_paint,
     prepare_label_list,
     x_overlap,
     y_overlap,
@@ -1085,17 +1084,22 @@ def _external_label_bounds_on_canvas(
     return min_x, min_y, max_x, max_y
 
 
+def _turned_letters(ink: FeatureLabelInk) -> tuple[tuple[float, float], ...]:
+    """The corners of a drawn label's letters' box, turned with its letters, in circle-local coordinates."""
+
+    box = ink.ink
+    return tuple(
+        ink.from_label_frame(corner)
+        for corner in ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
+    )
+
+
 def _external_label_paint_bounds_local(label: CircularLabel, total_length: int, style: FeatureLabelStyle) -> Aabb:
     """Return what an outer or inner label paints in ``style`` (its turned letters, its underline or white box,
     and its leader at its label's own width) in circle-local coordinates, from the label's ink owner."""
     ink = circular_label_ink(label, total_length, style)
-    box = ink.ink
-    letters = tuple(
-        ink.from_label_frame(corner)
-        for corner in ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
-    )
     drawn = tuple(point for part in feature_label_drawn_parts(ink, style) for point in part)
-    text_bounds = bounding_aabb((*letters, *drawn))
+    text_bounds = bounding_aabb((*_turned_letters(ink), *drawn))
     leader_bounds = bounding_aabb(ink.leader, 0.5 * label_leader_width_px(label))
     if (
         text_bounds is None or leader_bounds is None or (combined := union_aabbs((text_bounds, leader_bounds))) is None
@@ -1442,9 +1446,11 @@ def _record_track_ink(
     slots: Sequence[CircularResolvedSlot],
     sources: CircularTrackInkSources,
     annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
+    renderers: frozenset[str] | None = None,
 ) -> tuple[CircularInk, ...]:
     """What the record's tracks paint, from the owners that draw them (D-18), read with the same slot sources
-    the drawing reads (``_draw_resolved_circular_slot``).
+    the drawing reads (``_draw_resolved_circular_slot``); with ``renderers``, only the slots of those renderers
+    (``DATA_TRACK_RENDERERS``) and not the axis circle.
 
     It reads the radial layout's axis and resolved slots only, not the centre band or the outer content radius
     (OV-2111).
@@ -1462,10 +1468,10 @@ def _record_track_ink(
     record_transform = (
         sources.record_transform if sources.record_transform is not None else unset_record_transform(gb_record)
     )
-    inks: list[CircularInk] = [CircularInkRing(axis.paint_band_px)]
+    inks: list[CircularInk] = [] if renderers is not None else [CircularInkRing(axis.paint_band_px)]
     for slot in slots:
         renderer = str(slot.renderer)
-        if slot.draw_band_px is None:
+        if slot.draw_band_px is None or (renderers is not None and renderer not in renderers):
             continue
         norm_factor = _slot_norm_factor(slot, canvas_radius)
         slot_data = sources.slot_data.get(str(slot.id))
@@ -1586,14 +1592,52 @@ def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Se
     return len(_definition_lines_meeting(inks, definition_text))
 
 
+# The renderers that draw a record's data (``_record_track_ink``): the ``auto`` protection boxes an inner label whose
+# letters lie on their paint. Feature blocks, the scale, the axis circle and spacers are not data.
+DATA_TRACK_RENDERERS: frozenset[str] = frozenset(
+    {"dinucleotide_content", "dinucleotide_skew", "depth", "feature_density", "sequence_conservation", "annotations"}
+)
+
+
+def _labels_on_data_paint(
+    labels: Sequence[CircularLabel],
+    total_length: int,
+    style: FeatureLabelStyle,
+    layout: CircularRadialLayout,
+    annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
+    track_ink_sources: Callable[[], Sequence[CircularTrackInkSources]],
+) -> list[CircularLabel]:
+    """Copies of the drawn ``labels``; under the ``auto`` protection, each inner label whose letters' box (turned
+    with its letters) meets the paint of the data tracks (``_record_track_ink`` of ``DATA_TRACK_RENDERERS`` on
+    ``layout``, from each record's ``track_ink_sources``, as the definition-over-track check reads it; built only
+    when there is an inner label) is marked ``on_data_paint``, and its box is drawn
+    (``FeatureLabelStyle.draws_box``). It is judged once the labels are placed and moved, after the
+    ``circular_labels`` stage: the box takes no room and moves nothing, and a change of a track's data places no
+    labels again."""
+
+    copies = [label.copy() for label in labels]
+    inner = [
+        label for label in copies if style.protection == "auto" and label.get("is_inner") and not label.get("is_embedded")
+    ]
+    paint = tuple(
+        ink
+        for sources in track_ink_sources()
+        for ink in _record_track_ink(layout.axis, layout.slots, sources, annotation_labels, DATA_TRACK_RENDERERS)
+    ) if inner else ()
+    for label in inner:
+        box = bounding_aabb(_turned_letters(circular_label_ink(label, total_length, style)))
+        if box is not None and box_meets_ink(box, paint, threshold_px=0.0):
+            label["on_data_paint"] = True
+    return copies
+
+
 def _feature_label_drawn_parts(label: CircularLabel, total_length: int, style: FeatureLabelStyle) -> tuple[Polygon, ...]:
     """What ``style`` draws with a feature label besides its letters, its underline and white box
     (``feature_label_drawn_parts``); nothing for an embedded label, or when the style draws neither (its letters'
     ink is not measured then)."""
 
-    if label.get("is_embedded") or not style.draws_from_ink:
-        return ()
-    return feature_label_drawn_parts(circular_label_ink(label, total_length, style), style)
+    ink = None if label.get("is_embedded") else circular_label_drawn_ink(label, total_length, style)
+    return () if ink is None else feature_label_drawn_parts(ink, style)
 
 
 def _leader_segments(label: CircularLabel, shape: LabelShape) -> tuple[LeaderSegment, ...]:
@@ -3409,30 +3453,6 @@ class CircularLabelPlacement:
     report: _PlacementReport
     # Text measurements per label font size, for the fit probes.
     label_candidates: tuple[tuple[float, tuple[CircularLabelCandidate, ...]], ...]
-    # The labels placed again with the inner labels held off the scale numbers (``PlacedCircularLabels.held``), or
-    # None; ``drawn`` says which of the two is drawn.
-    held: PlacedCircularLabels | None = None
-
-    def drawn(
-        self, layout: CircularRadialLayout, track_ink_sources: Callable[[], Sequence[CircularTrackInkSources]]
-    ) -> CircularLabelPlacement:
-        """The placement to draw (OV-3636): the held one, unless one of its inner labels is over a piece of the
-        tracks' paint that the same label of ``labels`` is not over (``inner_labels_newly_over_paint``). The paint is
-        ``_record_track_ink`` of each record's ``track_ink_sources`` on ``layout``, the owner the definition-over-track
-        check reads, and is built only when there is a held placement. It is not a stage input: a change of a
-        track's data places no labels again."""
-
-        if self.held is None:
-            return self
-        paint = tuple(ink for sources in track_ink_sources() for ink in _record_track_ink(layout.axis, layout.slots, sources, {}))
-        if inner_labels_newly_over_paint(self.labels, self.held.labels, paint, self.state.total_length):
-            return replace(self, held=None)
-        return replace(
-            self,
-            labels=tuple(self.held.labels),
-            report=self.report._replace(packer_skipped=self.held.packer_skipped),
-            held=None,
-        )
 
 
 @dataclass(frozen=True)
@@ -3508,12 +3528,12 @@ def circular_labels(
     slots = list(layout_slots)
     capacity: tuple[CircularLabelCapacity, ...] = ()
     try:
-        labels, packer_skipped, held = _place_circular_labels(
+        labels, packer_skipped = _place_circular_labels(
             state(), profile, label_pass=label_pass, candidate_caches=candidate_caches
         )
     except CircularLabelCapacityExceeded as exceeded:
         # CAPACITY-STOP: the figure stops at the label fit check; nothing of this record is placed.
-        labels, capacity, packer_skipped, held = [], exceeded.capacities, False, None
+        labels, capacity, packer_skipped = [], exceeded.capacities, False
     # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
     radial_refused = False
     if radial_growth is not None:
@@ -3669,7 +3689,6 @@ def circular_labels(
             for font_size, cache in candidate_caches.items()
             if "candidates" in cache
         ),
-        held=held,
     )
 
 
@@ -3954,7 +3973,7 @@ def _circle_track_ink_sources(
 ) -> tuple[CircularTrackInkSources, ...]:
     """What the tracks of each record of the circle paint from, in drawing order, as ``layout`` places them
     (``_unit_track_ink_sources`` with the record's features of ``layout_feature_layers``): the definition-over-track
-    check and the held inner labels (``CircularLabelPlacement.drawn``) read the same paint."""
+    check and the inner labels' box judgement (``_labels_on_data_paint``) read the same paint."""
 
     return tuple(
         _unit_track_ink_sources(
@@ -4371,19 +4390,7 @@ def add_record_on_circular_canvas(
             annotation_tracks=annotation_tracks,
             record_id=str(record.gb_record.id),
             label_pass=presentation.label_pass,
-        ).drawn(radial_layout, partial(
-            _circle_track_ink_sources,
-            units,
-            radial_layout,
-            canvas_config,
-            configurators,
-            layout_feature_layers,
-            unit_feature_keys,
-            gc_content_tick_font_size_override=_gc_content_axis_font_size(configurators, scalar_axes, radial_layout.slots),
-            depth_tracks_by_index=depth_tracks_by_index,
-            annotation_track_layouts=annotation_track_layouts,
-            use_slot_tick_options=user_slot_mode,
-        ))
+        )
         # The one write of the radius the labels grew (a stage result is never changed).
         canvas_config.radius = placement.state.geometry.radius
         label_state = placement.state
@@ -4512,10 +4519,28 @@ def add_record_on_circular_canvas(
                 overlay_obstacles=overlay_obstacles,
             )
 
-    # The labels do not change after this: both label phases take one keyed copy.
-    placed_labels: Sequence[CircularLabel] = (
-        _pre_keyed(label.copy() for label in precalculated_labels or ()) if show_external_labels else ()
-    )
+    # The labels do not change after this: both label phases take one keyed copy, the inner labels on a data
+    # track's paint marked for the ``auto`` protection's box.
+    placed_labels: Sequence[CircularLabel] = _pre_keyed(_labels_on_data_paint(
+        precalculated_labels or (),
+        display_length,
+        profile.label_style,
+        radial_layout,
+        annotation_labels,
+        partial(
+            _circle_track_ink_sources,
+            units,
+            radial_layout,
+            canvas_config,
+            configurators,
+            layout_feature_layers,
+            unit_feature_keys,
+            gc_content_tick_font_size_override=gc_content_tick_font_size_override,
+            depth_tracks_by_index=depth_tracks_by_index,
+            annotation_track_layouts=annotation_track_layouts,
+            use_slot_tick_options=user_slot_mode,
+        ),
+    )) if show_external_labels else ()
     render_context = CircularRecordRenderContext(
         profile=profile,
         track_preset=circular_preset,

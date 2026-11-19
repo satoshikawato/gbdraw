@@ -31,7 +31,7 @@ import {
   readCollinearAnchorMode, readCollinearColorMode, readCollinearMergeOrientation, readCollinearSearchScope, readCollinearUnitMode, readOrthogroupMembershipMode
 } from './losat-normalization.js';
 import { normalizeOrthogroupDormantOverrides } from './orthogroup-feature-metadata.js';
-import { DEFAULT_PNG_DPI, LEGACY_SCALAR_AXIS_LABELS, SCALAR_AXIS_LABELS } from '../contracts/schema.generated.js';
+import { DEFAULT_PNG_DPI, LEGACY_CIRCULAR_LABEL_PROTECTION, LEGACY_SCALAR_AXIS_LABELS, SCALAR_AXIS_LABELS } from '../contracts/schema.generated.js';
 import {
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, PNG_DPI_CHOICES, RETIRED_STORED_FIELDS,
   SESSION_INPUT_TYPES, STORED_CONFIG_DOMAINS, STORED_ROW_FIELDS, createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
@@ -607,9 +607,13 @@ const readLinearLabelVisibility = textChoice(LINEAR_LABEL_VISIBILITY_MODES, 'aut
 const advRows = (mode) => Object.freeze([
   row('label_rendering', normalizeLabelRendering),
   // A value of no style reads as the mode's packaged style (the generated mode profile), and is reported
-  // (labels.<mode>.line, .protection).
+  // (labels.<mode>.line, .protection); a Circular draft without a protection was written before `auto` and
+  // drew none (LEGACY_CIRCULAR_LABEL_PROTECTION).
   row('label_line', textChoice(LABEL_STYLE_CHOICES.line, labelStyleForMode(mode).label_line)),
-  row('label_protection', textChoice(LABEL_STYLE_CHOICES.protection, labelStyleForMode(mode).label_protection)),
+  row('label_protection', textChoice(
+    LABEL_STYLE_CHOICES.protection[mode],
+    mode === 'circular' ? LEGACY_CIRCULAR_LABEL_PROTECTION : labelStyleForMode(mode).label_protection
+  )),
   row('label_placement', textChoice(LINEAR_LABEL_PLACEMENTS, 'auto', { aliases: LINEAR_LABEL_PLACEMENT_ALIASES })),
   row('multi_record_size_mode', textChoice(CIRCULAR_MULTI_RECORD_SIZE_MODES, 'auto', { aliases: CIRCULAR_MULTI_RECORD_SIZE_MODE_ALIASES })),
   row('circular_label_placement', textChoice(['radial', 'horizontal'], 'horizontal')),

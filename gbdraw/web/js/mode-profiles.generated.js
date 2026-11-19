@@ -423,11 +423,19 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "none",
       "under"
     ],
-    "protection": [
-      "none",
-      "halo",
-      "box"
-    ]
+    "protection": {
+      "circular": [
+        "none",
+        "halo",
+        "box",
+        "auto"
+      ],
+      "linear": [
+        "none",
+        "halo",
+        "box"
+      ]
+    }
   },
   "modes": {
     "circular": {
@@ -441,7 +449,7 @@ export const MODE_PROFILE_DATA = deepFreeze({
       "labelStyle": {
         "italicGeneLabels": false,
         "line": "none",
-        "protection": "none"
+        "protection": "auto"
       },
       "linearAxisColor": null,
       "linearRulerAxisColor": null,

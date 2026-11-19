@@ -88,6 +88,11 @@ _LABEL_RENDERING_RULE_BY_MODE: dict[LabelStyleMode, str] = {
     "circular": "",
     "linear": 'Cannot be combined with --label_placement above_feature except as "auto". ',
 }
+# The ``auto`` protection of ``--label_protection``, offered in Circular only (``LABEL_PROTECTIONS``).
+_LABEL_PROTECTION_AUTO_BY_MODE: dict[LabelStyleMode, str] = {
+    "circular": '"auto" (a white box behind each inner label whose letters lie on a data track such as GC content), ',
+    "linear": "",
+}
 # The per-track depth options whose values are numbers, ``auto``, or empty.
 _DEPTH_TRACK_NUMBER_OPTIONS = (
     "depth_track_large_tick_interval",
@@ -1022,8 +1027,8 @@ def _add_label_rendering_args(parser: argparse.ArgumentParser, *, mode: LabelSty
     parser.add_argument(
         '--label_protection',
         help='What keeps a leader passing behind a feature label off its letters: "halo" (a white outline of the letters), '
-        f'"box" (a white box), or "none". Default: "{DEFAULT_LABEL_PROTECTION[mode]}".',
-        choices=LABEL_PROTECTIONS,
+        f'"box" (a white box), {_LABEL_PROTECTION_AUTO_BY_MODE[mode]}or "none". Default: "{DEFAULT_LABEL_PROTECTION[mode]}".',
+        choices=LABEL_PROTECTIONS[mode],
         type=str)
 
 

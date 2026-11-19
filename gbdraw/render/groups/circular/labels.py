@@ -11,7 +11,7 @@ from gbdraw.svg.elements import Group, Line
 
 from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
-from ....labels.label_ink import FeatureLabelInk, circular_label_ink
+from ....labels.label_ink import FeatureLabelInk, circular_label_drawn_ink
 from ....labels.label_style import label_leader_width_px
 from ....svg.ids import stable_svg_id
 from ...drawers.circular.labels import LabelDrawer
@@ -74,7 +74,7 @@ class LabelsGroup:
         drawn: list[tuple[CircularLabel, FeatureLabelInk | None, Point, tuple[Point, Point, Point] | None]] = []
         for label in labels:
             contact: Point = (label.get("leader_start_x", label["start_x"]), label.get("leader_start_y", label["start_y"]))
-            ink = circular_label_ink(label, self.record_length, style) if style.draws_from_ink else None
+            ink = circular_label_drawn_ink(label, self.record_length, style)
             line = ink.underline if ink is not None else None
             # The leader ends on its underline, which continues it (LP-D88), or stops above the letters.
             drawn.append((label, ink, line[0] if line is not None else contact, line))

@@ -62,7 +62,8 @@ const NORMALIZE = [
 
 // A row's default that a released writer stored and the app has since changed.
 // A saved value equal to one is a default, not a setting: rule d must not read
-// it as a use of the mode (a Session 46-50 of one mode stays one drawing).
+// it as a use of the mode (a Session 46-50 of one mode stays one drawing). An
+// entry with a `mode` was that mode's default only.
 const EARLIER_DEFAULTS = [
   {
     domain: 'config.losat',
@@ -93,6 +94,13 @@ const EARLIER_DEFAULTS = [
     path: 'linearRecordLayout',
     reason: 'Sessions up to 50 saved the default Linear record gap as 24 px; Auto is null since OV-3572.',
     value: {"enabled": true, "recordGap": 24, "rows": []}
+  },
+  {
+    domain: 'config.adv',
+    path: 'label_protection',
+    mode: 'circular',
+    reason: 'gbdraw 0.14.0 to 0.14.5 saved the Circular default label protection none; the default is auto since.',
+    value: 'none'
   },
   {
     domain: 'config',
@@ -270,7 +278,7 @@ const renderModule = () => `// @ts-check
  * @typedef {{
  *   readonly registryRevision: number,
  *   readonly normalize: readonly UnarrangedFieldRule[],
- *   readonly earlierDefaults: readonly (ModeSliceDefault & { readonly reason: string })[],
+ *   readonly earlierDefaults: readonly (ModeSliceDefault & { readonly reason: string, readonly mode?: 'circular' | 'linear' })[],
  *   readonly earlierPaletteRows: EarlierPaletteRows,
  *   readonly defaults: Readonly<Record<'circular' | 'linear', readonly ModeSliceDefault[]>>
  * }} ModeSliceDefaults

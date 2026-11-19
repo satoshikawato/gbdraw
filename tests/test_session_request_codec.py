@@ -83,7 +83,11 @@ from gbdraw.features.query import FeatureQuery
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.shapes import resolve_feature_rendering
 from gbdraw.features.source import capture_source_features
-from gbdraw.session_legacy_values import SCALAR_AXIS_LABEL_PATHS
+from gbdraw.session_legacy_values import (
+    CIRCULAR_LABEL_PROTECTION_PATH,
+    LEGACY_CIRCULAR_LABEL_PROTECTION,
+    SCALAR_AXIS_LABEL_PATHS,
+)
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -115,6 +119,9 @@ from gbdraw.tracks import (
 # overrides an older writer stored without it read as numbered ticks.
 RANGE_AXIS_LABELS = {path: "range" for path in SCALAR_AXIS_LABEL_PATHS}
 NUMBERED_AXIS_LABELS = {path: "numbered" for path in SCALAR_AXIS_LABEL_PATHS}
+# A Circular request's overrides state its label protection; unstated, it reads as an older writer's (none).
+AUTO_PROTECTION = {CIRCULAR_LABEL_PROTECTION_PATH: "auto"}
+LEGACY_PROTECTION = {CIRCULAR_LABEL_PROTECTION_PATH: LEGACY_CIRCULAR_LABEL_PROTECTION}
 
 
 def _materialize_resources(
@@ -2303,6 +2310,7 @@ def test_schema5_round_trips_arrow_shape_and_geometry_overrides(
     assert decoded.options.config_overrides == {
         **request.options.config_overrides,
         **RANGE_AXIS_LABELS,
+        **(AUTO_PROTECTION if request_type is CircularDiagramRequest else {}),
     }
     assert encode_canonical_request(decoded).payload == encoded.payload
 
@@ -2790,6 +2798,7 @@ def test_decode_requires_caller_owned_output_directory(tmp_path: Path) -> None:
                     "canvas.show_gc": True,
                     "canvas.show_skew": True,
                     **RANGE_AXIS_LABELS,
+                    **AUTO_PROTECTION,
                 },
             },
         ),
@@ -2833,6 +2842,7 @@ def test_current_writer_serializes_resolved_mode_defaults(
             {
                 "canvas.show_gc": True,
                 "canvas.show_skew": True,
+                **LEGACY_PROTECTION,
             },
         ),
         (

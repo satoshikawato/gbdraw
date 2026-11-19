@@ -188,6 +188,27 @@ def test_an_other_mode_holding_the_colors_of_the_default_palette_before_ov_3114_
     assert _ids(data) == ["circular", "linear"]
 
 
+def test_an_other_circular_mode_holding_the_protection_gbdraw_0_14_wrote_is_not_used() -> None:
+    # gbdraw 0.14.0 to 0.14.5 wrote the Circular default label protection
+    # "none"; the default is "auto" since. That value in a Circular slice is
+    # that mode's earlier default only: in a Linear slice it is a use. The Web's
+    # rule d agrees (tests/web/session-drawings-upgrade.test.mjs, the same mutations).
+    from gbdraw.session_drawings import _mode_slice_defaults
+
+    data = _load(FIXTURES / "HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz")
+    circular = _slices(data)["circular"]["config"]
+    defaults = {row["path"]: row.get("value") for row in _mode_slice_defaults()["defaults"]["circular"]}
+    circular["adv"]["circular_track_slots"] = defaults["circular_track_slots"]
+    circular["colors"] = defaults["colors"]
+    assert circular["adv"]["label_protection"] == "none"
+    assert _ids(data) == ["linear"]
+    circular["adv"]["label_protection"] = "halo"
+    assert _ids(data) == ["linear", "circular"]
+    data = _settings_only_v48()
+    _slices(data)["linear"]["config"]["adv"]["label_protection"] = "none"
+    assert _ids(data) == ["circular", "linear"]
+
+
 def test_an_other_mode_holding_the_default_depth_series_is_not_used_when_the_shown_mode_has_two() -> None:
     # OV-1901 (D-15-122): 0.14.0 wrote one default Depth series in every mode,
     # so rule d sees it as the mode's default (session-drawings-upgrade.test.mjs).

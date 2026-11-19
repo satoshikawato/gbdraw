@@ -171,7 +171,7 @@ class LabelsLinearConfig:
             rotation=rotation,
             line=normalize_label_line(raw.get("line", DEFAULT_LABEL_LINE["linear"]), path="labels.linear.line"),
             protection=normalize_label_protection(
-                raw.get("protection", DEFAULT_LABEL_PROTECTION["linear"]), path="labels.linear.protection"
+                raw.get("protection", DEFAULT_LABEL_PROTECTION["linear"]), mode="linear", path="labels.linear.protection"
             ),
             italic_gene_labels=_config_bool(
                 raw.get("italic_gene_labels", DEFAULT_ITALIC_GENE_LABELS["linear"]), path="labels.linear.italic_gene_labels"
@@ -206,7 +206,7 @@ class LabelsCircularConfig:
             placement=normalize_circular_label_placement(raw.get("placement", "horizontal")),
             line=normalize_label_line(raw.get("line", DEFAULT_LABEL_LINE["circular"]), path="labels.circular.line"),
             protection=normalize_label_protection(
-                raw.get("protection", DEFAULT_LABEL_PROTECTION["circular"]), path="labels.circular.protection"
+                raw.get("protection", DEFAULT_LABEL_PROTECTION["circular"]), mode="circular", path="labels.circular.protection"
             ),
             italic_gene_labels=_config_bool(
                 raw.get("italic_gene_labels", DEFAULT_ITALIC_GENE_LABELS["circular"]), path="labels.circular.italic_gene_labels"

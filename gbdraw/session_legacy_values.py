@@ -33,6 +33,12 @@ SCALAR_AXIS_LABEL_PATHS: tuple[str, ...] = tuple(
     f"objects.{section}.axis_labels" for section in LEGACY_SCALAR_AXIS_LABEL_SECTIONS
 )
 LEGACY_SCALAR_AXIS_LABELS = "numbered"
+# The Circular feature label protection of a config or of config overrides that do not state it: every writer before
+# ``auto`` became the Circular default drew no box (v0.14.0 to v0.14.5 wrote ``none`` as the default and left a
+# default override unstated; earlier releases had no protection). A stored full config and stored overrides without
+# it read so; every writer of Circular config overrides since states it.
+CIRCULAR_LABEL_PROTECTION_PATH = "labels.circular.protection"
+LEGACY_CIRCULAR_LABEL_PROTECTION = "none"
 # The resource IDs under which a CLI or Python render of gbdraw (request schemas 2 and 5-9) stored a comparison
 # table it was given (`--comparisons_table`, a `LinearComparison`): this prefix and its number. Those writers stored
 # such a table as a protein table; the Web named its LOSATP tables otherwise (OV-3573).
@@ -45,6 +51,8 @@ LEGACY_GIVEN_COMPARISON_SCHEMAS: tuple[int, ...] = (2, 5, 6, 7, 8, 9)
 LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN = "query_protein_id"
 
 __all__ = [
+    "CIRCULAR_LABEL_PROTECTION_PATH",
+    "LEGACY_CIRCULAR_LABEL_PROTECTION",
     "LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN",
     "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX",
     "LEGACY_GIVEN_COMPARISON_SCHEMAS",

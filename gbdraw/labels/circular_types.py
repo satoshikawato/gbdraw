@@ -119,7 +119,11 @@ class CircularLabel(_CircularLabelRequired, total=False):
       ``text_y``, ``rotation_deg``, ``text_anchor``, ``dominant_baseline``,
       ``oriented_corners``, ``aabb_local``;
     - radial layout summary: ``required_radius_growth_px``,
-      ``layout_collision_counts``.
+      ``layout_collision_counts``;
+    - drawn inner label under the ``auto`` protection: ``on_data_paint``, set
+      once the labels are placed when its letters lie on a data track's paint
+      (the record assembly's ``_labels_on_data_paint``); it draws a box and
+      moves nothing.
     """
 
     is_inner: bool
@@ -149,6 +153,7 @@ class CircularLabel(_CircularLabelRequired, total=False):
     aabb_local: AabbTuple
     required_radius_growth_px: float
     layout_collision_counts: tuple[int, int, int, int]
+    on_data_paint: bool
 
 
 @dataclass(frozen=True)

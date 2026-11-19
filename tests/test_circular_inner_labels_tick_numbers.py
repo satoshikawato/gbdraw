@@ -3,15 +3,18 @@
 With a ticks slot between the feature track and the inner labels (``--separate_strands --track_type spreadout``),
 inner labels were drawn over the numbers ("SimC" and "PmgC-like head morphogenesis" over "50 kbp" of NC_005856.1).
 The figures are drawn by the command line; the tests read the labels the label drawer is given, the letters of the
-numbers the drawn tick groups have (``TickSlotLayout.numbers``) and what the tracks paint (``_record_track_ink``, as
-the definition-over-track check reads it). Whether a label is over a number is the placement's own test
-(``labels_over_tick_numbers``); whether a label is over a track's paint is checked here on its own, each label's fit
-box against each piece of paint (``box_meets_ink``). The track paint is read after the ``circular_labels`` render
-stage, so a Worker transaction still reuses the labels of a figure whose labels keep off the numbers.
+numbers the drawn tick groups have (``TickSlotLayout.numbers``) and what the data tracks paint (``_record_track_ink``
+of ``DATA_TRACK_RENDERERS``). Whether a label is over a number is the placement's own test
+(``labels_over_tick_numbers``). The inner labels are held inside the numbers whatever paint they land on, and under
+the default protection (``auto``) every inner label whose letters lie on a data track's paint gets the white box of
+``--label_protection box``; the tests find those labels on their own (each label's letters' box against the paint,
+``box_meets_ink``) and the boxes in the SVG by their label. The paint is read after the ``circular_labels`` render
+stage, so a Worker transaction still reuses the labels.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -20,16 +23,18 @@ import pytest
 
 from gbdraw import circular as circular_cli_module
 from gbdraw.diagrams.circular import assemble, builders
-from gbdraw.labels.circular import _label_fit_box, labels_over_tick_numbers
+from gbdraw.labels.circular import labels_over_tick_numbers
 from gbdraw.labels.circular_types import CircularLabel
+from gbdraw.labels.label_ink import circular_label_ink
+from gbdraw.labels.label_style import FeatureLabelStyle
 from gbdraw.layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink
-from gbdraw.layout.spatial import Aabb
+from gbdraw.layout.spatial import bounding_aabb
 from tests.utils.render_stage_equivalence import EquivalenceHarness
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 P1 = INPUTS / "NC_005856.1.gb"
 BGC = INPUTS / "BGC0000708.gbk"
-MELA = Path(__file__).resolve().parent.parent / "examples" / "MelaMJNV.gb"
+HMM = INPUTS / "HmmtDNA.gbk"
 P1_ARGS = ("--separate_strands", "--track_type", "spreadout", "--labels", "both")
 BGC_ARGS = ("--definition_font_size", "30", "--species", "<i>Genus species</i>", "--strain", "strain X-1", "--labels", "both")
 # GC content and GC skew inside the scale, under the inner labels.
@@ -39,41 +44,45 @@ INSIDE_TRACKS = (
     "--circular_track_slot", "gc_content:dinucleotide_content@side=inside",
     "--circular_track_slot", "gc_skew:dinucleotide_skew@side=inside",
 )
+# GC content and GC skew inside the features, the scale outside: inner labels on the GC paint, none near a number.
+INSIDE_GC_ONLY = (
+    "--circular_track_slot", "features:features",
+    "--circular_track_slot", "gc_content:dinucleotide_content@side=inside",
+    "--circular_track_slot", "gc_skew:dinucleotide_skew@side=inside",
+)
+# A box behind a label's letters, bound to its label (``feature_label_box``).
+BOX = re.compile(r'<rect aria-hidden="true" data-label-feature-id="([^"]*)" fill="#ffffff" fill-opacity="0.8"[^>]*/>')
 
 
 class _Drawn:
     """The inner labels the drawer was given, the letters of the numbers the tick groups drew, and what the
-    record's tracks paint."""
+    record's data tracks paint."""
 
     def __init__(self) -> None:
         self.numbers: list[CircularInkRing] = []
         self.inner_labels: list[CircularLabel] = []
         self.total_length = 0
-        self.track_ink: tuple[CircularInk, ...] = ()
+        self.data_paint: tuple[CircularInk, ...] = ()
 
     def over_numbers(self) -> list[str]:
         """The inner labels over a number's letters, by the placement's own test."""
 
         return [str(label["label_text"]) for label in labels_over_tick_numbers(self.inner_labels, self.numbers, self.total_length)]
 
-    def track_paint_met(self, label: CircularLabel) -> set[int]:
-        """The pieces of the tracks' paint the label's fit box meets."""
+    def on_data_paint(self) -> set[str]:
+        """The feature ids of the inner labels whose letters' box (turned with the letters) meets the data paint."""
 
-        (min_x, min_y), _, (max_x, max_y), _ = _label_fit_box(label, self.total_length)
-        box = Aabb(min_x, min_y, max_x, max_y)
-        return {index for index, ink in enumerate(self.track_ink) if box_meets_ink(box, (ink,), threshold_px=0.0)}
-
-    def newly_over_tracks(self, before: _Drawn) -> list[str]:
-        """The inner labels over a track's paint that the same label (by stable id) of ``before`` is not over."""
-
-        earlier = {str(label["stable_id"]): label for label in before.inner_labels}
-        newly: list[str] = []
+        style = FeatureLabelStyle("none", "none", False)
+        on_paint: set[str] = set()
         for label in self.inner_labels:
-            met = self.track_paint_met(label)
-            had = earlier.get(str(label["stable_id"]))
-            if met - (before.track_paint_met(had) if had is not None else set()):
-                newly.append(str(label["label_text"]))
-        return newly
+            ink = circular_label_ink(label, self.total_length, style)
+            box = bounding_aabb(tuple(ink.from_label_frame(corner) for corner in (
+                (ink.ink.min_x, ink.ink.min_y), (ink.ink.max_x, ink.ink.min_y),
+                (ink.ink.max_x, ink.ink.max_y), (ink.ink.min_x, ink.ink.max_y),
+            )))
+            if box is not None and box_meets_ink(box, self.data_paint, threshold_px=0.0):
+                on_paint.add(str(label["feature_id"]))
+        return on_paint
 
 
 def _draw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gbk: Path, args: tuple[str, ...]) -> tuple[str, _Drawn]:
@@ -87,9 +96,10 @@ def _draw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gbk: Path, args: tupl
         drawn.numbers.extend(number.letters for number in layout.numbers)
         return layout
 
-    def paint(axis: Any, slots: Sequence[Any], sources: Any, annotation_labels: Any) -> tuple[CircularInk, ...]:
-        inks = track_ink(axis, slots, sources, annotation_labels)
-        drawn.track_ink = inks
+    def paint(axis: Any, slots: Sequence[Any], sources: Any, annotation_labels: Any, *renderers: Any) -> tuple[CircularInk, ...]:
+        inks = track_ink(axis, slots, sources, annotation_labels, *renderers)
+        if renderers and renderers[0] is not None:
+            drawn.data_paint += inks
         return inks
 
     def labels(canvas: Any, gb_record: Any, canvas_config: Any, **kwargs: Any) -> Any:
@@ -109,6 +119,12 @@ def _draw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gbk: Path, args: tupl
         out = tmp_path / "figure"
         circular_cli_module.circular_main(["--gbk", str(gbk), *args, "-o", str(out), "-f", "svg"])
     return (tmp_path / "figure.svg").read_text(encoding="utf-8"), drawn
+
+
+def _boxed(svg: str) -> set[str]:
+    """The feature ids of the labels drawn with a white box."""
+
+    return set(BOX.findall(svg))
 
 
 def _without_tick_numbers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -150,42 +166,58 @@ def test_a_record_whose_inner_labels_reach_no_number_is_placed_as_before(
 
 
 @pytest.mark.circular
-def test_held_inner_labels_go_onto_no_track_paint_they_were_not_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """NC_005856.1 with GC content and GC skew inside the scale: the inner labels held off the numbers would sit on
-    the GC tracks where the figure drawn without the numbers had them on white, so no inner label is drawn over a
-    track's paint that it was not over in that figure."""
+def test_inner_labels_are_held_inside_the_numbers_over_data_tracks_and_boxed_there(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """NC_005856.1 with GC content and GC skew inside the scale: the inner labels are held inside the numbers although
+    the held places lie on the GC paint, and each inner label whose letters lie on that paint, and no other label,
+    gets a white box."""
 
-    _, held = _draw(tmp_path / "held", monkeypatch, P1, P1_ARGS + INSIDE_TRACKS)
+    svg, drawn = _draw(tmp_path / "held", monkeypatch, P1, P1_ARGS + INSIDE_TRACKS)
     _without_tick_numbers(monkeypatch)
     _, unheld = _draw(tmp_path / "unheld", monkeypatch, P1, P1_ARGS + INSIDE_TRACKS)
 
-    assert held.track_ink and len(held.inner_labels) > 20 and unheld.over_numbers()
-    assert held.newly_over_tracks(unheld) == []
+    assert unheld.over_numbers() and len(drawn.inner_labels) > 20
+    assert drawn.over_numbers() == []
+    assert drawn.data_paint and len(drawn.on_data_paint()) > 10
+    assert _boxed(svg) == drawn.on_data_paint()
 
 
 @pytest.mark.circular
-def test_held_inner_labels_over_inside_tracks_are_drawn_when_they_go_onto_no_new_paint(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_inner_labels_on_data_tracks_gain_a_box_and_nothing_else(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """HmmtDNA with GC content and GC skew inside the features: no inner label is near a number, some lie on the GC
+    paint; the default draws a box behind each of those, and the figure without the boxes is the one an explicit
+    ``--label_protection none`` draws."""
+
+    args = ("--labels", "both", *INSIDE_GC_ONLY)
+    svg, drawn = _draw(tmp_path / "auto", monkeypatch, HMM, args)
+    plain, _ = _draw(tmp_path / "none", monkeypatch, HMM, (*args, "--label_protection", "none"))
+
+    assert drawn.on_data_paint() and _boxed(svg) == drawn.on_data_paint()
+    assert BOX.sub("", svg) == plain
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("protection", ["none", "halo", "box"])
+def test_an_explicit_label_protection_reads_no_data_paint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, protection: str
 ) -> None:
-    """MelaMJNV with GC content and GC skew inside the scale, strands not separated: holding the inner labels off
-    the numbers puts none of them onto track paint it was not over, so the held figure is drawn."""
+    """An explicit ``--label_protection`` draws as it drew before ``auto``: the data paint is not built, and the
+    boxes are those of ``box`` on every label with a leader, or none."""
 
-    args = ("--track_type", "spreadout", "--labels", "both", *INSIDE_TRACKS)
-    held_svg, held = _draw(tmp_path / "held", monkeypatch, MELA, args)
-    _without_tick_numbers(monkeypatch)
-    unheld_svg, unheld = _draw(tmp_path / "unheld", monkeypatch, MELA, args)
+    args = ("--labels", "both", *INSIDE_GC_ONLY, "--label_protection", protection)
+    svg, drawn = _draw(tmp_path, monkeypatch, HMM, args)
 
-    assert held.track_ink and unheld.over_numbers()
-    assert held.over_numbers() == [] and held.newly_over_tracks(unheld) == []
-    assert held_svg != unheld_svg
+    assert drawn.inner_labels and drawn.data_paint == ()
+    assert bool(_boxed(svg)) is (protection == "box")
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("tracks", [(), INSIDE_TRACKS], ids=["held-drawn", "held-over-gc-paint"])
+@pytest.mark.parametrize("tracks", [(), INSIDE_TRACKS], ids=["held", "held-boxed-on-gc-paint"])
 def test_a_warm_render_reuses_the_labels_held_off_the_numbers(tmp_path: Path, tracks: tuple[str, ...]) -> None:
     """In a Worker transaction the ``circular_labels`` stage of NC_005856.1 (inner labels held off the numbers;
-    with GC tracks inside, the held placement is not drawn) is built once: the same render again and a GC window
-    change, which the labels do not read, reuse it."""
+    with GC tracks inside, also boxed on their paint after the stage) is built once: the same render again and a GC
+    window change, which the labels do not read, reuse it."""
 
     harness = EquivalenceHarness("circular", tmp_path)
     args = ["--gbk", str(P1), *P1_ARGS, *tracks]
@@ -199,3 +231,35 @@ def test_a_warm_render_reuses_the_labels_held_off_the_numbers(tmp_path: Path, tr
         for stages in (first, again, window)
     ]
     assert counts == [(1, 0, 0), (0, 1, 0), (0, 1, 0)]
+
+
+V0145_WEB_CIRCULAR_SESSION = (
+    Path(__file__).resolve().parent / "fixtures" / "sessions" / "tobacco-chloroplast.v50-web0145.gbdraw-session.json.gz"
+)
+
+
+@pytest.mark.circular
+def test_a_session_saved_before_auto_replays_without_boxes(tmp_path: Path) -> None:
+    """The v0.14.5 Web saved this Circular drawing (inner labels on, the default protection) with no
+    ``labels.circular.protection`` in its request: it drew no box. Replay reads the unstated protection as that
+    writer's ``none`` and draws no box; the same request stating ``auto`` boxes inner labels on the GC paint."""
+
+    from dataclasses import replace
+
+    from gbdraw.api import render_request
+    from gbdraw.session import materialize_session, session_to_request
+    from gbdraw.session_legacy_values import CIRCULAR_LABEL_PROTECTION_PATH
+
+    circular_cli_module.circular_main(
+        ["--session", str(V0145_WEB_CIRCULAR_SESSION), "-o", str(tmp_path / "replay"), "-f", "svg"]
+    )
+    with materialize_session(V0145_WEB_CIRCULAR_SESSION, output_directory=tmp_path / "session") as materialized:
+        request = session_to_request(materialized)
+        overrides = dict(request.options.config_overrides or {})
+        auto = render_request(replace(request, options=replace(
+            request.options, config_overrides={**overrides, CIRCULAR_LABEL_PROTECTION_PATH: "auto"}
+        )))
+
+    assert overrides[CIRCULAR_LABEL_PROTECTION_PATH] == "none"
+    assert _boxed((tmp_path / "replay.svg").read_text(encoding="utf-8")) == set()
+    assert any(_boxed(item.drawing.tostring()) for item in auto.items)

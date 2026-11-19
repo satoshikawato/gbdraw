@@ -269,7 +269,7 @@ feature = ["note"]
   scope = "none"
   placement = "horizontal"
   line = "none"
-  protection = "none"
+  protection = "auto"   # none | halo | box | auto: auto boxes the inner labels on a data track
   italic_gene_labels = false
 [labels.spacing]
   circular = 3.0

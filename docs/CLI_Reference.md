@@ -177,7 +177,8 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--track_type {tuckin,middle,spreadout}] [--resolve_overlaps]
               [--labels [{none,out,both}]]
               [--label_rendering {auto,embedded_only,external_only}]
-              [--label_line {none,under}] [--label_protection {none,halo,box}]
+              [--label_line {none,under}]
+              [--label_protection {none,halo,box,auto}]
               [--label_placement {horizontal,radial}]
               [--label_whitelist LABEL_WHITELIST |
               --label_blacklist LABEL_BLACKLIST]
@@ -601,10 +602,12 @@ options:
                         leader: "under" draws one that continues the leader (a
                         turned label gets none); "none" draws none. Default:
                         "none".
-  --label_protection {none,halo,box}
+  --label_protection {none,halo,box,auto}
                         What keeps a leader passing behind a feature label off
                         its letters: "halo" (a white outline of the letters),
-                        "box" (a white box), or "none". Default: "none".
+                        "box" (a white box), "auto" (a white box behind each
+                        inner label whose letters lie on a data track such as
+                        GC content), or "none". Default: "auto".
   --label_placement {horizontal,radial}
                         External circular label placement: "horizontal" or
                         "radial". Default: "horizontal".

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink_offsets
 from ..layout.spatial import Aabb
@@ -69,6 +69,8 @@ class FeatureLabelInk:
     line at the end on the side where it ends today, never inside it.
     ``feature_edge_y``: for a label drawn on its feature without a leader (Linear ``above_feature``), the y
     (drawing frame) of the feature edge it faces; its box stops there. None otherwise.
+    ``on_data_paint``: a Circular inner label whose letters lie on a data track's paint
+    (``CircularLabel.on_data_paint``); the ``auto`` protection boxes it.
     """
 
     ink: Aabb
@@ -80,11 +82,14 @@ class FeatureLabelInk:
     stop_y: float | None = None
     join_at_end: bool = False
     feature_edge_y: float | None = None
+    on_data_paint: bool = False
 
     def draws_box(self, style: FeatureLabelStyle) -> bool:
         """Whether ``style`` draws this label's white box (``FeatureLabelStyle.draws_box``)."""
 
-        return style.draws_box(has_leader=bool(self.leader), beside_feature=self.feature_edge_y is not None)
+        return style.draws_box(
+            has_leader=bool(self.leader), beside_feature=self.feature_edge_y is not None, on_data_paint=self.on_data_paint
+        )
 
     def _turned(self, point: Point, degrees: float) -> Point:
         if degrees == 0.0:
@@ -228,7 +233,7 @@ def circular_label_ink(label: CircularLabel, record_length: int, style: FeatureL
     """A drawn outer or inner Circular label; a radial one is turned, even where it reads horizontally."""
 
     (x, y), anchor, baseline, rotation_deg = rim_text_placement(label, record_length)
-    return feature_label_ink(
+    ink = feature_label_ink(
         str(label["label_text"]),
         str(label["font_family"]),
         float(label["font_size"]),
@@ -242,10 +247,21 @@ def circular_label_ink(label: CircularLabel, record_length: int, style: FeatureL
         style=style,
         join_at_end=True,
     )
+    return replace(ink, on_data_paint=label.get("on_data_paint", False))
+
+
+def circular_label_drawn_ink(label: CircularLabel, record_length: int, style: FeatureLabelStyle) -> FeatureLabelInk | None:
+    """The ink of a drawn Circular label when ``style`` draws a part from its letters (an underline, a box, or the
+    ``auto`` box of a label on a data track's paint); None when it draws none, so its letters need no measure."""
+
+    if style.draws_from_ink or (style.protection == "auto" and label.get("on_data_paint", False)):
+        return circular_label_ink(label, record_length, style)
+    return None
 
 
 __all__ = [
     "FeatureLabelInk",
+    "circular_label_drawn_ink",
     "circular_label_ink",
     "feature_label_ink",
     "linear_label_ink",

@@ -770,6 +770,13 @@ class ModeSliceDefault(_ModeSliceDefaultRow, total=False):
     value: object
 
 
+class EarlierModeSliceDefault(ModeSliceDefault, total=False):
+    """A default a released writer stored; with ``mode``, that mode's default only."""
+
+    reason: str
+    mode: DrawingMode
+
+
 class UnarrangedEntries(TypedDict):
     """A list that arranges nothing: each entry holds exactly ``entryKeys``, ``positionKey`` its 1-based position."""
 
@@ -807,7 +814,7 @@ class ModeSliceDefaults(TypedDict):
     description: str
     registryRevision: int
     normalize: list[ModeSliceNormalizeRule]
-    earlierDefaults: list[ModeSliceDefault]
+    earlierDefaults: list[EarlierModeSliceDefault]
     earlierPaletteRows: EarlierPaletteRows
     defaults: dict[DrawingMode, list[ModeSliceDefault]]
 
@@ -848,11 +855,12 @@ def _default_value(mode: DrawingMode, row: ModeScopedSetting) -> object:
     return _ABSENT
 
 
-def _is_earlier_default(row: ModeScopedSetting, value: object) -> bool:
-    """Whether ``value`` is a default of ``row`` that a released writer stored."""
+def _is_earlier_default(mode: DrawingMode, row: ModeScopedSetting, value: object) -> bool:
+    """Whether ``value`` is a default of ``row`` in ``mode`` that a released writer stored."""
 
     return any(
         (earlier["domain"], earlier["path"]) == (row.domain, row.path)
+        and earlier.get("mode", mode) == mode
         and _canonical(earlier.get("value")) == _canonical(value)
         for earlier in _mode_slice_defaults()["earlierDefaults"]
     )
@@ -918,7 +926,7 @@ def _used_by_settings(
         default = _default_value(mode, row)
         if default is not _ABSENT and _canonical(value) == _canonical(default):
             continue
-        if _is_earlier_default(row, value):
+        if _is_earlier_default(mode, row, value):
             continue
         if row.modes == mode:
             return True

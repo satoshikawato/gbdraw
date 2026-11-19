@@ -12,7 +12,12 @@ has a ``FeatureLabelStyle``, read from ``labels.linear`` / ``labels.circular``
 - ``protection``: ``halo`` draws a white glyph-shaped outline behind the
   letters (``HALO_WIDTH_EM`` wide), so a leader passing behind them is cut
   away; ``box`` draws a white rounded box (``BOX_OPACITY``) behind them;
-  ``none`` draws neither.
+  ``none`` draws neither. Circular only, ``auto`` draws the same box behind
+  each inner label whose letters lie on a data track's paint (GC content,
+  skew, depth, feature density, conservation, annotations), judged once the
+  labels are placed: the box takes no room and moves nothing. A config or
+  request that does not state the Circular protection reads as written
+  before ``auto`` was the default (``session_legacy_values``).
 - ``italic_gene_labels``: a label the qualifier priority names from the
   ``gene`` qualifier is drawn in italics (``FeatureLabelStyle.font_style``),
   also when an edit replaced its text; every other label stays upright. Every
@@ -34,18 +39,23 @@ from ..exceptions import ValidationError
 
 LabelStyleMode: TypeAlias = Literal["circular", "linear"]
 LabelLine: TypeAlias = Literal["none", "under"]
-LabelProtection: TypeAlias = Literal["none", "halo", "box"]
+LabelProtection: TypeAlias = Literal["none", "halo", "box", "auto"]
 # The ``font-style`` a feature label is drawn and measured with.
 LabelFontStyle: TypeAlias = Literal["normal", "italic"]
 # The qualifier whose labels ``italic_gene_labels`` draws in italics.
 ITALIC_LABEL_QUALIFIER: Final = "gene"
 LABEL_LINES: tuple[LabelLine, ...] = get_args(LabelLine)
-LABEL_PROTECTIONS: tuple[LabelProtection, ...] = get_args(LabelProtection)
+# The protections each mode offers: ``auto`` judges a Circular inner label against the tracks under it.
+LABEL_PROTECTIONS: Mapping[LabelStyleMode, tuple[LabelProtection, ...]] = {
+    "linear": ("none", "halo", "box"),
+    "circular": get_args(LabelProtection),
+}
 
 # The packaged defaults (config.toml writes the same values; a test compares them): Linear an underline on a
-# box, Circular neither a line nor a protection; a halo can be chosen (LP-D110).
+# box, Circular no line and a box only behind the inner labels on a data track's paint; a halo can be chosen
+# (LP-D110).
 DEFAULT_LABEL_LINE: Mapping[LabelStyleMode, LabelLine] = {"linear": "under", "circular": "none"}
-DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "box", "circular": "none"}
+DEFAULT_LABEL_PROTECTION: Mapping[LabelStyleMode, LabelProtection] = {"linear": "box", "circular": "auto"}
 # Gene-named labels are upright unless asked for (labels.<mode>.italic_gene_labels).
 DEFAULT_ITALIC_GENE_LABELS: Mapping[LabelStyleMode, bool] = {"linear": False, "circular": False}
 
@@ -98,17 +108,21 @@ class FeatureLabelStyle:
 
         return self.line == "under" and not turned
 
-    def draws_box(self, *, has_leader: bool, beside_feature: bool) -> bool:
-        """Whether a feature label gets this style's white box (``protection = box``): a label with a leader,
-        and a Linear ``above_feature`` label drawn on its feature without one (``beside_feature``), so that
-        another label's leader passing through its letters is faded there (OV-1361, LP-D119). A label drawn
-        inside its feature has neither and gets no box."""
+    def draws_box(self, *, has_leader: bool, beside_feature: bool, on_data_paint: bool) -> bool:
+        """Whether a feature label gets this style's white box: under ``box``, a label with a leader, and a
+        Linear ``above_feature`` label drawn on its feature without one (``beside_feature``), so that another
+        label's leader passing through its letters is faded there (OV-1361, LP-D119); a label drawn inside its
+        feature has neither and gets no box. Under ``auto``, a Circular inner label whose letters lie on a data
+        track's paint (``on_data_paint``, ``CircularLabel.on_data_paint``)."""
 
+        if self.protection == "auto":
+            return on_data_paint
         return self.protection == "box" and (has_leader or beside_feature)
 
     @property
     def draws_from_ink(self) -> bool:
-        """Whether this style draws a part placed from a label's letters (an underline or a box)."""
+        """Whether this style draws a part placed from every label's letters (an underline or a box); under
+        ``auto`` only a label on a data track's paint has one."""
 
         return self.line == "under" or self.protection == "box"
 
@@ -158,10 +172,10 @@ def normalize_label_line(value: object, *, path: str) -> LabelLine:
     return cast(LabelLine, _normalized(value, LABEL_LINES, path))
 
 
-def normalize_label_protection(value: object, *, path: str) -> LabelProtection:
-    """``value`` as a label protection (``none``, ``halo`` or ``box``); ``path`` names the setting."""
+def normalize_label_protection(value: object, *, mode: LabelStyleMode, path: str) -> LabelProtection:
+    """``value`` as a label protection of ``mode`` (``LABEL_PROTECTIONS``); ``path`` names the setting."""
 
-    return cast(LabelProtection, _normalized(value, LABEL_PROTECTIONS, path))
+    return cast(LabelProtection, _normalized(value, LABEL_PROTECTIONS[mode], path))
 
 
 __all__ = [

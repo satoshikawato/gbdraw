@@ -53,7 +53,7 @@ from ..layout.circular import (
     feature_block_intervals,
     feature_radius_intervals,
 )
-from ..layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink
+from ..layout.circular_ink import CircularInkRing, box_meets_ink
 from ..layout.spatial import (
     Aabb,
     bounding_aabb,
@@ -103,10 +103,6 @@ class PlacedCircularLabels(NamedTuple):
 
     labels: list[CircularLabel]
     packer_skipped: bool = False
-    # The same labels placed again with the inner labels held off the scale numbers, when one of ``labels`` is over a
-    # number and holding them is no worse (``_place_clear_of_tick_numbers``); the caller draws it instead unless it
-    # puts an inner label onto track paint (``inner_labels_newly_over_paint``), which the labels do not read.
-    held: PlacedCircularLabels | None = None
 
 
 class CircularLabelProbeStopped(Exception):
@@ -2665,20 +2661,14 @@ def _enforce_inner_label_maximum_middle_radius(labels: list[CircularLabel], tota
     return labels
 
 
-def _inks_met(label: CircularLabel, inks: Sequence[CircularInk], total_length: int) -> tuple[int, ...]:
-    """The places in ``inks`` of the paint the horizontal label's fit box (``_label_fit_box``) meets."""
+def _numbers_met(label: CircularLabel, tick_numbers: Sequence[CircularInkRing], total_length: int) -> list[CircularInkRing]:
+    """The scale numbers whose letters the horizontal label's fit box (``_label_fit_box``) meets."""
 
     (min_x, min_y), _, (max_x, max_y), _ = _label_fit_box(label, total_length)
     box = Aabb(min_x, min_y, max_x, max_y)
-    if not box_meets_ink(box, inks, threshold_px=0.0):
-        return ()
-    return tuple(index for index, ink in enumerate(inks) if box_meets_ink(box, (ink,), threshold_px=0.0))
-
-
-def _numbers_met(label: CircularLabel, tick_numbers: Sequence[CircularInkRing], total_length: int) -> list[CircularInkRing]:
-    """The scale numbers whose letters the horizontal label's fit box meets."""
-
-    return [tick_numbers[index] for index in _inks_met(label, tick_numbers, total_length)]
+    if not box_meets_ink(box, tick_numbers, threshold_px=0.0):
+        return []
+    return [ring for ring in tick_numbers if box_meets_ink(box, (ring,), threshold_px=0.0)]
 
 
 def labels_over_tick_numbers(
@@ -2741,13 +2731,13 @@ def _place_clear_of_tick_numbers(
     total_length: int,
     definition_text: Sequence[Aabb],
 ) -> PlacedCircularLabels:
-    """A record's labels as ``drawn`` places them without the scale numbers, and, when one of their horizontal inner
+    """A record's labels as ``drawn`` places them without the scale numbers, or, when one of their horizontal inner
     labels is over a number of ``tick_numbers`` (OV-3636), the same labels placed again with all inner labels held
-    off the numbers (``_hold_inner_labels_clear``) as its ``held`` placement, when that one has no inner label over a
-    number and the fit check counts no more overlapping pairs, crossing leader pairs or labels over the definition
-    text of either side than in the first. A record whose inner labels reach no number is placed as before; a probe
-    (a fit search) passes no numbers. Whether the held placement is drawn is the caller's: it reads the tracks'
-    paint (``inner_labels_newly_over_paint``), which the labels do not."""
+    off the numbers (``_hold_inner_labels_clear``), when that placement has no inner label over a number and the fit
+    check counts no more overlapping pairs, crossing leader pairs or labels over the definition text of either side
+    than in the first. The held labels may lie on a data track's paint: the ``auto`` protection boxes those once
+    the labels are placed. A record whose inner labels reach no number is placed as before; a probe (a fit search)
+    passes no numbers."""
 
     first = drawn(())
     if not (tick_numbers and _inner_labels_over_numbers(first.labels, tick_numbers, total_length)):
@@ -2761,7 +2751,7 @@ def _place_clear_of_tick_numbers(
         after[kind] > before[kind] for kind in after
     ):
         return first
-    return first._replace(held=held)
+    return held
 
 
 def _horizontal_inner_labels(labels: Sequence[CircularLabel]) -> list[CircularLabel]:
@@ -2776,23 +2766,6 @@ def _inner_labels_over_numbers(
     """Whether a horizontal inner label of ``labels`` is over a scale number."""
 
     return bool(labels_over_tick_numbers(_horizontal_inner_labels(labels), tick_numbers, total_length))
-
-
-def inner_labels_newly_over_paint(
-    first: Sequence[CircularLabel], held: Sequence[CircularLabel], track_ink: Sequence[CircularInk], total_length: int
-) -> list[CircularLabel]:
-    """The horizontal inner labels of ``held`` whose fit box meets a piece of ``track_ink`` (``_record_track_ink``)
-    that the same label of ``first`` (by its stable id) does not meet: a held placement
-    (``PlacedCircularLabels.held``) that has one is not drawn."""
-
-    before = {label["stable_id"]: label for label in _horizontal_inner_labels(first)}
-    newly: list[CircularLabel] = []
-    for label in _horizontal_inner_labels(held):
-        met = _inks_met(label, track_ink, total_length)
-        earlier = before.get(label["stable_id"]) if met else None
-        if met and not set(met) <= set(_inks_met(earlier, track_ink, total_length) if earlier is not None else ()):
-            newly.append(label)
-    return newly
 
 
 def _stabilize_inner_label_clearance(
@@ -6485,7 +6458,6 @@ __all__ = [
     "CircularLabelProbeStopped",
     "CircularLabelRadii",
     "circular_label_radii",
-    "inner_labels_newly_over_paint",
     "calculate_angle_degrees",
     "circular_label_defects",
     "circular_label_fits",

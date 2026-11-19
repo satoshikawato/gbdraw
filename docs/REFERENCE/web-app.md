@@ -555,13 +555,15 @@ Session whose font is not available.
 ### Label Line and Label Protection
 
 **Label Line** (**None**, **Underline**) and **Label Protection** (**None**,
-**Halo**, **Box**) follow **Label Rendering** under **Labels**. They set how a
-feature label with a leader line is drawn, as `--label_line` and
-`--label_protection` do on the
+**Halo**, **Box**, and in Circular **Auto**) follow **Label Rendering** under
+**Labels**. They set how a feature label with a leader line is drawn, as
+`--label_line` and `--label_protection` do on the
 [command line](command-line.md#tracks-annotations-and-presentation). Circular
 and Linear each have their own pair (Linear **Underline** and **Box**, Circular
-**None** and **None** by default; **Halo** can be chosen), which applies on Generate and is saved in
-Sessions. **Underline** is drawn under horizontal labels only; a turned label
+**None** and **Auto** by default; **Halo** can be chosen), which applies on Generate and is saved in
+Sessions. **Auto** draws a white box behind each inner label whose letters lie
+on a data track such as GC content, and behind no other label; choose **None**
+for no box. **Underline** is drawn under horizontal labels only; a turned label
 gets no line, and its leader ends at the letters. **Box** is a white box at 80 % opacity behind the letters; in Linear a turned
 **Above Feature** label on its feature gets one too. When **Halo** is chosen, the PDF
 export draws labels without their halos; SVG, Interactive SVG and PNG keep

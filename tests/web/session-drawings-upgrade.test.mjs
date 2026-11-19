@@ -105,6 +105,25 @@ test('an other mode that holds the Depth series Sessions 46 and 47 named is not 
   assert.deepEqual(idsOf(data), ['circular', 'linear']);
 });
 
+test('an other Circular mode that holds the protection gbdraw 0.14 wrote is not used; a Linear one is', async () => {
+  // 0.14.0 to 0.14.5 wrote the Circular default label protection none; the
+  // default is auto since. Python's rule d agrees
+  // (tests/test_session_drawings_vectors.py, the same mutations).
+  const { MODE_SLICE_DEFAULTS } = await import('../../gbdraw/web/js/mode-slice-defaults.generated.js');
+  const defaultOf = (/** @type {string} */ path) => MODE_SLICE_DEFAULTS.defaults.circular.find((row) => row.path === path)?.value;
+  const data = fixture('HmmtDNA-wrap-5kb.v50-web0145.gbdraw-session.json.gz');
+  const circular = data.modes.circular.config;
+  circular.adv.circular_track_slots = structuredClone(defaultOf('circular_track_slots'));
+  circular.colors = structuredClone(defaultOf('colors'));
+  assert.equal(circular.adv.label_protection, 'none');
+  assert.deepEqual(idsOf(data), ['linear']);
+  circular.adv.label_protection = 'halo';
+  assert.deepEqual(idsOf(data), ['linear', 'circular']);
+  const other = settingsOnly();
+  other.modes.linear.config.adv.label_protection = 'none';
+  assert.deepEqual(idsOf(other), ['circular', 'linear']);
+});
+
 // OV-3114: 0.14.5 and earlier wrote repeat_region, misc_feature and default
 // as one gray in the default palette. A Session 46-50's other mode that holds
 // those colors is not used (Python's rule d agrees, the same mutation in

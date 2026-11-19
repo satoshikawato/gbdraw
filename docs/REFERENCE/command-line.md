@@ -270,9 +270,13 @@ by exact selectors; its rows decide before the visibility and label tables (see
 [Feature override table](input-formats-and-tsv-schemas.md#feature-override-table)).
 
 `--label_line` (`none`, `under`) and `--label_protection` (`none`, `halo`,
-`box`) set how a feature label with a leader line is drawn. The defaults are
-`under` and `box` in Linear, and `none` and `none` in Circular, which draws
-no halo unless `halo` is chosen. `under` draws a
+`box`, and in Circular `auto`) set how a feature label with a leader line is
+drawn. The defaults are `under` and `box` in Linear, and `none` and `auto` in
+Circular, which draws no halo unless `halo` is chosen. `auto` draws the white
+box of `box` behind each Circular inner label whose letters lie on a data
+track (GC content, GC or AT skew, depth, feature density, a conservation ring,
+or an annotation track) and behind no other label; the boxes take no room, so
+no label or track moves. `none` draws no box anywhere. `under` draws a
 line under the letters of a horizontal label that continues the leader; a label
 drawn turned (`--label_rotation` in Linear, radial labels in Circular) gets no
 line, and its leader ends at the letters as with `none`. In Linear the line

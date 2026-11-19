@@ -6243,9 +6243,10 @@
                                         <div>
                                             <span class="input-label text-[10px] mb-0">
                                                 {{ t('Label Protection') }}
-                                                <help-tip id="help-label-label-protection" :text="t('Halo draws a white outline around the letters of each label with a leader, so leaders behind them are cut away. Box draws a white box behind the letters. None draws neither.')"></help-tip>
+                                                <help-tip id="help-label-label-protection" :text="mode === 'circular' ? t('Auto draws a white box behind each inner label whose letters lie on a data track such as GC content. Halo draws a white outline around the letters of each label with a leader, so leaders behind them are cut away. Box draws a white box behind the letters. None draws neither.') : t('Halo draws a white outline around the letters of each label with a leader, so leaders behind them are cut away. Box draws a white box behind the letters. None draws neither.')"></help-tip>
                                             </span>
                                             <select v-model="adv.label_protection" :aria-label="t('Label Protection')" aria-describedby="help-label-label-protection" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
+                                                <option v-if="mode === 'circular'" value="auto">{{ t('Auto') }}</option>
                                                 <option value="none">{{ t('None') }}</option>
                                                 <option value="halo">{{ t('Halo') }}</option>
                                                 <option value="box">{{ t('Box') }}</option>

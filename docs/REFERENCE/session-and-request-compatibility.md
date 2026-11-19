@@ -637,7 +637,10 @@ Each diagram mode keeps its own feature label style, **Label Line**,
 **Label Protection**, and **Italic gene names** (`--label_line`,
 `--label_protection`, `--italic_gene_labels`). A Session saved before they
 existed loads with each mode's defaults: Linear Underline and Box, Circular
-None and None, and upright gene names in both.
+None and None, and upright gene names in both. Circular **Auto** became the
+default after v0.14.5: a Circular drawing whose Session or request does not
+state its protection was saved before and draws, and loads, with None, so its
+figure stays as it was saved.
 
 A Linear drawing whose saved request states no legend or title side, as a
 Session saved from Python does, draws its legend at the right and its title at

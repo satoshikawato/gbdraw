@@ -62,16 +62,18 @@ def _leader_widths(svg: str) -> set[str]:
 
 
 def test_each_mode_has_its_packaged_label_style() -> None:
-    # Linear: an underline on a white box at 0.8; Circular: neither (a halo can be chosen, LP-D110).
+    # Linear: an underline on a white box at 0.8; Circular: no line, and a box only behind the inner labels on a data
+    # track's paint (``auto``; a halo can be chosen, LP-D110).
     config = GbdrawConfig.from_dict(load_default_config())
     assert LinearRenderProfile(config).label_style == FeatureLabelStyle("under", "box", False)
-    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "none", False)
+    assert CircularRenderProfile(config).label_style == FeatureLabelStyle("none", "auto", False)
     assert BOX_OPACITY == 0.8
     packaged = load_config_toml("gbdraw.data", "config.toml")["labels"]
     for mode in ("linear", "circular"):
         defaults = (DEFAULT_LABEL_LINE[mode], DEFAULT_LABEL_PROTECTION[mode], DEFAULT_ITALIC_GENE_LABELS[mode])
         assert (packaged[mode]["line"], packaged[mode]["protection"], packaged[mode]["italic_gene_labels"]) == defaults
-        # A stored config written before the settings existed takes the same defaults.
+        # A config file without the settings takes the same defaults (a Session's stored config reads as its
+        # writer drew it: ``session_legacy_values.LEGACY_CIRCULAR_LABEL_PROTECTION``).
         stored = load_default_config()
         for key in ("line", "protection", "italic_gene_labels"):
             del stored["labels"][mode][key]
@@ -303,16 +305,21 @@ def test_a_style_change_rebuilds_its_stages_without_an_undeclared_read(
 def test_a_label_gets_its_box_when_it_has_a_leader_or_sits_beside_its_feature() -> None:
     """LP-D121 (OV-1361, LP-D119): ``protection = box`` gives a feature label its white box when the label has
     a leader or is drawn on its feature without one (Linear ``above_feature``), turned or not; a label drawn
-    inside its feature has neither and gets no box, and ``protection = none`` draws none."""
+    inside its feature has neither and gets no box, and ``protection = none`` draws none. ``auto`` boxes only a
+    label on a data track's paint, whatever else."""
 
     from gbdraw.labels.label_ink import linear_label_ink
     from gbdraw.labels.linear import linear_leader_polyline
 
     box, none = FeatureLabelStyle(line="under", protection="box", italic_gene_labels=False), FeatureLabelStyle(line="under", protection="none", italic_gene_labels=False)
+    auto = FeatureLabelStyle(line="none", protection="auto", italic_gene_labels=False)
     for has_leader in (False, True):
         for beside_feature in (False, True):
-            assert box.draws_box(has_leader=has_leader, beside_feature=beside_feature) is (has_leader or beside_feature)
-            assert not none.draws_box(has_leader=has_leader, beside_feature=beside_feature)
+            for on_paint in (False, True):
+                where = {"has_leader": has_leader, "beside_feature": beside_feature, "on_data_paint": on_paint}
+                assert box.draws_box(**where) is (has_leader or beside_feature)
+                assert not none.draws_box(**where)
+                assert auto.draws_box(**where) is on_paint
 
     with_leader = _linear_label_with_leader(10.0, 0.0, -14.0)
     inside = {**with_leader, "is_embedded": True, "leader_line": False, "middle_y": 0.0}

@@ -1,0 +1,11 @@
+{
+  "purpose": "Positive fixture of the released flat Session 50 (tag v0.14.5) that the v0.14.5 Web app wrote for a Circular drawing with inner labels (labels.circular.scope both) and the default label protection: its committed request's configOverrides leave labels.circular.protection unstated, as that writer left every packaged default label style. v0.14.5 drew no box behind any label. A reader takes the unstated protection for that writer's none (LEGACY_CIRCULAR_LABEL_PROTECTION in gbdraw/session_legacy_values.py), so replay draws the figure without the boxes the auto default would add.",
+  "sourceCommit": "033a3aa89",
+  "history": "release tag v0.14.5 (first-parent main)",
+  "route": "git show v0.14.5:gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json (the Gallery Session the tag published), compressed",
+  "values": "renderRequest.mode circular; renderRequest.diagramOptions.configOverrides: labels.circular.scope \"both\", no labels.circular.protection; modes.circular.config.adv.label_protection \"none\"",
+  "decompressedSha256": "344ad1a4d13892fda14aef0433673c320325ee41db081811361fe86ff9843eaa",
+  "compression": "gzip -n -9",
+  "sessionVersion": 50,
+  "requestSchema": 9
+}

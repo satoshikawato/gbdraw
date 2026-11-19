@@ -186,6 +186,7 @@ import {
   CONFIG_UNSET_NUMBER_SPELLINGS,
   EXPANDED_RECORD_KEY_SEPARATOR,
   INPUT_FILE_MEDIA_TYPE,
+  LEGACY_CIRCULAR_LABEL_PROTECTION,
   LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN,
   LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX,
   LEGACY_GIVEN_COMPARISON_SCHEMAS,
@@ -3275,11 +3276,12 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.figureHeight]: /** @type {FigureLengthFormValue} */ (form.figure_height),
     ...trackFlagOverrides(form, circular, depthRequested),
     [MODE_LABEL_SCOPE_PATHS[mode]]: labelScopeOverride(form, circular),
-    // The mode's packaged style is left unstated, as a request that predates the setting leaves it.
+    // The mode's packaged style is left unstated, as a request that predates the setting leaves it; a Circular
+    // request states its protection, which unstated reads as an older writer's none (LEGACY_REQUEST_TABLES).
     [MODE_ADV_CONFIG_PATHS[mode].label_line]:
       adv.label_line === labelStyleForMode(mode).label_line ? null : adv.label_line,
     [MODE_ADV_CONFIG_PATHS[mode].label_protection]:
-      adv.label_protection === labelStyleForMode(mode).label_protection ? null : adv.label_protection,
+      !circular && adv.label_protection === labelStyleForMode(mode).label_protection ? null : adv.label_protection,
     [MODE_ADV_CONFIG_PATHS[mode].italic_gene_labels]:
       Boolean(adv.italic_gene_labels) === labelStyleForMode(mode).italic_gene_labels ? null : Boolean(adv.italic_gene_labels),
     // Without a fixed scale the colours run from the threshold to 100%, as before the setting.
@@ -7837,9 +7839,11 @@ export const projectCanonicalSessionRequest = ({
     window_size: options.window ?? null,
     step_size: options.step ?? null,
     label_rendering: overrides.label_rendering || 'auto',
-    // A request without a label style drew its mode's default, which Load gives a missing field.
+    // A request without a label style drew its mode's default, which Load gives a missing field; a Circular one
+    // without a protection was written before `auto` and drew none (LEGACY_CIRCULAR_LABEL_PROTECTION).
     ...(Object.hasOwn(overrides, 'label_line') ? { label_line: overrides.label_line } : {}),
-    ...(Object.hasOwn(overrides, 'label_protection') ? { label_protection: overrides.label_protection } : {}),
+    ...(Object.hasOwn(overrides, 'label_protection') ? { label_protection: overrides.label_protection }
+      : renderRequest.mode === 'circular' ? { label_protection: LEGACY_CIRCULAR_LABEL_PROTECTION } : {}),
     ...(Object.hasOwn(overrides, 'italic_gene_labels') ? { italic_gene_labels: overrides.italic_gene_labels === true } : {}),
     identity_scale: Array.isArray(overrides.identity_scale) ? [...overrides.identity_scale] : null,
     circular_label_placement: renderRequest.mode === 'circular'

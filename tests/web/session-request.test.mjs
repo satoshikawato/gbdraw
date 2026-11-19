@@ -950,7 +950,9 @@ assert.equal(
 // The feature label style of each mode (LP-D102): Save leaves the mode's packaged style (the generated mode
 // profile) unstated, as a request written before the setting does, and states another one; Load projects a stated
 // style into the drawing's settings, and a request without one into no field, so the drawing keeps its mode's
-// default (`createDefaultAdv`). Checked here for Circular and below for Linear.
+// default (`createDefaultAdv`). A Circular request states its protection, `auto` included: Load reads one without
+// it as written before `auto`, with none (LEGACY_CIRCULAR_LABEL_PROTECTION). Checked here for Circular and below
+// for Linear.
 const { LABEL_STYLE_CHOICES, labelStyleForMode } = await import(pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js')));
 /** @param {() => { renderRequest: { diagramOptions: { configOverrides: Record<string, unknown> } } }} build */
 const assertLabelStyleRoundTrip = (build) => {
@@ -959,14 +961,17 @@ const assertLabelStyleRoundTrip = (build) => {
   const paths = { label_line: `labels.${mode}.line`, label_protection: `labels.${mode}.protection` };
   Object.assign(state.adv, defaults);
   const plain = build();
-  for (const path of Object.values(paths)) {
-    assert.equal(Object.hasOwn(plain.renderRequest.diagramOptions.configOverrides, path), false, `${mode} ${path}`);
-  }
+  const plainOverrides = plain.renderRequest.diagramOptions.configOverrides;
+  assert.equal(Object.hasOwn(plainOverrides, paths.label_line), false, `${mode} ${paths.label_line}`);
+  assert.equal(plainOverrides[paths.label_protection], mode === 'circular' ? 'auto' : undefined, `${mode} ${paths.label_protection}`);
   const plainAdv = projectCanonicalSessionRequest(plain).config.adv;
-  assert.deepEqual([Object.hasOwn(plainAdv, 'label_line'), Object.hasOwn(plainAdv, 'label_protection')], [false, false], mode);
+  assert.deepEqual([Object.hasOwn(plainAdv, 'label_line'), plainAdv.label_protection], [false, mode === 'circular' ? 'auto' : undefined], mode);
+  const unstated = structuredClone(plain);
+  delete unstated.renderRequest.diagramOptions.configOverrides[paths.label_protection];
+  assert.equal(projectCanonicalSessionRequest(unstated).config.adv.label_protection, mode === 'circular' ? 'none' : undefined, mode);
   const other = {
     label_line: LABEL_STYLE_CHOICES.line.find((value) => value !== defaults.label_line),
-    label_protection: LABEL_STYLE_CHOICES.protection.find((value) => value !== defaults.label_protection)
+    label_protection: LABEL_STYLE_CHOICES.protection[mode].find((value) => value !== defaults.label_protection)
   };
   Object.assign(state.adv, other);
   const styled = build();
@@ -2217,9 +2222,17 @@ const roundTripCanonical = buildCanonicalRenderRequest({
   state: stateForCanonicalProjection(projection),
   filesData: projection.files
 });
+// This state holds no label protection, so its Circular request states none: Load reads it as written before
+// `auto`, with none, which the rebuilt request states.
 assert.deepEqual(
   roundTripCanonical.renderRequest,
-  canonical.renderRequest,
+  {
+    ...canonical.renderRequest,
+    diagramOptions: {
+      ...canonical.renderRequest.diagramOptions,
+      configOverrides: { ...canonical.renderRequest.diagramOptions.configOverrides, 'labels.circular.protection': 'none' }
+    }
+  },
   'canonical Session projection rebuilds the same render request'
 );
 // A FASTA given without GFF3 (PD-OI-068 rev 2): the request names its file as a `fasta` source in both modes, and the
@@ -6263,7 +6276,10 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
   // 14 Circular requests differ, only in `records` (keys, cardinality, selectors, and one file's one resource).
   // Re-recorded when a similarity ring's comparison genome became a list of files (request schema 10): with each
   // ring's list read back as its one reference or null, the four ring requests are the ones recorded before.
-  'de6e464d0a032170306020d2022448fcfee1aa01e3f01f2454acd71903676a26',
+  // Re-recorded when Circular label protection `auto` became the default: a Circular request without a protection
+  // reads as written before it, with none, so the 27 requests rebuilt from such a Load state none; one Linear request
+  // built on this file's shared state after them states none too. Nothing else differs.
+  '25e72198129fc77521431a74138c4c8ab00d8006308cafced149600eb3fce66c',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
 // The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.

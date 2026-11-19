@@ -10,7 +10,7 @@ import { textChoice } from './utils/field-reading.js';
  * @typedef {'circular' | 'linear'} ModeProfileName
  * @typedef {{ integer: boolean, maximum: number | null, minimum: number, reason: string }} ComparisonDomain
  * @typedef {'none' | 'under'} LabelLine
- * @typedef {'none' | 'halo' | 'box'} LabelProtection
+ * @typedef {'none' | 'halo' | 'box' | 'auto'} LabelProtection
  * @typedef {'deviation' | 'percent'} GcContentMode
  * @typedef {{
  *   comparison: { alignmentLength: number, bitscore: number, evalue: number, identity: number },
@@ -25,7 +25,7 @@ import { textChoice } from './utils/field-reading.js';
  *   defaultFontFamily: string,
  *   featureTypes: string[],
  *   gcContentModes: GcContentMode[],
- *   labelStyleChoices: { line: LabelLine[], protection: LabelProtection[] },
+ *   labelStyleChoices: { line: LabelLine[], protection: Record<ModeProfileName, LabelProtection[]> },
  *   modes: Record<ModeProfileName, ModeProfile>,
  *   oneCircleConfigOverrides: { 'canvas.show_skew': boolean, 'objects.gc_content.mode': GcContentMode },
  *   version: number
@@ -100,7 +100,7 @@ export const PACKAGED_FONT_FAMILY = /** @type {ModeProfileData} */ (MODE_PROFILE
 /** @param {unknown} mode */
 export const modeProfile = (mode) => /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).modes[normalizeMode(mode)];
 
-/** The values of `labels.<mode>.line` and `.protection`. */
+/** The values of `labels.<mode>.line`, and of `.protection` by mode (`auto` is Circular's). */
 export const LABEL_STYLE_CHOICES = /** @type {ModeProfileData} */ (MODE_PROFILE_DATA).labelStyleChoices;
 
 // The packaged feature label style of a mode (`labels.<mode>.line`, `.protection` and

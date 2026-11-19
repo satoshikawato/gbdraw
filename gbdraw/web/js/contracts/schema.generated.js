@@ -286,6 +286,9 @@ export const DEFAULT_PNG_DPI = 300;
 // gbdraw/session_legacy_values.py: LEGACY_SCALAR_AXIS_LABELS
 export const LEGACY_SCALAR_AXIS_LABELS = 'numbered';
 
+// gbdraw/session_legacy_values.py: LEGACY_CIRCULAR_LABEL_PROTECTION
+export const LEGACY_CIRCULAR_LABEL_PROTECTION = 'none';
+
 // gbdraw/session_legacy_values.py: LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX
 export const LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX = 'comparison-explicit-';
 
@@ -439,7 +442,8 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
       "canvas.show_gc": true,
       "canvas.show_skew": true,
       "objects.depth.axis_labels": 'numbered',
-      "objects.gc_content.axis_labels": 'numbered'
+      "objects.gc_content.axis_labels": 'numbered',
+      "labels.circular.protection": 'none'
     }),
     linear: Object.freeze({
       "canvas.show_gc": true,

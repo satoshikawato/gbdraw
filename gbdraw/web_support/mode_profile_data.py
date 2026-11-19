@@ -120,8 +120,11 @@ def mode_profiles_payload() -> dict[str, object]:
             "pasteNotCarriedKinds": list(get_args(PasteNotCarriedKind)),
             "copyRefusalReasons": list(get_args(CopyRefusalReason)),
         },
-        # The values of labels.<mode>.line and .protection.
-        "labelStyleChoices": {"line": list(LABEL_LINES), "protection": list(LABEL_PROTECTIONS)},
+        # The values of labels.<mode>.line, and of .protection by mode (``auto`` is Circular's).
+        "labelStyleChoices": {
+            "line": list(LABEL_LINES),
+            "protection": {mode: list(choices) for mode, choices in LABEL_PROTECTIONS.items()},
+        },
         "modes": {
             mode: {
                 "comparison": {

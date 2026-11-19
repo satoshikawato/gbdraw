@@ -81,12 +81,15 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.models.objects import DEFAULT_SCALAR_AXIS_LABELS
+from gbdraw.labels.label_style import DEFAULT_LABEL_PROTECTION
 from gbdraw.config.models.root import read_stored_font_size, style_leaf_domain
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.record_planning import _source_details
 from gbdraw.core.numeric import ascii_float
 from gbdraw.io.input_text import GZIP_ERRORS, is_gzip_file, open_input_text, read_input_bytes
 from gbdraw.session_legacy_values import (
+    CIRCULAR_LABEL_PROTECTION_PATH,
+    LEGACY_CIRCULAR_LABEL_PROTECTION,
     LEGACY_FEATURE_SHAPES,
     LEGACY_FEATURE_TYPES,
     LEGACY_GIVEN_COMPARISON_PROTEIN_COLUMN,
@@ -357,11 +360,16 @@ _LEGACY_SPARSE_COMPARISON_DEFAULTS = {
 _UNSTATED_SCALAR_AXIS_LABELS: dict[str, object] = dict.fromkeys(
     SCALAR_AXIS_LABEL_PATHS, LEGACY_SCALAR_AXIS_LABELS
 )
+# Overrides an older writer stored without the Circular label protection drew no box.
+_UNSTATED_BY_MODE: dict[str, dict[str, object]] = {
+    "circular": {**_UNSTATED_SCALAR_AXIS_LABELS, CIRCULAR_LABEL_PROTECTION_PATH: LEGACY_CIRCULAR_LABEL_PROTECTION},
+    "linear": _UNSTATED_SCALAR_AXIS_LABELS,
+}
 _LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
         "canvas.show_skew": True,
-        **_UNSTATED_SCALAR_AXIS_LABELS,
+        **_UNSTATED_BY_MODE["circular"],
     },
     "linear": {
         "canvas.show_gc": True,
@@ -2277,12 +2285,18 @@ def _encode_diagram_options(
         # Stored overrides state each axis label style the request draws, so a reader takes an absent
         # one for an older writer's (D-24).
         # A full config states its own style; one without it reads as an older writer's, as the decoder reads it.
+        # A Circular request states its label protection the same way.
         config = result.get("config")
         stated = {**overrides}
         for section, label_path in zip(LEGACY_SCALAR_AXIS_LABEL_SECTIONS, SCALAR_AXIS_LABEL_PATHS):
             stated.setdefault(label_path, (
                 DEFAULT_SCALAR_AXIS_LABELS if not isinstance(config, MappingABC)
                 else config.get("objects", {}).get(section, {}).get("axis_labels", LEGACY_SCALAR_AXIS_LABELS)
+            ))
+        if isinstance(options, CircularDiagramOptions):
+            stated.setdefault(CIRCULAR_LABEL_PROTECTION_PATH, (
+                DEFAULT_LABEL_PROTECTION["circular"] if not isinstance(config, MappingABC)
+                else config.get("labels", {}).get("circular", {}).get("protection", LEGACY_CIRCULAR_LABEL_PROTECTION)
             ))
         result["configOverrides"] = stated
     labels = _precomputed_ring_labels(options)
@@ -2563,7 +2577,7 @@ def _decode_config_overrides(
                 "requires canonical config overrides."
             )
     migrated = migrate_flat_config_overrides(overrides, mode=mode, path=path)
-    for label_path, style in _UNSTATED_SCALAR_AXIS_LABELS.items():
+    for label_path, style in _UNSTATED_BY_MODE[mode].items():
         migrated.setdefault(label_path, style)
     return migrated
 
@@ -3488,6 +3502,22 @@ def _decode_option_value(
     return value
 
 
+def _state_unstated_legacy_styles(config: dict[str, Any]) -> None:
+    """State in a stored full ``config`` the styles an older writer left out, as they drew: each scalar axis label
+    style (D-24) and the Circular label protection, written before ``auto`` and drawing no box."""
+
+    objects = config.get("objects")
+    if isinstance(objects, dict):
+        for section_name in LEGACY_SCALAR_AXIS_LABEL_SECTIONS:
+            section = objects.get(section_name)
+            if isinstance(section, dict):
+                section.setdefault("axis_labels", LEGACY_SCALAR_AXIS_LABELS)
+    labels_section = config.setdefault("labels", {})
+    circular_labels = labels_section.setdefault("circular", {}) if isinstance(labels_section, dict) else None
+    if isinstance(circular_labels, dict):
+        circular_labels.setdefault("protection", LEGACY_CIRCULAR_LABEL_PROTECTION)
+
+
 def migrate_legacy_full_config(
     value: Mapping[str, Any],
     *,
@@ -3501,12 +3531,7 @@ def migrate_legacy_full_config(
     """
 
     migrated = deepcopy(dict(value))
-    objects = migrated.get("objects")
-    if isinstance(objects, dict):
-        for section_name in LEGACY_SCALAR_AXIS_LABEL_SECTIONS:
-            section = objects.get(section_name)
-            if isinstance(section, dict):
-                section.setdefault("axis_labels", LEGACY_SCALAR_AXIS_LABELS)
+    _state_unstated_legacy_styles(migrated)
     canvas = migrated.get("canvas")
     if not isinstance(canvas, dict):
         return migrated

@@ -155,6 +155,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEFAULT_PNG_DPI", "gbdraw.render.export_limits", "DEFAULT_PNG_DPI"),
     # What an absent axis label style reads as: every writer before the setting drew numbered ticks.
     ("LEGACY_SCALAR_AXIS_LABELS", "gbdraw.session_legacy_values", "LEGACY_SCALAR_AXIS_LABELS"),
+    # What an absent Circular label protection reads as: every writer before ``auto`` drew no box.
+    ("LEGACY_CIRCULAR_LABEL_PROTECTION", "gbdraw.session_legacy_values", "LEGACY_CIRCULAR_LABEL_PROTECTION"),
     # The resource IDs, schemas and protein column by which a given comparison table of an older CLI or Python
     # Session holds no protein matches: Load reads such a table as Python's decoder does (OV-3573, OV-3574).
     ("LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX", "gbdraw.session_legacy_values", "LEGACY_GIVEN_COMPARISON_RESOURCE_PREFIX"),

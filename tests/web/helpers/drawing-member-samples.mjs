@@ -66,7 +66,7 @@ import { CIRCULAR_MULTI_RECORD_SIZE_MODES, LINEAR_LABEL_PLACEMENTS, LINEAR_TRACK
 import { FIGURE_LENGTH_UNITS } from '../../../gbdraw/web/js/services/figure-size-form.js';
 import { FEATURE_RENDERING_VALUES } from '../../../gbdraw/web/js/utils/feature-rendering.js';
 import { LINEAR_LABEL_VISIBILITY_MODES } from '../../../gbdraw/web/js/services/linear-label-visibility.js';
-import { GC_CONTENT_MODES } from '../../../gbdraw/web/js/mode-profiles.js';
+import { GC_CONTENT_MODES, LABEL_STYLE_CHOICES } from '../../../gbdraw/web/js/mode-profiles.js';
 import { CIRCULAR_RECORD_LAYOUTS } from '../../../gbdraw/web/js/services/one-circle-layout.js';
 import { CONSERVATION_COLOR_SCHEMES } from '../../../gbdraw/web/js/utils/conservation-colors.generated.js';
 import { LINEAR_COMPARISON_MODES, LINEAR_COMPARISON_SOURCES, createLinearComparisonEdge } from '../../../gbdraw/web/js/services/linear-comparisons.js';
@@ -177,7 +177,9 @@ const APP_LEAF_CHOICES = {
     'feature_shapes.*': FEATURE_RENDERING_VALUES, label_placement: LINEAR_LABEL_PLACEMENTS,
     linear_accession_visibility: LINEAR_LABEL_VISIBILITY_MODES, linear_length_visibility: LINEAR_LABEL_VISIBILITY_MODES,
     depth_axis_labels: SCALAR_AXIS_LABELS.values, gc_content_axis_labels: SCALAR_AXIS_LABELS.values, gc_content_mode: GC_CONTENT_MODES,
-    multi_record_size_mode: CIRCULAR_MULTI_RECORD_SIZE_MODES, circular_record_layout: CIRCULAR_RECORD_LAYOUTS
+    multi_record_size_mode: CIRCULAR_MULTI_RECORD_SIZE_MODES, circular_record_layout: CIRCULAR_RECORD_LAYOUTS,
+    // The label protections of the drawing's mode (`auto` is Circular's only).
+    label_protection: (leaf, drawing) => LABEL_STYLE_CHOICES.protection[drawing.mode]
   },
   losat: {
     'blastp.mode': PROTEIN_BLASTP_MODES,

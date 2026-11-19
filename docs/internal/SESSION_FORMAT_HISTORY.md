@@ -480,6 +480,26 @@ without the key reads as no tracks; an entry that leaves the request's track
 shape is dropped with its Load repair row (`services/feature-density-tracks.js`).
 Fixture: `tests/fixtures/sessions/HmmtDNA-feature-density.v51-cli.gbdraw`.
 
+## Unreleased: Circular label protection `auto`
+
+No Session or request version changes. `labels.circular.protection` gains the value `"auto"`, the new Circular
+default (a white box behind each inner label whose letters lie on a data track's paint); Linear keeps `none`,
+`halo` and `box`. Every writer before drew no box with an unstated Circular protection: v0.14.0 to v0.14.5 wrote
+`none` as the default and the Web left a default label style out of `configOverrides`; earlier releases had no
+protection. Every writer of Circular `configOverrides` (the Web, and Python for a request with overrides) now states
+the leaf.
+
+A reader takes an absent Circular protection for an older writer's: stored `configOverrides`
+(`_decode_config_overrides`, and the sparse schema 1-2 defaults), a stored full config
+(`migrate_legacy_full_config`) and a stored Circular draft (`config.adv.label_protection`, `advRows` in
+`gbdraw/web/js/services/config-field-readers.js`) without it read as `"none"`, the value
+`LEGACY_CIRCULAR_LABEL_PROTECTION` of `gbdraw/session_legacy_values.py`, which `tools/generate_web_contracts.py`
+carries to the Web. A request without config and without overrides draws the default. Evidence: tag v0.14.5
+(`gbdraw/data/config.toml` `[labels.circular] protection = "none"`; `services/session-request.js` leaves the
+mode's packaged protection unstated); positive fixture
+`tests/fixtures/sessions/tobacco-chloroplast.v50-web0145.gbdraw-session.json.gz` (the Gallery Session the tag
+published, a Circular drawing with inner labels), read by `tests/test_circular_inner_labels_tick_numbers.py`.
+
 ## Unreleased: depth and GC Percent axis label styles
 
 No Session or request version changes. The config leaves `objects.depth.axis_labels` and

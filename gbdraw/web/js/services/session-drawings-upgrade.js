@@ -476,12 +476,15 @@ const changedRowValue = (modeSlice, mode, row) => {
  * `_is_earlier_default`: whether a value is a default a released writer
  * stored, which the move of a Session 46-50 reads as a default, not a
  * setting. Only that move reads it: the current app's Save compares with the
- * current default (`sliceDiffersFromDefault`).
+ * current default (`sliceDiffersFromDefault`). An entry with a `mode` was that
+ * mode's default only.
+ * @param {DrawingMode} mode
  * @param {RegistryRow} row
  * @param {unknown} value
  */
-const isEarlierDefault = (row, value) => MODE_SLICE_DEFAULTS.earlierDefaults.some((earlier) => (
-  earlier.domain === row.domain && earlier.path === row.path && canonical(earlier.value) === canonical(value)
+const isEarlierDefault = (mode, row, value) => MODE_SLICE_DEFAULTS.earlierDefaults.some((earlier) => (
+  earlier.domain === row.domain && earlier.path === row.path && (earlier.mode ?? mode) === mode
+  && canonical(earlier.value) === canonical(value)
 ));
 
 /**
@@ -508,7 +511,7 @@ const usedBySettings = (slices, mode, other) => {
   const shown = mapping(slices[other]);
   return /** @type {readonly RegistryRow[]} */ (MODE_SCOPED_SETTINGS.rows).some((row) => {
     const value = changedRowValue(own, mode, row);
-    if (value === ABSENT || isEarlierDefault(row, value)) return false;
+    if (value === ABSENT || isEarlierDefault(mode, row, value)) return false;
     if (row.modes === mode) return true;
     const shownValue = rowValue(shown, row);
     if (shownValue === ABSENT) return true;

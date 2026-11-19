@@ -1532,14 +1532,17 @@ test('a feature shape of a feature type the user added survives Save and Load', 
 
 // A stored feature label style outside its list (LP-D102) reads as the
 // drawing's mode's packaged style, which the generated mode profile gives
-// (Linear an underline on a box, Circular neither), and is listed.
+// (Linear an underline on a box, Circular no line), and is listed; a Circular
+// protection reads as written before `auto`, none
+// (LEGACY_CIRCULAR_LABEL_PROTECTION).
 test('a stored label style outside its list reads as its mode\'s default and is listed', async () => {
   const { configFieldRepairs, defaultSettingsContainers } = await import('../../gbdraw/web/js/services/config-field-readers.js');
   const { labelStyleForMode } = await import('../../gbdraw/web/js/mode-profiles.js');
   for (const mode of /** @type {const} */ (['circular', 'linear'])) {
     const targets = defaultSettingsContainers(mode);
     const repairs = configFieldRepairs(targets, { adv: { label_line: 'over', label_protection: 'bogus' } }, 'config', { mode });
-    const { label_line: line, label_protection: protection } = labelStyleForMode(mode);
+    const { label_line: line } = labelStyleForMode(mode);
+    const protection = mode === 'circular' ? 'none' : labelStyleForMode(mode).label_protection;
     assert.deepEqual([targets.adv.label_line, targets.adv.label_protection], [line, protection], mode);
     assert.deepEqual(describeLoadRepairs(repairs)?.items, [
       `Settings: the value "over" (config.adv.label_line) cannot be used; ${line} is used.`,

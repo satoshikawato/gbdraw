@@ -2,8 +2,14 @@
   inner labels (for example `--separate_strands --track_type spreadout
   --labels both`), inner feature labels are no longer drawn over the scale's
   numbers. The inner labels move just inside the numbers when that adds no
-  overlap or crossing leader and puts no label onto GC content, GC skew,
-  depth, conservation ring or annotation paint it was not already on;
-  otherwise they are placed as before. When such a track sits directly inside
-  the scale, there is no room between them, and labels can still be drawn over
-  the numbers.
+  overlap or crossing leader, also when that puts them on GC content, GC skew,
+  depth, conservation ring or annotation paint; otherwise they are placed as
+  before.
+- Changed: Circular `--label_protection` has a new default, `auto` (web app
+  **Label Protection** **Auto**): a white box, as `box` draws it, behind each
+  inner label whose letters lie on a data track (GC content, GC or AT skew,
+  depth, feature density, a conservation ring or an annotation track), so the
+  letters stay readable there. No other label gets a box, and the boxes move
+  no label or track. `--label_protection none` draws no box. A Session or
+  request saved before this release, which does not state the protection,
+  replays with `none` as it was drawn.
