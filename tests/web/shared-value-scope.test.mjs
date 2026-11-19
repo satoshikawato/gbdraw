@@ -57,10 +57,7 @@ export const ARTIFACT_KEYS_OUTSIDE_SLOT = Object.freeze([
   // reader shows: the bar and Reset Layout need a shown Result (OV-3893, not a product defect).
   'lengthBarUserOffset',
   // The slot's own `drawingId`: every slot install and owner-set install writes it from there.
-  'generatedDrawingId',
-  // OPEN OV-3891: the drawing whose Generate removed the edits keeps no count of its own; another
-  // drawing shown next reports the removal as its own.
-  'featureEditRemovalCount'
+  'generatedDrawingId'
 ]);
 
 /**
@@ -137,12 +134,7 @@ export const DRAWING_LIFETIME_STORES = Object.freeze([
   'services/artifact-slot.js#slots',
   // The History router's Histories: `removeMember` hands the History to the project step, its Undo gives it back;
   // `addMember` gives a new drawing an empty History and refuses an ID that has one.
-  'services/history.js#managers',
-  // OPEN OV-3892: the selector states, read generations, and running refreshes of a deleted drawing stay under
-  // its ID until a refresh prunes them, so a new drawing that takes the ID can inherit them.
-  'app/linear-record-selector.js#selectorStateByDrawing',
-  'app/linear-record-selector.js#refreshGenerations',
-  'app/linear-record-selector.js#activeRefreshes'
+  'services/history.js#managers'
 ]);
 
 // A JSDoc type that a drawing's ID keys: `Map<DrawingId, ...>`, `ReadonlyMap<DrawingId, ...>`,
