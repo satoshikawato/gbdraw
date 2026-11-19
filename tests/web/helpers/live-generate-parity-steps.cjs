@@ -278,23 +278,26 @@ const resetSettings = (page) => evaluateWithRetainedPromise(page, async () => { 
   .then(() => settleLive(page));
 
 // The reply of the next automatic rerender (or Generate) is held until
-// `releaseRerender`, so the steps between land while it is owed. The warm
+// `releaseRerender`, so the steps between land while it is owed. With `fail`,
+// the held run and every later one fail until `releaseRerender`. The warm
 // restore releases a hold a case left (`installPageProbe`).
-const holdNextRerender = (page) => installPageProbe(page, () => {
+const holdNextRerender = (page, { fail = false } = {}) => installPageProbe(page, (failing) => {
   const hold = { entered: false };
   const released = new Promise((resolve) => { hold.release = resolve; });
   window.__RERENDER_HOLD__ = hold;
   window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
-    if (hold.entered) return;
-    hold.entered = true;
-    await released;
+    if (!hold.entered) {
+      hold.entered = true;
+      await released;
+    }
+    if (failing) throw new Error('The held rerender fails (test hook).');
   };
   return () => {
     hold.release();
     delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
     delete window.__RERENDER_HOLD__;
   };
-});
+}, fail);
 const insideHeldRerender = (page) => expect.poll(() => page.evaluate(() => window.__RERENDER_HOLD__.entered), { timeout: 120_000 }).toBe(true);
 const releaseRerender = async (page) => {
   await page.evaluate(() => {

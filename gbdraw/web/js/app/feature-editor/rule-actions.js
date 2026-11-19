@@ -5,6 +5,7 @@
 /** @import { FeatureLegendRows, RuleLegendIntent, RuleRowColor, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { AskChoice, NoticeRequest, ShowNotice } from '../app-messages.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
+import { untilIdle } from './label-actions.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { joinedLegendRow, runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
@@ -396,12 +397,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // go stale on that binding with the Results unchanged (OV-166): any change
   // of the inputs the candidate was prepared from counts, unless the rule
   // table changed, or the caller or a Session operation superseded this one.
-  /** @returns {Promise<void>} */
-  const rerenderIdle = () => (state.labelReflowProcessing.value
-    ? new Promise((resolve) => {
-      const stop = watch(state.labelReflowProcessing, (busy) => { if (!busy) { stop(); resolve(); } });
-    })
-    : Promise.resolve());
+  const rerenderIdle = () => untilIdle(watch, state.labelReflowProcessing);
   // OV-61: the rule table is the latest explicit color of the rows its rules
   // draw. A Legend-only color an earlier popup edit left on such a row (the
   // popup stores the caption's color when it recolors a whole group) would

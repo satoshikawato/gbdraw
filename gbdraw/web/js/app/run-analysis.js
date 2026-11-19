@@ -1629,6 +1629,14 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  *   inputs of each drawing's last request (A4b).
  */
 
+// A run's outcome without the candidate History committed (Generate and a run of the committed request).
+/** @template {Record<string, unknown> | null} T @param {T} outcome @returns {T} */
+const withoutArtifactCandidate = (outcome) => {
+  if (!outcome || !Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) return outcome;
+  const { generatedArtifactCandidate, ...publicOutcome } = outcome;
+  return /** @type {T} */ (publicOutcome);
+};
+
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
 export const executeCanonicalRenderCandidate = async ({
   canonical,
@@ -1752,8 +1760,11 @@ export const executeCanonicalRenderCandidate = async ({
 
 /**
  * A built generated artifact before it replaces the shown one: the owners' values and the runtime state to publish.
+ * `legendFactsDrawn`: the label owner learns that the Results carry Python's Legend row facts of the edits the request
+ * was built from (`startLegendFactsDraw`, OV-2412).
  * @typedef {{ readonly ownerSet: Readonly<Parameters<RunAnalysisOptions['installGeneratedArtifactOwnerSet']>[0]>,
- *   readonly runtimeState: { files?: unknown, archiveName?: unknown, losatTelemetry?: unknown } | null }} GeneratedArtifactCandidate
+ *   readonly runtimeState: { files?: unknown, archiveName?: unknown, losatTelemetry?: unknown } | null,
+ *   readonly legendFactsDrawn: () => void }} GeneratedArtifactCandidate
  */
 
 /**
@@ -1855,6 +1866,10 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   it replaced (OV-2436).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {(drawing: DrawingState) => () => void} startLegendFactsDraw The label owner's port: a run takes the
+ *   number of the edits its request draws (Generate before it reads `drawing`'s edits, the other runs right after their
+ *   request is final, in the same task as that read); it calls the function returned once its Results are committed
+ *   (OV-2412).
  * @property {(results: readonly SvgResultEntry[], moved: EditorPaintState) => void} moveDrawnPaint
  *   The Result paint record's port: a Generate drew the rows it moved to new record keys (`moved`; its bound paint
  *   when it moved none), which its Results' record takes once the drawing holds them (OV-1949, OV-1983).
@@ -1917,6 +1932,7 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
+  startLegendFactsDraw,
   moveDrawnPaint,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   askChoice = async () => 'cancel',
@@ -1991,17 +2007,23 @@ export const createRunAnalysis = ({
    * Generate, a committed rerender and a label reflow render the shown
    * drawing: they name its feature catalog, so a reused build keeps it, and
    * the children texts its Results keep sanitized, so Python omits them.
+   * Each reports to the label owner, once its Results are committed, that they carry Python's Legend row facts of
+   * the edits read into the request (`legendFactsDrawn`, OV-2412). Generate passes the report it took before it read
+   * the edits (its request build awaits after that read). The rerender and the committed-request runs take it here, by
+   * default, right after their request is final: their `prepareCommitInput` is read before the default, and only the
+   * return of `prepareCommittedPaintCandidate` lies between its reads and this one, so no user edit lands in between.
    * @param {DrawingState} drawing The drawing the run renders, given by its caller.
    * @param {CanonicalRenderCandidateExecutionOptions} options
+   * @param {() => void} [legendFactsDrawn]
    */
-  const executeShownDrawingCandidate = (drawing, options) => {
+  const executeShownDrawingCandidate = async (drawing, options, legendFactsDrawn = startLegendFactsDraw(drawing)) => {
     const shown = captureGeneratedArtifactOwnerSet(drawing);
-    return executeCanonicalRenderCandidate({
+    return { ...await executeCanonicalRenderCandidate({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
       heldResults: shown.results ?? null,
       drawingId: drawing.id
-    });
+    }), legendFactsDrawn };
   };
   // Show Depth off leaves the Depth sources out of the request, so Python cannot name
   // the Depth rows a Legend style may still address; the draft names them (OV-81).
@@ -2149,14 +2171,15 @@ export const createRunAnalysis = ({
   const generatedArtifactTransactionOwner = Object.freeze({
     /**
      * @param {Record<string, any>} ownerSet
-     * @param {{ runtimeState?: GeneratedArtifactCandidate['runtimeState'] }} [options]
+     * @param {{ runtimeState?: GeneratedArtifactCandidate['runtimeState'], legendFactsDrawn: () => void }} options
      */
-    build(ownerSet, { runtimeState = null } = {}) {
+    build(ownerSet, { runtimeState = null, legendFactsDrawn }) {
       recordSessionLifecycleEvent('artifact.candidate-completed');
       recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
       return Object.freeze({
         ownerSet: Object.freeze(ownerSet),
-        runtimeState
+        runtimeState,
+        legendFactsDrawn
       });
     },
     /**
@@ -2176,7 +2199,9 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactActivationCount', 1);
       recordSessionLifecycleEvent('artifact.activation-completed', { selectedResultIndex });
     },
-    finalize() {
+    /** @param {GeneratedArtifactCandidate} candidate The candidate History committed. */
+    finalize(candidate) {
+      candidate.legendFactsDrawn();
       recordSessionLifecycleEvent('artifact.finalization-started');
       recordStructuralMetric('generatedArtifactFinalizeCount', 1);
       recordSessionLifecycleEvent('artifact.finalization-completed');
@@ -2878,16 +2903,18 @@ export const createRunAnalysis = ({
    * @param {DrawingState} drawing
    * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
    *   generatedArtifactHandle?: HistoryArtifactHandle | null, comparisonExecution?: Record<string, any> | null,
-   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} [options]
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean, legendFactsDrawn: () => void }} options
+   *   `legendFactsDrawn`: started before the run reads the drawing's edits (`startLegendFactsDraw`, OV-2412).
    */
   const runAnalysisInternal = async (drawing, {
+    legendFactsDrawn,
     decorationContinuity = null,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
     comparisonExecution = null,
     isCurrentOperation = () => true,
     isCurrentAlert = () => true
-  } = {}) => {
+  }) => {
     /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
     let candidateRules = drawing.manualSpecificRules;
@@ -5284,7 +5311,7 @@ export const createRunAnalysis = ({
           manualSpecificRules: candidateRules
         },
         timingEntries: postGbdrawTimingEntries
-      });
+      }, legendFactsDrawn);
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
       setProcessingStatus(t('Preparing preview...'));
       await nextTick();
@@ -5428,7 +5455,8 @@ export const createRunAnalysis = ({
             files: candidateCliHelpers?.files,
             archiveName: candidateCliHelpers?.archiveName,
             losatTelemetry: cloneJsonData(structuredLosatTelemetry)
-          }
+          },
+          legendFactsDrawn: canonicalExecution.legendFactsDrawn
         }
       );
       const nextSelectedResultIndex = Math.max(
@@ -5699,7 +5727,7 @@ export const createRunAnalysis = ({
         runDraftIsShown = readRunDraftIsShown();
         return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
-          comparisonExecution, isCurrentOperation, isCurrentAlert
+          comparisonExecution, isCurrentOperation, isCurrentAlert, legendFactsDrawn: startLegendFactsDraw(drawing)
         });
       };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
@@ -5753,7 +5781,7 @@ export const createRunAnalysis = ({
           )
         : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle(drawing));
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
-        generatedArtifactTransactionOwner.finalize();
+        generatedArtifactTransactionOwner.finalize(outcome.generatedArtifactCandidate);
         completedLosatSearch = null;
         // The committed Results draw every edit, so the last live edit failure
         // no longer applies (OV-36). A failed Generate keeps the Result it
@@ -5761,10 +5789,7 @@ export const createRunAnalysis = ({
         clearLabelBuildNotices({ rerender: true });
         recordSessionLifecycleEvent('generate.completed');
       }
-      if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) {
-        const { generatedArtifactCandidate, ...publicOutcome } = outcome;
-        outcome = publicOutcome;
-      }
+      outcome = withoutArtifactCandidate(outcome);
       if (outcome?.status === 'canceled' && isCurrentOperation()) {
         preserveCanceledResult(runDraftIsShown);
       } else if (outcome?.status === 'ok') {
@@ -5945,7 +5970,7 @@ export const createRunAnalysis = ({
           files: preservedRuntimeState.latestCliHelperFiles,
           archiveName: preservedRuntimeState.latestCliHelperArchiveName,
           losatTelemetry: preservedRuntimeState.losatTelemetry
-        } }
+        }, legendFactsDrawn: execution.legendFactsDrawn }
       );
       const nextSelectedResultIndex = Math.max(
         0,
@@ -6103,12 +6128,9 @@ export const createRunAnalysis = ({
           })
         : await execute(await captureGeneratedArtifactHandle(drawing));
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
-        generatedArtifactTransactionOwner.finalize();
+        generatedArtifactTransactionOwner.finalize(outcome.generatedArtifactCandidate);
       }
-      if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) {
-        const { generatedArtifactCandidate, ...publicOutcome } = outcome;
-        outcome = publicOutcome;
-      }
+      outcome = withoutArtifactCandidate(outcome);
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, operation, isCurrent: isCurrentAlert, isCurrentOperation,
@@ -6342,6 +6364,7 @@ export const createRunAnalysis = ({
         execution.commit, nextSelectedResultIndex, isShownReflow, canonical.renderRequest.diagramOptions, drawnPaint,
         historyRequestedAt, liveRedrawLegend
       );
+      execution.legendFactsDrawn();
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok' };
     } catch (e) {

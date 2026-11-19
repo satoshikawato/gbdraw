@@ -575,17 +575,21 @@ const alignmentPortsBeforeOwner = (state) => ({
 });
 
 // The Restore of the shown drawing's deleted Legend rows at `indexes` (every row when null) when clicked, by those
-// rows wherever they stand once the Restore runs (a Restore may wait, `restoreLegendItems`): a row deleted during
-// the wait stays deleted, and a row that left the list restores nothing.
+// rows' Python keys wherever the rows stand once the Restore runs (a Restore may wait, `restoreLegendItems`, and a
+// paint write meanwhile copies every deleted row): a row deleted during the wait stays deleted, and a row that left
+// the list restores nothing.
 /**
  * @param {Pick<WebState, 'activeDrawing'>} state
  * @param {number[] | null} indexes
  * @param {(indexes: number[]) => unknown} restore
  */
 const restoreOfDeletedRows = (state, indexes, restore) => {
-  const rows = state.activeDrawing().deletedLegendEntries.value.filter((/** @type {unknown} */ _, /** @type {number} */ index) => (
-    !indexes || indexes.includes(index)));
-  return () => restore(rows.map((row) => state.activeDrawing().deletedLegendEntries.value.indexOf(row)).filter((index) => index >= 0));
+  const keys = state.activeDrawing().deletedLegendEntries.value
+    .filter((/** @type {unknown} */ _, /** @type {number} */ index) => !indexes || indexes.includes(index)).map(legendEntryKey);
+  return () => {
+    const deleted = state.activeDrawing().deletedLegendEntries.value;
+    return restore(keys.map((key) => deleted.findIndex((row) => legendEntryKey(row) === key)).filter((index) => index >= 0));
+  };
 };
 
 /**
@@ -1944,6 +1948,7 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    startLegendFactsDraw: featureActions.startLegendFactsDraw,
     moveDrawnPaint: resultPaintRecord.moveDrawn,
     askChoice,
     showNotice,
@@ -2511,7 +2516,9 @@ export const createAppSetup = () => {
     VISIBILITY_DOMAINS,
     showEditorIntent,
     requestAutomaticRerender: featureActions.requestAutomaticRerender,
-    whenRedrawn: featureActions.whenRedrawn,
+    whenLegendFactsDrawn: featureActions.whenLegendFactsDrawn,
+    getCommittedCanonicalRenderRequest,
+    showNotice,
     runUndoable: history.runUndoable
   });
 

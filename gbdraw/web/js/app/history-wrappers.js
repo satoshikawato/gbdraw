@@ -221,8 +221,8 @@ export const createFeatureEditHistory = ({
  * @property {(choice: string) => unknown} handleLegendRenameChoice
  * @property {(restore: () => unknown) => unknown} restoreLegendRows Runs a Restore of deleted Legend rows.
  * @property {(indexes?: number[] | null) => unknown} restoreDeletedLegendEntries
- * @property {() => Promise<void>} whenLegendFactsCurrent Resolves once Python's Legend row facts are those of the
- *   drawing's current edits (editor intent).
+ * @property {() => Promise<boolean>} whenLegendFactsCurrent Resolves once Python's Legend row facts are those of the
+ *   drawing's current edits: false when they could not be drawn, and the Restore is refused (editor intent).
  * @property {() => void} cancelLegendRename
  * @property {(choice: string) => unknown} handlePaletteColorsChoice
  * @property {() => void} cancelPaletteColorsDialog
@@ -303,10 +303,10 @@ export const createLegendEditHistory = ({
     const key = legendRenameDialog.deletedTargetKey;
     const restores = choice === 'merge' || (choice === 'keep-both' && legendRenameDialog.keepBothRestores);
     if (!restores || !key) return handleLegendRenameChoice(choice);
-    await whenLegendFactsCurrent();
+    if (!await whenLegendFactsCurrent()) return false;
     return runUndoableCheckpoint(msg('Rename legend item'), async () => {
       const deleted = state.activeDrawing().deletedLegendEntries.value;
-      const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === key);
+      const index = deleted.findIndex((/** @type {KeptLegendRow} */ entry) => legendEntryKey(entry) === key);
       if (index >= 0) restoreLegendRows(() => restoreDeletedLegendEntries([index]));
       return handleLegendRenameChoice(choice);
     });

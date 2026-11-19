@@ -2479,6 +2479,273 @@ test('a Restore all that waits for a rerender restores only the rows deleted whe
   await expectLiveEqualsGenerate(page, { label: 'Restore all after a delete inside its wait' });
 });
 
+// An edit that only Python can draw, made while Generate prepares its
+// request (after the request read the edits), is drawn by the rerender that
+// follows Generate, not by Generate. When that rerender fails, and so does the
+// one Restore asks for, the facts are still owed and Restore is refused (OV-2412).
+test('a Restore after an edit made while Generate built its request, whose rerender fails, is refused', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await installPageProbe(page, () => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const probe = { responses: 0, edited: false };
+    window.__EDIT_DURING_BUILD__ = probe;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      onSessionLifecycleEvent: (event) => {
+        hooks.onSessionLifecycleEvent?.(event);
+        if (event.name !== 'canonical-request-built' || probe.edited) return;
+        probe.edited = true;
+        void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0);
+      },
+      // Generate draws; every later run fails.
+      beforeDiagramGenerationResponse: async () => {
+        probe.responses += 1;
+        if (probe.responses > 1) throw new Error('The rerender fails (test hook).');
+      }
+    };
+    return () => {
+      window.__GBDRAW_TEST_HOOKS__ = hooks;
+      delete window.__EDIT_DURING_BUILD__;
+    };
+  });
+  await generateAndWaitForResult(page);
+  await settleLive(page);
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const restored = await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries();
+    const { edited, responses } = window.__EDIT_DURING_BUILD__;
+    return { edited, failedRuns: responses > 2, restored, notice: window.__GBDRAW_APP__.notice.text };
+  }), 'the Restore is refused with the reason').toEqual({
+    edited: true, failedRuns: true, restored: false, notice: 'Updating diagram. Retry after the update finishes.'
+  });
+  expect((await legendEditorState(page)).deleted, 'the row stays deleted').toEqual(['repeat_region']);
+});
+
+// A Generate that read every edit draws the Legend row facts the drawing owed
+// after its failed rerender: a later Restore applies at once, even while every
+// further run fails (OV-2412).
+test('a Restore after a Generate that followed a failed rerender applies at once', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await installPageProbe(page, () => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const probe = { responses: 0 };
+    window.__FAILED_THEN_GENERATE__ = probe;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      // The edit's rerender fails, Generate draws, every later run fails.
+      beforeDiagramGenerationResponse: async () => {
+        probe.responses += 1;
+        if (probe.responses !== 2) throw new Error('The rerender fails (test hook).');
+      }
+    };
+    return () => {
+      window.__GBDRAW_TEST_HOOKS__ = hooks;
+      delete window.__FAILED_THEN_GENERATE__;
+    };
+  });
+  await page.evaluate(() => { void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0); });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__FAILED_THEN_GENERATE__.responses), 'the edit\'s rerender ran and failed').toBe(1);
+  await generateAndWaitForResult(page);
+  await settleLive(page);
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const restored = await window.__GBDRAW_APP__.restoreDeletedLegendEntry(window.__GBDRAW_APP__.deletedLegendEntries
+      .findIndex((entry) => (entry.originalCaption || entry.caption) === 'repeat_region'));
+    return { restored, refused: window.__GBDRAW_APP__.notice.text === 'Updating diagram. Retry after the update finishes.' };
+  }), 'the Restore applies, not refused').toEqual({ restored: true, refused: false });
+  await settleLive(page);
+  expect((await legendEditorState(page)).deleted, 'the row is restored').toEqual([]);
+});
+
+// A Restore of one row that waits for a rerender finds that row by its key
+// once it runs: a write of the Legend paint during the wait (a History apply
+// of editor state, a rule commit that re-keys a row) copies every deleted row,
+// and the row still returns (#2123 review).
+test('a Restore of one row that waits for a rerender restores it after the deleted rows were copied', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await deleteLegendRow(page, 'other proteins');
+  await holdNextRerender(page);
+  await page.evaluate(() => { void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0); });
+  await insideHeldRerender(page);
+  expect(await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.deletedLegendEntries.findIndex((entry) => (entry.originalCaption || entry.caption) === 'repeat_region');
+    const row = app.deletedLegendEntries[index];
+    window.__heldRestore = app.restoreDeletedLegendEntry(index);
+    const drawing = (await import('/gbdraw/web/js/state.js')).state.activeDrawing();
+    const { PAINT_SLICE } = await import('/gbdraw/web/js/services/drawing/paint.js');
+    PAINT_SLICE.install(drawing.slices.paint, { deletedLegendEntries: drawing.deletedLegendEntries.value });
+    return app.deletedLegendEntries.indexOf(row);
+  }), 'the paint write copied the deleted rows').toBe(-1);
+  await releaseRerender(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__heldRestore; delete window.__heldRestore; });
+  await settleLive(page);
+  const restored = await legendEditorState(page);
+  expect({ listed: restored.listed.includes('repeat_region'), deleted: restored.deleted.includes('repeat_region') },
+    'the row the Restore was pressed on returns').toEqual({ listed: true, deleted: false });
+  await expectLiveEqualsGenerate(page, { label: 'a Restore of one row after its deleted rows were copied' });
+});
+
+// A Restore pressed inside a rerender that fails: the drawing still owes
+// Python's facts of its edits, and so does the rerender the Restore asks for
+// once more, so the Restore is refused with the reason and the row stays
+// deleted. After a Generate it restores as Generate lists (OV-2412).
+test('a Restore pressed inside a failing rerender of a stale row\'s rule removal is refused until a Generate (OV-2412)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  const row = await STALE_ROWS.stroke(page);
+  await deleteLegendRow(page, row);
+  await generate(page);
+  const index = await ruleIndex(page, row);
+  await holdNextRerender(page, { fail: true });
+  await page.evaluate((rule) => { void window.__GBDRAW_APP__.removeSpecificRule(rule); }, index);
+  await insideHeldRerender(page);
+  await page.evaluate(() => { window.__heldRestore = window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  await page.evaluate(() => window.__RERENDER_HOLD__.release());
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const restored = await window.__heldRestore;
+    delete window.__heldRestore;
+    return { restored, notice: window.__GBDRAW_APP__.notice.text };
+  }), 'the Restore is refused with the reason').toEqual({
+    restored: false, notice: 'Updating diagram. Retry after the update finishes.'
+  });
+  await releaseRerender(page);
+  expect((await legendEditorState(page)).deleted, 'the row stays deleted').toEqual([row]);
+  await generate(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
+  await settleLive(page);
+  const restored = await legendEditorState(page);
+  expect({ listed: restored.listed.includes(row), deleted: restored.deleted }, 'after the Generate, Restore lists no row for the stale key')
+    .toEqual({ listed: false, deleted: [] });
+  await expectLiveEqualsGenerate(page, { label: 'the Restore after a failed rerender and a Generate' });
+});
+
+// A Session saved while a deleted row is stale holds Results without Python's
+// Legend row facts once loaded: Restore asks Python to draw the drawing again
+// before it reads them, so it lists no row for the stale key, and Generate
+// lists what Restore listed (OV-2412).
+test('a Session saved with a stale deleted row restores it after Load as Generate lists it (OV-2412)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  const row = await STALE_ROWS.stroke(page);
+  await deleteLegendRow(page, row);
+  await generate(page);
+  await STALE_ROUTES['its rule removed'](page, row);
+  const before = await legendEditorState(page);
+  const saved = testInfo.outputPath('stale-deleted-row.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  const loaded = await load(browser, saved);
+  expect(await legendEditorState(loaded), 'Load keeps the deleted row and its edits').toEqual(before);
+  await evaluateWithRetainedPromise(loaded, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  await settleLive(loaded);
+  const restored = await legendEditorState(loaded);
+  expect(restored, 'Restore lists no row for the stale key and keeps its edits').toEqual({
+    listed: before.listed, deleted: [], edits: before.edits
+  });
+  await expectLiveEqualsGenerate(loaded, { label: 'the Restore after Load of a stale deleted row' });
+  expect((await legendEditorState(loaded)).listed, 'Generate lists the rows Restore listed').toEqual(restored.listed);
+  await loaded.context().close();
+});
+
+// A Restore after a Session Load asks Python for the Legend row facts first
+// (OV-2412); the figure it shows is the one the same Restore shows on the
+// page that saved the Session, byte for byte, and the other drawing's figure
+// stays as loaded. Two drawings, a row Python still draws (not stale).
+test('a Restore after Session Load draws the figure the same Restore drew before Save, in each of two drawings', async ({ page, browser }, testInfo) => {
+  test.setTimeout(400_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await showDrawing(page, { kind: 'linear' });
+  await page.evaluate(async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
+    await window.Vue.nextTick();
+  }, readFileSync(SINGLE_FIXTURE, 'utf8'));
+  await settleLive(page);
+  await generate(page);
+  await deleteLegendRow(page, 'repeat_region');
+  const saved = testInfo.outputPath('deleted-row-two-drawings.gbdraw');
+  await download(page, 'Save Session', saved, { title: '' });
+  // The shown figure, without the marks the label binder adds to the labels it binds while a drawing is shown
+  // (they differ with which drawing was shown first, not with the figure).
+  const figure = (target) => target.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg').cloneNode(true);
+    for (const label of svg.querySelectorAll('[data-label-editable]')) {
+      ['data-label-editable', 'data-label-key', 'data-label-source-text'].forEach((name) => label.removeAttribute(name));
+      if (label.getAttribute('style') === 'cursor: text;') label.removeAttribute('style');
+    }
+    return svg.outerHTML;
+  });
+  // The page that saved: the same Restore, live.
+  await page.evaluate(() => window.__GBDRAW_APP__.restoreAllDeletedLegendEntries());
+  await settleLive(page);
+  const restoredLinear = await figure(page);
+  await showDrawing(page, { kind: 'circular' });
+  await settleLive(page);
+  const circular = await figure(page);
+  const loaded = await load(browser, saved);
+  await showDrawing(loaded, { kind: 'circular' });
+  await settleLive(loaded);
+  const loadedCircular = await figure(loaded);
+  await showDrawing(loaded, { kind: 'linear' });
+  await settleLive(loaded);
+  await evaluateWithRetainedPromise(loaded, async () => { await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries(); });
+  await settleLive(loaded);
+  expect((await legendEditorState(loaded)).listed.includes('repeat_region'), 'the row returns').toBe(true);
+  const loadedLinear = await figure(loaded);
+  if (loadedLinear !== restoredLinear) {
+    writeFileSync(testInfo.outputPath('saving-page-linear.svg'), restoredLinear);
+    writeFileSync(testInfo.outputPath('loaded-page-linear.svg'), loadedLinear);
+  }
+  expect(loadedLinear === restoredLinear, 'the restored figure equals the one the page that saved drew').toBe(true);
+  await showDrawing(loaded, { kind: 'circular' });
+  await settleLive(loaded);
+  const loadedCircularAfter = await figure(loaded);
+  if (loadedCircularAfter !== loadedCircular) {
+    writeFileSync(testInfo.outputPath('loaded-circular-before.svg'), loadedCircular);
+    writeFileSync(testInfo.outputPath('loaded-circular-after.svg'), loadedCircularAfter);
+    writeFileSync(testInfo.outputPath('saving-circular.svg'), circular);
+  }
+  expect(loadedCircularAfter === loadedCircular, 'the other drawing\'s figure stays as loaded').toBe(true);
+  expect(loadedCircular === circular, 'and equals the page that saved').toBe(true);
+  await loaded.context().close();
+});
+
+// A Result loaded from a Session of versions 27 to 30 has no render request:
+// nothing can draw it again before a Generate, so a Restore draws no diagram
+// and is not refused, also after a Legend rename that only Python could draw
+// (its rerender waits for Generate), and lists the row as before (OV-2412).
+test('a Restore on a Session 29 Result loaded without a request restores at once, without a rerender', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v29.gbdraw-session.json.gz');
+  try {
+    await settleLive(page);
+    const listed = (await legendEditorState(page)).listed;
+    await renameRow(page, listed[0], 'Renamed row');
+    await settleLive(page);
+    const renders = await countRenders(page);
+    await deleteLegendRow(page, 'Renamed row');
+    const restored = await evaluateWithRetainedPromise(page, async () => {
+      const result = await window.__GBDRAW_APP__.restoreAllDeletedLegendEntries();
+      return { result, refused: window.__GBDRAW_APP__.notice.text === 'Updating diagram. Retry after the update finishes.' };
+    });
+    await settleLive(page);
+    expect(restored, 'the Restore applies, not refused').toEqual({ result: true, refused: false });
+    const after = await legendEditorState(page);
+    expect({ first: after.listed[0], deleted: after.deleted }, 'the row is listed again').toEqual({ first: 'Renamed row', deleted: [] });
+    expect(await renders(), 'no diagram is drawn').toBe(0);
+  } finally {
+    await page.context().close();
+  }
+});
+
 // PD-OI-114 scenario revision 2 (issue #1427): a Legend rename, deletion,
 // Restore, Move, and Sort, and Canvas padding, reach Python through the
 // request. On a figure drawn to a requested width the automatic rerender then
