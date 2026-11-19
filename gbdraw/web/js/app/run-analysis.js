@@ -1866,8 +1866,10 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   it replaced (OV-2436).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {(drawing: DrawingState) => () => void} startLegendFactsDraw The label owner's port: a run builds its
- *   request from `drawing`'s edits now; it calls the function returned once its Results are committed (OV-2412).
+ * @property {(drawing: DrawingState) => () => void} startLegendFactsDraw The label owner's port: a run takes the
+ *   number of the edits its request draws (Generate before it reads `drawing`'s edits, the other runs right after their
+ *   request is final, in the same task as that read); it calls the function returned once its Results are committed
+ *   (OV-2412).
  * @property {(results: readonly SvgResultEntry[], moved: EditorPaintState) => void} moveDrawnPaint
  *   The Result paint record's port: a Generate drew the rows it moved to new record keys (`moved`; its bound paint
  *   when it moved none), which its Results' record takes once the drawing holds them (OV-1949, OV-1983).
@@ -2006,8 +2008,10 @@ export const createRunAnalysis = ({
    * drawing: they name its feature catalog, so a reused build keeps it, and
    * the children texts its Results keep sanitized, so Python omits them.
    * Each reports to the label owner, once its Results are committed, that they carry Python's Legend row facts of
-   * the edits read into the request (`legendFactsDrawn`, OV-2412): from the start of the run that read them, which
-   * Generate gives (it reads the edits before the awaits of its request build), else from now.
+   * the edits read into the request (`legendFactsDrawn`, OV-2412). Generate passes the report it took before it read
+   * the edits (its request build awaits after that read). The rerender and the committed-request runs take it here, by
+   * default, right after their request is final: their `prepareCommitInput` is read before the default, and only the
+   * return of `prepareCommittedPaintCandidate` lies between its reads and this one, so no user edit lands in between.
    * @param {DrawingState} drawing The drawing the run renders, given by its caller.
    * @param {CanonicalRenderCandidateExecutionOptions} options
    * @param {() => void} [legendFactsDrawn]

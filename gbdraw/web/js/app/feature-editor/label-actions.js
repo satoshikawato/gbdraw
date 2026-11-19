@@ -959,8 +959,9 @@ export const createFeatureLabelActions = ({
     legendFactsOwedAt.set(drawing, labelReflowForceRequestSeq.value);
     return true;
   };
-  // A run (Generate, a rerender, a run of the committed request) builds its request from `drawing`'s edits now; the
-  // function it returns is called once its Results are committed.
+  // A run (Generate, a rerender, a run of the committed request) takes the number of the edits its request draws:
+  // Generate before it reads `drawing`'s edits, the other runs right after their request is final, in the same task as
+  // that read. The function it returns is called once its Results are committed.
   /** @param {DrawingState} drawing @returns {() => void} */
   const startLegendFactsDraw = (drawing) => {
     const builtAt = labelReflowForceRequestSeq.value;

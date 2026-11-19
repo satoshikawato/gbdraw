@@ -2523,6 +2523,45 @@ test('a Restore after an edit made while Generate built its request, whose reren
   expect((await legendEditorState(page)).deleted, 'the row stays deleted').toEqual(['repeat_region']);
 });
 
+// A Generate that read every edit draws the Legend row facts the drawing owed
+// after its failed rerender: a later Restore applies at once, even while every
+// further run fails (OV-2412).
+test('a Restore after a Generate that followed a failed rerender applies at once', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await installPageProbe(page, () => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const probe = { responses: 0 };
+    window.__FAILED_THEN_GENERATE__ = probe;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      // The edit's rerender fails, Generate draws, every later run fails.
+      beforeDiagramGenerationResponse: async () => {
+        probe.responses += 1;
+        if (probe.responses !== 2) throw new Error('The rerender fails (test hook).');
+      }
+    };
+    return () => {
+      window.__GBDRAW_TEST_HOOKS__ = hooks;
+      delete window.__FAILED_THEN_GENERATE__;
+    };
+  });
+  await page.evaluate(() => { void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0); });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__FAILED_THEN_GENERATE__.responses), 'the edit\'s rerender ran and failed').toBe(1);
+  await generateAndWaitForResult(page);
+  await settleLive(page);
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const restored = await window.__GBDRAW_APP__.restoreDeletedLegendEntry(window.__GBDRAW_APP__.deletedLegendEntries
+      .findIndex((entry) => (entry.originalCaption || entry.caption) === 'repeat_region'));
+    return { restored, refused: window.__GBDRAW_APP__.notice.text === 'Updating diagram. Retry after the update finishes.' };
+  }), 'the Restore applies, not refused').toEqual({ restored: true, refused: false });
+  await settleLive(page);
+  expect((await legendEditorState(page)).deleted, 'the row is restored').toEqual([]);
+});
+
 // A Restore of one row that waits for a rerender finds that row by its key
 // once it runs: a write of the Legend paint during the wait (a History apply
 // of editor state, a rule commit that re-keys a row) copies every deleted row,
