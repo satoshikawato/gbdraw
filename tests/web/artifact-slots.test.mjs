@@ -1,10 +1,10 @@
 // E1: each diagram mode keeps its own generated artifact. The History snapshot
 // service captures and installs one mode's artifact slot by reference, key by
-// key (`ARTIFACT_SLOT_KEYS`). Draft and project state stays in place: the
-// specific color rules, the file Legend captions, the Linear record
-// orientations, the pending palette, the LOSAT caches and manifests, and every
-// editor intent. A Linear drawing's alignment plan and record translations are
-// its own artifact values (OV-3532).
+// key (`ARTIFACT_SLOT_KEYS`). The drawing's settings and editor intent stay in
+// the drawing: the specific color rules, the file Legend captions, the Linear
+// record orientations, the pending palette. A Linear drawing's alignment plan
+// and record translations (OV-3532), its LOSAT evidence (D-221), and the count of
+// feature edits its Generate removed (OV-3891) are its own artifact values.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -36,7 +36,7 @@ snapshots.setGeneratedArtifactRuntimeOwner({
 const SWAPPED = [
   'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'featureEditorStatus', 'biologicalFeatures',
   'featureRecordIds', 'orthogroups', 'featureOrthogroupIndex', 'collinearGroups', 'trackSlotResolvedGeometry',
-  'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'inputSummaries', 'lastRunInfo',
+  'annotationWarnings', 'featureIdentityNotices', 'featureEditRemovalCount', 'comparisonWarnings', 'labelFitReports', 'inputSummaries', 'lastRunInfo',
   'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
@@ -67,7 +67,7 @@ const fillCircularArtifact = async () => {
     biologicalFeatures: [{ id: 'b1' }], featureRecordIds: ['r1'], orthogroups: [{ id: 'og1' }],
     featureOrthogroupIndex: new Map([['f1', 'og1']]), collinearGroups: [{ id: 'c1' }],
     trackSlotResolvedGeometry: { slots: [] }, annotationWarnings: [{ code: 'w' }],
-    featureIdentityNotices: [{ status: 'dormant' }], comparisonWarnings: [{ code: 'c' }],
+    featureIdentityNotices: [{ status: 'dormant' }], featureEditRemovalCount: 2, comparisonWarnings: [{ code: 'c' }],
     labelFitReports: [{ resultIndex: 0, resultName: 'a.svg', report: { drawn: true }, rowToken: null }],
     inputSummaries: [{ resultIndex: 0, resultName: 'a.svg', lines: ['Record r1 (a.gb), record 1 of 1, 8 bp: drew 0 features.'], warnings: [] }],
     lastRunInfo: { invocation: { mode: 'circular' } }, pairwiseMatchFactors: { p1: 1.5 },
@@ -119,6 +119,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.deepEqual(state.results.value, []);
   assert.equal(state.selectedResultIndex.value, 0);
   assert.equal(state.featureCatalog.value, null);
+  assert.equal(state.featureEditRemovalCount.value, 0, 'the arriving drawing reports no removal of another drawing\'s Generate (OV-3891)');
   assert.equal(state.generatedDrawingId.value, 'linear');
   assert.equal(canonicalRenderArtifactOwner.capture().committedCanonicalSession, null);
   assert.equal(canonicalRenderArtifactOwner.capture().conservationPairs.size, 0);

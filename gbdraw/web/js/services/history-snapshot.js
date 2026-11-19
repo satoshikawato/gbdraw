@@ -1420,8 +1420,9 @@ export const createHistorySnapshotService = ({
   // the drawing's mode); a null value of the slot installs the empty slot's.
   // Its Legend inventory and colors install through their one install
   // (`installShownSetLegend`), after its Results. Nothing
-  // outside the slot changes, so the draft, the editor intent and the caches
-  // stay shared.
+  // outside the slot changes: the draft and the editor intent are the
+  // drawing's own and follow the shown drawing, and the drawing's LOSAT
+  // evidence is part of its slot.
   /**
    * @param {Readonly<ArtifactSlot>} slot
    * @param {{ drawing: DrawingIdentity, ui?: { canvasPan?: { x: number, y: number } } }} options

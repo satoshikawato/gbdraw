@@ -225,9 +225,16 @@ const ref = (value) => ({ value });
 // The state.js members the selector reads besides the drawings, as state.js creates them.
 const selectorMembers = () => ({ sessionOperationAvailability: () => null, semanticFileWatchersSuppressed: ref(false), sessionImportRollbackInProgress: ref(false) });
 // One drawing per mode, as in state.js: the shown drawing follows `mode` and
-// holds the fixture's rows (`fixture.linearSeqs` is that drawing's array).
+// holds the fixture's rows (`fixture.linearSeqs` is that drawing's array). Each
+// mode's drawing is one object, as the store's drawings are (the selector keys
+// a drawing's states by the object).
 const withShownDrawing = (fixture) => {
-  const shown = () => ({ id: fixture.mode.value, mode: fixture.mode.value, inputType: fixture.inputType, linearSeqs: fixture.linearSeqs });
+  const drawings = new Map();
+  const shown = () => {
+    const mode = fixture.mode.value;
+    if (!drawings.has(mode)) drawings.set(mode, { id: mode, mode, inputType: fixture.inputType, get linearSeqs() { return fixture.linearSeqs; } });
+    return drawings.get(mode);
+  };
   return Object.assign(fixture, { activeDrawing: shown, drawingList: () => [shown()] });
 };
 const fileA = { name: 'a.gb' };
@@ -290,8 +297,8 @@ state.linearSeqs.reverse();
 assert.equal(controller.optionsFor(state.activeDrawing(), state.linearSeqs[0]).at(-1).value, 'Other');
 state.linearSeqs.splice(0, 1);
 controller.purgeInactiveState();
-assert.equal(Object.hasOwn(controller.selectorStateByDrawing.get('linear'), 'row-b'), false);
-assert.equal(Object.hasOwn(controller.selectorStateByDrawing.get('linear'), 'row-a'), true);
+assert.equal(Object.hasOwn(controller.selectorStateByDrawing.get(state.activeDrawing()), 'row-b'), false);
+assert.equal(Object.hasOwn(controller.selectorStateByDrawing.get(state.activeDrawing()), 'row-a'), true);
 
 const errorState = {
   ...selectorMembers(),
@@ -366,14 +373,14 @@ const rollbackController = createLinearRecordSelector({
 const staleSelectorRefresh = rollbackController.refresh(rollbackState.activeDrawing());
 await Promise.resolve();
 const selectorStateBeforeRollback = structuredClone(
-  rollbackController.selectorStateByDrawing.get('linear')['rollback-row']
+  rollbackController.selectorStateByDrawing.get(rollbackState.activeDrawing())['rollback-row']
 );
 rollbackState.semanticFileWatchersSuppressed.value = true;
 await rollbackController.refresh(rollbackState.activeDrawing(), { suppress: true });
 rejectStaleSelectorRead(new Error('injected restored-file selector failure'));
 await staleSelectorRefresh;
 assert.deepEqual(
-  rollbackController.selectorStateByDrawing.get('linear')['rollback-row'],
+  rollbackController.selectorStateByDrawing.get(rollbackState.activeDrawing())['rollback-row'],
   selectorStateBeforeRollback
 );
 rollbackState.semanticFileWatchersSuppressed.value = false;
@@ -551,8 +558,12 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
     ...selectorMembers(), mode: ref('linear'), inputType: ref('gb'),
     linearSeqs: [{ uid: 'pin-a', gb: { name: 'pin.gb' }, fasta: null, region_record_id: '' }]
   };
-  pinState.activeDrawing = () => ({ id: shownId, mode: 'linear', inputType: pinState.inputType, linearSeqs: pinState.linearSeqs });
-  pinState.drawingList = () => [pinState.activeDrawing()];
+  // Two Linear drawings, each one object as in the store.
+  const pinDrawings = new Map(['linear', 'linear-2'].map((id) => [
+    id, { id, mode: 'linear', inputType: pinState.inputType, linearSeqs: pinState.linearSeqs }
+  ]));
+  pinState.activeDrawing = () => pinDrawings.get(shownId);
+  pinState.drawingList = () => [...pinDrawings.values()];
   /** @type {((records: unknown[]) => void)[]} */
   const reads = [];
   const discovered = [];
@@ -600,6 +611,76 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
   perDrawing.purgeInactiveState();
   assert.equal(perDrawing.statusFor(source, source.linearSeqs[0]), 'ready', 'deleting the Duplicate keeps the source state');
   assert.equal(perDrawing.statusFor(copy, copy.linearSeqs[0]), 'idle', 'a deleted drawing keeps no state');
+}
+
+{
+  // OV-3892: a drawing's selector states, read generation, and running refresh live as long as the drawing
+  // object. A new drawing that takes a deleted drawing's ID (with the same row uid and file) starts with none,
+  // shares no refresh still running for the deleted drawing, and gets none of its late records; the Undo of the
+  // Delete brings the drawing back with its own states; a same-ID copy (a legacy configuration Load) shows them.
+  const file = { name: 'reused.gb' };
+  const linearDrawing = (id) => ({ id, mode: 'linear', inputType: { value: 'gb' }, linearSeqs: [{ uid: 'reused-row', gb: file, fasta: null, region_record_id: '' }] });
+  const kept = { id: 'linear', mode: 'linear', inputType: { value: 'gb' }, linearSeqs: [] };
+  const deleted = linearDrawing('linear-2');
+  let drawings = [kept, deleted];
+  const reads = [];
+  const discovered = [];
+  const selector = createLinearRecordSelector({
+    state: { ...selectorMembers(), drawingList: () => drawings },
+    reactive: (value) => value,
+    recordReader: () => new Promise((resolve) => { reads.push(resolve); }),
+    onRecordsDiscovered: ({ drawingId, uid }) => { discovered.push([drawingId, uid]); }
+  });
+  const settledRead = selector.refresh(deleted);
+  while (reads.length < 1) await new Promise((resolve) => { setImmediate(resolve); });
+  reads[0]([{ selector: '#1', recordId: 'Deleted', recordLength: 5 }]);
+  await settledRead;
+  assert.equal(selector.statusFor(deleted, deleted.linearSeqs[0]), 'ready');
+  drawings = [kept];
+  const successor = linearDrawing('linear-2');
+  drawings = [kept, successor];
+  assert.equal(selector.statusFor(successor, successor.linearSeqs[0]), 'deferred', 'the new drawing inherits no state');
+  assert.deepEqual(selector.recordsFor(successor, successor.linearSeqs[0]), []);
+  drawings = [kept, deleted];
+  assert.equal(selector.statusFor(deleted, deleted.linearSeqs[0]), 'ready', 'the Undo of the Delete brings its states back');
+  const copy = linearDrawing('linear-2');
+  selector.followDrawingCopy(deleted, copy);
+  drawings = [kept, copy];
+  assert.equal(selector.optionsFor(copy, copy.linearSeqs[0])[1].value, 'Deleted', 'a same-ID copy shows the drawing\'s reads');
+
+  // A refresh still running when its drawing is deleted: the successor reads its own file, and the late records
+  // of the deleted drawing reach no drawing.
+  const running = linearDrawing('linear-3');
+  drawings = [kept, running];
+  const runningRead = selector.refresh(running);
+  while (reads.length < 2) await new Promise((resolve) => { setImmediate(resolve); });
+  const runningSuccessor = linearDrawing('linear-3');
+  drawings = [kept, runningSuccessor];
+  const successorRead = selector.refresh(runningSuccessor);
+  for (let tick = 0; tick < 50 && reads.length < 3; tick += 1) await new Promise((resolve) => { setImmediate(resolve); });
+  assert.equal(reads.length, 3, 'the successor shares no refresh of the deleted drawing');
+  reads[1]([{ selector: '#1', recordId: 'Late', recordLength: 5 }]);
+  await runningRead;
+  assert.deepEqual(discovered, [['linear-2', 'reused-row']], 'the deleted drawing\'s late records reach no drawing');
+  reads[2]([{ selector: '#1', recordId: 'Own', recordLength: 5 }]);
+  await successorRead;
+  assert.equal(selector.optionsFor(runningSuccessor, runningSuccessor.linearSeqs[0])[1].value, 'Own');
+  assert.deepEqual(discovered, [['linear-2', 'reused-row'], ['linear-3', 'reused-row']]);
+
+  // A drawing deleted while its read runs, then brought back by the Undo of the Delete: the late records land in
+  // its own states (no read starts again on Undo), and expand no rows while it is not listed.
+  const undone = linearDrawing('linear-4');
+  drawings = [kept, undone];
+  const undoneRead = selector.refresh(undone);
+  while (reads.length < 4) await new Promise((resolve) => { setImmediate(resolve); });
+  assert.equal(selector.statusFor(undone, undone.linearSeqs[0]), 'loading');
+  drawings = [kept];
+  reads[3]([{ selector: '#1', recordId: 'WhileDeleted', recordLength: 5 }]);
+  await undoneRead;
+  assert.deepEqual(discovered, [['linear-2', 'reused-row'], ['linear-3', 'reused-row']], 'an unlisted drawing reports no records');
+  drawings = [kept, undone];
+  assert.equal(selector.statusFor(undone, undone.linearSeqs[0]), 'ready', 'the Undo of the Delete shows the late read');
+  assert.equal(selector.optionsFor(undone, undone.linearSeqs[0])[1].value, 'WhileDeleted');
 }
 
 // D-37 / OV-2563: a Linear card's annotation catalog source carries the error model its record select

@@ -405,8 +405,8 @@ export const createSessionImportRollbackState = ({
   // A Load's commit, in the task that writes the store: each drawing it made starts with an empty History.
   replaceHistoryMembers,
   // The legacy configuration Load's commit replaced `drawing` with its same-ID `copy`: the CLI options, Preview
-  // search, record binding and Sequence search sets follow it (its History is kept by ID). In-flight work tied to the
-  // old drawing (pending live settings, discoveries, `redrawOwed`) stays with it, as on dev.
+  // search, record binding, Sequence search sets and Linear record reads follow it (its History is kept by ID).
+  // In-flight work tied to the old drawing (pending live settings, discoveries, `redrawOwed`) stays with it, as on dev.
   followDrawingCopy: (/** @type {DrawingState} */ drawing, /** @type {DrawingState} */ copy) => {
     for (const follow of drawingCopyFollowers) follow(drawing, copy);
   },
@@ -3530,7 +3530,7 @@ export const createAppSetup = () => {
     keepDrawingSearch: previewFeatureSearch.keepDrawingSearch,
     returnToDrawingSearch: previewFeatureSearch.returnToDrawingSearch,
     drawingCopyFollowers: [followDrawingCopyCliOptions, recordDisplayControls.followDrawingCopy,
-      previewFeatureSearch.followDrawingCopy, sequenceSearch.followDrawingCopy]
+      previewFeatureSearch.followDrawingCopy, sequenceSearch.followDrawingCopy, linearRecordSelector.followDrawingCopy]
   });
   // Select region reads the axis of the shown Result from its track-slot geometry (Python's), and its popup is the
   // match frame's (the one Result popup).

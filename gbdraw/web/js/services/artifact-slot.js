@@ -29,9 +29,8 @@ export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error:
  * drawing's own record display; OV-3532), and its LOSAT evidence (D-221: its LOSAT
  * results, the raw searches and converted payloads it holds, the protein identity
  * manifest they resolve in, and the older Session's protein candidates Load gave it).
- * Draft and project state stays shared: the specific color rules, the file Legend
- * captions, the Linear record orientations, the pending palette, and every editor
- * intent (R2).
+ * The drawing itself holds its settings and editor intent (R2, R15), such as the
+ * specific color rules and the pending palette; none of them is in the slot.
  * @satisfies {Readonly<Record<string, (mode: 'circular' | 'linear', current: any) => any>>}
  */
 export const ARTIFACT_SLOT_EMPTY = Object.freeze({
@@ -48,6 +47,8 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   trackSlotResolvedGeometry: () => null,
   annotationWarnings: () => [],
   featureIdentityNotices: () => [],
+  // The per-feature edits the drawing's last Generate removed (OV-3891), a runtime field like the editor status.
+  featureEditRemovalCount: () => 0,
   comparisonWarnings: () => [],
   labelFitReports: () => [],
   inputSummaries: () => [],

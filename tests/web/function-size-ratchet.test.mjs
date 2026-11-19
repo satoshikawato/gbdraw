@@ -98,7 +98,7 @@ const FUNCTION_STATEMENTS = {
   'app/legend/entry-actions.js::createLegendEntryActions.prepareFileLegendEntries': 98,
   'app/linear-comparison-edits.js::createLinearComparisonGapEdits': 98,
   'app/linear-comparison-edits.js::createLinearComparisonPairEdits': 102,
-  'app/linear-record-selector.js::createLinearRecordSelector': 154,
+  'app/linear-record-selector.js::createLinearRecordSelector': 146,
   'app/linear-track-slots.js::createLinearTrackSlotEditor': 628,
   'app/orthogroups.js::createOrthogroupEditor': 259,
   'app/preview-runtime.js::createPreviewRuntime': 381,

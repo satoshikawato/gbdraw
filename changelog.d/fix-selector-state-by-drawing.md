@@ -1,0 +1,2 @@
+- Fixed: After a Generate removed feature edits whose features the new source no longer has, the Editor of the next drawing shown said it had removed them too; the Editor of another drawing no longer shows them, and a Duplicate shows its source's.
+- Fixed: A Linear drawing made after a drawing was deleted no longer shows the deleted drawing's record list state for its cards, and records still being read for the deleted drawing no longer reach the new drawing.
