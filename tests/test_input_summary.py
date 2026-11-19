@@ -17,6 +17,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from Bio.SeqRecord import SeqRecord
 
 import gbdraw
 from gbdraw.api import (
@@ -1159,6 +1160,54 @@ def test_a_linear_crop_leaves_out_a_part_past_the_end_of_a_linear_record_with_th
         "WARNING: Record rec (rec.gb): left out 1 feature that does not fit in the record's 100 bp: CDS 81..110 (past)."
     ) in _lines(run)
     assert any("drew 1 feature (1 CDS)" in line for line in _lines(run))
+
+
+def _api_record(topology: str, location: str | None) -> SeqRecord:
+    """A 100 bp record with ``CDS 21..40`` and, unless ``location`` is ``None``, a CDS ``x`` at ``location``."""
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+
+    record = SeqRecord(Seq("acgtgcatgc" * 10), id="rec", name="rec",
+                       annotations={"topology": topology, "molecule_type": "DNA"})
+    record.features = [SeqFeature(FeatureLocation(20, 40, 1), type="CDS", qualifiers={"locus_tag": ["in"]})]
+    if location == "past":
+        record.features.append(SeqFeature(FeatureLocation(80, 110, 1), type="CDS", qualifiers={"locus_tag": ["x"]}))
+    elif location == "join":
+        record.features.append(SeqFeature(
+            CompoundLocation([FeatureLocation(80, 100, 1), FeatureLocation(0, 10, 1)]), type="CDS",
+            qualifiers={"locus_tag": ["x"]}))
+    return record
+
+
+@pytest.mark.parametrize("draw", ["draw_linear", "draw_circular"])
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+@pytest.mark.parametrize("region", ["1-30", "1-100"])
+def test_a_crop_by_apply_region_specs_reads_a_part_past_the_end_by_the_record_topology(
+    caplog: pytest.LogCaptureFixture, draw: str, topology: str, region: str
+) -> None:
+    """``apply_region_specs`` crops before any drawing, so it fits each record by its own topology first: a linear
+    record's part past its end is left out with the warning, in both modes, as Linear leaves it out of the whole
+    record; a circular record's crop draws its share of the span over the origin, as of ``join(81..100,1..10)``
+    (OV-3867: the crop cut the part at the end with no warning)."""
+    import logging
+    import re
+
+    from gbdraw.api import apply_region_specs, parse_region_specs
+
+    def drawn(location: str | None) -> list[str]:
+        crop = apply_region_specs([_api_record(topology, location)], parse_region_specs([region]))
+        svg = getattr(gbdraw, draw)(crop).to_svg()
+        return re.findall(r' d="([^"]*)"', svg)
+
+    with caplog.at_level(logging.WARNING):
+        past = drawn("past")
+    warned = [record.getMessage() for record in caplog.records
+              if "left out 1 feature that does not fit in the record's 100 bp: CDS 81..110 (x)" in record.getMessage()]
+    caplog.clear()
+    expected = drawn("join" if topology == "circular" else None)
+
+    assert past == expected
+    assert len(warned) == (1 if topology == "linear" else 0)
 
 
 def test_setting_a_gff3_record_circular_draws_a_part_past_its_end_over_the_origin(tmp_path: Path) -> None:

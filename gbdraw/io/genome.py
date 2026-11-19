@@ -622,8 +622,20 @@ class FittedRecord:
     """A record with only the features that fit in it (``fit_features_to_record``)."""
 
     record: SeqRecord
-    # The features left out, in source order.
+    # The features left out, in source order: first those a fit left out of the record this one was cut from.
     outside: tuple[FeatureOutsideRecord, ...]
+
+
+# The features a fit left out of a record (``FittedRecord.outside``), carried by the record and by every crop of it,
+# so a later fit of a crop made before drawing (``apply_region_specs``) still names them (OV-3867).
+FEATURES_OUTSIDE_RECORD_ANNOTATION = "gbdraw_features_outside_record"
+
+
+def _features_left_out_before(record: SeqRecord) -> tuple[FeatureOutsideRecord, ...]:
+    carried = record.annotations.get(FEATURES_OUTSIDE_RECORD_ANNOTATION, ())
+    if isinstance(carried, tuple) and all(isinstance(item, FeatureOutsideRecord) for item in carried):
+        return carried
+    return ()
 
 
 def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRecord:
@@ -635,9 +647,11 @@ def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRec
     the origin (GFF3 writes one so), kept as written; Linear draws it as the join it is (``location_over_origin``).
     On any other record such a part does not fit. A record whose features all fit is returned as it is. Otherwise
     the kept features are copies that carry their source identity (index, location facts and hash), as the GFF3 type
-    filter's copies do, so edits and colors still find each one.
+    filter's copies do, so edits and colors still find each one. The record keeps the features left out
+    (``FEATURES_OUTSIDE_RECORD_ANNOTATION``), and so do its crops, so a fit of one names them too.
     """
 
+    before = _features_left_out_before(record)
     length = len(record.seq)
     outside = [
         feature for feature in record.features
@@ -645,7 +659,7 @@ def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRec
         and not location_fits_record(feature.location.parts, length, over_origin=over_origin)
     ]
     if not outside:
-        return FittedRecord(record, ())
+        return FittedRecord(record, before)
     left_out = {id(feature) for feature in outside}
     indexes = _feature_source_index_map(record.features)
     base, step = _read_coord_map(record)
@@ -662,7 +676,9 @@ def fit_features_to_record(record: SeqRecord, *, over_origin: bool) -> FittedRec
 
     fitted = copy.copy(record)
     fitted.features = [carried(feature) for feature in record.features if id(feature) not in left_out]
-    return FittedRecord(fitted, tuple(_feature_outside_record(feature, length) for feature in outside))
+    left = before + tuple(_feature_outside_record(feature, length) for feature in outside)
+    fitted.annotations = {**record.annotations, FEATURES_OUTSIDE_RECORD_ANNOTATION: left}
+    return FittedRecord(fitted, left)
 
 
 @contextmanager

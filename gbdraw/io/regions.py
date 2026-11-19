@@ -26,7 +26,8 @@ from ..core.record_metadata import (
 )
 from ..exceptions import ValidationError
 from ..crop_genbank import check_start_end_coords, crop_and_shift_features
-from ..layout.record_transform import detected_topology, drawn_circular
+from ..layout.record_transform import detected_topology, drawn_circular, reads_over_origin
+from .genome import fit_features_to_record
 from .record_select import RecordSelector, record_index_number, reverse_records
 
 logger = logging.getLogger(__name__)
@@ -622,12 +623,25 @@ def apply_region_specs(
     *,
     log: logging.Logger | None = None,
 ) -> list[SeqRecord]:
-    """Crop each record to the specs that select it; a record with several specs gives one record per window."""
+    """Crop each record to the specs that select it; a record with several specs gives one record per window.
+
+    A crop is made before any drawing, so each record it cuts is first fitted as its own topology reads it
+    (``fit_features_to_record`` with ``reads_over_origin``): a feature part that runs past the end of a linear
+    record does not fit it and is left out, and the drawing of the crop warns about it in both modes. To draw such a
+    part over the origin, as the GFF3 way of writing a span over it, set the record's ``topology`` annotation to
+    ``"circular"`` before cropping.
+    """
 
     if not specs:
         return list(records)
+    cut = assign_region_specs(records, specs)
+    fitted = [
+        fit_features_to_record(record, over_origin=reads_over_origin(False, None, record, "memory")).record
+        if index in cut else record
+        for index, record in enumerate(records)
+    ]
     windows, _cropped = crop_then_reverse_records(
-        records, specs, [False] * len(records), is_circular=None, source_kind="memory", log=log
+        fitted, specs, [False] * len(records), is_circular=None, source_kind="memory", log=log
     )
     return [unit for units in windows for unit in units]
 
