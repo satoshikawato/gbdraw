@@ -1111,7 +1111,7 @@ export const createFeatureLabelActions = ({
       const key = textEl.getAttribute(LABEL_KEY_ATTRIBUTE);
       if (!key) return;
       const text = labelTextOf(textEl);
-      const sourceText = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || text;
+      const sourceText = recordedLabelSourceTextOf(null, textEl);
       const featureId = textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '';
       const kind = textEl.querySelector('textPath') ? 'embedded' : 'regular';
       nextEntries.push({
@@ -1252,10 +1252,7 @@ export const createFeatureLabelActions = ({
       textEl.style.cursor = 'text';
       textEl.setAttribute(LABEL_EDITABLE_ATTRIBUTE, 'true');
       textEl.setAttribute(LABEL_KEY_ATTRIBUTE, `label-${index + 1}`);
-      const currentText = labelTextOf(textEl);
-      if (!textEl.hasAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE)) {
-        textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, currentText);
-      }
+      // The source-text record is the projection's to write (`projectLabelTextIntent`, which runs right after).
       const featureId = featureAssignments.get(textEl);
       if (featureId) {
         textEl.setAttribute(LABEL_FEATURE_ID_ATTRIBUTE, featureId);
@@ -1745,7 +1742,7 @@ export const createFeatureLabelActions = ({
       let hasUntrackableMatch = false;
       const displayed = displayedFeatures(drawing);
       svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((/** @type {Element} */ textEl) => {
-        const candidateSource = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || '';
+        const candidateSource = recordedLabelSourceTextOf(null, textEl);
         if (candidateSource !== sourceText) return;
         matchedCount += 1;
         const candidate = labelFeature(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);

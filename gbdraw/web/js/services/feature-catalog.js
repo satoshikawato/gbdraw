@@ -430,14 +430,29 @@ export const biologicalFeatureKey = (recordKey, biologicalFeatureId) => {
 };
 
 /**
- * The rendered features of a per-feature row's source identity in each Result
- * of an admission (design Q4 6.2, R2).
- * @param {{ readonly renderedTargetsByOverrideKey: ReadonlyMap<string, readonly { resultIndex: number, renderedId: string }[]> }} addressing
- * @param {{ recordKey?: unknown, biologicalFeatureId?: unknown } | null | undefined} row
+ * What an admission gives the lookup of a feature's rendered features: a
+ * catalog's admission, or the features read from a Result without a catalog
+ * (services/feature-override-identity.js displayedFeatureAddressing).
+ * @typedef {{ readonly renderedTargetsByOverrideKey: ReadonlyMap<string, readonly { resultIndex: number, renderedId: string }[]> }} RenderedTargetAddressing
+ */
+
+/**
+ * The rendered features of an override key in each Result of an admission:
+ * the one lookup of a key (design Q4 6.2, R2).
+ * @param {RenderedTargetAddressing} addressing
+ * @param {string} key
  * @returns {readonly { resultIndex: number, renderedId: string }[]}
  */
+export const overrideKeyTargets = (addressing, key) => addressing.renderedTargetsByOverrideKey.get(key) || [];
+
+/**
+ * The rendered features of a per-feature row's source identity in each Result
+ * of an admission.
+ * @param {RenderedTargetAddressing} addressing
+ * @param {{ recordKey?: unknown, biologicalFeatureId?: unknown } | null | undefined} row
+ */
 export const featureRowTargets = (addressing, row) => (
-  addressing.renderedTargetsByOverrideKey.get(biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId)) || []
+  overrideKeyTargets(addressing, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
 );
 
 /** @param {FeatureCatalogRow | null | undefined} feature */

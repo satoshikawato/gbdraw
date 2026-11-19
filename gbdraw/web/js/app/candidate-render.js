@@ -15,7 +15,7 @@ import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendKeyOrder, isLegendOrderEdited, ownLegendColor } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
-import { featureRowTargets } from '../services/feature-catalog.js';
+import { featureRowTargets, overrideKeyTargets } from '../services/feature-catalog.js';
 import { labelSourceTextsByResult, recordLabelSourceTexts } from '../services/preview-affordances.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
 import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
@@ -490,30 +490,12 @@ export const editorPaintDomains = (changes) => [...new Set((Array.isArray(change
 
 /**
  * @param {EditorAddressing} catalogAdmission
- * @param {string} key
- * @returns {{ resultIndex: number, renderedId: string }[]}
- */
-const resolvedStableTargets = (catalogAdmission, key) => (
-  catalogAdmission.renderedTargetsByOverrideKey.get(key) || []
-);
-
-/**
- * @param {EditorAddressing} catalogAdmission
  * @param {string} renderedId
  * @returns {ReadonlySet<number>}
  */
 const renderedResultIndexes = (catalogAdmission, renderedId) => (
   catalogAdmission.resultIndexesByRenderedId.get(renderedId) || new Set()
 );
-
-// Per-feature edits name a source identity in the drawing of the catalog's
-// mode; each Result of that mode draws it with its own rendered ID (design Q4
-// 6.2, R2).
-/**
- * @param {EditorAddressing} catalogAdmission
- * @param {CanonicalFeatureOverride | null | undefined} row
- */
-const identityTargets = (catalogAdmission, row) => featureRowTargets(catalogAdmission, row);
 
 
 /** @param {EditorPlanOptions} options */
@@ -576,7 +558,7 @@ const compilePlanBundle = ({
   runStage('fills', () => {
     Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
       const color = normalizePaint(featureColorEditColor(rawOverride), 'feature fill');
-      const targets = resolvedStableTargets(catalogAdmission, key);
+      const targets = overrideKeyTargets(catalogAdmission, key);
       if (!color || targets.length === 0) return;
       normalizedFeatureColorOverrides[key] = rawOverride && typeof rawOverride === 'object'
         ? { ...cloneJsonValue(rawOverride, {}), color }
@@ -626,10 +608,11 @@ const compilePlanBundle = ({
       });
       return;
     }
+    // A row names a source identity; each Result draws it with its own rendered ID (design Q4 6.2, R2).
     Object.values(featureOverrides || {}).forEach((row) => {
       const featureMode = text(row?.featureVisibility).toLowerCase();
       if (featureMode !== 'on' && featureMode !== 'off') return;
-      identityTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
+      featureRowTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
         const operations = operationsByResult[resultIndex];
         if (!operations) return;
         operations.featureVisibility.push({ renderedId, mode: featureMode });
@@ -641,7 +624,7 @@ const compilePlanBundle = ({
   runStage('labels', () => {
     Object.values(featureOverrides || {}).forEach((row) => {
       const labelMode = text(row?.labelVisibility).toLowerCase();
-      identityTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
+      featureRowTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
         const operations = operationsByResult[resultIndex];
         if (!operations) return;
         if (typeof row?.labelText === 'string') {
@@ -793,7 +776,7 @@ const compilePlanBundle = ({
     const named = namedLegendCaption(override, rules) === caption;
     const row = named ? caption : ruleRowOf({ cap: caption, color: text(edit?.color) });
     const renderedIds = renderedIdsByEditRow.get(row) || new Set();
-    resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
+    overrideKeyTargets(catalogAdmission, key).forEach(({ renderedId }) => {
       if (!renderedId) return;
       renderedIds.add(/** @type {RenderedFeatureId} */ (renderedId));
       if (!named) ruleDrawnIds.add(/** @type {RenderedFeatureId} */ (renderedId));
@@ -861,7 +844,7 @@ const compilePlanBundle = ({
       const strokeWidth = hasOwn(rawOverride, 'strokeWidth')
         ? normalizeStrokeWidth(rawOverride.strokeWidth)
         : null;
-      const targets = resolvedStableTargets(catalogAdmission, key);
+      const targets = overrideKeyTargets(catalogAdmission, key);
       if ((!strokeColor && strokeWidth === null) || targets.length === 0) return;
       targets.forEach(({ resultIndex, renderedId }) => {
         operationsByResult[resultIndex].featureStrokes.push({

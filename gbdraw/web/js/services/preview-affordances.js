@@ -22,16 +22,14 @@ export const PREVIEW_MATCH_BUTTON_ATTRIBUTE = 'data-gbdraw-preview-match';
 // it; an export strips it. Its value has one rule, `labelSourceTextOf`, and
 // the Result's text holds it independent of clicks: a Result entering the
 // page (Generate, a rerender, Load) records it from the feature rows
-// (`recordLabelSourceTexts`), the binder reads it there, and serialization
-// drops one equal to the shown text (`stripLabelBinderMarks`). So neither a
+// (`recordLabelSourceTexts`), the label projection writes it on each bound
+// label of the mounted Result by the same rule, and serialization drops one
+// equal to the shown text (`stripLabelBinderMarks`). So neither a
 // saved Session nor an export depends on whether a label was clicked, and a
 // renamed label's old text does not leave the page (OV-3848).
 export const LABEL_EDITABLE_ATTRIBUTE = 'data-label-editable';
 export const LABEL_KEY_ATTRIBUTE = 'data-label-key';
 export const LABEL_SOURCE_TEXT_ATTRIBUTE = 'data-label-source-text';
-export const LABEL_BINDER_ATTRIBUTES = Object.freeze([
-  LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
-]);
 // The labels the binder made editable.
 export const EDITABLE_LABEL_SELECTOR = `text[${LABEL_EDITABLE_ATTRIBUTE}="true"]`;
 
@@ -43,8 +41,8 @@ export const labelTextOf = (textEl) => {
 };
 
 /**
- * A label's source text, by the one rule the binder, the projection and the
- * admission share: its feature row's recorded source text, else the label's
+ * A label's source text, by the one rule the label actions, the projection
+ * and the admission share: its feature row's recorded source text, else the label's
  * record, else the text it shows.
  * @param {string | null | undefined} rowSourceText
  * @param {Element} textEl

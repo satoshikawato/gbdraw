@@ -12,9 +12,13 @@ import zhHans from '../../gbdraw/web/js/utils/i18n-catalogs/zh-Hans.js';
 import { wordedNotice } from './helpers/worded-notice.mjs';
 import { serializeCleanSvg, stripTransientPreviewState } from '../../gbdraw/web/js/services/svg-serialization.js';
 import {
-  LABEL_BINDER_ATTRIBUTES, labelSourceTextsByResult, recordLabelSourceTexts, stripLabelSourceRecords
+  LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, labelSourceTextsByResult, recordLabelSourceTexts,
+  stripLabelSourceRecords
 } from '../../gbdraw/web/js/services/preview-affordances.js';
 import { biologicalFeatureKey, featureRowTargets } from '../../gbdraw/web/js/services/feature-catalog.js';
+
+// The marks the label binder writes on a mounted label, and the source-text record.
+const LABEL_BINDER_ATTRIBUTES = [LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE];
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
