@@ -153,7 +153,7 @@ const MUTATING_METHODS = new Set([
 const READERS = new Set([
   'Array.from', 'Array.isArray', 'Object.entries', 'Object.hasOwn', 'Object.keys', 'clonePlainObject', 'cloneJsonArray',
   'cloneJsonData', 'cloneJsonObject', 'cloneJsonValue', 'cloneFeatureVisibilityRules', 'getFeatureOverride',
-  'getGeneratedArtifactRef', 'getRef', 'hasOwn', 'hasOwnEntry', 'isLegendOrderEdited', 'normalizeFeatureVisibilityRulesForSession',
+  'getRef', 'hasOwn', 'hasOwnEntry', 'isLegendOrderEdited', 'normalizeFeatureVisibilityRulesForSession',
   'normalizedLegendEntries', 'publicationClone', 'readFeatureColorEdits', 'requestFeatureVisibilityRules', 'rewriteOverrideMap',
   'rowOf', 'savedFeatureColorEdits', 'serializeFeatureVisibilityRules'
 ]);

@@ -71,7 +71,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/feature-visibility.js': 1,
   'services/file-imports.js': 1,
   'services/gallery-session-publication.js': 9,
-  'services/history-snapshot.js': 18,
+  'services/history-snapshot.js': 8,
   'services/history.js': 9,
   'services/losat-cache.js': 8,
   'services/losat.js': 2,

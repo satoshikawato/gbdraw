@@ -48,11 +48,73 @@ for (const filename of [
 
 const { createHistoryManager, createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
 const { createInputFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
-const { createHeldFigurePorts, createHistorySnapshotService } = await import(
+const { createHeldFigurePorts, createHistorySnapshotService: createSnapshotService } = await import(
   pathToFileURL(join(tempDir, 'services', 'history-snapshot.js'))
 );
 
 const ref = (value) => ({ value });
+// The app state members the snapshot service reads, at the values state.js
+// creates them with: a fixture below gains each one it leaves out (its own
+// members stay), since every app state has them. A fixture that names no
+// shown drawing shows none (`activeDrawingId` names no drawing), so each of
+// its drawings reads and writes its artifact through its slot.
+const SNAPSHOT_STATE_MEMBERS = () => ({
+  activeDrawingId: ref(null),
+  results: ref([]),
+  selectedResultIndex: ref(0),
+  resultPanelTab: ref('preview'),
+  resultGenerationKey: ref(0),
+  errorLog: ref(null),
+  semanticFileWatchersSuppressed: ref(false),
+  trustedArtifactRestoreInProgress: ref(false),
+  skipCaptureBaseConfig: ref(false),
+  skipExtractOnSvgChange: ref(false),
+  featureCatalog: ref(null),
+  extractedFeatures: ref([]),
+  biologicalFeatures: ref([]),
+  selectedFeatureRecordIdx: ref(0),
+  orthogroups: ref([]),
+  selectedOrthogroupId: ref(''),
+  selectedOrthogroupAlignmentFeature: ref(''),
+  similarityAlignmentPlan: ref(null),
+  similarityAlignmentResetReceipt: ref(null),
+  linearRecordTranslations: ref([]),
+  pairwiseMatchFactors: ref({}),
+  editableLabels: ref([]),
+  originalLegendOrder: ref([]),
+  originalLegendColors: ref({}),
+  generatedLegendPosition: ref('left'),
+  autoLabelReflowEnabled: ref(false),
+  appliedPaletteName: ref('default'),
+  appliedPaletteColors: ref({}),
+  legendCurrentOffset: { x: 0, y: 0 },
+  diagramOffset: { x: 0, y: 0 },
+  lengthBarUserOffset: { x: 0, y: 0 },
+  plotTitleUserOffset: { x: 0, y: 0 },
+  clickedFeature: ref(null),
+  clickedPairwiseMatch: ref(null),
+  featureStyleScopeDialog: { show: false },
+  resetColorDialog: { show: false, caption: '', siblingCount: 0 },
+  legendRenameDialog: { show: false },
+  labelTextScopeDialog: { show: false, labelKey: '', newText: '', sourceText: '', featureId: '', matchingCount: 0 },
+  featureVisibilityScopeDialog: { show: false, feat: null, mode: 'default', previousMode: 'default', scopes: [] },
+  hiddenLabelTextDialog: { show: false, featureId: '', reason: '' },
+  selectedSpecificPreset: ref(''),
+  newSpecRule: { feat: 'CDS', qual: 'product', val: '', color: '#ff0000', cap: '' },
+  newPriorityRule: { feat: 'CDS', order: 'product,gene,locus_tag' },
+  newColorFeat: ref('gene'),
+  newColorVal: ref('#d3d3d3'),
+  newFeatureToAdd: ref('mobile_element')
+});
+const withSnapshotStateMembers = (state) => {
+  Object.entries(SNAPSHOT_STATE_MEMBERS()).forEach(([key, value]) => {
+    if (!(key in state)) state[key] = value;
+  });
+  return state;
+};
+const createHistorySnapshotService = (options) => createSnapshotService({
+  ...options, state: withSnapshotStateMembers(options.state)
+});
 const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastModified: 1 });
 const createLayoutPreferences = () => ({
   circular: {

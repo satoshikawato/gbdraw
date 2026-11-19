@@ -129,7 +129,7 @@ const FUNCTION_STATEMENTS = {
   'services/diagram-resource-staging.js::createDiagramResourceTransport': 87,
   'services/feature-catalog.js::validateAndProjectCatalogItem': 191,
   'services/feature-override-identity.js::migrateLegacyFeatureOverrides': 94,
-  'services/history-snapshot.js::createHistorySnapshotService': 390,
+  'services/history-snapshot.js::createHistorySnapshotService': 389,
   'services/history.js::createHistoryManager': 897,
   'services/history.js::createHistoryRouter': 449,
   'services/legend-layout.js::buildCircularLegendLayout': 97,

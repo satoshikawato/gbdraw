@@ -942,7 +942,7 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     ):
         assert fragment in feature_catalog
     assert (
-        "setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);"
+        "setRef(state.collinearGroups, ownerSet.collinearGroups || []);"
         in history_snapshot
     )
 

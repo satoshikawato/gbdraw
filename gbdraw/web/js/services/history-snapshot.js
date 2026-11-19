@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { ArtifactSlot, FeatureEditorStatus, ShownSetLegend, ShownSetLegendRefs } from './artifact-slot.js' */
+/** @import { ArtifactSlot, FeatureEditorStatus, ShownSetLegend } from './artifact-slot.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { DrawnInputSummary } from './input-summary.js' */
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
@@ -47,6 +47,7 @@ import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { PaletteColors, PaletteSlice } from './drawing/palette.js' */
 /** @import { GroupNamesData } from './drawing/group-names.js' */
 /** @import { HeldFigure, HeldFigurePort, HistoryArtifactHandle } from './history.js' */
+/** @import { WebState } from '../state.js' */
 
 export { cloneJsonData };
 
@@ -136,7 +137,27 @@ const editedIntentPartOf = (path, value) => (
 /** @typedef {{ orthogroupNameOverrides?: unknown, orthogroupDescriptionOverrides?: unknown, orthogroupDormantOverrides?: unknown }} GroupNameIntentData */
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
 /** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
-/** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
+/**
+ * The app state members the snapshot service reads and writes (state.js `WebState`): the artifact slot values
+ * (`ARTIFACT_SLOT_KEYS`) and the members below.
+ * @typedef {(typeof ARTIFACT_SLOT_KEYS)[number] | 'activeDrawingId' | 'autoLabelReflowEnabled' | 'clickedFeature'
+ *   | 'clickedPairwiseMatch' | 'diagramOffset' | 'downloadDpi' | 'errorLog' | 'failedGeneratePreservedResult'
+ *   | 'featureExtractionPending' | 'featurePopupDrag' | 'featurePopupResize' | 'featureStyleScopeDialog'
+ *   | 'featureVisibilityScopeDialog' | 'generatedDrawingId' | 'hiddenLabelTextDialog' | 'labelTextScopeDialog'
+ *   | 'legendCurrentOffset' | 'legendRenameDialog' | 'lengthBarUserOffset' | 'mode' | 'newColorFeat' | 'newColorVal'
+ *   | 'newFeatureToAdd' | 'newPriorityRule' | 'newSpecRule' | 'originalLegendColors' | 'originalLegendOrder'
+ *   | 'pairwiseMatchPopupDrag' | 'pairwiseMatchPopupResize' | 'paletteInstantPreviewEnabled' | 'plotTitleUserOffset'
+ *   | 'resetColorDialog' | 'resultGenerationKey' | 'resultPanelTab' | 'selectedAnnotation' | 'selectedFeatureRecordIdx'
+ *   | 'selectedOrthogroupAlignmentFeature' | 'selectedOrthogroupId' | 'selectedSpecificPreset'
+ *   | 'semanticFileWatchersSuppressed' | 'sessionTitle' | 'skipCaptureBaseConfig' | 'skipExtractOnSvgChange'
+ *   | 'trustedArtifactRestoreInProgress'} HistorySnapshotStateKey
+ */
+/**
+ * The app state the snapshot service is given: the members it reads and writes, and the drawing lookups, which
+ * return the composition root's drawing type `D` (state.js `DrawingState`).
+ * @template {DrawingView} [D=DrawingView]
+ * @typedef {Pick<WebState, HistorySnapshotStateKey> & { drawingOf: (id: DrawingId) => D, drawingList: () => readonly D[] }} HistorySnapshotState
+ */
 /** @import { CurrentResultsPort, SvgResultEntry } from './svg-result-ingestion.js' */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /** @import { LinearCardOrientation } from './record-display-model.js' */
@@ -273,11 +294,10 @@ const clonePlainObject = (value) => {
 };
 
 /**
- * @param {Record<string, unknown> | null | undefined} target
+ * @param {Record<string, unknown>} target
  * @param {Record<string, unknown> | null | undefined} source
  */
 const replacePlainObject = (target, source) => {
-  if (!target || typeof target !== 'object') return;
   Object.keys(target).forEach((key) => delete target[key]);
   Object.entries(source || {}).forEach(([key, value]) => {
     target[key] = value;
@@ -359,19 +379,23 @@ const buildUiIntentData = (ui) => {
   return intent;
 };
 
+/**
+ * The Features-list record index a step holds: an integer, else the first record.
+ * @param {unknown} value
+ * @returns {number}
+ */
+const recordIndexOf = (value) => (typeof value === 'number' && Number.isInteger(value) ? value : 0);
+
 // A generated artifact's features hold the Features-list record it showed;
 // an intent's per-mode features do not (the intent's `ui` holds it).
 /**
- * @param {Record<string, any>} state
+ * @param {Pick<WebState, 'selectedFeatureRecordIdx'>} state
  * @param {DrawingView} drawing
  * @param {FeatureEditsData} [features]
  */
 const applyFeatureIntentData = (state, drawing, features = {}) => {
   if (Object.hasOwn(features, 'selectedFeatureRecordIdx')) {
-    setRef(
-      state.selectedFeatureRecordIdx,
-      Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
-    );
+    state.selectedFeatureRecordIdx.value = recordIndexOf(features.selectedFeatureRecordIdx);
   }
   PAINT_SLICE.install(drawing.slices.paint, { featureColorOverrides: capturedFills(features) });
   replaceFeatureEditState(drawing, features);
@@ -411,7 +435,7 @@ const applyEditorIntentData = (drawing, editorState = {}) => {
  * @param {HandleEditorState | undefined} editorState
  * @param {{ readonly similarityAlignmentResetReceipt?: AlignmentResetReceipt | null,
  *   readonly featureCatalog?: FeatureCatalog | null } | null | undefined} ownerSet
- * @param {{ state: HistorySnapshotState, applyEditorStateData: ((drawing: D, editorState: EditorStateData) => unknown) | null }} restore
+ * @param {{ state: Pick<WebState, 'featureCatalog'>, applyEditorStateData: ((drawing: D, editorState: EditorStateData) => unknown) | null }} restore
  */
 const restoreHandleEditorState = (drawing, editorState, ownerSet, { state, applyEditorStateData }) => {
   if (!editorState) return;
@@ -426,19 +450,16 @@ const restoreHandleEditorState = (drawing, editorState, ownerSet, { state, apply
     return;
   }
   applyEditorIntentData(drawing, trusted);
-  setGeneratedArtifactRef(state.featureCatalog, trusted.featureCatalog);
+  state.featureCatalog.value = trusted.featureCatalog;
 };
 
 /**
- * @param {Record<string, any>} state
+ * @param {Pick<WebState, 'selectedOrthogroupId' | 'selectedOrthogroupAlignmentFeature'>} state
  * @param {OrthogroupIntentData} [orthogroupState]
  */
 const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
-  setRef(state.selectedOrthogroupId, String(orthogroupState.selectedOrthogroupId || ''));
-  setRef(
-    state.selectedOrthogroupAlignmentFeature,
-    String(orthogroupState.selectedOrthogroupAlignmentFeature || '')
-  );
+  state.selectedOrthogroupId.value = String(orthogroupState.selectedOrthogroupId || '');
+  state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '');
 };
 
 /**
@@ -538,24 +559,6 @@ const getRef = (target, fallback) => (
 );
 
 /**
- * @param {unknown} target A Vue ref, or any other value (a non-ref is left as it is).
- * @param {unknown} value
- */
-const setGeneratedArtifactRef = (target, value) => {
-  if (target && typeof target === 'object' && 'value' in target) target.value = value;
-};
-
-/**
- * @template T, F
- * @param {{ value: T } | null | undefined} target A Vue ref (the fallback is returned for a non-ref).
- * @param {F} fallback The value for a target that is not a ref.
- * @returns {T | F}
- */
-const getGeneratedArtifactRef = (target, fallback) => (
-  target && typeof target === 'object' && 'value' in target ? target.value : fallback
-);
-
-/**
  * The shown drawing's LOSAT evidence for an artifact owner set, by reference, key by key: the keys of
  * `LOSAT_EVIDENCE_KEYS`, which the owner set's install, the artifact slot and Clear read too.
  * @param {(key: (typeof LOSAT_EVIDENCE_KEYS)[number]) => unknown} valueOf The app state's value of a key.
@@ -565,29 +568,34 @@ const capturedLosatEvidence = (valueOf) => /** @type {{ [K in keyof LosatEvidenc
   Object.fromEntries(LOSAT_EVIDENCE_KEYS.map((key) => [key, toRaw(valueOf(key))]))
 );
 
-/** @param {Record<string, any>} state */
+/**
+ * The draft members of the app state (`DraftIntentData`).
+ * @typedef {Pick<WebState, 'selectedAnnotation' | 'selectedSpecificPreset' | 'newSpecRule' | 'newPriorityRule'
+ *   | 'newColorFeat' | 'newColorVal' | 'newFeatureToAdd'>} DraftState
+ */
+/** @param {DraftState} state */
 const buildDraftIntentData = (state) => ({
   selectedAnnotation: cloneJsonData(getRef(state.selectedAnnotation, null)),
-  selectedSpecificPreset: String(getRef(state.selectedSpecificPreset, '') || ''),
+  selectedSpecificPreset: state.selectedSpecificPreset.value,
   newSpecRule: clonePlainObject(state.newSpecRule),
   newPriorityRule: clonePlainObject(state.newPriorityRule),
-  newColorFeat: String(getRef(state.newColorFeat, '') || ''),
-  newColorVal: String(getRef(state.newColorVal, '') || ''),
-  newFeatureToAdd: String(getRef(state.newFeatureToAdd, '') || '')
+  newColorFeat: state.newColorFeat.value,
+  newColorVal: state.newColorVal.value,
+  newFeatureToAdd: state.newFeatureToAdd.value
 });
 
 /**
- * @param {Record<string, any>} state
+ * @param {DraftState} state
  * @param {DraftIntentData} [drafts]
  */
 const applyDraftIntentData = (state, drafts = {}) => {
   setRef(state.selectedAnnotation, cloneJsonData(drafts.selectedAnnotation) || null);
-  setRef(state.selectedSpecificPreset, String(drafts.selectedSpecificPreset || ''));
+  state.selectedSpecificPreset.value = String(drafts.selectedSpecificPreset || '');
   replacePlainObject(state.newSpecRule, clonePlainObject(drafts.newSpecRule));
   replacePlainObject(state.newPriorityRule, clonePlainObject(drafts.newPriorityRule));
-  setRef(state.newColorFeat, String(drafts.newColorFeat || ''));
-  setRef(state.newColorVal, String(drafts.newColorVal || ''));
-  setRef(state.newFeatureToAdd, String(drafts.newFeatureToAdd || ''));
+  state.newColorFeat.value = String(drafts.newColorFeat || '');
+  state.newColorVal.value = String(drafts.newColorVal || '');
+  state.newFeatureToAdd.value = String(drafts.newFeatureToAdd || '');
 };
 
 // A History step holds the padding the canvas slice captured (the cast).
@@ -617,16 +625,20 @@ const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
   }
 }));
 
-/** @param {HistorySnapshotState} state */
+/**
+ * @param {Pick<WebState, 'clickedFeature' | 'clickedPairwiseMatch' | 'featureStyleScopeDialog' | 'resetColorDialog'
+ *   | 'legendRenameDialog' | 'labelTextScopeDialog' | 'featureVisibilityScopeDialog' | 'hiddenLabelTextDialog'
+ *   | 'featurePopupDrag' | 'featurePopupResize' | 'pairwiseMatchPopupDrag' | 'pairwiseMatchPopupResize'>} state
+ */
 const closeTransientState = (state) => {
-  setRef(state.clickedFeature, null);
-  setRef(state.clickedPairwiseMatch, null);
-  if (state.featureStyleScopeDialog) state.featureStyleScopeDialog.show = false;
-  if (state.resetColorDialog) state.resetColorDialog.show = false;
-  if (state.legendRenameDialog) state.legendRenameDialog.show = false;
-  if (state.labelTextScopeDialog) state.labelTextScopeDialog.show = false;
-  if (state.featureVisibilityScopeDialog) state.featureVisibilityScopeDialog.show = false;
-  if (state.hiddenLabelTextDialog) state.hiddenLabelTextDialog.show = false;
+  state.clickedFeature.value = null;
+  state.clickedPairwiseMatch.value = null;
+  state.featureStyleScopeDialog.show = false;
+  state.resetColorDialog.show = false;
+  state.legendRenameDialog.show = false;
+  state.labelTextScopeDialog.show = false;
+  state.featureVisibilityScopeDialog.show = false;
+  state.hiddenLabelTextDialog.show = false;
   if (state.featurePopupDrag) state.featurePopupDrag.active = false;
   if (state.featurePopupResize) state.featurePopupResize.active = false;
   if (state.pairwiseMatchPopupDrag) state.pairwiseMatchPopupDrag.active = false;
@@ -634,39 +646,46 @@ const closeTransientState = (state) => {
 };
 
 /**
- * @param {Record<string, any>} state
+ * The app state members of the fallback UI capture and restore.
+ * @typedef {Pick<WebState, 'sessionTitle' | 'mode' | 'selectedResultIndex' | 'downloadDpi' | 'generatedLegendPosition'
+ *   | 'generatedMultiRecordCanvas' | 'generatedCircularPlotTitlePosition' | 'autoLabelReflowEnabled'
+ *   | 'paletteInstantPreviewEnabled' | 'appliedPaletteName' | 'appliedPaletteColors' | 'legendCurrentOffset'
+ *   | 'diagramOffset' | 'lengthBarUserOffset' | 'plotTitleUserOffset' | 'results'>} FallbackUiState
+ */
+/**
+ * @param {FallbackUiState} state
  * @param {DrawingView} drawing
  */
 const buildFallbackUiStateData = (state, drawing) => ({
   title: getRef(state.sessionTitle, ''),
-  mode: getRef(state.mode, 'circular'),
+  mode: state.mode.value,
   ...SETTINGS_SLICE.capture(drawing.slices.settings, ['losatProgram', 'layoutPreferences']),
-  selectedResultIndex: getRef(state.selectedResultIndex, 0),
+  selectedResultIndex: state.selectedResultIndex.value,
   downloadDpi: getRef(state.downloadDpi, DEFAULT_PNG_DPI),
   canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
-  generatedLegendPosition: getRef(state.generatedLegendPosition, 'left'),
+  generatedLegendPosition: state.generatedLegendPosition.value,
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
-  autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
+  autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
   paletteInstantPreviewEnabled: Boolean(getRef(state.paletteInstantPreviewEnabled, false)),
-  appliedPaletteName: getRef(state.appliedPaletteName, 'default'),
-  appliedPaletteColors: clonePlainObject(getRef(state.appliedPaletteColors, {})),
+  appliedPaletteName: state.appliedPaletteName.value,
+  appliedPaletteColors: clonePlainObject(state.appliedPaletteColors.value),
   ...queuedPaletteData(drawing.slices.palette),
-  legendCurrentOffset: { ...(state.legendCurrentOffset || {}) },
-  diagramOffset: { ...(state.diagramOffset || {}) },
-  lengthBarUserOffset: { ...(state.lengthBarUserOffset || {}) },
-  plotTitleUserOffset: { ...(state.plotTitleUserOffset || {}) }
+  legendCurrentOffset: { ...state.legendCurrentOffset },
+  diagramOffset: { ...state.diagramOffset },
+  lengthBarUserOffset: { ...state.lengthBarUserOffset },
+  plotTitleUserOffset: { ...state.plotTitleUserOffset }
 });
 
 // The fallback's Session-level values (R15-23).
 /**
- * @param {HistorySnapshotState} state
+ * @param {Pick<WebState, 'sessionTitle' | 'downloadDpi' | 'autoLabelReflowEnabled' | 'paletteInstantPreviewEnabled'>} state
  * @param {SessionUiData} ui
  */
 const applyFallbackSessionUiData = (state, ui) => {
   if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
   if (ui.downloadDpi) setRef(state.downloadDpi, ui.downloadDpi);
-  if (Object.hasOwn(ui, 'autoLabelReflow')) setRef(state.autoLabelReflowEnabled, Boolean(ui.autoLabelReflow));
+  if (Object.hasOwn(ui, 'autoLabelReflow')) state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
   if (Object.hasOwn(ui, 'paletteInstantPreviewEnabled')) {
     setRef(state.paletteInstantPreviewEnabled, Boolean(ui.paletteInstantPreviewEnabled));
   }
@@ -674,7 +693,7 @@ const applyFallbackSessionUiData = (state, ui) => {
 
 // `mode` is not restored: a drawing switch is no History step (PD-OI-090).
 /**
- * @param {HistorySnapshotState} state
+ * @param {FallbackUiState} state
  * @param {DrawingView} drawing
  * @param {FallbackUiData} [ui]
  */
@@ -691,40 +710,41 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
     setRef(state.generatedCircularPlotTitlePosition, ui.generatedCircularPlotTitlePosition);
   }
   installCanvasPadding(drawing, ui);
-  if (ui.appliedPaletteName !== undefined) setRef(state.appliedPaletteName, String(ui.appliedPaletteName || 'default'));
+  if (ui.appliedPaletteName !== undefined) state.appliedPaletteName.value = String(ui.appliedPaletteName || 'default');
   if (ui.appliedPaletteColors) setRef(state.appliedPaletteColors, clonePlainObject(ui.appliedPaletteColors));
   installQueuedPalette(drawing, ui);
-  if (state.legendCurrentOffset && ui.legendCurrentOffset) {
+  if (ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
     state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;
   }
-  if (state.diagramOffset && ui.diagramOffset) {
+  if (ui.diagramOffset) {
     state.diagramOffset.x = Number(ui.diagramOffset.x) || 0;
     state.diagramOffset.y = Number(ui.diagramOffset.y) || 0;
   }
-  if (state.lengthBarUserOffset && ui.lengthBarUserOffset) {
+  if (ui.lengthBarUserOffset) {
     state.lengthBarUserOffset.x = Number(ui.lengthBarUserOffset.x) || 0;
     state.lengthBarUserOffset.y = Number(ui.lengthBarUserOffset.y) || 0;
   }
-  if (state.plotTitleUserOffset && ui.plotTitleUserOffset) {
+  if (ui.plotTitleUserOffset) {
     state.plotTitleUserOffset.x = Number(ui.plotTitleUserOffset.x) || 0;
     state.plotTitleUserOffset.y = Number(ui.plotTitleUserOffset.y) || 0;
   }
   if (Number.isInteger(ui.selectedResultIndex)) {
-    const count = Array.isArray(getRef(state.results, [])) ? getRef(state.results, []).length : 0;
+    const count = state.results.value.length;
     // The guard above passes only integers; `Number.isInteger` does not narrow the type.
-    setRef(state.selectedResultIndex, count > 0 ? Math.max(0, Math.min(/** @type {number} */ (ui.selectedResultIndex), count - 1)) : 0);
+    state.selectedResultIndex.value = count > 0 ? Math.max(0, Math.min(/** @type {number} */ (ui.selectedResultIndex), count - 1)) : 0;
   }
 };
 
+/** @typedef {Pick<WebState, 'extractedFeatures' | 'featureRecordIds' | 'selectedFeatureRecordIdx'>} FallbackFeatureState */
 /**
- * @param {Record<string, any>} state
+ * @param {FallbackFeatureState} state
  * @param {DrawingView} drawing
  */
 const buildFallbackFeatureStateData = (state, drawing) => ({
-  extractedFeatures: cloneJsonData(getRef(state.extractedFeatures, [])) || [],
+  extractedFeatures: cloneJsonData(state.extractedFeatures.value),
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
-  selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
+  selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: captureFeatureFills(drawing.slices.paint),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides,
@@ -732,46 +752,44 @@ const buildFallbackFeatureStateData = (state, drawing) => ({
 });
 
 /**
- * @param {Record<string, any>} state
+ * @param {FallbackFeatureState} state
  * @param {DrawingView} drawing
  * @param {FeatureEditsData & { extractedFeatures?: unknown, featureRecordIds?: unknown }} [features]
  */
 const applyFallbackFeatureStateData = (state, drawing, features = {}) => {
   setRef(state.extractedFeatures, cloneJsonData(features.extractedFeatures) || []);
   setRef(state.featureRecordIds, cloneJsonData(features.featureRecordIds) || []);
-  setRef(
-    state.selectedFeatureRecordIdx,
-    Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
-  );
+  state.selectedFeatureRecordIdx.value = recordIndexOf(features.selectedFeatureRecordIdx);
   PAINT_SLICE.install(drawing.slices.paint, { featureColorOverrides: capturedFills(features) });
   replaceFeatureEditState(drawing, features);
 };
 
+/** @typedef {Pick<WebState, 'orthogroups' | 'selectedOrthogroupId' | 'selectedOrthogroupAlignmentFeature'>} FallbackOrthogroupState */
 /**
- * @param {Record<string, any>} state
+ * @param {FallbackOrthogroupState} state
  * @param {DrawingView} drawing
  */
 const buildFallbackOrthogroupStateData = (state, drawing) => ({
-  groups: cloneJsonData(getRef(state.orthogroups, [])) || [],
-  selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
-  selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
+  groups: cloneJsonData(state.orthogroups.value),
+  selectedOrthogroupId: state.selectedOrthogroupId.value,
+  selectedOrthogroupAlignmentFeature: state.selectedOrthogroupAlignmentFeature.value,
   ...buildGroupNameIntentData(drawing)
 });
 
 /**
- * @param {Record<string, any>} state
+ * @param {FallbackOrthogroupState} state
  * @param {DrawingView} drawing
  * @param {OrthogroupIntentData & GroupNameIntentData & { groups?: unknown }} [data]
  */
 const applyFallbackOrthogroupStateData = (state, drawing, data = {}) => {
   setRef(state.orthogroups, cloneJsonData(data.groups) || []);
-  setRef(state.selectedOrthogroupId, String(data.selectedOrthogroupId || ''));
-  setRef(state.selectedOrthogroupAlignmentFeature, String(data.selectedOrthogroupAlignmentFeature || ''));
+  state.selectedOrthogroupId.value = String(data.selectedOrthogroupId || '');
+  state.selectedOrthogroupAlignmentFeature.value = String(data.selectedOrthogroupAlignmentFeature || '');
   applyGroupNameIntentData(drawing, data);
 };
 
 /**
- * @param {HistorySnapshotState} state
+ * @param {Pick<WebState, 'results'>} state
  * @param {unknown} [results]
  */
 const applyFallbackResultsData = (state, results = []) => {
@@ -898,8 +916,7 @@ const applyFilesData = (drawing, filesData, fileStore) => {
  * @template {DrawingView} [D=DrawingView]
  * @template [P=unknown]
  * @typedef {object} HistorySnapshotServiceOptions
- * @property {Record<string, any> & { drawingOf: (id: DrawingId) => D, drawingList: () => readonly D[] } & ShownSetLegendRefs} state
- *   App state (state.js; not yet typed but for these members).
+ * @property {HistorySnapshotState<D>} state
  * @property {HistorySnapshotFileStore} fileStore
  *   The file store that holds the files an intent and a checkpoint name.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
@@ -1245,55 +1262,45 @@ export const createHistorySnapshotService = ({
     const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
       results,
-      featureCatalog: toRaw(getGeneratedArtifactRef(state.featureCatalog, null)),
-      extractedFeatures: toRaw(getGeneratedArtifactRef(state.extractedFeatures, null)),
-      biologicalFeatures: toRaw(getGeneratedArtifactRef(state.biologicalFeatures, null)),
-      featureRecordIds: toRaw(getGeneratedArtifactRef(state.featureRecordIds, null)),
-      orthogroups: toRaw(getGeneratedArtifactRef(state.orthogroups, null)),
+      featureCatalog: toRaw(state.featureCatalog.value),
+      extractedFeatures: toRaw(state.extractedFeatures.value),
+      biologicalFeatures: toRaw(state.biologicalFeatures.value),
+      featureRecordIds: toRaw(getRef(state.featureRecordIds, null)),
+      orthogroups: toRaw(state.orthogroups.value),
       featureOrthogroupIndex: toRaw(
-        getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
+        getRef(state.featureOrthogroupIndex, null)
       ),
-      collinearGroups: toRaw(getGeneratedArtifactRef(state.collinearGroups, null)),
-      similarityAlignmentResetReceipt: toRaw(
-        getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)
-      ),
-      similarityAlignmentPlan: toRaw(
-        getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
-      ),
-      linearRecordTranslations: toRaw(
-        getGeneratedArtifactRef(state.linearRecordTranslations, null)
-      ),
+      collinearGroups: toRaw(getRef(state.collinearGroups, null)),
+      similarityAlignmentResetReceipt: toRaw(state.similarityAlignmentResetReceipt.value),
+      similarityAlignmentPlan: toRaw(state.similarityAlignmentPlan.value),
+      linearRecordTranslations: toRaw(state.linearRecordTranslations.value),
       linearRecordOrientations: toRaw(captureLinearRecordOrientations(drawing)),
-      annotationWarnings: toRaw(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      annotationWarnings: toRaw(getRef(state.annotationWarnings, null)),
       featureIdentityNotices: toRaw(
-        getGeneratedArtifactRef(state.featureIdentityNotices, null)
+        getRef(state.featureIdentityNotices, null)
       ),
-      comparisonWarnings: toRaw(getGeneratedArtifactRef(state.comparisonWarnings, null)),
-      labelFitReports: toRaw(getGeneratedArtifactRef(state.labelFitReports, null)),
-      inputSummaries: toRaw(getGeneratedArtifactRef(state.inputSummaries, null)),
+      comparisonWarnings: toRaw(getRef(state.comparisonWarnings, null)),
+      labelFitReports: toRaw(getRef(state.labelFitReports, null)),
+      inputSummaries: toRaw(getRef(state.inputSummaries, null)),
       specificRules: colorRules.manualSpecificRules,
       trackSlotResolvedGeometry: toRaw(
-        getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
+        getRef(state.trackSlotResolvedGeometry, null)
       ),
-      ...capturedLosatEvidence((key) => getGeneratedArtifactRef(state[key], null)),
-      lastRunInfo: toRaw(getGeneratedArtifactRef(state.lastRunInfo, null)),
-      pairwiseMatchFactors: toRaw(
-        getGeneratedArtifactRef(state.pairwiseMatchFactors, null)
-      ),
-      editableLabels: toRaw(getGeneratedArtifactRef(state.editableLabels, null)),
-      generatedLegendPosition: getGeneratedArtifactRef(state.generatedLegendPosition, null),
-      generatedMultiRecordCanvas: getGeneratedArtifactRef(
+      ...capturedLosatEvidence((key) => getRef(state[key], null)),
+      lastRunInfo: toRaw(getRef(state.lastRunInfo, null)),
+      pairwiseMatchFactors: toRaw(state.pairwiseMatchFactors.value),
+      editableLabels: toRaw(state.editableLabels.value),
+      generatedLegendPosition: state.generatedLegendPosition.value,
+      generatedMultiRecordCanvas: getRef(
         state.generatedMultiRecordCanvas,
         false
       ),
-      generatedCircularPlotTitlePosition: getGeneratedArtifactRef(
+      generatedCircularPlotTitlePosition: getRef(
         state.generatedCircularPlotTitlePosition,
         null
       ),
-      appliedPaletteName: getGeneratedArtifactRef(state.appliedPaletteName, ''),
-      appliedPaletteColors: toRaw(
-        getGeneratedArtifactRef(state.appliedPaletteColors, null)
-      ),
+      appliedPaletteName: state.appliedPaletteName.value,
+      appliedPaletteColors: toRaw(state.appliedPaletteColors.value),
       // By reference, as every artifact value (`restoreArtifactQueuedPalette`).
       pendingPaletteName: drawing.pendingPaletteName.value,
       pendingPaletteColors: toRaw(drawing.pendingPaletteColors.value)
@@ -1315,65 +1322,53 @@ export const createHistorySnapshotService = ({
     }
     const results = Array.isArray(ownerSet.results) ? ownerSet.results : [];
     const replacesShownResults = toRaw(results)
-      !== toRaw(getGeneratedArtifactRef(state.results, []));
+      !== toRaw(getRef(state.results, []));
     if (typeof installResults === 'function') installResults(results);
-    else setGeneratedArtifactRef(state.results, results);
-    setGeneratedArtifactRef(
-      state.selectedResultIndex,
-      results.length > 0
-        ? Math.max(0, Math.min(Number(selectedResultIndex) || 0, results.length - 1))
-        : 0
-    );
-    setGeneratedArtifactRef(state.featureCatalog, ownerSet.featureCatalog ?? null);
-    setGeneratedArtifactRef(state.extractedFeatures, ownerSet.extractedFeatures || []);
-    setGeneratedArtifactRef(state.biologicalFeatures, ownerSet.biologicalFeatures || []);
-    setGeneratedArtifactRef(state.featureRecordIds, ownerSet.featureRecordIds || []);
-    setGeneratedArtifactRef(state.orthogroups, ownerSet.orthogroups || []);
-    setGeneratedArtifactRef(
+    else setRef(state.results, results);
+    state.selectedResultIndex.value = results.length > 0
+      ? Math.max(0, Math.min(Number(selectedResultIndex) || 0, results.length - 1))
+      : 0;
+    state.featureCatalog.value = ownerSet.featureCatalog ?? null;
+    state.extractedFeatures.value = ownerSet.extractedFeatures || [];
+    state.biologicalFeatures.value = ownerSet.biologicalFeatures || [];
+    setRef(state.featureRecordIds, ownerSet.featureRecordIds || []);
+    state.orthogroups.value = ownerSet.orthogroups || [];
+    setRef(
       state.featureOrthogroupIndex,
       ownerSet.featureOrthogroupIndex || new Map()
     );
-    setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);
-    setGeneratedArtifactRef(
-      state.similarityAlignmentResetReceipt,
-      ownerSet.similarityAlignmentResetReceipt ?? null
-    );
-    setGeneratedArtifactRef(
-      state.similarityAlignmentPlan,
-      ownerSet.similarityAlignmentPlan ?? null
-    );
-    setGeneratedArtifactRef(
-      state.linearRecordTranslations,
-      ownerSet.linearRecordTranslations || []
-    );
+    setRef(state.collinearGroups, ownerSet.collinearGroups || []);
+    state.similarityAlignmentResetReceipt.value = ownerSet.similarityAlignmentResetReceipt ?? null;
+    state.similarityAlignmentPlan.value = ownerSet.similarityAlignmentPlan ?? null;
+    state.linearRecordTranslations.value = ownerSet.linearRecordTranslations || [];
     installLinearRecordOrientations(drawing, ownerSet.linearRecordOrientations);
-    setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
-    setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
-    setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
-    setGeneratedArtifactRef(state.labelFitReports, ownerSet.labelFitReports || []);
-    setGeneratedArtifactRef(state.inputSummaries, ownerSet.inputSummaries || []);
+    setRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    setRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
+    setRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
+    setRef(state.labelFitReports, ownerSet.labelFitReports || []);
+    setRef(state.inputSummaries, ownerSet.inputSummaries || []);
     COLOR_RULES_SLICE.install(drawing.slices.colorRules, { manualSpecificRules: ownerSet.specificRules });
-    setGeneratedArtifactRef(
+    setRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
     );
     // The drawing's LOSAT evidence is the owner set's, as every artifact value (D-221).
-    LOSAT_EVIDENCE_KEYS.forEach((key) => setGeneratedArtifactRef(state[key], ownerSet[key] ?? LOSAT_EVIDENCE_EMPTY[key]()));
-    setGeneratedArtifactRef(state.lastRunInfo, ownerSet.lastRunInfo ?? null);
-    setGeneratedArtifactRef(state.pairwiseMatchFactors, ownerSet.pairwiseMatchFactors || {});
-    setGeneratedArtifactRef(state.editableLabels, ownerSet.editableLabels || []);
-    setGeneratedArtifactRef(state.generatedLegendPosition, ownerSet.generatedLegendPosition);
-    setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
-    setGeneratedArtifactRef(
+    LOSAT_EVIDENCE_KEYS.forEach((key) => setRef(state[key], ownerSet[key] ?? LOSAT_EVIDENCE_EMPTY[key]()));
+    setRef(state.lastRunInfo, ownerSet.lastRunInfo ?? null);
+    state.pairwiseMatchFactors.value = ownerSet.pairwiseMatchFactors || {};
+    state.editableLabels.value = ownerSet.editableLabels || [];
+    setRef(state.generatedLegendPosition, ownerSet.generatedLegendPosition);
+    state.generatedDrawingId.value = drawing.id;
+    setRef(
       state.generatedMultiRecordCanvas,
       Boolean(ownerSet.generatedMultiRecordCanvas)
     );
-    setGeneratedArtifactRef(
+    setRef(
       state.generatedCircularPlotTitlePosition,
       ownerSet.generatedCircularPlotTitlePosition
     );
-    setGeneratedArtifactRef(state.appliedPaletteName, ownerSet.appliedPaletteName || '');
-    setGeneratedArtifactRef(state.appliedPaletteColors, ownerSet.appliedPaletteColors || {});
+    state.appliedPaletteName.value = ownerSet.appliedPaletteName || '';
+    state.appliedPaletteColors.value = ownerSet.appliedPaletteColors || {};
     restoreArtifactQueuedPalette(drawing.slices.palette, ownerSet.pendingPaletteName || '', ownerSet.pendingPaletteColors || {});
     if (replacesShownResults) clearSimilarityGroupCopyFeedback?.();
   };
@@ -1393,12 +1388,12 @@ export const createHistorySnapshotService = ({
     if (displayed.id !== drawingId) {
       throw diagnosticError('RESULT_INVALID', { reason: 'DRAWING_MISMATCH', drawingId, artifactDrawingId: displayed.id }, { stage: 'result-admission', operation: 'installRedrawnArtifact' });
     }
-    setGeneratedArtifactRef(state.featureCatalog, redrawn.featureCatalog);
-    setGeneratedArtifactRef(state.extractedFeatures, redrawn.extractedFeatures);
-    setGeneratedArtifactRef(state.biologicalFeatures, redrawn.biologicalFeatures);
+    setRef(state.featureCatalog, redrawn.featureCatalog);
+    setRef(state.extractedFeatures, redrawn.extractedFeatures);
+    setRef(state.biologicalFeatures, redrawn.biologicalFeatures);
     installResults(redrawn.results);
-    setGeneratedArtifactRef(state.labelFitReports, redrawn.labelFitReports);
-    setGeneratedArtifactRef(state.inputSummaries, redrawn.inputSummaries);
+    setRef(state.labelFitReports, redrawn.labelFitReports);
+    setRef(state.inputSummaries, redrawn.inputSummaries);
   };
 
   // E1: the displayed artifact, by reference, key by key, as the artifact of
@@ -1408,11 +1403,11 @@ export const createHistorySnapshotService = ({
     return createArtifactSlot({
       drawing: displayedArtifactDrawing(),
       values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
-        key, key === 'results' ? results : toRaw(getGeneratedArtifactRef(state[key], null))
+        key, key === 'results' ? results : toRaw(getRef(state[key], null))
       ])),
       legend: {
-        originalOrder: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
-        originalColors: toRaw(getGeneratedArtifactRef(state.originalLegendColors, {})) || {}
+        originalOrder: state.originalLegendOrder.value,
+        originalColors: toRaw(state.originalLegendColors.value)
       },
       runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
       transportIdentity: currentGeneratedArtifactIdentity,
@@ -1437,11 +1432,11 @@ export const createHistorySnapshotService = ({
       throw diagnosticError('RESULT_INVALID', { reason: 'DRAWING_MISMATCH', drawingId: drawing.id, artifactDrawingId: slot.drawingId }, { stage: 'result-admission', operation: 'installArtifactSlot' });
     }
     ARTIFACT_SLOT_KEYS.forEach((key) => {
-      setGeneratedArtifactRef(state[key], slot.values[key]
-        ?? ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
+      setRef(state[key], slot.values[key]
+        ?? ARTIFACT_SLOT_EMPTY[key](drawing.mode, getRef(state[key], null)));
     });
     installShownSetLegend(state, slot.legend);
-    setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
+    state.generatedDrawingId.value = drawing.id;
     generatedArtifactRuntimeOwner?.restore?.(slot.runtimeState, { ui });
     currentGeneratedArtifactIdentity = /** @type {HistorySnapshotTransportIdentity | null} */ (slot.transportIdentity);
     currentGeneratedArtifactRetainedBytes = slot.retainedBytes;
@@ -1590,7 +1585,7 @@ export const createHistorySnapshotService = ({
       ? buildUiStateData(drawing, { includePreviewNavigation: true })
       : buildFallbackUiStateData(state, drawing);
     const features = {
-      selectedFeatureRecordIdx: getGeneratedArtifactRef(state.selectedFeatureRecordIdx, 0),
+      selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: captureFeatureFills(drawing.slices.paint),
       featureVisibilityManualRules: cloneFeatureVisibilityRules(
         VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules
@@ -1613,19 +1608,15 @@ export const createHistorySnapshotService = ({
       },
       featureStrokes: { overrides: paint.featureStrokeOverrides },
       originalSvgStroke: cloneJsonData(
-        getGeneratedArtifactRef(state.originalSvgStroke, null)
+        getRef(state.originalSvgStroke, null)
       ) || {
         color: null,
         width: null
       }
     };
     const orthogroupState = {
-      selectedOrthogroupId: String(
-        getGeneratedArtifactRef(state.selectedOrthogroupId, '') || ''
-      ),
-      selectedOrthogroupAlignmentFeature: String(
-        getGeneratedArtifactRef(state.selectedOrthogroupAlignmentFeature, '') || ''
-      ),
+      selectedOrthogroupId: state.selectedOrthogroupId.value,
+      selectedOrthogroupAlignmentFeature: state.selectedOrthogroupAlignmentFeature.value,
       ...buildGroupNameIntentData(drawing)
     };
     const mutableIntent = Object.freeze({
@@ -1635,21 +1626,19 @@ export const createHistorySnapshotService = ({
       editorState,
       orthogroupState,
       alignmentState: Object.freeze({
-        receipt: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)),
-        plan: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentPlan, null)),
-        recordTranslations: cloneJsonData(
-          getGeneratedArtifactRef(state.linearRecordTranslations, [])
-        ) || [],
+        receipt: cloneJsonData(state.similarityAlignmentResetReceipt.value),
+        plan: cloneJsonData(state.similarityAlignmentPlan.value),
+        recordTranslations: cloneJsonData(state.linearRecordTranslations.value),
         recordOrientations: captureLinearRecordOrientations(drawing)
       }),
       presentation: Object.freeze({
-        resultGenerationKey: getGeneratedArtifactRef(state.resultGenerationKey, 0),
-        resultPanelTab: getGeneratedArtifactRef(state.resultPanelTab, 'preview'),
-        errorLog: cloneJsonData(getGeneratedArtifactRef(state.errorLog, null)),
-        labelTextScopeDialog: cloneJsonData(state.labelTextScopeDialog || {}) || {},
-        featureEditorStatus: getGeneratedArtifactRef(state.featureEditorStatus, FEATURE_EDITOR_STATUS_IDLE),
+        resultGenerationKey: state.resultGenerationKey.value,
+        resultPanelTab: state.resultPanelTab.value,
+        errorLog: cloneJsonData(state.errorLog.value),
+        labelTextScopeDialog: cloneJsonData(state.labelTextScopeDialog),
+        featureEditorStatus: getRef(state.featureEditorStatus, FEATURE_EDITOR_STATUS_IDLE),
         featureExtractionPending: Boolean(
-          getGeneratedArtifactRef(state.featureExtractionPending, false)
+          getRef(state.featureExtractionPending, false)
         )
       })
     });
@@ -1706,16 +1695,12 @@ export const createHistorySnapshotService = ({
       state.failedGeneratePreservedResult.value = false;
     }
     if (generatedArtifactRestoreDepth === 0) {
-      restoreSemanticSuppressionBaseline = Boolean(
-        getGeneratedArtifactRef(state.semanticFileWatchersSuppressed, false)
-      );
-      restoreTrustedStateBaseline = Boolean(
-        getGeneratedArtifactRef(state.trustedArtifactRestoreInProgress, false)
-      );
+      restoreSemanticSuppressionBaseline = Boolean(state.semanticFileWatchersSuppressed.value);
+      restoreTrustedStateBaseline = Boolean(state.trustedArtifactRestoreInProgress.value);
     }
     generatedArtifactRestoreDepth += 1;
-    setGeneratedArtifactRef(state.semanticFileWatchersSuppressed, true);
-    setGeneratedArtifactRef(state.trustedArtifactRestoreInProgress, true);
+    state.semanticFileWatchersSuppressed.value = true;
+    state.trustedArtifactRestoreInProgress.value = true;
     try {
       closeTransientState(state);
       const mutableIntent = handle.mutableIntent || {};
@@ -1724,35 +1709,24 @@ export const createHistorySnapshotService = ({
       if (mutableIntent.inputType) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: mutableIntent.inputType });
       await nextTick();
 
-      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+      state.skipCaptureBaseConfig.value = true;
       installGeneratedArtifactOwnerSet(handle.ownerSet, {
         drawing,
         selectedResultIndex: ui.selectedResultIndex
       });
       applyFeatureIntentData(state, drawing, mutableIntent.features || {});
-      setGeneratedArtifactRef(
-        state.selectedOrthogroupId,
-        String(mutableIntent.orthogroupState?.selectedOrthogroupId || '')
-      );
-      setGeneratedArtifactRef(
-        state.selectedOrthogroupAlignmentFeature,
-        String(mutableIntent.orthogroupState?.selectedOrthogroupAlignmentFeature || '')
-      );
+      state.selectedOrthogroupId.value = String(mutableIntent.orthogroupState?.selectedOrthogroupId || '');
+      state.selectedOrthogroupAlignmentFeature.value = String(mutableIntent.orthogroupState?.selectedOrthogroupAlignmentFeature || '');
       applyGroupNameIntentData(drawing, mutableIntent.orthogroupState);
 
       restoreHandleEditorState(drawing, mutableIntent.editorState, handle.ownerSet, { state, applyEditorStateData });
       const presentation = mutableIntent.presentation || {};
-      setGeneratedArtifactRef(state.resultGenerationKey, presentation.resultGenerationKey ?? 0);
-      setGeneratedArtifactRef(state.resultPanelTab, presentation.resultPanelTab || 'preview');
-      setGeneratedArtifactRef(state.errorLog, cloneJsonData(presentation.errorLog));
-      if (state.labelTextScopeDialog) {
-        Object.assign(
-          state.labelTextScopeDialog,
-          cloneJsonData(presentation.labelTextScopeDialog) || {}
-        );
-      }
-      setGeneratedArtifactRef(state.featureEditorStatus, presentation.featureEditorStatus ?? FEATURE_EDITOR_STATUS_IDLE);
-      setGeneratedArtifactRef(
+      setRef(state.resultGenerationKey, presentation.resultGenerationKey ?? 0);
+      setRef(state.resultPanelTab, presentation.resultPanelTab || 'preview');
+      setRef(state.errorLog, cloneJsonData(presentation.errorLog));
+      Object.assign(state.labelTextScopeDialog, cloneJsonData(presentation.labelTextScopeDialog) || {});
+      setRef(state.featureEditorStatus, presentation.featureEditorStatus ?? FEATURE_EDITOR_STATUS_IDLE);
+      setRef(
         state.featureExtractionPending,
         Boolean(presentation.featureExtractionPending)
       );
@@ -1784,14 +1758,8 @@ export const createHistorySnapshotService = ({
     } finally {
       generatedArtifactRestoreDepth = Math.max(0, generatedArtifactRestoreDepth - 1);
       if (generatedArtifactRestoreDepth === 0) {
-        setGeneratedArtifactRef(
-          state.trustedArtifactRestoreInProgress,
-          restoreTrustedStateBaseline
-        );
-        setGeneratedArtifactRef(
-          state.semanticFileWatchersSuppressed,
-          restoreSemanticSuppressionBaseline
-        );
+        state.trustedArtifactRestoreInProgress.value = restoreTrustedStateBaseline;
+        state.semanticFileWatchersSuppressed.value = restoreSemanticSuppressionBaseline;
       }
     }
   };
@@ -1832,7 +1800,7 @@ export const createHistorySnapshotService = ({
       ? buildRunStateData()
       : {
           lastRunInfo: cloneJsonData(getRef(state.lastRunInfo, null)),
-          pairwiseMatchFactors: clonePlainObject(getRef(state.pairwiseMatchFactors, {}))
+          pairwiseMatchFactors: clonePlainObject(state.pairwiseMatchFactors.value)
         };
 
     return { ui, results, features, editorState, orthogroupState, runState };
@@ -1893,7 +1861,7 @@ export const createHistorySnapshotService = ({
       });
 
   /** @param {DrawingId} drawingId */
-  const isShown = (drawingId) => drawingId === state.activeDrawingId?.value;
+  const isShown = (drawingId) => drawingId === state.activeDrawingId.value;
   // E1: the artifacts of the drawings not shown (the slot store). History
   // writes a hidden drawing's slot values (`writeArtifactValues`); the mode
   // transition and Session Load (with its rollback) use its other named
@@ -1906,8 +1874,8 @@ export const createHistorySnapshotService = ({
   // the displayed palette when it is shown).
   /** @param {DrawingId} drawingId @param {readonly (keyof typeof ARTIFACT_SLOT_EMPTY)[]} keys */
   const readSlotValues = (drawingId, keys) => Object.fromEntries(keys.map((key) => [key, artifactSlots.readOfDrawing(
-    drawingId, state.activeDrawingId?.value,
-    () => getGeneratedArtifactRef(state[key], null), (slot) => slot.values[key]
+    drawingId, state.activeDrawingId.value,
+    () => getRef(state[key], null), (slot) => slot.values[key]
   ) ?? null]));
   /**
    * Writes slot values of drawing `drawingId`: into the displayed artifact
@@ -1917,7 +1885,11 @@ export const createHistorySnapshotService = ({
    */
   const writeArtifactValues = (drawingId, values) => {
     if (isShown(drawingId)) {
-      Object.entries(values).forEach(([key, value]) => setGeneratedArtifactRef(state[key], value));
+      // In the order the values were given; each key names its slot key.
+      Object.keys(values).forEach((name) => {
+        const key = ARTIFACT_SLOT_KEYS.find((slotKey) => slotKey === name);
+        if (key) setRef(state[key], values[key]);
+      });
       return;
     }
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
@@ -1936,7 +1908,7 @@ export const createHistorySnapshotService = ({
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
     const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, ARTIFACT_SLOT_PALETTE_KEYS) });
-    uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
+    uiIntent.selectedFeatureRecordIdx = state.selectedFeatureRecordIdx.value;
     // B17, D-15-50: the composition offsets of this drawing's Results.
     const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;
     if (compositionDeltas) uiIntent.compositionUserDeltas = compositionDeltas;
@@ -1955,8 +1927,8 @@ export const createHistorySnapshotService = ({
       files: buildIntentFilesData(drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       orthogroupState: buildOrthogroupIntentData({
-        selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
-        selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, '')
+        selectedOrthogroupId: state.selectedOrthogroupId.value,
+        selectedOrthogroupAlignmentFeature: state.selectedOrthogroupAlignmentFeature.value
       })
     });
   };
@@ -2014,8 +1986,8 @@ export const createHistorySnapshotService = ({
         )
       : null;
     const suppressRef = state.semanticFileWatchersSuppressed;
-    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
-    if (domains.has('files')) setGeneratedArtifactRef(suppressRef, true);
+    const previousSuppressed = suppressRef.value;
+    if (domains.has('files')) suppressRef.value = true;
     try {
       // A drawing that is not shown takes its slot values in its slot.
       const { appliedPaletteName, appliedPaletteColors, ...drawingUi } = intent.ui || {};
@@ -2051,8 +2023,7 @@ export const createHistorySnapshotService = ({
           writeArtifactValues(drawingId, { appliedPaletteName, appliedPaletteColors });
         }
         if (Object.hasOwn(ui, 'selectedFeatureRecordIdx')) {
-          setRef(state.selectedFeatureRecordIdx, Number.isInteger(ui.selectedFeatureRecordIdx)
-            ? ui.selectedFeatureRecordIdx : 0);
+          state.selectedFeatureRecordIdx.value = recordIndexOf(ui.selectedFeatureRecordIdx);
         }
       }
 
@@ -2071,7 +2042,7 @@ export const createHistorySnapshotService = ({
         await afterApplyHistoryIntent(intent, { ...context, domains });
       }
     } finally {
-      if (domains.has('files')) setGeneratedArtifactRef(suppressRef, previousSuppressed);
+      if (domains.has('files')) suppressRef.value = previousSuppressed;
     }
     if (domains.has('files') || domains.has('ui')) discoverDrawingRecords?.(drawing);
   };
@@ -2103,8 +2074,8 @@ export const createHistorySnapshotService = ({
     if (!snapshot || typeof snapshot !== 'object') return;
     const drawing = state.drawingOf(drawingId);
     const suppressRef = state.semanticFileWatchersSuppressed;
-    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
-    setGeneratedArtifactRef(suppressRef, true);
+    const previousSuppressed = suppressRef.value;
+    suppressRef.value = true;
     try {
       closeTransientState(state);
 
@@ -2128,8 +2099,8 @@ export const createHistorySnapshotService = ({
       applyFilesData(drawing, snapshot.files || {}, fileStore);
       if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, drawingId);
 
-      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-      if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
+      state.skipCaptureBaseConfig.value = true;
+      state.skipExtractOnSvgChange.value = false;
 
       applyArtifactDomains(drawing, snapshot);
 
@@ -2141,7 +2112,7 @@ export const createHistorySnapshotService = ({
         applyFallbackUiStateData(state, drawing, ui);
       }
     } finally {
-      setGeneratedArtifactRef(suppressRef, previousSuppressed);
+      suppressRef.value = previousSuppressed;
     }
     discoverDrawingRecords?.(drawing);
   };
