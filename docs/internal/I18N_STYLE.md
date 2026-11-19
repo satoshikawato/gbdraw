@@ -2871,7 +2871,10 @@ The system typeface is used (Nirmala UI on Windows); Devanagari marks need Thai'
   opens a further step keeps `…` (फ़ॉन्ट फ़ाइल लोड करें…). **Headings, tabs, column and field
   labels**: nouns (निर्यात, लेआउट संपादन, रिकॉर्ड का चयन).
 - **Instructions and help**: complete sentences in the simple present, each ending with a period;
-  prefer the imperative to आप + a gendered verb (चुनें, not आप चुन सकते हैं).
+  prefer the imperative to आप + a gendered verb (चुनें, not आप चुन सकते हैं). A help text that
+  describes its control with an English noun phrase stays a noun phrase with the period (Font size
+  for feature labels. = फ़ीचर लेबलों का फ़ॉन्ट आकार.): no यह … है frame and no added verb such as
+  सेट करें, which would turn a description into an instruction.
 - **Status "…ing"**: passive progressive + `…` (Microsoft 4.1.14): सत्र सहेजा जा रहा है…; an
   intransitive verb stays active: LOSAT चल रहा है…. **Completion**: past passive (सत्र सहेजा गया).
 - **Cannot, failed, errors**: passive, never the app as "I" (Microsoft 5.4.2): पढ़ी नहीं जा सकती /
@@ -3039,6 +3042,8 @@ and Google write loans (ফাইল, ফিচার, সেশন).
   are nouns (সেটিংস, লেজেন্ড). Dialog headings are noun phrases (প্যালেট পরিবর্তন, X নির্বাচন). An option in a select is
   a noun or adjective, or a verbal noun when it names an action (কেটে ফেলা, সংকুচিত করা). History step labels are verbal
   nouns (রং পরিবর্তন, ফিচার সম্পাদনা, X অপসারণ).
+- A help text that describes its control with an English noun phrase stays a noun phrase with the dari (Font size for
+  feature labels. = ফিচারের লেবেলের ফন্টের আকার।); an instruction in a help text is a polite imperative.
 - Work in progress: X করা হচ্ছে… or X হচ্ছে… (লোড হচ্ছে…, ডায়াগ্রাম তৈরি হচ্ছে…). Done: X করা হয়েছে। Failure
   (could not X, X failed): X করা যায়নি। then what to do (আবার চেষ্টা করুন।). A state that names what was not done
   (was not saved, was not loaded) is X করা হয়নি।, not যায়নি. A rule that forbids: X করা যাবে না। A dialog question
