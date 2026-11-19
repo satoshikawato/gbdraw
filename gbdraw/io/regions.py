@@ -448,8 +448,9 @@ def _crop_record_to_region(
         coord_base=coord_base,
         coord_step=coord_step,
         period=_source_period(record),
-        # Only a record drawn circular reads a feature part past its end as the span over its origin it is (OV-3724).
-        record_length=len(source.seq) if circular else None,
+        # A part past the record's end is one the fit kept as a span over the origin (``fit_features_to_record``,
+        # OV-3724): the crop draws its share of that span, as the whole record does (OV-3867).
+        record_length=len(source.seq),
     )
     cropped_base = _wrap_source_base(coord_base + (coord_step * start_0), period)
     cropped_step = coord_step
@@ -598,6 +599,10 @@ def crop_record_to_region(
 
     A spec whose start is after its end runs across the origin; ``circular``
     says whether the record is drawn as circular, which such a spec requires.
+    A feature part past the record's end is read as the span over its origin
+    it is (``location_over_origin``), whatever ``circular`` says: the record's
+    fit (``fit_features_to_record``), the one owner of whether such a part
+    fits, has kept it only where the drawing reads it so (OV-3867).
     """
 
     log = log or logger

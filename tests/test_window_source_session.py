@@ -447,6 +447,34 @@ def test_an_edited_crop_is_saved_with_only_its_edits_on_its_source(
     assert source.id == ("renamed" if edit == "rename" else "src")
 
 
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_an_edited_crop_of_a_part_past_the_end_saves_that_part_as_written(mode: str, tmp_path: Path) -> None:
+    """A crop draws its share of a part past its circular record's end (``81..110`` on 100 bp, the GFF3 way to write
+    a span over the origin): the Session cuts the source again by the same reading, so the share ``1..10`` is that
+    feature's, not an added one, and the source keeps ``81..110`` once (OV-3867: the recut cut the part at the end and
+    saved the share as a second feature)."""
+
+    source = SeqRecord(Seq("ACGTGCATGC" * 10), id="src", name="src",
+                       annotations={"topology": "circular", "molecule_type": "DNA"})
+    source.features = [
+        SeqFeature(FeatureLocation(80, 110, 1), type="CDS", qualifiers={"locus_tag": ["PAST"], "product": ["p"]}),
+        SeqFeature(FeatureLocation(20, 40, 1), type="CDS", qualifiers={"locus_tag": ["I1"], "product": ["i"]}),
+    ]
+    crop = apply_region_specs([source], parse_region_specs(["src:1-50"]))[0]
+    assert [(_locus(feature), str(feature.location)) for feature in crop.features] == [
+        ("PAST", "[<0:10](+)"), ("I1", "[20:40](+)"),
+    ]
+    _CROP_EDITS["product"](crop)
+
+    live, replay = _replayed(_request(mode, crop, tmp_path), tmp_path)
+
+    assert replay == live
+    assert [(_locus(feature), str(feature.location), feature.qualifiers.get("product"))
+            for feature in _saved_source(tmp_path).features] == [
+        ("PAST", "[80:110](+)", ["p"]), ("I1", "[20:40](+)", ["edited"]),
+    ]
+
+
 def _request(mode: str, crop: SeqRecord, tmp_path: Path) -> LinearDiagramRequest | CircularDiagramRequest:
     record = RecordInput(source=InMemoryRecordSource(crop), record_key="r")
     if mode == "linear":

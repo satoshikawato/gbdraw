@@ -1141,6 +1141,26 @@ def test_a_part_past_the_end_of_a_record_not_drawn_circular_is_left_out_in_linea
     assert any("drew 2 features (2 CDS)" in line for line in _lines(circular))
 
 
+@pytest.mark.parametrize("region", ["1-30", "1-100"])
+def test_a_linear_crop_leaves_out_a_part_past_the_end_of_a_linear_record_with_the_warning(
+    tmp_path: Path, region: str
+) -> None:
+    """Linear leaves the part past the end of a linear record out of a crop with the warning, as out of the whole
+    record (OV-3724), never cut at the end (OV-3867)."""
+    (tmp_path / "rec.gb").write_text(
+        _genbank_text("rec", "linear", (("21..40", 'locus_tag="in"'), ("81..110", 'locus_tag="past"'))),
+        encoding="utf-8")
+    (tmp_path / "rec.tsv").write_text(f"gbk\tregion\nrec.gb\t{region}\n", encoding="utf-8")
+
+    run = _gbdraw("linear", "--records_table", "rec.tsv", "-o", "out", "-f", "svg", cwd=tmp_path)
+
+    assert run.returncode == 0, run.stderr
+    assert (
+        "WARNING: Record rec (rec.gb): left out 1 feature that does not fit in the record's 100 bp: CDS 81..110 (past)."
+    ) in _lines(run)
+    assert any("drew 1 feature (1 CDS)" in line for line in _lines(run))
+
+
 def test_setting_a_gff3_record_circular_draws_a_part_past_its_end_over_the_origin(tmp_path: Path) -> None:
     (tmp_path / "rec.gff").write_text(
         "##gff-version 3\nrec\t.\tCDS\t81\t110\t.\t+\t0\tID=past;locus_tag=past\n", encoding="utf-8")
@@ -1385,36 +1405,24 @@ def test_circular_density_counts_a_part_past_the_end_as_its_join(tmp_path: Path)
     assert past and past == _group_paths(tmp_path / "join.svg", "_density_d")
 
 
-def test_a_circular_crop_keeps_both_blocks_of_a_part_past_the_end(tmp_path: Path) -> None:
-    """A records-table region over the whole record keeps the part from the start too: ``81..110`` draws as
-    ``join(81..100,1..10)`` does, one block from 81 round to 10 (dev drew only 81..100 with a cut end; r2 MEDIUM-1 b,
-    an intended correction)."""
+@pytest.mark.parametrize("topology", ["circular", "linear"])
+@pytest.mark.parametrize("region", ["1-100", "1-30"])
+def test_a_circular_crop_keeps_both_blocks_of_a_part_past_the_end(tmp_path: Path, topology: str, region: str) -> None:
+    """A records-table region keeps the share of the span over the origin that the whole record draws: ``81..110``
+    draws as ``join(81..100,1..10)`` does, over the whole record one block from 81 round to 10, and in ``1-30`` the
+    block ``1..10`` (dev drew only 81..100 with a cut end; r2 MEDIUM-1 b, an intended correction). Circular draws every
+    record as a circle, so a linear record's crop draws the same and nothing warns (OV-3867: it cut the part at the end
+    and left ``1..10`` out)."""
     for name, location in (("past", "81..110"), ("join", "join(81..100,1..10)")):
         (tmp_path / f"{name}.gb").write_text(
-            _genbank_text("rec", "circular", ((location, 'locus_tag="x"'),)), encoding="utf-8")
-        (tmp_path / f"{name}.tsv").write_text(f"gbk\tregion\n{name}.gb\t1-100\n", encoding="utf-8")
-        run = _gbdraw("circular", "--records_table", f"{name}.tsv", "-o", name, "-f", "svg", cwd=tmp_path)
-        assert run.returncode == 0, run.stderr
-
-    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "join")]
-    assert paths[0] and paths[0] == paths[1]
-
-
-@pytest.mark.parametrize("region", ["1-100", "1-30"])
-def test_a_circular_crop_of_a_linear_record_cuts_a_part_past_the_end_at_the_end(tmp_path: Path, region: str) -> None:
-    """A linear record has no origin to cross, also in a Circular diagram: a records-table crop of ``81..110`` cuts it at
-    the end as dev did, so it draws as ``81..>100`` does, the cut end a fuzzy one (r4 LOW-1: only a record drawn
-    circular reads the part over the origin in a crop)."""
-    for name, location in (("past", "81..110"), ("cut", "81..>100")):
-        (tmp_path / f"{name}.gb").write_text(
-            _genbank_text("rec", "linear", ((location, 'locus_tag="x"'),)), encoding="utf-8")
+            _genbank_text("rec", topology, ((location, 'locus_tag="x"'),)), encoding="utf-8")
         (tmp_path / f"{name}.tsv").write_text(f"gbk\tregion\n{name}.gb\t{region}\n", encoding="utf-8")
         run = _gbdraw("circular", "--records_table", f"{name}.tsv", "-o", name, "-f", "svg", cwd=tmp_path)
         assert run.returncode == 0, run.stderr
+        assert not [line for line in _lines(run) if line.startswith("WARNING: Record rec")]
 
-    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "cut")]
-    assert paths[0] == paths[1]
-    assert bool(paths[0]) == (region == "1-100")
+    paths = [[d for _id, d in _feature_paths(tmp_path / f"{name}.svg")] for name in ("past", "join")]
+    assert paths[0] and paths[0] == paths[1]
 
 
 def _gff3_text(*landmarks: tuple[str, str, int, int, str], cds: tuple[str, int, int] | None = ("rec", 81, 110)) -> str:

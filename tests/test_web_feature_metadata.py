@@ -740,6 +740,22 @@ def test_web_feature_extraction_region_uses_absolute_display_coordinates(
     )
 
 
+@pytest.mark.parametrize("topology", ["linear", "circular"])
+@pytest.mark.parametrize(("region", "parts"), [("1-30", ["1..10"]), ("1-100", ["81..100", "1..10"])])
+def test_web_feature_extraction_of_a_crop_lists_its_share_of_a_part_past_the_end(
+    tmp_path: Path, topology: str, region: str, parts: list[str]
+) -> None:
+    """The listing holds every feature a drawing may draw, and Circular draws a part past the end of any record over
+    its origin: a crop lists its share of that span, of a linear record as of a circular one (OV-3867: the crop of a
+    linear record left ``1..10`` out and cut the feature at the end)."""
+    record = SeqRecord(Seq("ACGTGCATGC" * 10), id="rec", name="rec", annotations={"topology": topology})
+    record.features.append(SeqFeature(FeatureLocation(80, 110, strand=1), type="CDS", qualifiers={"locus_tag": ["x"]}))
+
+    payload = extract_features_from_genbank_payload(_write_genbank(tmp_path, record), region_spec=region)
+
+    assert [[part["display"] for part in feature["location_parts"]] for feature in payload["features"]] == [parts]
+
+
 def test_web_feature_extraction_region_reverse_uses_absolute_display_coordinates(
     tmp_path: Path,
 ) -> None:
