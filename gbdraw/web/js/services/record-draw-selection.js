@@ -225,6 +225,44 @@ export const continuedRecordPlaces = (previous, next) => {
 };
 
 /**
+ * Which record of a card's file now continues each record of its file as last read (`marked`), when the card's file
+ * held the records `committed` at the last committed Generate (OV-3846). A Generate moves the feature edits of each
+ * committed record by `continuedRecordPlaces(committed, next)`, whatever Replaces came between, so a record of
+ * `marked` that continues a committed record (`continuedRecordPlaces(committed, marked)`) continues as that record
+ * does; one that continues none (new since the Generate, or `committed` null: the card drew nothing) continues by
+ * `continuedRecordPlaces(marked, next)`, as does one whose committed record leaves. Each record of the new file
+ * continues one record at most: a claim by record ID before a claim by place, then a committed record's before the
+ * record's own, then in file order; a record whose claims are all taken leaves (-1). With `committed` equal to
+ * `marked` this is `continuedRecordPlaces(marked, next)`.
+ * @param {readonly unknown[] | null} committed the record IDs of the card's file at the last committed Generate
+ * @param {readonly unknown[]} marked the record IDs of the card's file as last read, in file order
+ * @param {readonly unknown[]} next the record IDs of the card's new file, in file order
+ * @returns {number[]} for each record of `marked`, the 0-based place of its record in the new file, or -1
+ */
+export const continuedSinceCommit = (committed, marked, next) => {
+  const stepwise = continuedRecordPlaces(marked, next);
+  if (committed === null) return stepwise;
+  const origin = continuedRecordPlaces(committed, marked);
+  const direct = continuedRecordPlaces(committed, next);
+  const after = next.map(cleanKey);
+  /** @param {number} row @param {number} place @param {unknown} id @param {number} rank */
+  const claim = (row, place, id, rank) => ({ row, place, rank: (after[place] === cleanKey(id) ? 0 : 2) + rank });
+  const claims = marked.flatMap((id, row) => {
+    const from = origin.indexOf(row);
+    return [...(from >= 0 ? [claim(row, direct[from], committed[from], 0)] : []), claim(row, stepwise[row], id, 1)];
+  }).filter(({ place }) => place >= 0).sort((left, right) => left.rank - right.rank || left.row - right.row);
+  const places = marked.map(() => -1);
+  /** @type {Set<number>} */
+  const taken = new Set();
+  claims.forEach(({ row, place }) => {
+    if (places[row] >= 0 || taken.has(place)) return;
+    places[row] = place;
+    taken.add(place);
+  });
+  return places;
+};
+
+/**
  * The records a drawing's OFF records keep their rows under, as request
  * records a row is matched against (`rowBelongsToRequest`): a Linear card's
  * uid with its `<uid>:<k>` identities, or a Circular record's identity.
@@ -795,26 +833,31 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
 /**
  * A File card at one moment with the record IDs of its file, in file order.
  * @typedef {{ uid: string, recordIds: readonly string[] }} CardRecords
+ * The record IDs of each card's file, in file order, as the drawing's committed request drew it, by card uid; a card
+ * that request did not draw has none (`continuedSinceCommit`).
+ * @typedef {ReadonlyMap<string, readonly string[]>} CommittedCardRecords
  */
 
 /**
  * The rows of a list that keeps one row per record of a drawing's cards (a
  * record-major Depth matrix) after its cards change: `marked` are the cards
  * the rows stand for, in row order, `now` the drawing's cards. A record keeps
- * the row of the record of its card it continues (`continuedRecordPlaces`, the
- * rule a Generate moves the record's other rows by), so a card moved or
- * removed takes its rows along, and a Replace in the same card keeps each
- * record's row with the record of the new file with its record ID, or at its
- * place (D-05, D-20). A record new to the list gets an empty row (`resliceRecordRows`).
+ * the row of the record of its card it continues (`continuedSinceCommit`,
+ * from the records the committed request drew, as a Generate moves the
+ * record's other rows), so a card moved or removed takes its rows along, and
+ * a Replace in the same card keeps each record's row with the record of the
+ * new file with its record ID, or at its place (D-05, D-20). A record new to
+ * the list gets an empty row (`resliceRecordRows`).
  * @template R
  * @param {readonly R[]} rows
  * @param {readonly CardRecords[]} marked
  * @param {readonly CardRecords[]} now
+ * @param {CommittedCardRecords} committed
  * @param {() => R} empty
  * @returns {R[]}
  */
-export const resliceCardRows = (rows, marked, now, empty) => resliceRecordRows(
-  rows, continuedCardRows(marked, now).map(({ key }) => key), cardRecordKeys(now), empty
+export const resliceCardRows = (rows, marked, now, committed, empty) => resliceRecordRows(
+  rows, continuedCardRows(marked, now, committed).map(({ key }) => key), cardRecordKeys(now), empty
 );
 
 /**
@@ -836,11 +879,12 @@ const cardRecordKeys = (cards) => cardRecords(cards).map(({ key }) => key);
  * edit's rows (`resliceCardRows`, `cardRowsLeaving`).
  * @param {readonly CardRecords[]} marked
  * @param {readonly CardRecords[]} now
+ * @param {CommittedCardRecords} committed
  * @returns {{ uid: string, k: number, key: string | null }[]}
  */
-const continuedCardRows = (marked, now) => marked.flatMap(({ uid, recordIds }) => {
+const continuedCardRows = (marked, now, committed) => marked.flatMap(({ uid, recordIds }) => {
   const after = now.find((card) => card.uid === uid);
-  const places = after ? continuedRecordPlaces(recordIds, after.recordIds) : recordIds.map(() => -1);
+  const places = after ? continuedSinceCommit(committed.get(uid) ?? null, recordIds, after.recordIds) : recordIds.map(() => -1);
   return recordIds.map((_id, index) => ({
     uid, k: index + 1, key: places[index] < 0 ? null : expandedRecordKey(uid, places[index] + 1)
   }));
@@ -854,9 +898,10 @@ const continuedCardRows = (marked, now) => marked.flatMap(({ uid, recordIds }) =
  * @param {readonly R[]} rows one per record of `marked`, in its order
  * @param {readonly CardRecords[]} marked
  * @param {readonly CardRecords[]} now
+ * @param {CommittedCardRecords} committed
  * @returns {{ uid: string, k: number, row: R }[]}
  */
-export const cardRowsLeaving = (rows, marked, now) => continuedCardRows(marked, now)
+export const cardRowsLeaving = (rows, marked, now, committed) => continuedCardRows(marked, now, committed)
   .flatMap(({ uid, k, key }, index) => (key !== null || index >= rows.length ? [] : [{ uid, k, row: rows[index] }]));
 
 /**

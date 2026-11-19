@@ -1913,6 +1913,7 @@ export const createAppSetup = () => {
     discardLiveSettingRequests,
     refreshCircularRecordOrder: refreshRecordOrderOfDrawing,
     readDrawingRecordIdentities,
+    committedCardRecordsOf,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
@@ -1938,6 +1939,7 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     planGenomeScales: (drawing, request) => planDraftGenomeScales(drawing, { ...request, readOfDrawing: artifactSlots.readOfDrawing }),
     readRecordIdentitySources,
+    readOfDrawing: artifactSlots.readOfDrawing,
     linearCardRecord,
     readLinearCardRecords: linearRecordSelector.refresh,
     placeCircularRecordChoices: (drawing) => placeCircularRecordChoices(drawing), // created below, with the record settings
@@ -3399,7 +3401,9 @@ export const createAppSetup = () => {
     uploadLinearSourceDepthFile, uploadLinearComparisonCardFile
   } = createInputUploads({
     shownAction, replaceFromShownDrawing, replaceCircularSourceFile,
-    askCircularSourceReplacement: createCircularSourceReplacementQuestion({ state, askChoice, showNotice, barTabs: drawingBar.tabs }),
+    askCircularSourceReplacement: createCircularSourceReplacementQuestion({
+      state, askChoice, showNotice, barTabs: drawingBar.tabs, committedCardRecords: committedCardRecordsOf
+    }),
     replaceCircularDepthFile, replaceLinearSourceFile, setLinearDepthFiles, setLinearSourceDepthFile,
     linearComparisonPairForEdgeKey, setLinearComparisonCardFile
   });

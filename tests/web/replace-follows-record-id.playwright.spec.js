@@ -9,10 +9,15 @@ const { openApp, evaluateWithRetainedPromise, waitForAppShell, expectSessionLoad
 // and feature edit with that record: through a Session saved and loaded before
 // the next Generate (the Depth rows move at the read after the Replace, the
 // edits at that Generate, from the committed request's own file), and through a
-// Replace and Generate in one sitting. A's Depth is never drawn on B.
+// Replace and Generate in one sitting. Two Replaces before one Generate (the
+// first to a file whose records have other IDs) move both from the records
+// that Generate drew, in one sitting and across a Save and Load between them.
+// A's Depth is never drawn on B.
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankA = readFileSync(join(repoRoot, 'tests/test_inputs/BGC0000708.gbk'), 'utf8');
 const genbankB = readFileSync(join(repoRoot, 'tests/test_inputs/BGC0000709.gbk'), 'utf8');
+// The same two records under other IDs (C, D), so a Replace with them continues each record by its place.
+const genbankCD = `${genbankA.replaceAll('BGC0000708', 'BGC0000718')}\n${genbankB.replaceAll('BGC0000709', 'BGC0000719')}`;
 const depthTsv = (recordId, length, depth) => ['reference_name\tposition\tdepth',
   ...Array.from({ length: Math.ceil(length / 1000) }, (_, index) => `${recordId}\t${Math.min(length, index * 1000 + 1)}\t${depth + (index % 3)}`),
   `${recordId}\t${length}\t${depth}`].join('\n');
@@ -50,6 +55,24 @@ const replaceCardFile = async (page, name, text) => {
 };
 const recordOrder = (page, ids) => page.waitForFunction((joined) => window.__GBDRAW_APP__.circularRecordList
   ?.map((record) => record.record_id).join() === joined, ids.join(), { timeout: 180_000 });
+// Saves the Session and loads it into a fresh page, before any Generate: the loaded Session keeps no identities of
+// the committed request.
+const saveAndLoad = async (page) => {
+  const download = page.waitForEvent('download', { timeout: 120_000 });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const saved = await (await download).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page, { waitForPalette: false });
+  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved);
+  await expectSessionLoadedWithoutWarnings(page);
+};
+// Each record's Depth file and edit with A (BGC0000708) and B (BGC0000709) in file order `ids`.
+const withA = (ids) => ({
+  recordIds: ids,
+  depth: Object.fromEntries(ids.map((id) => [id, id === 'BGC0000708' ? ['sample-a.tsv', null] : [null, 'sample-b.tsv']])),
+  drawnOn: { depth_1: 'BGC0000708', depth_2: 'BGC0000709' },
+  edits: [['BGC0000708', 'EDIT_ON_A']]
+});
 
 test('a reordered Replace keeps each record\'s Depth file and feature edit through a Save/Load before its Generate and in one sitting', async ({ page }, testInfo) => {
   test.setTimeout(900_000);
@@ -95,13 +118,7 @@ test('a reordered Replace keeps each record\'s Depth file and feature edit throu
   await replaceCardFile(page, 'ba.gbk', `${genbankB}\n${genbankA}`);
   await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
   await recordOrder(page, ['BGC0000709', 'BGC0000708']);
-  const download = page.waitForEvent('download', { timeout: 120_000 });
-  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
-  const saved = await (await download).path();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForAppShell(page, { waitForPalette: false });
-  await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(saved);
-  await expectSessionLoadedWithoutWarnings(page);
+  await saveAndLoad(page);
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   await recordOrder(page, ['BGC0000709', 'BGC0000708']);
   const loaded = await drawn(page);
@@ -109,12 +126,7 @@ test('a reordered Replace keeps each record\'s Depth file and feature edit throu
   if (process.env.GBDRAW_REPLACE_SVG) {
     require('node:fs').writeFileSync(process.env.GBDRAW_REPLACE_SVG, await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content));
   }
-  expect(loaded).toEqual({
-    recordIds: ['BGC0000709', 'BGC0000708'],
-    depth: { BGC0000709: [null, 'sample-b.tsv'], BGC0000708: ['sample-a.tsv', null] },
-    drawnOn: { depth_1: 'BGC0000708', depth_2: 'BGC0000709' },
-    edits: [['BGC0000708', 'EDIT_ON_A']]
-  });
+  expect(loaded).toEqual(withA(['BGC0000709', 'BGC0000708']));
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('EDIT_ON_A');
 
   // A Replace back to the first order and a Generate in one sitting move them again, from the identities the
@@ -124,12 +136,36 @@ test('a reordered Replace keeps each record\'s Depth file and feature edit throu
   await recordOrder(page, ['BGC0000708', 'BGC0000709']);
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const back = await drawn(page);
-  expect(back).toEqual({
-    recordIds: ['BGC0000708', 'BGC0000709'],
-    depth: { BGC0000708: ['sample-a.tsv', null], BGC0000709: [null, 'sample-b.tsv'] },
-    drawnOn: { depth_1: 'BGC0000708', depth_2: 'BGC0000709' },
-    edits: [['BGC0000708', 'EDIT_ON_A']]
-  });
+  expect(back).toEqual(withA(['BGC0000708', 'BGC0000709']));
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('EDIT_ON_A');
-  await testInfo.attach('drawn.json', { body: JSON.stringify({ before, loaded, back }, null, 2), contentType: 'application/json' });
+
+  // Two Replaces before one Generate, in one sitting: (A, B) -> (C, D) moves the Depth rows by place, then (B, A)
+  // moves them from the records the Generate drew, as that Generate moves the edit. Step by step, A's Depth would go
+  // from C to B.
+  await replaceCardFile(page, 'cd.gbk', genbankCD);
+  await recordOrder(page, ['BGC0000718', 'BGC0000719']);
+  await replaceCardFile(page, 'ba.gbk', `${genbankB}\n${genbankA}`);
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
+  await recordOrder(page, ['BGC0000709', 'BGC0000708']);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const twice = await drawn(page);
+  if (process.env.GBDRAW_REPLACE_SVG) {
+    require('node:fs').writeFileSync(process.env.GBDRAW_REPLACE_SVG.replace(/\.svg$/, '-twice.svg'),
+      await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content));
+  }
+  expect(twice).toEqual(withA(['BGC0000709', 'BGC0000708']));
+
+  // The same with a Save and Load between the two Replaces: the loaded Session's committed request names its own
+  // file, (B, A), from which both continue.
+  await replaceCardFile(page, 'cd.gbk', genbankCD);
+  await recordOrder(page, ['BGC0000718', 'BGC0000719']);
+  // The loaded list stays unread until a read needs it; the Replace reads the cards as loaded.
+  await saveAndLoad(page);
+  await replaceCardFile(page, 'ab.gbk', `${genbankA}\n${genbankB}`);
+  await expect(page.locator('[data-choice-prompt]')).toHaveCount(0);
+  await recordOrder(page, ['BGC0000708', 'BGC0000709']);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const loadedTwice = await drawn(page);
+  expect(loadedTwice).toEqual(withA(['BGC0000708', 'BGC0000709']));
+  await testInfo.attach('drawn.json', { body: JSON.stringify({ before, loaded, back, twice, loadedTwice }, null, 2), contentType: 'application/json' });
 });

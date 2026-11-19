@@ -40,7 +40,7 @@ setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: { overrides: payload.configOverrides } }));
 const { CANONICAL_REQUEST_SCHEMA, projectCanonicalSessionRequest } = await import('../../gbdraw/web/js/services/session-request.js');
-const { committedRecordIdentitySources, readStoredRecordIdPlaces, readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
+const { circularDepthRowsAfterRead, committedRecordIdentitySources, readStoredRecordIdPlaces, readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
 const { drawnRecordIdentities, recordKeyMoves, recordSelectorNumber } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
 const { buildDisambiguatedRecordEntries } = await import('../../gbdraw/web/js/services/record-options.js');
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
@@ -204,7 +204,36 @@ test('after a Load, the committed request\'s records are read from its own file 
   const held = createSessionResourceFileView(adoptCurrentSessionResources(resources), 'then');
   const same = await committedRecordIdentitySources({ records, resources, sources: now, ...holding(held) });
   assert.equal(same.cards.get('card'), now.cards.get('card'));
-  // A request file that cannot be read keeps the list now.
+  // A request file that cannot be read keeps the list now, and the failure is reported.
+  const failures = () => metrics.filter(({ name }) => name === 'committedRecordReadFailureCount').map(({ card }) => card);
+  const failed = failures().length;
   const unread = await committedRecordIdentitySources({ records: [requestRecord('card:1', null, 'missing')], resources, sources: now, ...holding(replaced) });
   assert.equal(unread.cards.get('card'), now.cards.get('card'));
+  assert.deepEqual(failures().slice(failed), ['card']);
+});
+
+// OV-3846 review (MEDIUM 1): a Session saved after a Replace (third, fourth over the committed first, second) and
+// loaded, then a Replace with (second, first) before the next Generate. The Depth rows move at the read after that
+// Replace and the feature edits at the Generate, both from the records the committed request drew, read from its own
+// file, so first's Depth file and edits stay with first. Step by step, the rows of (third, fourth) would go by place.
+test('after a Load, a second Replace moves the Depth rows where the next Generate moves the feature edits', async () => {
+  const resources = { then: descriptor(genbankOf(['first', 'second']), 'ab.gb') };
+  const records = [requestRecord('card:1', { kind: 'recordIndex', index: 0 }, 'then'), requestRecord('card:2', { kind: 'recordIndex', index: 1 }, 'then')];
+  const now = { mode: 'circular', cards: new Map([['card', buildDisambiguatedRecordEntries([{ recordId: 'second' }, { recordId: 'first' }])]]) };
+  const picked = new File([genbankOf(['second', 'first'])], 'ba.gb', { type: 'text/plain' });
+  const committed = drawnRecordIdentities(records, await committedRecordIdentitySources({
+    records, resources, sources: now, cards: [{ uid: 'card', gb: { fileId: 'picked' } }], inputType: 'gb', inputFiles: { fileOf: (ref) => (ref ? picked : null) }
+  }));
+  const depth = await circularDepthRowsAfterRead({
+    matrix: [['a.tsv'], ['b.tsv']],
+    // The cards as the Session was saved: its rows stand for (third, fourth).
+    marks: [{ uid: 'card', primaryFile: 'cd', pairedFile: null, recordIds: ['third', 'fourth'] }],
+    inputs: [{ uid: 'card', spec: null, primaryFile: 'ba', pairedFile: null }],
+    records: [[{ record_id: 'second' }, { record_id: 'first' }]],
+    fileOf: () => null,
+    committed: async () => new Map(committed.map(({ card, cardRecordIds }) => [card, cardRecordIds]))
+  });
+  assert.deepEqual(depth, { rows: [['b.tsv'], ['a.tsv']] }, 'first\'s Depth file goes to first, at place 2');
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(committed, drawnRecordIdentities(records, now))), { 'card:1': 'card:2', 'card:2': 'card:1' },
+    'first\'s feature edits go to place 2 too');
 });

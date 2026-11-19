@@ -28,6 +28,7 @@ import { drawingTabLabels } from './input-replacement-ports.js';
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
+/** @import { CommittedCardRecords } from '../services/record-draw-selection.js' */
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
@@ -224,15 +225,17 @@ const sameEntries = (asked, now) => now.length === asked.length && now.every((en
  * marks), and the read after the edit keeps the row of each record with the record it continues as
  * (`circularDepthRowsAfterRead` with `resliceCardRows`): both sets of cards are read by `circularMarkRecords`, as that
  * read reads them, and the rows of the records the new file has no record for leave (`cardRowsLeaving`: by record ID,
- * else by place, D-05). None when the rows cannot be placed (a file that cannot be read, rows that are not those of
+ * else by place, D-05), from the records the drawing's committed request drew (`committed`, as that read and the next
+ * Generate). None when the rows cannot be placed (a file that cannot be read, rows that are not those of
  * their cards): that read reports the matrix, as before.
  * @param {DrawingState} drawing
  * @param {readonly ReplacedCardFile[]} replaced
  * @param {ReplacementFile} value
  * @param {(file: ReplacementFile | null) => FileLike | null | undefined} fileOf
+ * @param {(drawing: DrawingState) => Promise<CommittedCardRecords>} committed
  * @returns {Promise<{ k: number, record: string | null, files: string[] }[]>}
  */
-const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf) => {
+const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf, committed) => {
   const settledMarks = settledCircularCardMarks(drawing);
   /** @type {readonly ReplacementCardRecords[]} */
   const settled = settledMarks ?? [];
@@ -256,7 +259,7 @@ const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf) => {
     marks: after.map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordIds: null })), now: known, inputs: after, fileOf
   });
   if (!now) return [];
-  return cardRowsLeaving(rows, marked, now).flatMap(({ uid, k, row }) => {
+  return cardRowsLeaving(rows, marked, now, await committed(drawing)).flatMap(({ uid, k, row }) => {
     const files = row.flatMap((ref) => (ref ? [ref.name] : []));
     const record = drawing.circularRecordList.value.find((entry) => entry.uid === uid && entry.k === k);
     return files.length === 0 ? [] : [{ k, record: record ? record.record_id : null, files }];
@@ -265,11 +268,13 @@ const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf) => {
 
 /**
  * The question a card's file control asks before a Replace that removes Depth files (OV-2318). Registers nothing.
- * @param {{ state: WebState, askChoice: AskChoice, showNotice: ShowNotice, barTabs: () => Array<DrawingBarTab | DrawingBarOffer> }} ports
- *   `barTabs`: the drawing bar's tabs, named as they show.
+ * @param {{ state: WebState, askChoice: AskChoice, showNotice: ShowNotice, barTabs: () => Array<DrawingBarTab | DrawingBarOffer>,
+ *   committedCardRecords: (drawing: DrawingState) => Promise<CommittedCardRecords> }} ports
+ *   `barTabs`: the drawing bar's tabs, named as they show. `committedCardRecords`: the record IDs of each card's file as
+ *   the drawing's committed request drew it (the runner's `committedCardRecordsOf`).
  * @returns {(sites: readonly DrawingInputSite[], value: ReplacementFile, pickHolds: () => boolean) => Promise<boolean> | null}
  */
-export const createCircularSourceReplacementQuestion = ({ state, askChoice, showNotice, barTabs }) => {
+export const createCircularSourceReplacementQuestion = ({ state, askChoice, showNotice, barTabs, committedCardRecords }) => {
   /** @param {ReplacementFile | null} file */
   const fileOf = (file) => /** @type {FileLike | null} */ (isInputFileRef(file) ? state.inputFiles.fileOf(file) : file);
   /**
@@ -334,7 +339,7 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, show
       do {
         asked = depthNow();
         leaving = await Promise.all(asking().map(async ({ drawingId, drawing, replaced }) => ({
-          drawingId, rows: await circularDepthFilesLeaving(drawing, replaced, value, fileOf)
+          drawingId, rows: await circularDepthFilesLeaving(drawing, replaced, value, fileOf, committedCardRecords)
         })));
         if (!cardsHold() || !stillShown()) return false;
       } while (!sameEntries(asked, depthNow()));

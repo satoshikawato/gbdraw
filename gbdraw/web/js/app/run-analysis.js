@@ -24,7 +24,7 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 import { trackHidesOn } from '../services/setting-application.js';
 import { normalizeResultLabelFits } from '../services/label-fit.js';
 import { keepResultNames, redrawsEachResult } from '../services/result-normalization.js';
-import { regionWithinRecord } from '../services/record-options.js';
+import { circularRecordEntries, regionWithinRecord } from '../services/record-options.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
@@ -50,7 +50,7 @@ import {
 import {
   drawnRecordIdentities, linearSeqRecordKey, offRecordRequestRecords, recordKeyMoves, recordSelectorNumber
 } from '../services/record-draw-selection.js';
-/** @import { DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
+/** @import { CommittedCardRecords, DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
 import { moveInstanceRuleRecords } from '../services/feature-selector.js';
 import {
   cancelDiagramGeneration,
@@ -1849,6 +1849,9 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   record list says of the records it draws (app/shown-drawing-readers.js): its record ID names its raw LOSAT TSVs.
  * @property {(drawing: DrawingState) => unknown} readLinearCardRecords The record selector's read of a Linear drawing's
  *   cards (its `refresh`, which the record list starts too): Save Raw LOSAT TSV awaits it before it names a pair.
+ * @property {import('../services/artifact-slot.js').ArtifactSlotStore['readOfDrawing']} [readOfDrawing] A value of a
+ *   drawing's artifact, shown or kept: its committed Session, whose records a card edit's Depth rows continue from
+ *   (`committedCardRecordsOf`).
  * @property {((drawing: DrawingState) => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
  *   The record discovery owner's record lists of a drawing's inputs, awaited (DESIGN A4): the sources
  *   `readDrawingRecordIdentities` returns, from which a request's record identities are read (`drawnRecordIdentities`).
@@ -1918,6 +1921,7 @@ export const createRunAnalysis = ({
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
   readRecordIdentitySources = null,
+  readOfDrawing = () => undefined,
   linearCardRecord,
   readLinearCardRecords,
   placeCircularRecordChoices = null,
@@ -2725,7 +2729,10 @@ export const createRunAnalysis = ({
     // A record-major Depth matrix follows its records to the cards read now (OV-2868).
     const depthRows = reads.some((read) => read.error) ? null : await circularDepthRowsAfterRead({
       matrix: drawing.files.c_depth, marks: drawing.files.c_depth_rows, inputs, records: reads.map((read) => read.records),
-      fileOf: (file) => inputFiles.fileOf(file)
+      fileOf: (file) => inputFiles.fileOf(file),
+      committed: () => committedCardRecordsOf(drawing, {
+        mode: 'circular', cards: new Map(inputs.map(({ uid }, index) => [uid, circularRecordEntries(reads[index].records)]))
+      })
     });
     if (
       refreshGeneration !== currentGeneration() ||
@@ -2850,6 +2857,40 @@ export const createRunAnalysis = ({
       await shareCircularRecordRead({}, drawing).read;
     }
     return readRecordIdentitySources(drawing);
+  };
+
+  /**
+   * The identities of the records `committed` drew (OV-1949, OV-3846): those its Generate kept with it, else (a
+   * Session Load) read from the files it was drawn from (`committedRecordIdentitySources`). The one reading of the
+   * records a Replace's rows continue from: the feature edits a Generate moves (`recordKeyMoves`) and the Depth rows a
+   * card edit moves (`committedCardRecordsOf`).
+   * @param {CommittedCanonicalSession | null | undefined} committed @param {DrawingState} drawing
+   * @param {RecordIdentitySources} sources the drawing's record lists now
+   * @returns {Promise<readonly DrawnRecordIdentity[]>}
+   */
+  const committedIdentitiesOf = async (committed, drawing, sources) => {
+    const records = committed && committed.renderRequest.mode === drawing.mode ? committed.renderRequest.records || [] : [];
+    if (!committed || records.length === 0) return [];
+    return committedRecordIdentities.get(committed.resources) ?? drawnRecordIdentities(records, await committedRecordIdentitySources({
+      records, resources: committed.resources, sources, inputType: drawing.inputType.value, inputFiles,
+      cards: drawing.mode === 'circular' ? drawing.circularSources : drawing.linearSeqs
+    }));
+  };
+
+  /**
+   * The record IDs of each card's file as `drawing`'s committed request drew it (`CommittedCardRecords`), which a
+   * card edit's Depth rows and the question before a Replace continue from (`continuedSinceCommit`). None before the
+   * drawing's first Generate.
+   * @param {DrawingState} drawing
+   * @param {RecordIdentitySources | null} [sources] the drawing's record lists now; else read from their owner
+   * @returns {Promise<CommittedCardRecords>}
+   */
+  const committedCardRecordsOf = async (drawing, sources = null) => {
+    const committed = readOfDrawing(drawing.id, state.activeDrawingId.value, () => getCommittedCanonicalSession?.() ?? null,
+      (slot) => slot.runtimeState?.canonical?.committedCanonicalSession ?? null);
+    const lists = committed ? sources ?? await readDrawingRecordIdentities(drawing) : null;
+    return new Map((lists ? await committedIdentitiesOf(committed, drawing, lists) : [])
+      .map(({ card, cardRecordIds }) => [card, cardRecordIds]));
   };
 
   // R13: Generate and the label reflow prepare the specific-color rules they
@@ -3007,13 +3048,11 @@ export const createRunAnalysis = ({
     const replacedRecordKeys = new Set(replacedFeatures
       .filter((/** @type {FeatureCatalogRow} */ feature) => feature.scope === mode.value)
       .map((/** @type {FeatureCatalogRow} */ feature) => String(feature.record_key)));
-    const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
-      ? getCommittedCanonicalSession()?.renderRequest : null;
+    // The committed Session, whose records this run's records continue (`committedIdentitiesOf`).
+    const previousCommitted = typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession() : null;
+    const previousCommittedRequest = previousCommitted?.renderRequest;
     const previousRequestRecords = previousCommittedRequest && previousCommittedRequest.mode === mode.value
       ? previousCommittedRequest.records || [] : [];
-    // The identities of the committed request's records, kept with it when a Generate committed it.
-    const previousRecordIdentities = previousRequestRecords.length > 0
-      ? committedRecordIdentities.get(getCommittedCanonicalSession?.()?.resources ?? {}) ?? null : null;
     let [workingLosatCacheInfo, workingLosatNamedKeys] = startingLosatRowsOf(mode.value === 'circular',
       committedArtifactHandle?.ownerSet, { losatCacheInfo: losatCacheInfo.value, losatNamedKeys: losatNamedKeys.value });
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -3214,12 +3253,11 @@ export const createRunAnalysis = ({
       if (identitySources && nextRecordPlan) {
         // A committed request without kept identities (a Session Load) reads them again: the records it was drawn from
         // are its own files' where a card no longer holds them (OV-3846).
-        if (!previousRecordIdentities && previousRequestRecords.length > 0) recordStructuralMetric('recordIdentityFallbackCount');
+        if (previousRequestRecords.length > 0 && !committedRecordIdentities.has(previousCommitted?.resources ?? {})) {
+          recordStructuralMetric('recordIdentityFallbackCount');
+        }
         recordMoves = recordKeyMoves(
-          previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, await committedRecordIdentitySources({
-            records: previousRequestRecords, resources: getCommittedCanonicalSession?.()?.resources ?? {}, sources: identitySources,
-            cards: drawing.mode === 'circular' ? drawing.circularSources : drawing.linearSeqs, inputType: drawing.inputType.value, inputFiles
-          })),
+          await committedIdentitiesOf(previousCommitted, drawing, identitySources),
           drawnRecordIdentities(nextRecordPlan, identitySources),
           replacedRecordKeys
         );
@@ -6644,6 +6682,7 @@ export const createRunAnalysis = ({
     discardLiveSettingRequests,
     refreshCircularRecordOrder,
     readDrawingRecordIdentities,
+    committedCardRecordsOf,
     releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,

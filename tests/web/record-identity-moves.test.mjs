@@ -321,3 +321,46 @@ test('a reordered Replace moves each record\'s rows to the record with its ID; d
     [key('U:2', 'a1')]: row('U:2', 'a1', 'on A'), [key('U:1', 'b1')]: row('U:1', 'b1', 'on B')
   });
 });
+
+// OV-3846 review (MEDIUM 1): several Replaces of a card before one Generate. The Depth rows move at the read after
+// each Replace and the feature edits at the Generate; both continue from the records the committed request drew
+// (`continuedSinceCommit` for the rows, `recordKeyMoves` for the edits), so the rows of a record never part from its
+// edits. On the step-by-step reading (C, D) -> (B, A) would put A's Depth on B while A's edit stays on A.
+test('Replaces before one Generate move a record\'s Depth rows where that Generate moves its feature edits', async () => {
+  const { continuedRecordPlaces, continuedSinceCommit, resliceCardRows, cardRowsLeaving } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const all = (cards) => drawnRecordIdentities(Object.keys(cards).map((recordKey) => ({ recordKey, cardinality: 'all', windows: [] })), circular(cards));
+  const committed = new Map([['U', ['A', 'B']]]);
+  const card = (...recordIds) => [{ uid: 'U', recordIds }];
+  // (A, B) committed, then (C, D), then (B, A): the rows of (C, D) stood for A and B.
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['C', 'D'], ['B', 'A']), [1, 0]);
+  assert.deepEqual(resliceCardRows([['a.tsv'], ['b.tsv']], card('C', 'D'), card('B', 'A'), committed, () => []), [['b.tsv'], ['a.tsv']]);
+  assert.deepEqual(moves(all({ U: ['A', 'B'] }), all({ U: ['B', 'A'] })), { 'U:1': 'U:2', 'U:2': 'U:1' }, 'A\'s edits go to U:2, where A\'s Depth went');
+  assert.deepEqual(cardRowsLeaving([['a.tsv'], ['b.tsv']], card('C', 'D'), card('B', 'A'), committed), []);
+  // (A, B) -> (B, A) -> (A2, B): A's rows go to its new version at A's place, as A's edits do.
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['B', 'A'], ['A2', 'B']), [1, 0]);
+  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['A2', 'B']), [0, 1]);
+  // (A, B) -> (B) -> (A, B): B's row stays with B (A's row left at the first Replace, which asked).
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['B'], ['A', 'B']), [1]);
+  // A record the committed request did not draw, or a card it did not draw, continues step by step.
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['C'], ['B', 'C']), [1], 'C continues A, which leaves: C keeps its row');
+  assert.deepEqual(continuedSinceCommit(null, ['C', 'D'], ['B', 'A']), continuedRecordPlaces(['C', 'D'], ['B', 'A']));
+  assert.deepEqual(resliceCardRows([['c.tsv']], [{ uid: 'V', recordIds: ['C'] }], [{ uid: 'V', recordIds: ['C2'] }], committed, () => []), [['c.tsv']]);
+  // One record of the new file continues one record: a claim by record ID before a claim by place.
+  assert.deepEqual(continuedSinceCommit(['A'], ['C', 'D'], ['D', 'A2']), [-1, 0]);
+  // With no Replace since the Generate it is the one-step rule.
+  for (const [then, next] of [[['A', 'B'], ['B', 'A']], [['A', 'B'], ['B']], [['A'], ['A2']], [['A', 'B'], ['A', 'C']], [['A', 'B'], ['B', 'B']], [['A', 'A', 'B'], ['B']]]) {
+    assert.deepEqual(continuedSinceCommit(then, then, next), continuedRecordPlaces(then, next), `${then} -> ${next}`);
+  }
+});
+
+// A Linear card's request record names its record by ID (`region_record_id`) under the card's uid: a reordered
+// Replace keeps drawing that record under the same request key, so its rows stay where they are.
+test('Linear: a reordered Replace keeps the rows of the record a card draws by its ID', () => {
+  const one = (id) => [{ recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: id }, windows: [] }];
+  const then = drawnRecordIdentities(one('A'), linear({ U: ['A', 'B'] }));
+  const now = drawnRecordIdentities(one('A'), linear({ U: ['B', 'A'] }));
+  assert.deepEqual(pairs(then), [['U', 'U:1']]);
+  assert.deepEqual(pairs(now), [['U', 'U:2']]);
+  // The rows under U stay (U still draws A); B, not drawn, takes the rows under its identity along.
+  assert.deepEqual(moves(then, now), { 'U:2': 'U:1' });
+});

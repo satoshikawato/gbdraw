@@ -234,12 +234,12 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   assert.deepEqual(circular.circularSources.map((card) => card.uid), [cardB, cardA]);
   assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
   assert.equal(circular.files.c_depth_rows, null);
-  // OV-3706: a Load marks the cards as loaded (their record counts unread); the settled read of the same cards
+  // OV-3706: a Load marks the cards as loaded (their record IDs unread); the settled read of the same cards
   // leaves the rows and gives the one form of a page that never saved: no marks.
   const { markCircularDepthRows } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { circularSourceInputs } = await import('../../gbdraw/web/js/services/input-types.js');
   markCircularDepthRows(circular.slices.inputs, circularSourceInputs('gb', circular.circularSources)
-    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordCount: null })));
+    .map(({ uid, primaryFile, pairedFile }) => ({ uid, primaryFile, pairedFile, recordIds: null })));
   await app.refreshCircularRecordOrder();
   await settle();
   assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);
@@ -247,7 +247,9 @@ test('a record-major Depth matrix follows its records through a Replace and a Mo
   // Marks whose records are not the matrix's rows (B marked with 5 records, 7 against 3 rows): the rows cannot be
   // placed and stay for Generate to report; the read still ends the marks, as a second read of the same cards would.
   markCircularDepthRows(circular.slices.inputs, circularSourceInputs('gb', circular.circularSources)
-    .map(({ uid, primaryFile, pairedFile }, index) => ({ uid, primaryFile, pairedFile, recordCount: index === 0 ? 5 : 2 })));
+    .map(({ uid, primaryFile, pairedFile }, index) => ({
+      uid, primaryFile, pairedFile, recordIds: index === 0 ? ['B1', 'x2', 'x3', 'x4', 'x5'] : ['A1', 'A2']
+    })));
   await app.refreshCircularRecordOrder();
   await settle();
   assert.deepEqual(rows(), [['b.tsv'], ['a.tsv'], []]);

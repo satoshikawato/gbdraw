@@ -28,8 +28,9 @@ import {
 } from './file-content-cache.js';
 
 import { isInputExpansionRefusal } from './session-resource-backing.js';
+import { recordStructuralMetric } from './runtime-test-hooks.js';
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceTable } from './session-resource-backing.js' */
-/** @import { IdentityRequestRecord, RecordIdentitySources } from './record-draw-selection.js' */
+/** @import { IdentityRequestRecord, RecordIdentitySources, RecordSourceEntry } from './record-draw-selection.js' */
 /** @import { GenerationPayload } from './diagram-generation.js' */
 /** @import { CanonicalRecord } from '../contracts/request.generated.js' */
 /** @import { RingGenomeFileLengths, RingGenomeInput, RingGenomeScales } from '../contracts/card-windows.generated.js' */
@@ -1255,13 +1256,48 @@ export const readStoredTokenRecordIds = async (requests, fileOf, known = new Map
 };
 
 /**
+ * The Session resource table of each committed request's resources, adopted once, with the record lists read from it
+ * by the resources they name (`committedRecordIdentitySources`): a committed Session's resources never change, so each
+ * file is listed once per committed Session, however many Generates and card edits read it.
+ * @type {WeakMap<object, { table: SessionResourceTable, lists: Map<string, Promise<RecordSourceEntry[]>> }>}
+ */
+const committedRecordLists = new WeakMap();
+
+/** @param {Readonly<Record<string, unknown>>} resources a committed request's */
+const committedReadsOf = (resources) => {
+  const held = committedRecordLists.get(resources)
+    ?? { table: adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (resources)), lists: new Map() };
+  committedRecordLists.set(resources, held);
+  return held;
+};
+
+/**
+ * The records of the file a committed request names by `ids`, listed once per committed Session
+ * (`committedRecordLists`); a failed read is not kept, so a later reading tries again.
+ * @param {ReturnType<typeof committedReadsOf>} held @param {readonly string[]} ids @param {unknown} kind
+ * @returns {Promise<RecordSourceEntry[]>}
+ */
+const listCommittedRecords = ({ table, lists }, ids, kind) => {
+  const key = JSON.stringify([kind, ...ids]);
+  const listed = lists.get(key);
+  if (listed) return listed;
+  const started = (async () => {
+    const [primaryFile, pairedFile] = ids.map((id) => createSessionResourceFileView(table, id));
+    return buildDisambiguatedRecordEntries(await discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(kind)), primaryFile, pairedFile ?? null));
+  })();
+  lists.set(key, started);
+  started.catch(() => { if (lists.get(key) === started) lists.delete(key); });
+  return started;
+};
+
+/**
  * The record lists the records of a committed request were drawn from, for its identities when none are kept with it
  * (a Session Load; `drawnRecordIdentities`): each card a record of the request names lists the records of the file the
  * request names for it. That is the card's list now (`sources`) while the card holds that file, else the records of the
- * request's own file, read from the Session resource the request names. So a Replace made before a Save and Load moves
- * the feature edits of each record at the next Generate by the rule a Replace in one sitting moves them by
- * (`recordKeyMoves`, D-05), as the Depth rows moved at the read after the Replace (`circularDepthRowsAfterRead`). A
- * card whose request file cannot be read keeps its list now.
+ * request's own file, read from the Session resource the request names (`listCommittedRecords`). So a Replace made
+ * before a Save and Load moves the feature edits and the Depth rows of each record from the records that request drew
+ * (`recordKeyMoves`, `circularDepthRowsAfterRead`, D-05), as a Replace in one sitting does. A card whose request file
+ * cannot be read keeps its list now, for both, and the read failure is reported (`committedRecordReadFailureCount`).
  * @param {{ records: readonly (IdentityRequestRecord & { source?: Readonly<Record<string, unknown>> | null })[],
  *   resources: Readonly<Record<string, unknown>>, sources: RecordIdentitySources,
  *   cards: readonly (Readonly<Partial<Record<import('./input-types.js').InputSlot, InputFileRef | null>>> & { uid: unknown })[],
@@ -1278,8 +1314,6 @@ export const committedRecordIdentitySources = async ({ records, resources, sourc
     return [primaryFile, pairedFile].map((ref) => inputFiles.fileOf(ref));
   };
   const cards = new Map(sources.cards);
-  /** @type {SessionResourceTable | null} */
-  let table = null;
   const read = new Set();
   for (const record of records) {
     const uid = requestRecordCard(String(record.recordKey), sources.cards);
@@ -1287,17 +1321,19 @@ export const committedRecordIdentitySources = async ({ records, resources, sourc
     read.add(uid);
     const ids = storedRecordSourceResourceIds(record.source);
     const held = filesOf(uid);
+    if (ids.length === 0) continue;
+    const reads = committedReadsOf(resources);
+    if (ids.every((id, index) => sessionResourceSource(held[index]) !== null
+      && matchesSessionResourceDescriptor(held[index], adoptedSessionResourceDescriptor(reads.table, id)))) continue;
+    let listed;
     try {
-      table ??= adoptCurrentSessionResources(/** @type {Record<string, unknown>} */ (resources));
-      const own = /** @type {SessionResourceTable} */ (table);
-      if (ids.length > 0 && ids.every((id, index) => sessionResourceSource(held[index]) !== null
-        && matchesSessionResourceDescriptor(held[index], adoptedSessionResourceDescriptor(own, id)))) continue;
-      const [primaryFile, pairedFile] = ids.map((id) => createSessionResourceFileView(own, id));
-      const listed = await discoverInputRecords(inputTypeSpec(inputTypeOfSourceKind(record.source?.kind)), primaryFile, pairedFile ?? null);
-      cards.set(uid, buildDisambiguatedRecordEntries(listed));
-    } catch {
-      // The request's file cannot be read: the card keeps its list now.
+      listed = await listCommittedRecords(reads, ids, record.source?.kind);
+    } catch (error) {
+      // The request's file cannot be read: the card keeps its list now, for the feature edits and the Depth rows.
+      recordStructuralMetric('committedRecordReadFailureCount', 1, { card: uid, error: String(error) });
+      continue;
     }
+    cards.set(uid, listed);
   }
   return { ...sources, cards };
 };
@@ -1373,7 +1409,9 @@ const sameRecordIds = (left, right) => left !== null && left.length === right.le
  * OV-2868: what a settled read of a drawing's cards makes of its record-major
  * Depth matrix. The rows stand for the records of `marks` (`c_depth_rows`, in
  * row order); after a card edit they follow their records to the cards read
- * now (`resliceCardRows`). A mark's record IDs are `circularMarkRecords`'s.
+ * now (`resliceCardRows`), from the records the drawing's committed request
+ * drew (`committed`, read only when the cards changed), as the next Generate
+ * moves the records' feature edits. A mark's record IDs are `circularMarkRecords`'s.
  * A settled read ends the marks: its caller clears them whenever this gives a
  * result, since marks null read as the cards as last read, the one form of
  * "the rows stand for the cards read" (OV-3706). Marks stay only while a read
@@ -1384,11 +1422,12 @@ const sameRecordIds = (left, right) => left !== null && left.length === right.le
  * @param {{ matrix: DrawingInputFiles['c_depth'], marks: readonly CircularCardMark[] | null,
  *   inputs: readonly import('./input-types.js').CircularSourceInput<InputFileRef>[],
  *   records: readonly (readonly Pick<CircularListRecord, 'record_id'>[])[],
- *   fileOf: (file: InputFileRef | null) => FileLike | null | undefined }} read
+ *   fileOf: (file: InputFileRef | null) => FileLike | null | undefined,
+ *   committed: () => Promise<import('./record-draw-selection.js').CommittedCardRecords> }} read
  *   `records`: the records read now of each card of `inputs`.
  * @returns {Promise<{ rows: (InputFileRef | null)[][] | null } | null>}
  */
-export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, records, fileOf }) => {
+export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, records, fileOf, committed }) => {
   if (!marks || !isRecordMajorDepthFileMatrix(matrix)) return null;
   const now = inputs.map(({ uid, primaryFile, pairedFile }, index) => ({
     uid, primaryFile, pairedFile, recordIds: records[index].map((record) => record.record_id)
@@ -1399,7 +1438,7 @@ export const circularDepthRowsAfterRead = async ({ matrix, marks, inputs, record
   const marked = await circularMarkRecords({ marks, now, inputs, fileOf });
   const rows = /** @type {(InputFileRef | null)[][]} */ (matrix);
   if (marked === null || marked.reduce((sum, card) => sum + card.recordIds.length, 0) !== rows.length) return { rows: null };
-  return { rows: resliceCardRows(rows, marked, now, () => /** @type {(InputFileRef | null)[]} */ ([])) };
+  return { rows: resliceCardRows(rows, marked, now, await committed(), () => /** @type {(InputFileRef | null)[]} */ ([])) };
 };
 
 /**

@@ -405,7 +405,7 @@ const WRITES = {
     moveCircularSource: (h, drawing) => modules.inputs.moveCircularSource(h, drawing.circularSources[1].uid, 0),
     replaceCircularSources: (h) => modules.inputs.replaceCircularSources(h, [createCircularSource({ uid: 'replaced-card' })]),
     markCircularDepthRows: (h, drawing) => modules.inputs.markCircularDepthRows(h,
-      drawing.circularSources.map(({ uid }) => ({ uid, primaryFile: null, pairedFile: null, recordCount: 1 })))
+      drawing.circularSources.map(({ uid }) => ({ uid, primaryFile: null, pairedFile: null, recordIds: ['r1'] })))
   },
   settings: {}
 };
