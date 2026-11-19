@@ -713,6 +713,40 @@ test('a Depth file named as BED sets its series Format, and a replacement follow
   assert.deepEqual([format(0), format(1)], ['bed', 'auto'], 'each series follows its own files');
 });
 
+// Review r1 M2 (D-34): a series' Min and Max hold a number, `auto` (the series' own range) or nothing (Shared, the
+// global Depth Min or Max); their menus offer the three as Baseline's menu offers its words and Value.
+test('a Depth series Min and Max menus set Shared, Auto and a Value, and show what the series holds', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  /** @param {string} label @param {() => unknown} edit */
+  const step = (label, edit) => history.runUndoable(label, edit);
+  app.drawingList.newDrawing('circular');
+  await step('Depth file', () => app.setCircularDepthFile(0, new File(['chr\t1\t3\n'], 'depth.tsv')));
+  const series = () => state.activeDrawing().adv.depth_tracks[0];
+  for (const [key, field] of /** @type {const} */ ([['minValue', 'min_value'], ['maxValue', 'max_value']])) {
+    assert.deepEqual(app.depthSeriesChoices(key).map(({ value, label }) => [value, label]),
+      [['shared', 'Shared'], ['auto', 'Auto'], ['value', 'Value']], key);
+    assert.equal(app.depthSeriesMenuValue(series()[field]), 'shared', `${key}: unset shows Shared`);
+    await step(key, () => app.setDepthSeriesSetting(0, field, 'auto'));
+    assert.equal(series()[field], 'auto');
+    assert.equal(app.depthSeriesMenuValue(series()[field]), 'auto', `${key}: auto shows Auto`);
+    await step(key, () => app.setDepthSeriesSetting(0, field, 'value'));
+    assert.equal(series()[field], 0, `${key}: Value starts at 0`);
+    assert.equal(app.depthSeriesMenuValue(series()[field]), 'value');
+    await step(key, () => app.setDepthSeriesSetting(0, field, '-2.5'));
+    assert.equal(series()[field], -2.5);
+    await step(key, () => app.setDepthSeriesSetting(0, field, ''));
+    assert.equal(series()[field], -2.5, `${key}: a blank number field stores nothing`);
+    await step(key, () => app.setDepthSeriesSetting(0, field, 'value'));
+    assert.equal(series()[field], -2.5, `${key}: Value keeps the number`);
+    await step(key, () => app.setDepthSeriesSetting(0, field, 'shared'));
+    assert.equal(Object.hasOwn(series(), field), false, `${key}: Shared is left out of the request`);
+  }
+  assert.deepEqual(app.depthSeriesChoices('baseline').map(({ value }) => value), ['auto', 'mean', 'value']);
+  assert.equal(app.depthSeriesMenuValue(0.5), 'value');
+  assert.equal(app.depthSeriesMenuValue('mean'), 'mean');
+});
+
 test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;

@@ -121,40 +121,60 @@ const rowsForDepthTrackCount = (drawing, count) => {
     return { index, key: `depth-track-${index}`, config, series: depthSeriesSettings(config) };
   });
 };
+/** The menus of the series settings: a word's menu, or a number's (Baseline, Min, Max: a word or a Value). */
+/** @typedef {'format' | 'agg' | 'style' | 'baseline' | 'minValue' | 'maxValue'} DepthSeriesMenuKey */
 /**
  * The words of the series settings a menu offers, as the menu names them (Python owns the words: `depthSeriesWords`).
- * A baseline's menu adds Value, a number of the series' own.
- * @type {Readonly<Record<'format' | 'agg' | 'style' | 'baseline', Readonly<Record<string, string>>>>}
+ * A menu of a setting that may hold a number adds Value, a number of the series' own; one that may be unset adds
+ * Shared first, the global Depth Min or Max.
+ * @type {Readonly<Record<DepthSeriesMenuKey, Readonly<Record<string, string>>>>}
  */
 const DEPTH_SERIES_WORD_NAMES = Object.freeze({
   format: { auto: msg('Auto'), samtools: msg('samtools depth'), bedgraph: msg('bedGraph'), bed: msg('BED'), position_value: msg('Position and value') },
   agg: { mean: msg('Mean'), max: msg('Max'), sum: msg('Sum') },
   style: { area: msg('Area'), line: msg('Line') },
-  baseline: { auto: msg('Auto'), mean: msg('Mean'), value: msg('Value') }
+  baseline: { auto: msg('Auto'), mean: msg('Mean'), value: msg('Value') },
+  minValue: { shared: msg('Shared'), auto: msg('Auto'), value: msg('Value') },
+  maxValue: { shared: msg('Shared'), auto: msg('Auto'), value: msg('Value') }
 });
-/** The baseline menu's choice of a number of the series' own. */
-export const DEPTH_BASELINE_VALUE = 'value';
+/** A number menu's choice of a number of the series' own. */
+export const DEPTH_SERIES_VALUE = 'value';
+/** A range bound menu's choice of the global Depth Min or Max (the bound unset). */
+export const DEPTH_SERIES_SHARED = 'shared';
 /**
- * The choices of a series setting's menu, in Python's order of its words.
- * @param {'format' | 'agg' | 'style' | 'baseline'} key
+ * The choices of a series setting's menu, in Python's order of its words (Shared before them, Value after them).
+ * @param {DepthSeriesMenuKey} key
  * @returns {{ value: string, label: string }[]}
  */
-export const depthSeriesChoices = (key) => [...depthSeriesWords(key), ...(key === 'baseline' ? [DEPTH_BASELINE_VALUE] : [])]
-  .map((value) => ({ value, label: tm(DEPTH_SERIES_WORD_NAMES[key][value] ?? value) }));
+export const depthSeriesChoices = (key) => [
+  ...(depthSeriesValueFits(key, null) ? [DEPTH_SERIES_SHARED] : []),
+  ...depthSeriesWords(key),
+  ...(depthSeriesValueFits(key, 0) ? [DEPTH_SERIES_VALUE] : [])
+].map((value) => ({ value, label: tm(DEPTH_SERIES_WORD_NAMES[key][value] ?? value) }));
 /**
- * What a series setting's control gives as the value it stores: a number field's text as its number (blank: unset,
- * or for a baseline, nothing to store yet); the baseline menu's Value as 0 when the series has no number yet; any
- * other value as it is.
+ * The choice a series setting's menu shows for the value the series holds: Value for a number, Shared when unset.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export const depthSeriesMenuValue = (value) => (
+  typeof value === 'number' ? DEPTH_SERIES_VALUE : value === null || value === undefined ? DEPTH_SERIES_SHARED : String(value)
+);
+/**
+ * What a series setting's control gives as the value it stores: a menu's Value as the series' number, or 0 when it
+ * has none yet; a menu's Shared as unset; a number field's text as its number (blank: nothing to store); any other
+ * value as it is.
  * @param {DepthSeriesKey} key
  * @param {unknown} value
  * @param {unknown} current The value the series holds.
  * @returns {{ value: unknown } | null} null: nothing to store.
  */
 const depthSeriesInputValue = (key, value, current) => {
-  if (key === 'baseline' && value === DEPTH_BASELINE_VALUE) return { value: typeof current === 'number' ? current : 0 };
+  const number = depthSeriesValueFits(key, 0);
+  if (number && value === DEPTH_SERIES_VALUE) return { value: typeof current === 'number' ? current : 0 };
+  if (value === DEPTH_SERIES_SHARED && depthSeriesValueFits(key, null)) return { value: null };
   const word = typeof value === 'string' && depthSeriesValueFits(key, value);
-  if (typeof value !== 'string' || word || !depthSeriesValueFits(key, 0)) return { value };
-  if (value.trim() === '') return key === 'baseline' ? null : { value: null };
+  if (typeof value !== 'string' || word || !number) return { value };
+  if (value.trim() === '') return null;
   const numeric = Number(value);
   return { value: Number.isFinite(numeric) ? numeric : value };
 };
@@ -400,7 +420,7 @@ export const createDepthTrackPanels = ({ state, shownDrawingOfMode }) => {
     hasCircularDepthFiles, canShowDepthTrack, circularDepthTrackRows, linearDepthTrackRows, linearSourceDepthRows,
     linearSourceDepthSummary, depthTrackRows, linearDepthTrackCoverageLabel, linearDepthTrackIndexOptions,
     getDepthTrackLabel, depthSeriesDefaultName, depthSeriesName, getDepthTrackColor, getDepthTrackLegendLabelForSlot,
-    getCircularDepthFile, depthSeriesChoices
+    getCircularDepthFile, depthSeriesChoices, depthSeriesMenuValue
   };
 };
 

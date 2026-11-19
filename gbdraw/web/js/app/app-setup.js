@@ -1642,7 +1642,7 @@ export const createAppSetup = () => {
     hasCircularDepthFiles, canShowDepthTrack, circularDepthTrackRows, linearDepthTrackRows, linearSourceDepthRows,
     linearSourceDepthSummary, depthTrackRows, linearDepthTrackCoverageLabel, linearDepthTrackIndexOptions,
     getDepthTrackLabel, depthSeriesDefaultName, depthSeriesName, getDepthTrackColor, getDepthTrackLegendLabelForSlot,
-    getCircularDepthFile, depthSeriesChoices
+    getCircularDepthFile, depthSeriesChoices, depthSeriesMenuValue
   } = createDepthTrackPanels({ state, shownDrawingOfMode });
   const enabledOptionClass = 'text-slate-700 cursor-pointer';
   const disabledOptionClass = 'text-slate-400 cursor-not-allowed opacity-60';
@@ -3756,6 +3756,7 @@ export const createAppSetup = () => {
     getDepthTrackColor,
     setDepthTrackColor,
     depthSeriesChoices,
+    depthSeriesMenuValue,
     setDepthSeriesSetting,
     getDepthTrackLegendLabelForSlot,
     setDepthTrackLegendLabelForSlot,

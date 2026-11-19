@@ -3509,36 +3509,43 @@ test('a bedGraph and a two-column Depth file draw as the per-base file of the sa
   expect(depthGroups.twoColumns.group).toBe(depthGroups.perBase.group);
 });
 
-// Numeric series settings: a series' Format, Style, Negative color, Baseline and
-// Unit, set in its controls, reach Python in the request (a staged file has no
-// name to tell its format by). The Source recipe of that Generate gives them as
-// CLI flags and the CLI draws the Result; the CLI's own flags write the same
-// request fields. Save then Load keeps every setting and draws the same series.
-test('a signed bedGraph set as a line with a negative color, a baseline and no unit draws as the CLI draws it', async ({ page }, testInfo) => {
+// Numeric series settings: a series' Format, Style, Negative color, Baseline,
+// Max and Unit, set in its controls, reach Python in the request (a staged file
+// has no name to tell its format by). The file is a samtools depth file of two
+// signed samples without a header: Auto reads its four columns as bedGraph and
+// refuses it, so the Format reaches the reader or nothing draws (review r1 I1).
+// The global Depth Min is negative (review r1 H1) and the series' Max is Auto
+// (its own top, above the global Depth Max; review r1 M2). The Source recipe of
+// that Generate gives them as CLI flags and the CLI draws the Result; the CLI's
+// own flags write the same request fields. Save then Load keeps every setting
+// and draws the same series.
+test('a signed samtools depth file set as a line with a negative color, a baseline, its own Max and no unit draws as the CLI draws it', async ({ page }, testInfo) => {
   test.setTimeout(600000);
   const genbank = readFileSync(sparseGenbankAPath, 'utf8');
-  const rows = ['track type=bedGraph'];
+  const rows = [];
   for (let start = 0, index = 0; start < 40579; index += 1) {
     const end = Math.min(40579, start + 1 + ((index * 37) % 400));
-    rows.push(`BGC0000708\t${start}\t${end}\t${(((index * 13) % 90) - 45) / 10}`);
+    const value = (((index * 13) % 90) - 45) / 10;
+    for (let position = start + 1; position <= end; position += 1) rows.push(`BGC0000708\t${position}\t${value}\t99`);
     start = end;
   }
-  const bedGraph = `${rows.join('\n')}\n`;
+  const samples = `${rows.join('\n')}\n`;
   const directory = testInfo.outputPath('numeric-series');
   mkdirSync(directory, { recursive: true });
-  const inputs = [join(directory, 'BGC0000708.gbk'), join(directory, 'signal.bedgraph')];
+  const inputs = [join(directory, 'BGC0000708.gbk'), join(directory, 'samples.depth.tsv')];
   writeFileSync(inputs[0], genbank);
-  writeFileSync(inputs[1], bedGraph);
+  writeFileSync(inputs[1], samples);
   const replayEnv = { ...process.env };
   delete replayEnv.PYTHONPATH;
   delete replayEnv.PYTHONHOME;
   const settingsOf = (track) => Object.fromEntries(['format', 'agg', 'style', 'negativeColor', 'baseline', 'minValue', 'maxValue', 'unit']
     .filter((key) => Object.hasOwn(track, key)).map((key) => [key, track[key]]));
-  const expectedSettings = { format: 'bedgraph', style: 'line', negativeColor: '#d62728', baseline: 0.5, unit: '' };
+  const expectedSettings = { format: 'samtools', style: 'line', negativeColor: '#d62728', baseline: 0.5, maxValue: 'auto', unit: '' };
   const cli = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
-    '-m', 'gbdraw.cli', 'circular', '--gbk', 'BGC0000708.gbk', '--depth_track', 'signal.bedgraph',
-    '--depth_track_format', 'bedgraph', '--depth_track_style', 'line', '--depth_track_negative_color', '#d62728',
-    '--depth_track_baseline', '0.5', '--depth_track_unit', '', '-f', 'svg', '-o', 'cli', '--save_session'
+    '-m', 'gbdraw.cli', 'circular', '--gbk', 'BGC0000708.gbk', '--depth_track', 'samples.depth.tsv',
+    '--depth_track_format', 'samtools', '--depth_track_style', 'line', '--depth_track_negative_color', '#d62728',
+    '--depth_track_baseline', '0.5', '--depth_track_max', 'auto', '--depth_track_unit', '', '--depth_min', '-3',
+    '--depth_max', '2', '-f', 'svg', '-o', 'cli', '--save_session'
   ], { cwd: directory, encoding: 'utf8', env: { ...process.env, PYTHONPATH: repoRoot } });
   expect(cli.status, cli.stderr).toBe(0);
   const cliRequest = (await readSessionFile(join(directory, 'cli.gbdraw'))).drawings[0].renderRequest;
@@ -3550,9 +3557,11 @@ test('a signed bedGraph set as a line with a negative color, a baseline and no u
     app.selectDrawing('circular');
     app.setCircularInputType('gb');
     await (async (file) => { const inputs = await import('./js/services/drawing/inputs.js'); const { state: cardState } = await import('./js/state.js'); const slice = cardState.activeDrawing().slices.inputs; const card = inputs.createCircularSource(); inputs.addCircularSource(slice, card); inputs.bindCircularSourceFile(cardState.inputFiles, slice, card.uid, 'gb', file); })(new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
-    app.setCircularDepthFile(0, new File([signalText], 'signal.bedgraph', { type: 'text/plain', lastModified: 2 }));
+    app.setCircularDepthFile(0, new File([signalText], 'samples.depth.tsv', { type: 'text/plain', lastModified: 2 }));
     await window.Vue.nextTick();
-  }, { genbankText: genbank, signalText: bedGraph });
+  }, { genbankText: genbank, signalText: samples });
+  const control = async (name) => reveal(page.getByLabel(name, { exact: true }));
+  await (await control('Depth format')).selectOption('samtools');
   const generated = async (name) => {
     await generateAndWaitForResult(page);
     const result = await page.evaluate(() => {
@@ -3570,11 +3579,9 @@ test('a signed bedGraph set as a line with a negative color, a baseline and no u
     writeFileSync(file, result.svg);
     return { ...result, file };
   };
-  const before = await generated('defaults');
+  const before = await generated('samtools');
 
-  // The series' own controls, as a user sets them.
-  const control = async (name) => reveal(page.getByLabel(name, { exact: true }));
-  await (await control('Depth format')).selectOption('bedgraph');
+  // The series' own controls and the global range, as a user sets them.
   await (await control('Depth style')).selectOption('line');
   await (await control('Depth baseline')).selectOption('value');
   const baselineValue = await control('Depth baseline value');
@@ -3587,14 +3594,24 @@ test('a signed bedGraph set as a line with a negative color, a baseline and no u
   await unit.fill('');
   await unit.press('Enter');
   await expect(page.getByRole('button', { name: 'Use the series color below the Depth baseline', exact: true })).toBeEnabled();
+  const seriesMax = await control('Depth series max');
+  await expect(seriesMax).toHaveValue('shared');
+  await seriesMax.selectOption('auto');
+  for (const [name, value] of [['Depth Min', '-3'], ['Depth Max', '2']]) {
+    const field = await reveal(page.getByRole('spinbutton', { name, exact: true }));
+    await field.fill(value);
+    await field.press('Enter');
+  }
 
   const web = await generated('settings');
-  expect(web.draft).toMatchObject({ format: 'bedgraph', style: 'line', negative_color: '#d62728', baseline: 0.5, unit: '' });
+  expect(web.draft).toMatchObject({ format: 'samtools', style: 'line', negative_color: '#d62728', baseline: 0.5, max_value: 'auto', unit: '' });
   expect(web.groups).toHaveLength(1);
   expect(web.groups[0]).toContain('#d62728');
   expect(web.recipe.available, web.recipe.reason).toBe(true);
-  for (const flag of ['--depth_track_format bedgraph', '--depth_track_style line', "--depth_track_negative_color '#d62728'",
-    '--depth_track_baseline 0.5', "--depth_track_unit ''"]) expect(web.recipe.command).toContain(flag);
+  for (const flag of ['--depth_track_format samtools', '--depth_track_style line', "--depth_track_negative_color '#d62728'",
+    '--depth_track_baseline 0.5', '--depth_track_max auto', "--depth_track_unit ''", '--depth_min -3', '--depth_max 2']) {
+    expect(web.recipe.command).toContain(flag);
+  }
   const replay = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
     join(repoRoot, 'tests/web/helpers/source-recipe-replay.py'), join(directory, 'replay'), web.recipe.command,
     web.file, before.file, '-', ...inputs
@@ -3617,14 +3634,18 @@ test('a signed bedGraph set as a line with a negative color, a baseline and no u
   await page.locator('input[accept*=".gbdraw"]').first().setInputFiles(savedSessionPath);
   await expectSessionLoadedWithoutWarnings(page);
   await showDrawing(page, { kind: 'circular' });
-  await expect(await control('Depth format')).toHaveValue('bedgraph');
+  await expect(await control('Depth format')).toHaveValue('samtools');
   await expect(await control('Depth style')).toHaveValue('line');
+  await expect(await control('Depth series min')).toHaveValue('shared');
+  await expect(await control('Depth series max')).toHaveValue('auto');
+  await expect(await reveal(page.getByRole('spinbutton', { name: 'Depth Min', exact: true }))).toHaveValue('-3');
+  await expect(await reveal(page.getByRole('spinbutton', { name: 'Depth Max', exact: true }))).toHaveValue('2');
   await expect(await control('Depth baseline')).toHaveValue('value');
   await expect(await control('Depth baseline value')).toHaveValue('0.5');
   await expect(await control('Depth negative color')).toHaveValue('#d62728');
   await expect(await control('Depth unit')).toHaveValue('');
   const reloaded = await generated('reloaded');
-  expect(reloaded.draft).toMatchObject({ format: 'bedgraph', style: 'line', negative_color: '#d62728', baseline: 0.5, unit: '' });
+  expect(reloaded.draft).toMatchObject({ format: 'samtools', style: 'line', negative_color: '#d62728', baseline: 0.5, max_value: 'auto', unit: '' });
   expect(reloaded.groups).toEqual(web.groups);
 });
 
