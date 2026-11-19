@@ -139,6 +139,9 @@ test('Add files: a drop of several files is one card each and one undo; GFF3 + F
   await expect.poll(() => cardNames(page)).toEqual([
     'File 1: NC_013668.gff3 + NC_013668.fasta', 'File 2: NC_013668-reannotated.gff3 + no FASTA'
   ]);
+  // OV-3099: no card's records are read while File 2 waits for its FASTA; the Source records line says so.
+  await expect(page.locator('[data-circular-discovery-status]'))
+    .toHaveText('File 2 needs its FASTA file before the records can be inspected.');
   await expect(cards(page).nth(1).locator('[data-circular-source-fold]')).toHaveAttribute('open', '');
   await expect(cards(page).nth(1).getByRole('button', { name: 'Choose FASTA File', exact: true })).toBeVisible();
   // The empty slot shows only its prompt: no ready check and no drop hint (only the Add files zone has those).
