@@ -14,7 +14,9 @@ stage, so a Worker transaction still reuses the labels.
 
 from __future__ import annotations
 
+import math
 import re
+import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -28,13 +30,15 @@ from gbdraw.labels.circular_types import CircularLabel
 from gbdraw.labels.label_ink import circular_label_ink
 from gbdraw.labels.label_style import FeatureLabelStyle
 from gbdraw.layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink
-from gbdraw.layout.spatial import bounding_aabb
+from gbdraw.layout.spatial import Aabb, bounding_aabb
+from gbdraw.render.drawers.label_backing import feature_label_backing
 from tests.utils.render_stage_equivalence import EquivalenceHarness
 
 INPUTS = Path(__file__).resolve().parent / "test_inputs"
 P1 = INPUTS / "NC_005856.1.gb"
 BGC = INPUTS / "BGC0000708.gbk"
 HMM = INPUTS / "HmmtDNA.gbk"
+LAMBDA = INPUTS / "NC_001416.gb"
 P1_ARGS = ("--separate_strands", "--track_type", "spreadout", "--labels", "both")
 BGC_ARGS = ("--definition_font_size", "30", "--species", "<i>Genus species</i>", "--strain", "strain X-1", "--labels", "both")
 # GC content and GC skew inside the scale, under the inner labels.
@@ -50,8 +54,25 @@ INSIDE_GC_ONLY = (
     "--circular_track_slot", "gc_content:dinucleotide_content@side=inside",
     "--circular_track_slot", "gc_skew:dinucleotide_skew@side=inside",
 )
-# A box behind a label's letters, bound to its label (``feature_label_box``).
-BOX = re.compile(r'<rect aria-hidden="true" data-label-feature-id="([^"]*)" fill="#ffffff" fill-opacity="0.8"[^>]*/>')
+# Lambda's regions inside the scale, GC content inside them: the inner labels meet the region labels.
+LAMBDA_TRACKS = (
+    "--annotation_table", str(INPUTS / "lambda_wrap_regions.tsv"), "--track_type", "spreadout", "--labels", "both",
+    "--circular_track_slot", "features:features",
+    "--circular_track_slot", "ticks:ticks@side=inside",
+    "--circular_track_slot", "regions:annotations@set_id=regions,side=inside,overflow=compress",
+    "--circular_track_slot", "gc_content:dinucleotide_content@side=inside",
+)
+# A box behind a label's letters, bound to its label (``feature_label_box``), cut away by its clip where it would
+# cover other text (``feature_label_box_cut``).
+BOX = re.compile(
+    r'<rect aria-hidden="true"(?: clip-path="url\(#[^)]*\)")? data-label-feature-id="([^"]*)" fill="#ffffff"'
+    r' fill-opacity="0.8"[^>]*/>'
+)
+CUT_BOX = re.compile(
+    r'<rect aria-hidden="true" clip-path="url\(#([^)]*)\)" data-label-feature-id="([^"]*)" fill="#ffffff"'
+    r' fill-opacity="0.8"[^>]*/>'
+)
+CLIP = re.compile(r'<clipPath id="([^"]*)"><path [^>]*\bd="([^"]*)"')
 
 
 class _Drawn:
@@ -63,6 +84,8 @@ class _Drawn:
         self.inner_labels: list[CircularLabel] = []
         self.total_length = 0
         self.data_paint: tuple[CircularInk, ...] = ()
+        # The convex parts of the drawn region labels' letters.
+        self.region_letters: list[tuple[tuple[float, float], ...]] = []
 
     def over_numbers(self) -> list[str]:
         """The inner labels over a number's letters, by the placement's own test."""
@@ -90,6 +113,11 @@ def _draw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gbk: Path, args: tupl
     tick_layout = builders.tick_slot_layout
     track_ink = assemble._record_track_ink
     draw_labels = assemble.add_labels_group_on_canvas
+    draw_annotations = assemble._draw_circular_annotation_slot
+
+    def annotations(*args: Any, **kwargs: Any) -> Any:
+        drawn.region_letters.extend(tuple(part) for label in kwargs["annotation_labels"] for part in label.parts)
+        return draw_annotations(*args, **kwargs)
 
     def ticks(*args: Any, **kwargs: Any) -> Any:
         layout = tick_layout(*args, **kwargs)
@@ -116,6 +144,7 @@ def _draw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, gbk: Path, args: tupl
         patch.setattr(builders, "tick_slot_layout", ticks)
         patch.setattr(assemble, "_record_track_ink", paint)
         patch.setattr(assemble, "add_labels_group_on_canvas", labels)
+        patch.setattr(assemble, "_draw_circular_annotation_slot", annotations)
         out = tmp_path / "figure"
         circular_cli_module.circular_main(["--gbk", str(gbk), *args, "-o", str(out), "-f", "svg"])
     return (tmp_path / "figure.svg").read_text(encoding="utf-8"), drawn
@@ -263,3 +292,83 @@ def test_a_session_saved_before_auto_replays_without_boxes(tmp_path: Path) -> No
     assert overrides[CIRCULAR_LABEL_PROTECTION_PATH] == "none"
     assert _boxed((tmp_path / "replay.svg").read_text(encoding="utf-8")) == set()
     assert any(_boxed(item.drawing.tostring()) for item in auto.items)
+
+
+@pytest.mark.circular
+def test_inner_labels_are_not_held_where_their_region_labels_would_warn_of_more(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lambda with its strands apart: inner labels over the scale numbers, and a region label inside them. Holding the
+    inner labels off the numbers would put one over the region label "Late region" (a region label overlap the
+    figure without the hold does not have), so the figure is the one drawn without the hold, and it warns of no
+    region label."""
+
+    args = ("--separate_strands", *LAMBDA_TRACKS)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        svg, _ = _draw(tmp_path / "held", monkeypatch, LAMBDA, args)
+    _without_tick_numbers(monkeypatch)
+    unheld, unheld_drawn = _draw(tmp_path / "unheld", monkeypatch, LAMBDA, args)
+
+    assert unheld_drawn.over_numbers() and unheld_drawn.region_letters
+    assert not [warning for warning in caught if "region label" in str(warning.message)]
+    assert svg == unheld
+
+
+def _turns_point(radius: float, turn: float) -> tuple[float, float]:
+    """A point at ``radius`` and ``turn`` (from the top, clockwise) around the circle centre."""
+
+    return radius * math.sin(2.0 * math.pi * turn), -radius * math.cos(2.0 * math.pi * turn)
+
+
+def _number_corners(ring: CircularInkRing) -> list[tuple[float, float]]:
+    """The corners and arc middles of a scale number's letters."""
+
+    span = (ring.end_turn - ring.start_turn) % 1.0
+    turns = (ring.start_turn, ring.start_turn + 0.5 * span, ring.start_turn + span)
+    return [_turns_point(radius, turn) for radius in (ring.band.inner_px, ring.band.outer_px) for turn in turns]
+
+
+def _cuts(path_data: str) -> list[Aabb]:
+    """The boxes a clip's path cuts out: every closed figure after its first."""
+
+    boxes = []
+    for figure in path_data.split("Z")[1:]:
+        values = [float(value) for value in re.findall(r"-?[0-9.]+", figure)]
+        if values:
+            xs, ys = values[0::2], values[1::2]
+            boxes.append(Aabb(min(xs), min(ys), max(xs), max(ys)))
+    return boxes
+
+
+@pytest.mark.circular
+def test_a_box_hides_no_region_label_or_scale_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lambda's "AAA family ATPase" lies on the GC paint and its letters reach the region label "Late region" (which
+    the figure warns of): its box is cut away over every letter of a region label or scale number it would cover, so
+    a box never hides other text. Every other boxed label is checked alike."""
+
+    svg, drawn = _draw(tmp_path, monkeypatch, LAMBDA, LAMBDA_TRACKS)
+    style = FeatureLabelStyle("none", "auto", False)
+    clips = dict(CLIP.findall(svg))
+    cuts = {feature_id: _cuts(clips[clip_id]) for clip_id, feature_id in CUT_BOX.findall(svg)}
+    others = [*(point for part in drawn.region_letters for point in part), *(
+        point for ring in drawn.numbers for point in _number_corners(ring)
+    )]
+
+    covered: dict[str, list[tuple[float, float]]] = {}
+    for label in drawn.inner_labels:
+        feature_id = str(label["feature_id"])
+        if feature_id not in _boxed(svg):
+            continue
+        ink = circular_label_ink(label, drawn.total_length, style)
+        box = feature_label_backing(ink)
+        for x, y in (ink.to_label_frame(point) for point in others):
+            if box.min_x + 1e-6 < x < box.max_x - 1e-6 and box.min_y + 1e-6 < y < box.max_y - 1e-6:
+                covered.setdefault(feature_id, []).append((x, y))
+
+    assert drawn.region_letters and covered
+    for feature_id, points in covered.items():
+        assert all(
+            any(cut.min_x - 0.01 <= x <= cut.max_x + 0.01 and cut.min_y - 0.01 <= y <= cut.max_y + 0.01 for cut in cuts.get(feature_id, ()))
+            for x, y in points
+        ), feature_id

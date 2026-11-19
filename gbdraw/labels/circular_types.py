@@ -123,7 +123,9 @@ class CircularLabel(_CircularLabelRequired, total=False):
     - drawn inner label under the ``auto`` protection: ``on_data_paint``, set
       once the labels are placed when its letters lie on a data track's paint
       (the record assembly's ``_labels_on_data_paint``); it draws a box and
-      moves nothing.
+      moves nothing. ``spared_text``: the letters of the region labels and
+      scale numbers that box would cover, as convex polygons; the box is cut
+      away there, so it never hides other text.
     """
 
     is_inner: bool
@@ -154,6 +156,7 @@ class CircularLabel(_CircularLabelRequired, total=False):
     required_radius_growth_px: float
     layout_collision_counts: tuple[int, int, int, int]
     on_data_paint: bool
+    spared_text: tuple[tuple[Point, ...], ...]
 
 
 @dataclass(frozen=True)

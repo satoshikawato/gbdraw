@@ -59,11 +59,13 @@ def _closest_label_gap_px(
 
 @dataclass(frozen=True)
 class TickNumber:
-    """One scale number: its letters along its circle, and the backing it is drawn on when a feature label's leader
-    runs behind it or within the backing's padding of it (OV-3301)."""
+    """One scale number: its letters along its circle (``letters``, and as the convex parts of that annular sector,
+    ``letter_parts``), and the backing it is drawn on when a feature label's leader runs behind it or within the
+    backing's padding of it (OV-3301)."""
 
     letters: CircularInkRing
     backing: SectorBacking
+    letter_parts: tuple[tuple[tuple[float, float], ...], ...]
 
 
 @dataclass(frozen=True)
@@ -342,7 +344,8 @@ class TickGroup:
             low = position_angle_rad(ring.start_turn, 1.0)
             high = low + position_turn_rad((ring.end_turn - ring.start_turn) % 1.0, 1.0)
             backing = sector_backing(ring.band.inner_px, ring.band.outer_px, low, high, float(self.font_size), edge=edge)
-            numbers.append(TickNumber(ring, backing))
+            letters = SectorBacking(ring.band.inner_px, ring.band.outer_px, low, high)
+            numbers.append(TickNumber(ring, backing, letters.parts))
         return tuple(numbers)
 
     def layout(self) -> TickSlotLayout:

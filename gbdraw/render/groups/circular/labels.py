@@ -15,7 +15,7 @@ from ....labels.label_ink import FeatureLabelInk, circular_label_drawn_ink
 from ....labels.label_style import label_leader_width_px
 from ....svg.ids import stable_svg_id
 from ...drawers.circular.labels import LabelDrawer
-from ...drawers.label_backing import feature_label_box, label_halo
+from ...drawers.label_backing import feature_label_box, feature_label_box_cut, label_halo
 from ...label_binding import bind_label_part
 
 if TYPE_CHECKING:
@@ -92,7 +92,12 @@ class LabelsGroup:
 
         for label, ink, _contact, _line in drawn:
             if ink is not None and ink.draws_box(style):
-                group.add(feature_label_box(ink, label["feature_id"]))
+                # Cut away over the letters of other text it would cover: a box hides no other text (OV-3941).
+                box = feature_label_box(ink, label["feature_id"])
+                clip_id = stable_svg_id("label_box_cut", label["stable_id"], label["input_order"])
+                if (cut := feature_label_box_cut(ink, box, clip_id)) is not None:
+                    group.add(cut)
+                group.add(box)
         drawer = LabelDrawer(profile=self.profile)
         feature_anchor_radius = float(self.geometry.radius)
         letters = Group()

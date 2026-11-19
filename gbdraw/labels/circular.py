@@ -33,7 +33,17 @@ from .circular_types import (
     CircularLabel,
     CircularLabelCandidateCache,
 )
-from .fit import FITS, LabelDefect, LabelFit, LabelKind, LabelShape, Polygon, label_defects, label_fits_by_kind
+from .fit import (
+    FITS,
+    REGION_WARNING_FIELDS,
+    LabelDefect,
+    LabelFit,
+    LabelKind,
+    LabelShape,
+    Polygon,
+    label_defects,
+    label_fits_by_kind,
+)
 from .label_style import CIRCULAR_LABEL_GAP_EM, LabelFontStyle
 from ..config.models import (
     CircularRenderProfile,
@@ -103,6 +113,9 @@ class PlacedCircularLabels(NamedTuple):
 
     labels: list[CircularLabel]
     packer_skipped: bool = False
+    # The same labels placed again with the inner labels held off the scale numbers, when one of ``labels`` is over a
+    # number (``_place_clear_of_tick_numbers``); whether it is drawn is ``held_unless_worse``'s choice.
+    held: PlacedCircularLabels | None = None
 
 
 class CircularLabelProbeStopped(Exception):
@@ -2729,27 +2742,48 @@ def _place_clear_of_tick_numbers(
     tick_numbers: Sequence[CircularInkRing],
     *,
     total_length: int,
-    definition_text: Sequence[Aabb],
 ) -> PlacedCircularLabels:
-    """A record's labels as ``drawn`` places them without the scale numbers, or, when one of their horizontal inner
+    """A record's labels as ``drawn`` places them without the scale numbers, and, when one of their horizontal inner
     labels is over a number of ``tick_numbers`` (OV-3636), the same labels placed again with all inner labels held
-    off the numbers (``_hold_inner_labels_clear``), when that placement has no inner label over a number and the fit
-    check counts no more overlapping pairs, crossing leader pairs or labels over the definition text of either side
-    than in the first. The held labels may lie on a data track's paint: the ``auto`` protection boxes those once
-    the labels are placed. A record whose inner labels reach no number is placed as before; a probe (a fit search)
-    passes no numbers."""
+    off the numbers (``_hold_inner_labels_clear``) as its ``held`` placement, which ``held_unless_worse`` draws or
+    not. A record whose inner labels reach no number is placed as before; a probe (a fit search) passes no
+    numbers."""
 
     first = drawn(())
     if not (tick_numbers and _inner_labels_over_numbers(first.labels, tick_numbers, total_length)):
         return first
-    held = drawn(tick_numbers)
+    return first._replace(held=drawn(tick_numbers))
+
+
+def held_unless_worse(
+    placed: PlacedCircularLabels,
+    tick_numbers: Sequence[CircularInkRing],
+    *,
+    total_length: int,
+    definition_text: Sequence[Aabb],
+    region_warnings: Callable[[Sequence[CircularLabel]], LabelFit],
+) -> PlacedCircularLabels:
+    """The placement to draw, the one choice between ``placed`` and its ``held`` placement (OV-3636): the held one
+    when none of its inner labels is over a number of ``tick_numbers``, the fit check counts no more overlapping
+    pairs, crossing leader pairs or labels over the definition text of either side, and the region labels drawn
+    with it warn of no more of any kind (``region_warnings`` of its labels: overlaps, cuts, labels on another track or
+    left out, OV-3939) than with ``placed``; else ``placed``. The held labels may lie on a data track's paint: the
+    ``auto`` protection boxes those once the labels are placed."""
+
+    held = placed.held
+    if held is None:
+        return placed
+    first = placed._replace(held=None)
     before, after = (
-        Counter(defect.kind for defect in circular_label_defects(placed.labels, total_length, definition_text=definition_text))
-        for placed in (first, held)
+        Counter(defect.kind for defect in circular_label_defects(chosen.labels, total_length, definition_text=definition_text))
+        for chosen in (first, held)
     )
     if _inner_labels_over_numbers(held.labels, tick_numbers, total_length) or any(
         after[kind] > before[kind] for kind in after
     ):
+        return first
+    regions_before, regions_after = region_warnings(first.labels), region_warnings(held.labels)
+    if any(regions_after.count(field) > regions_before.count(field) for field in REGION_WARNING_FIELDS):
         return first
     return held
 
@@ -6360,10 +6394,7 @@ def prepare_label_list(
         )
 
     return _place_clear_of_tick_numbers(
-        drawn,
-        room.tick_numbers if room is not None and not probe else (),
-        total_length=total_length,
-        definition_text=definition_text,
+        drawn, room.tick_numbers if room is not None and not probe else (), total_length=total_length
     )
 
 
@@ -6460,6 +6491,7 @@ __all__ = [
     "circular_label_radii",
     "calculate_angle_degrees",
     "circular_label_defects",
+    "held_unless_worse",
     "circular_label_fits",
     "circular_label_shape",
     "circular_label_shapes",

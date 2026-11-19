@@ -71,6 +71,8 @@ class FeatureLabelInk:
     (drawing frame) of the feature edge it faces; its box stops there. None otherwise.
     ``on_data_paint``: a Circular inner label whose letters lie on a data track's paint
     (``CircularLabel.on_data_paint``); the ``auto`` protection boxes it.
+    ``spared_text``: the letters of other text that box would cover (``CircularLabel.spared_text``), as convex
+    polygons in the drawing frame; the box is cut away there (``feature_label_box_cut``).
     """
 
     ink: Aabb
@@ -83,6 +85,7 @@ class FeatureLabelInk:
     join_at_end: bool = False
     feature_edge_y: float | None = None
     on_data_paint: bool = False
+    spared_text: tuple[tuple[Point, ...], ...] = ()
 
     def draws_box(self, style: FeatureLabelStyle) -> bool:
         """Whether ``style`` draws this label's white box (``FeatureLabelStyle.draws_box``)."""
@@ -247,7 +250,7 @@ def circular_label_ink(label: CircularLabel, record_length: int, style: FeatureL
         style=style,
         join_at_end=True,
     )
-    return replace(ink, on_data_paint=label.get("on_data_paint", False))
+    return replace(ink, on_data_paint=label.get("on_data_paint", False), spared_text=label.get("spared_text", ()))
 
 
 def circular_label_drawn_ink(label: CircularLabel, record_length: int, style: FeatureLabelStyle) -> FeatureLabelInk | None:

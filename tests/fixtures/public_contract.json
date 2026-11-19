@@ -32,7 +32,7 @@
     "contract_sha256": "1257e98b927352f7a7be4ae377a6359a8eecd704c094c9304c500e4dac2c5811"
   },
   "circular_cli": {
-    "actions_sha256": "d95f51bf67d21bb40011f9106cda3de97af10e2079e963af5d6c40d5e7074144",
+    "actions_sha256": "0055a8afa9c67346bb1273c6fec8243255dfed960614dffd71d6b4f78e6a893b",
     "defaults_sha256": "ecfac71258314d2fdb6201756eaf17be7102ccefa26c82a679b06849bf8fb0b9",
     "representative_sha256": "091f61a00c1ec50a1e21f3d0f505ed1895730dbce90467a2ad89305abd0e8f16"
   },

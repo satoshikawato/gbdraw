@@ -70,7 +70,7 @@ from ...features.factory import FeatureBuildResult, FeatureLayerMode, create_fea
 from ...features.objects import FeatureObject
 from ...labels.label_ink import FeatureLabelInk, circular_label_drawn_ink, circular_label_ink
 from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
-from ...render.drawers.label_backing import feature_label_drawn_parts
+from ...render.drawers.label_backing import feature_label_box_part, feature_label_drawn_parts
 from ...labels.circular import (
     CircularLabelPass,
     CircularLabelProbeStopped,
@@ -81,6 +81,7 @@ from ...labels.circular import (
     circular_label_fits,
     circular_label_font_size,
     circular_label_shape,
+    held_unless_worse,
     minimum_bbox_gap_px,
     circular_label_radii,
     prepare_label_list,
@@ -140,6 +141,7 @@ from ...layout.composition import (
     plan_composition,
 )
 from ...layout.spatial import Aabb, BoxedLetters, bounding_aabb, union_aabbs
+from ...layout.text_geometry import convex_polygons_intersect
 from ...comparisons.identity_scale import IdentityColorDomain, identity_color_domain
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
@@ -197,7 +199,7 @@ from ...render.drawers.circular.record_band import (
 )
 from ...render.numeric_series import gc_content_band_frame, numeric_series_plot
 from ...render.groups.circular.conservation import conservation_ring_ink, conservation_ring_paints_band_edges
-from ...render.groups.circular.ticks import TickGroup
+from ...render.groups.circular.ticks import TickGroup, TickNumber
 from ...svg.circular_tracks import CircularTrackPlace
 from ...render.drawers.circular.annotations import (
     AnnotationRing,
@@ -1331,6 +1333,27 @@ class _RecordRegionLabels:
         moved, self.made_way = made_way
         return moved
 
+    def drawn(
+        self, feature_labels: list[CircularLabel] | None, definition_text: Sequence[Aabb]
+    ) -> tuple[list[CircularLabel] | None, _SlotLabels, tuple[Aabb, ...], _RegionLabelsNotClear]:
+        """The feature labels, moved where they make way (``make_way``), and the region labels drawn with them
+        (``place``)."""
+
+        labels_by_slot, bounds, not_clear = self.place(feature_labels or ())
+        moved = self.make_way(feature_labels or (), not_clear, definition_text)
+        if moved is None:
+            return feature_labels, labels_by_slot, bounds, not_clear
+        return moved, *self.place(moved)
+
+    def warnings(self, feature_labels: Sequence[CircularLabel], definition_text: Sequence[Aabb]) -> LabelFit:
+        """What the region labels warn of (``_region_label_warnings``) when drawn with the feature labels at
+        ``feature_labels`` (``drawn``), on a copy that keeps no place the feature labels made way for."""
+
+        _moved, labels_by_slot, _bounds, not_clear = replace(self, made_way={}).drawn(list(feature_labels), definition_text)
+        return _region_label_warnings(
+            self.radial_layout, self.annotation_track_layouts or {}, self.record_index, labels_by_slot, not_clear
+        ).fit
+
 
 def _region_label_warnings(
     radial_layout: CircularRadialLayout,
@@ -1341,14 +1364,15 @@ def _region_label_warnings(
 ) -> RegionLabelWarnings:
     """The record's region label counts that only warn, with the font sizes of the labels left out: the labels its
     tracks leave out for want of room (``region_rooms_left_out``), what the drawn ``labels`` still overlap (OV-3015,
-    REGION-WARN as in Linear), the drawn labels that lie on another track (LP-D86), and the labels left out because
-    no letter fits their circle (RGN-CUT-EMPTY-OMIT)."""
+    REGION-WARN as in Linear), the drawn labels cut to fit their circle (LP-D87), the drawn labels that lie on another
+    track (LP-D86), and the labels left out because no letter fits their circle (RGN-CUT-EMPTY-OMIT)."""
 
     return region_rooms_left_out(tracks.values(), record_index).adding(
         LabelFit(
             0,
             0,
             region_overlaps=not_clear.overlaps,
+            region_cuts=sum(label.cut for drawn in labels.values() for label in drawn),
             region_track_overlaps=_region_labels_on_other_tracks(radial_layout, labels),
             region_cuts_left_out=len(not_clear.without_letters),
         ),
@@ -1606,14 +1630,16 @@ def _labels_on_data_paint(
     layout: CircularRadialLayout,
     annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
     track_ink_sources: Callable[[], Sequence[CircularTrackInkSources]],
+    tick_numbers: Callable[[], Sequence[TickNumber]],
 ) -> list[CircularLabel]:
     """Copies of the drawn ``labels``; under the ``auto`` protection, each inner label whose letters' box (turned
     with its letters) meets the paint of the data tracks (``_record_track_ink`` of ``DATA_TRACK_RENDERERS`` on
-    ``layout``, from each record's ``track_ink_sources``, as the definition-over-track check reads it; built only
-    when there is an inner label) is marked ``on_data_paint``, and its box is drawn
-    (``FeatureLabelStyle.draws_box``). It is judged once the labels are placed and moved, after the
-    ``circular_labels`` stage: the box takes no room and moves nothing, and a change of a track's data places no
-    labels again."""
+    ``layout``, from each record's ``track_ink_sources``, as the definition-over-track check reads it, without the
+    region labels' letters, which are text and not paint; built only when there is an inner label) is marked
+    ``on_data_paint``, and its box is drawn (``FeatureLabelStyle.draws_box``), cut away over the letters of the
+    region labels (``annotation_labels``) and scale numbers (``tick_numbers``) it would cover (``spared_text``,
+    OV-3941). It is judged once the labels are placed and moved, after the ``circular_labels`` stage: the box takes
+    no room and moves nothing, and a change of a track's data places no labels again."""
 
     copies = [label.copy() for label in labels]
     inner = [
@@ -1622,12 +1648,22 @@ def _labels_on_data_paint(
     paint = tuple(
         ink
         for sources in track_ink_sources()
-        for ink in _record_track_ink(layout.axis, layout.slots, sources, annotation_labels, DATA_TRACK_RENDERERS)
+        for ink in _record_track_ink(layout.axis, layout.slots, sources, {}, DATA_TRACK_RENDERERS)
     ) if inner else ()
+    boxed = []
     for label in inner:
         box = bounding_aabb(_turned_letters(circular_label_ink(label, total_length, style)))
         if box is not None and box_meets_ink(box, paint, threshold_px=0.0):
             label["on_data_paint"] = True
+            boxed.append(label)
+    other_text = (
+        *(part for drawn in annotation_labels.values() for region in drawn for part in region.parts),
+        *(part for number in tick_numbers() for part in number.letter_parts),
+    ) if boxed else ()
+    for label in boxed:
+        box_part = feature_label_box_part(circular_label_ink(label, total_length, style))
+        if spared := tuple(tuple(part) for part in other_text if convex_polygons_intersect(box_part, part)):
+            label["spared_text"] = spared
     return copies
 
 
@@ -2640,8 +2676,8 @@ def _drawn_tick_numbers(
     units: Sequence[_DrawnUnit],
     canvas_config: CircularCanvasConfigurator,
     user_slot_mode: bool,
-) -> tuple[CircularInkRing, ...]:
-    """The letters of the scale numbers the figure draws, for its feature labels to keep off (OV-3636), from the
+) -> tuple[TickNumber, ...]:
+    """The scale numbers the figure draws, for its feature labels to keep off (OV-3636), from the
     tick groups the figure draws (``tick_slot_layout``, a render stage: within a Worker transaction, drawing them
     reuses the build).
 
@@ -2650,7 +2686,7 @@ def _drawn_tick_numbers(
     labels fails at once, so a requested figure size tries it cheaply; drawing a slot refuses the same way.
     """
 
-    numbers: list[CircularInkRing] = []
+    numbers: list[TickNumber] = []
     for slot in radial_layout.slots:
         tick_group = (
             _tick_group_options(slot, use_slot_tick_options=user_slot_mode)
@@ -2662,7 +2698,7 @@ def _drawn_tick_numbers(
         try:
             for unit in units:
                 layout = tick_slot_layout(unit.record.gb_record, canvas_config, **tick_group, record_transform=unit.transform)
-                numbers.extend(number.letters for number in layout.numbers)
+                numbers.extend(layout.numbers)
         except ValidationError as error:
             raise _with_slot_row(error, slot) from None
     return tuple(numbers)
@@ -3260,8 +3296,7 @@ def _record_label_layout(
         )
         label_counts[kind] = label_counts.get(kind, 0) + 1
     placed = bool(label_counts) and place_labels is not None
-    cuts = sum(label.cut for label in region_labels)
-    region_counts = replace(region_warnings.fit, region_cuts=cuts)
+    region_counts = region_warnings.fit
     if not placed and region_counts.fits and not definition_track_overlaps and not capacity:
         return None
     cfg = profile.config
@@ -3453,6 +3488,29 @@ class CircularLabelPlacement:
     report: _PlacementReport
     # Text measurements per label font size, for the fit probes.
     label_candidates: tuple[tuple[float, tuple[CircularLabelCandidate, ...]], ...]
+    # The labels placed again with the inner labels held off the scale numbers (``PlacedCircularLabels.held``), or
+    # None; ``drawn`` says which of the two is drawn.
+    held: PlacedCircularLabels | None = None
+
+    def drawn(self, region_warnings: Callable[[Sequence[CircularLabel]], LabelFit]) -> CircularLabelPlacement:
+        """The placement to draw (``held_unless_worse``, OV-3636, OV-3939), judged after the stage: the region labels
+        that ``region_warnings`` places with each are not a stage input."""
+
+        if self.held is None:
+            return self
+        chosen = held_unless_worse(
+            PlacedCircularLabels(list(self.labels), self.report.packer_skipped, self.held),
+            self.state.label_radii.tick_numbers,
+            total_length=self.state.total_length,
+            definition_text=self.state.definition_text,
+            region_warnings=region_warnings,
+        )
+        return replace(
+            self,
+            labels=tuple(chosen.labels),
+            report=self.report._replace(packer_skipped=chosen.packer_skipped),
+            held=None,
+        )
 
 
 @dataclass(frozen=True)
@@ -3528,12 +3586,12 @@ def circular_labels(
     slots = list(layout_slots)
     capacity: tuple[CircularLabelCapacity, ...] = ()
     try:
-        labels, packer_skipped = _place_circular_labels(
+        labels, packer_skipped, held = _place_circular_labels(
             state(), profile, label_pass=label_pass, candidate_caches=candidate_caches
         )
     except CircularLabelCapacityExceeded as exceeded:
         # CAPACITY-STOP: the figure stops at the label fit check; nothing of this record is placed.
-        labels, capacity, packer_skipped = [], exceeded.capacities, False
+        labels, capacity, packer_skipped, held = [], exceeded.capacities, False, None
     # Radial labels that collide once the canvas stops growing are refused (OV-694, RADIAL-JOIN).
     radial_refused = False
     if radial_growth is not None:
@@ -3689,6 +3747,7 @@ def circular_labels(
             for font_size, cache in candidate_caches.items()
             if "candidates" in cache
         ),
+        held=held,
     )
 
 
@@ -4347,6 +4406,7 @@ def add_record_on_circular_canvas(
     definition_text = _centre_definition_text(centre) if centre is not None else ()
     definition_ink = _centre_definition_ink(centre) if centre is not None else ()
     label_report = _PlacementReport()
+    placement: CircularLabelPlacement | None = None
     label_state: _CircularLabelState | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
     label_candidate_caches: dict[float, CircularLabelCandidateCache] = {}
@@ -4367,7 +4427,9 @@ def add_record_on_circular_canvas(
             # The labels read the centre band only as their inner reserve (OV-2103).
             resolved_slots=radial_layout.slots,
             # Only inner labels keep off the numbers: without them, a change of the scale places no labels again.
-            label_radii=circular_label_radii(radial_layout, tick_numbers if profile.inner_labels_enabled else ()),
+            label_radii=circular_label_radii(
+                radial_layout, tuple(number.letters for number in tick_numbers) if profile.inner_labels_enabled else ()
+            ),
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,
@@ -4405,12 +4467,9 @@ def add_record_on_circular_canvas(
         feature_lane_direction = label_state.feature_lane_direction
         resolved_feature_anchor_radius_px = label_state.resolved_feature_anchor_radius_px
         feature_track_ratio_factor_override = label_state.feature_track_ratio_factor_override
-        label_report = placement.report
         label_candidate_caches.update(
             (font_size, {"candidates": candidates}) for font_size, candidates in placement.label_candidates
         )
-        # Copies: the legend collision shift and the leader pass move them.
-        precalculated_labels = [label.copy() for label in placement.labels]
 
     resolved_track_slots = list(radial_layout.slots)
     track_slot_geometry = _serialize_circular_track_slot_geometry(
@@ -4451,10 +4510,14 @@ def add_record_on_circular_canvas(
             definition_target=definition,
         )
 
-    annotation_labels, annotation_label_obstacles, region_labels_not_clear = region_labels.place(precalculated_labels or ())
-    if (moved := region_labels.make_way(precalculated_labels or (), region_labels_not_clear, definition_text)) is not None:
-        precalculated_labels = moved
-        annotation_labels, annotation_label_obstacles, region_labels_not_clear = region_labels.place(moved)
+    if placement is not None:
+        # The labels held off the scale numbers are drawn unless their region labels warn of more (OV-3939).
+        placement = placement.drawn(partial(region_labels.warnings, definition_text=definition_text))
+        # Copies: the legend collision shift and the leader pass move them.
+        label_report, precalculated_labels = placement.report, [label.copy() for label in placement.labels]
+    precalculated_labels, annotation_labels, annotation_label_obstacles, region_labels_not_clear = region_labels.drawn(
+        precalculated_labels, definition_text
+    )
     overlay_obstacles = (
         *_external_label_obstacles_on_canvas(precalculated_labels or (), display_length, canvas_config),
         *annotation_label_obstacles,
@@ -4520,7 +4583,7 @@ def add_record_on_circular_canvas(
             )
 
     # The labels do not change after this: both label phases take one keyed copy, the inner labels on a data
-    # track's paint marked for the ``auto`` protection's box.
+    # track's paint marked for the ``auto`` protection's box, which spares the region labels' and numbers' letters.
     placed_labels: Sequence[CircularLabel] = _pre_keyed(_labels_on_data_paint(
         precalculated_labels or (),
         display_length,
@@ -4540,6 +4603,7 @@ def add_record_on_circular_canvas(
             annotation_track_layouts=annotation_track_layouts,
             use_slot_tick_options=user_slot_mode,
         ),
+        partial(_drawn_tick_numbers, radial_layout, units, canvas_config, user_slot_mode),
     )) if show_external_labels else ()
     render_context = CircularRecordRenderContext(
         profile=profile,

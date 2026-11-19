@@ -11,7 +11,8 @@ region label's backing is the same rounded box turned with its letters
 (``turned_backing``), a curved one's an annular sector (``sector_backing``,
 square-cornered); each stops before its mark. A feature label with
 ``protection = box`` at ``label_style.BOX_OPACITY``, bound to its label and
-taking no pointer events.
+taking no pointer events; the ``auto`` box of a Circular inner label is cut
+away over the letters of other text it would cover (``feature_label_box_cut``).
 
 A halo (``protection = halo``) is a ``<use>`` of the label's text, stroked
 white ``label_style.HALO_WIDTH_EM`` font sizes wide with round joins and no
@@ -48,7 +49,7 @@ from gbdraw.labels.label_style import (
 from gbdraw.layout.spatial import Aabb
 from gbdraw.layout.text_geometry import Point, annular_sector_parts
 from gbdraw.render.label_binding import bind_label_part
-from gbdraw.svg.elements import Group, Line, Path, Rect, Text, Use
+from gbdraw.svg.elements import ClipPath, Group, Line, Path, Rect, Text, Use
 from gbdraw.svg.circular_arcs import circle_point_rad
 from gbdraw.svg.path_data import path_number, path_point
 
@@ -373,8 +374,15 @@ def feature_label_drawn_parts(label: FeatureLabelInk, style: FeatureLabelStyle) 
     if line is not None:
         parts.append(_corners(line))
     if label.draws_box(style):
-        parts.append(tuple(label.from_label_frame(corner) for corner in _corners(feature_label_backing(label))))
+        parts.append(feature_label_box_part(label))
     return tuple(parts)
+
+
+def feature_label_box_part(label: FeatureLabelInk) -> tuple[Point, ...]:
+    """A feature label's white box (``feature_label_backing``) turned with its letters: a convex polygon in the
+    drawing frame."""
+
+    return tuple(label.from_label_frame(corner) for corner in _corners(feature_label_backing(label)))
 
 
 def feature_label_box(label: FeatureLabelInk, feature_id: str | None) -> Rect:
@@ -390,6 +398,37 @@ def feature_label_box(label: FeatureLabelInk, feature_id: str | None) -> Rect:
     return bind_label_part(rect, feature_id)
 
 
+def feature_label_box_cut(label: FeatureLabelInk, box: Rect, clip_id: str) -> ClipPath | None:
+    """The clip ``clip_id`` that cuts ``label``'s drawn ``box`` (``feature_label_box``) away over the letters of the
+    other text it would cover (``label.spared_text``), set as the box's clip path; None, and ``box`` unchanged, when
+    it covers none. In the frame of the letters (the box's own user space, turned with it), each covered text is
+    the box of its letters there, within the box; covered texts whose boxes meet are cut as one box, so no two cuts
+    overlap and a cut never fills again under either fill rule."""
+
+    bounds = feature_label_backing(label)
+    cuts: list[Aabb] = []
+    for part in label.spared_text:
+        xs, ys = zip(*(label.to_label_frame(point) for point in part))
+        cut = Aabb(max(min(xs), bounds.min_x), max(min(ys), bounds.min_y), min(max(xs), bounds.max_x), min(max(ys), bounds.max_y))
+        if cut.min_x >= cut.max_x or cut.min_y >= cut.max_y:
+            continue
+        while (met := next((other for other in cuts if other.intersects(cut)), None)) is not None:
+            cuts.remove(met)
+            cut = Aabb(min(cut.min_x, met.min_x), min(cut.min_y, met.min_y), max(cut.max_x, met.max_x), max(cut.max_y, met.max_y))
+        cuts.append(cut)
+    if not cuts:
+        return None
+
+    def ring(box: Aabb, clockwise: bool) -> str:
+        corners = _corners(box) if clockwise else tuple(reversed(_corners(box)))
+        return "M " + " L ".join(path_point(x, y) for x, y in corners) + " Z"
+
+    clip = ClipPath(id=clip_id)
+    clip.add(Path(d=" ".join((ring(bounds, True), *(ring(cut, False) for cut in sorted(cuts, key=_corners)))), clip_rule="evenodd"))
+    box["clip-path"] = f"url(#{clip_id})"
+    return clip
+
+
 __all__ = [
     "BACKING_FILL",
     "BACKING_OPACITY",
@@ -399,6 +438,8 @@ __all__ = [
     "backing_rect",
     "feature_label_backing",
     "feature_label_box",
+    "feature_label_box_cut",
+    "feature_label_box_part",
     "feature_label_drawn_parts",
     "label_halo",
     "region_label_front",
