@@ -305,23 +305,21 @@ test('a Result that leaves lacking a domain keeps no intent to be shown again wi
   assert.equal(record.takeLeft(b), 'the intent it left with', 'shown in full, it is shown again as it left (E1)');
 });
 
-// OV-1983, OV-2413: the label owner reads the Label visibility On and Off the
-// displayed Result was drawn with; a Generate that moves a record's rows to
-// its new key drew the moved rows (read as its request was built),
-// which its Results' record takes when the drawing takes them.
+// OV-1983, OV-2413, OV-3950: the label owner reads the Label visibility On and
+// Off the displayed Result was drawn with; a Generate that moves a record's
+// rows to its new key drew the moved rows (read as its request was built),
+// which the drawing holds when its Results bind.
 test('the Label visibility the displayed Result was drawn with follows a Generate key move', () => {
   const labelsOf = (from) => JSON.stringify([[[from, 'f1', 'on', null, null], [from, 'f2', null, 'text', null], ['kept', 'f3', 'off', null, null]], {}]);
-  const bound = { ...paint('drawn'), labels: labelsOf('old') };
   const moved = { ...paint('drawn'), labels: labelsOf('new') };
   const [g, other] = ['g', 'other'].map(resultNamed);
   const record = createResultPaintRecord();
   assert.equal(record.displayedDrawnLabelVisibility(), null, 'no Result displayed');
-  record.commit([g, other], g, bound, { draws: bound });
+  record.commit([g, other], g, moved, { draws: moved });
   const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
-  assert.deepEqual([...record.displayedDrawnLabelVisibility()], [[key('old', 'f1'), 'on'], [key('kept', 'f3'), 'off']]);
-  record.moveDrawn([g, other], moved);
   assert.deepEqual(new Map(record.displayedDrawnLabelVisibility()), new Map([[key('new', 'f1'), 'on'], [key('kept', 'f3'), 'off']]));
-  assert.equal(record.drawn(other), moved, 'every committed Result takes the moved rows');
+  assert.equal(record.drawn(other), moved, 'every committed Result is drawn from the moved rows');
+  assert.equal(record.lacking(g), null, 'the drawing holds the moved rows: nothing to show again');
   record.depart(moved, 'left');
   assert.equal(record.displayedDrawnLabelVisibility(), null, 'the Result left');
 });

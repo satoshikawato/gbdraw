@@ -1949,7 +1949,6 @@ export const createAppSetup = () => {
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     startLegendFactsDraw: featureActions.startLegendFactsDraw,
-    moveDrawnPaint: resultPaintRecord.moveDrawn,
     askChoice,
     showNotice,
     // Only a Generate that searched its drawing's rings installs them, and the

@@ -427,7 +427,6 @@ const generatedArtifactHandleOptions = {
   closeLabelTextScopeDialog: () => {},
   clearLabelBuildNotices: () => {},
   startLegendFactsDraw: () => () => {},
-  moveDrawnPaint: () => {},
   nextTick: window.Vue.nextTick,
   waitForAfterPaint: async () => {}
 };
