@@ -3254,10 +3254,18 @@ def _decode_depth_tracks(
                 baseline=series["baseline"],
                 min_value=series["min_value"],
                 max_value=series["max_value"],
-                unit=series["unit"],
+                unit=_series_unit(series["unit"], f"{path}.unit"),
             )
         )
     return tuple(decoded)
+
+
+def _series_unit(value: object, path: str) -> str:
+    """A series' unit: any text, empty for none (not null)."""
+
+    if not isinstance(value, str):
+        raise CanonicalRequestDecodingError(f"{path} must be a string.", diagnostic=_REQUEST_FIELDS_INVALID)
+    return value
 
 
 def _encode_feature_density_tracks(value: object) -> list[dict[str, object]]:

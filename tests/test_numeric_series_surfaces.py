@@ -494,6 +494,25 @@ def test_a_request_with_an_unknown_depth_track_key_is_refused(tmp_path: Path) ->
         _decoded(payload, encoded, tmp_path)
 
 
+@pytest.mark.parametrize(("key", "value"), [("unit", 3), ("unit", None), ("format", "wig"), ("minValue", "low")])
+def test_a_request_with_a_series_setting_out_of_its_kind_is_refused_with_a_diagnostic(
+    tmp_path: Path, key: str, value: object
+) -> None:
+    """A stored request (a hand-edited Session) with a bad series setting is refused with a diagnostic the Web can
+    word (a unit that is not text was refused untyped)."""
+
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("NC_012920.1\t1\t5\n", encoding="utf-8")
+    encoded = encode_canonical_request(_request(DepthTrackInput(source=depth)))
+    payload = {**encoded.payload}
+    payload["diagramOptions"] = {
+        **payload["diagramOptions"],
+        "depthTracks": [{**payload["diagramOptions"]["depthTracks"][0], key: value}],
+    }
+    _message, diagnostic = _refusal(lambda: _decoded(payload, encoded, tmp_path))
+    assert isinstance(diagnostic, dict) and diagnostic["code"] == "INPUT_INVALID", diagnostic
+
+
 def test_the_request_description_declares_the_settings_optional() -> None:
     from gbdraw.session_request_codec import describe_canonical_request
 
