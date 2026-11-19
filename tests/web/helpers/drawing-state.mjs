@@ -93,15 +93,33 @@ export const ARTIFACT_KEYS = Object.freeze([
 ]);
 
 // Inputs that every drawing shares.
-export const PROJECT_KEYS = Object.freeze(['sessionTitle', 'inputFiles']);
+// The shared classes, this one and `UI_KEYS`, are registered design-rule
+// allowlists (tools/web-design-rule-guards.json, R15, kind `set`): a value
+// that drawings share is a Product decision, so a new key is an authority-only
+// change. Each key stands on its own line with the reason every drawing shares
+// it (tests/web/shared-value-scope.test.mjs).
+export const PROJECT_KEYS = Object.freeze([
+  'sessionTitle', // One title per Session (PD-OI-090: a project value; its edit is a project step).
+  'inputFiles' // The content of the input files; each drawing binds what it draws in its inputs slice (R15).
+]);
 
 // App settings and catalogs outside any drawing, and the shown drawing: its ID
 // (`activeDrawingId`, which `installShownDrawing` writes) and its mode (`mode`,
 // read from the drawing). LOSAT execution and the rich feature popup are app
 // settings (Session `ui.losatExecution`, `ui.richFeaturePopup`).
 export const UI_KEYS = Object.freeze([
-  'activeDrawingId', 'mode', 'downloadDpi', 'autoLabelReflowEnabled', 'paletteInstantPreviewEnabled', 'paletteDefinitions',
-  'paletteNames', 'specificRulePresets', 'featureKeys', 'defaultColorKeys', 'losatExecution', 'richFeaturePopup'
+  'activeDrawingId', // Which drawing is shown: the drawing store's, written only by `installShownDrawing` (R15).
+  'mode', // The shown drawing's mode, read from that drawing; nothing writes it (R15).
+  'downloadDpi', // PNG DPI, one per Session (PD-OI-090: Reset this drawing keeps it).
+  'autoLabelReflowEnabled', // Auto Reflow, one per Session (PD-OI-090).
+  'paletteInstantPreviewEnabled', // palette Instant Preview, one per Session; On applies every drawing's queue (PD-OI-090).
+  'paletteDefinitions', // The built-in palette catalog, read-only data that every drawing picks from.
+  'paletteNames', // The names of that catalog, in its order.
+  'specificRulePresets', // The built-in color tables, read-only data (`-t builtin:<id>`).
+  'featureKeys', // The feature types the editors offer, constant.
+  'defaultColorKeys', // The Default colors rows the editors offer, constant.
+  'losatExecution', // LOSAT execution and thread settings, one per Session (PD-OI-090, PD-OI-020).
+  'richFeaturePopup' // The Rich Feature Popup preference, one per Session and outside History (PD-OI-090, PD-OI-100).
 ]);
 
 // Never saved: progress and operation flags, input drafts, selection, search,

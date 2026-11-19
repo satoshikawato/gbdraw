@@ -106,6 +106,7 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/per-mode-drawings.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/session-drawings-upgrade.test.mjs` | `web-contracts-pr` | `browser` | a Session 46-50 is no longer read |
 | [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/session-drawings.test.mjs` | `web-contracts-pr` | `browser` | never |
+| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/shared-value-scope.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/computation-ownership.playwright.spec.js` | `playwright-functional` | `playwright-functional` | never |
 | [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/computation-ownership.test.mjs` | `web-contracts-pr` | `browser` | never |
 | [CW](../../gbdraw/web/CLAUDE.md#computation-ownership) | `tests/web/helpers/app-lifecycle.cjs` | `playwright-functional` | not a test | never |
@@ -139,6 +140,10 @@ Source: `tools/web-design-rule-guards.json`. A rule links to its heading.
 | [R13](../../gbdraw/web/CLAUDE.md#r13-owner-layering-and-ports) | `tests/web/owner-graph-baseline.test.mjs` | `PROJECTION_SHAPE_BASELINE` | count-map |
 | [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/typed-boundaries.test.mjs` | `UNCHECKED_MODULES` | set |
 | [R14](../../gbdraw/web/CLAUDE.md#r14-typed-boundaries) | `tests/web/explicit-any-ratchet.test.mjs` | `EXPLICIT_ANY_BASELINE` | count-map |
+| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/helpers/drawing-state.mjs` | `PROJECT_KEYS` | set |
+| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/helpers/drawing-state.mjs` | `UI_KEYS` | set |
+| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/shared-value-scope.test.mjs` | `ARTIFACT_KEYS_OUTSIDE_SLOT` | set |
+| [R15](../../gbdraw/web/CLAUDE.md#r15-drawing-context-and-mode-scoped-settings) | `tests/web/shared-value-scope.test.mjs` | `DRAWING_LIFETIME_STORES` | set |
 | [TYPE-DEBT](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#type-checking) | `tests/test_type_check_ratchet.py` | `TYPE_DEBT_BASELINE` | py-count-map |
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `UPWARD_IMPORTS` | py-set |
 | [PY-STRUCTURE](ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#python-structure) | `tests/test_python_structure_ratchet.py` | `IMPORT_CYCLE_SIZES` | py-count-map |
@@ -238,6 +243,7 @@ under "Cited ids without a record".
   - `tests/web/session-cli-compatibility.test.mjs`
 
 - [PD-OI-020](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-020-losat-total-thread-allocation-and-control-agreement): LOSAT total-thread allocation and control agreement. ACCEPTED, concern `diagram-generation.losat-total-thread-allocation`, scenario revision 1.
+  - `tests/web/helpers/drawing-state.mjs`
 
 - [PD-OI-021](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-021-optional-collinear-self-search-and-orthogroup-inference): Optional Collinear self-search and orthogroup inference. ACCEPTED, concern `diagram-generation.collinear-optional-orthogroup-inference`, scenario revision 2, supersedes scenario revision 1.
 
@@ -693,6 +699,7 @@ under "Cited ids without a record".
 - [PD-OI-099](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-099-confirm-what-load-cannot-restore-before-it-loads): Confirm what Load cannot restore before it loads. ACCEPTED, concern `web.session.load-repair-confirmation`, scenario revision 1.
 
 - [PD-OI-100](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-100-rich-feature-popup-outside-undo): Rich Feature Popup outside Undo. ACCEPTED, concern `web.history.rich-feature-popup`, scenario revision 1.
+  - `tests/web/helpers/drawing-state.mjs`
 
 - [PD-OI-101](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-101-task-yield-after-the-later-generate-statuses): Task yield after the later Generate statuses. ACCEPTED, concern `web.generate.later-status-paint-yields`, scenario revision 1.
   - `tests/web/generation-feedback.playwright.spec.js`
