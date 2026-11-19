@@ -43,6 +43,8 @@ DEPTH_FILE_NAME_FORMATS: Mapping[str, DepthFileFormat] = {".bed": "bed", ".bed.g
 # The value of a window: the mean of the bases it counts, their largest value, or their sum.
 DepthAggregation = Literal["mean", "max", "sum"]
 DEPTH_AGGREGATIONS: tuple[DepthAggregation, ...] = get_args(DepthAggregation)
+# The value of a window when a series does not say (gbdraw.api.DepthTrackInput's default).
+DEFAULT_DEPTH_AGGREGATION: DepthAggregation = "mean"
 # The columns of each form, by the column count of the first data line (four or more: bedGraph).
 _POSITION_VALUE_COLUMNS = ("position", "depth")
 _INTERVAL_COLUMNS = ("reference_name", "start", "end", "depth")
@@ -119,9 +121,9 @@ def checked_depth_file_format(file_format: str) -> DepthFileFormat:
     raise ValidationError(f"Depth file format must be one of {', '.join(DEPTH_FILE_FORMATS)}; got {file_format!r}.")
 
 
-def depth_file_format_of_names(sources: Iterable[object]) -> DepthFileFormat:
+def depth_file_format_of_names(sources: Iterable[object]) -> DepthFileFormat | None:
     """The format the names of a series' files state (``DEPTH_FILE_NAME_FORMATS``): the first a path's name states,
-    else ``auto``. A table or a missing source has no name."""
+    else None (the series' format is its default). A table or a missing source has no name."""
 
     for source in sources:
         if isinstance(source, (str, PathLike)):
@@ -129,7 +131,7 @@ def depth_file_format_of_names(sources: Iterable[object]) -> DepthFileFormat:
             for suffix, file_format in DEPTH_FILE_NAME_FORMATS.items():
                 if name.endswith(suffix):
                     return file_format
-    return "auto"
+    return None
 
 
 @dataclass(frozen=True)
@@ -928,7 +930,7 @@ def depth_df(
     circular: bool,
     min_depth: float | None = None,
     max_depth: float | None = None,
-    agg: DepthAggregation = "mean",
+    agg: DepthAggregation = DEFAULT_DEPTH_AGGREGATION,
     log_scale: bool = False,
 ) -> DataFrame:
     """The value of each sliding window of a record (``agg``: the mean depth, the largest or the sum): one row per
@@ -989,6 +991,7 @@ def depth_df(
 
 
 __all__ = [
+    "DEFAULT_DEPTH_AGGREGATION",
     "DEPTH_AGGREGATIONS",
     "DEPTH_COLUMNS",
     "DEPTH_FILE_FORMATS",

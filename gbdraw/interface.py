@@ -36,9 +36,10 @@ from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.io.record_sequences import detached_records
 from gbdraw.analysis.depth import DepthAggregation, DepthFileFormat, depth_file_format_of_names
 from gbdraw.analysis.depth_tracks import depth_track_number
-from gbdraw.layout.series_style import DEPTH_UNIT, SeriesBaseline, SeriesBound, SeriesStyle
+from gbdraw.layout.series_style import SeriesBaseline, SeriesBound, SeriesStyle
 from gbdraw.api.options import (
     DepthTrackInput,
+    given_depth_series_settings,
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
     CircularOutputOptions as _CircularOutputOptions,
@@ -207,8 +208,9 @@ class DepthTrackOptions:
     """One depth track (a numeric series), with one source per displayed record when needed.
 
     ``format``, ``agg``, ``style``, ``negative_color``, ``baseline``, ``min_value``, ``max_value`` and ``unit`` are
-    those of :class:`gbdraw.api.DepthTrackInput`, which each track becomes. An unset ``format`` reads a file named
-    ``.bed`` or ``.bed.gz`` as BED, others by their columns (``auto``).
+    those of :class:`gbdraw.api.DepthTrackInput`, which each track becomes; one left None takes that input's
+    default. An unset ``format`` reads a file named ``.bed`` or ``.bed.gz`` as BED, others by their columns
+    (``auto``).
     """
 
     source: TableSource | Sequence[TableSource | None]
@@ -219,13 +221,13 @@ class DepthTrackOptions:
     small_tick_interval: float | str | None = None
     tick_font_size: float | str | None = None
     format: DepthFileFormat | None = None
-    agg: DepthAggregation = "mean"
-    style: SeriesStyle = "area"
+    agg: DepthAggregation | None = None
+    style: SeriesStyle | None = None
     negative_color: str | None = None
-    baseline: SeriesBaseline = "auto"
+    baseline: SeriesBaseline | None = None
     min_value: SeriesBound = None
     max_value: SeriesBound = None
-    unit: str = DEPTH_UNIT
+    unit: str | None = None
 
     def __post_init__(self) -> None:
         source = self.source
@@ -925,14 +927,17 @@ def _depth_kwargs(
                     track.small_tick_interval, field_name="depth_track_small_tick_intervals"
                 ),
                 tick_font_size=depth_track_number(track.tick_font_size, field_name="depth_track_tick_font_sizes"),
-                format=track.format if track.format is not None else depth_file_format_of_names(record_sources),
-                agg=track.agg,
-                style=track.style,
-                negative_color=track.negative_color,
-                baseline=track.baseline,
-                min_value=track.min_value,
-                max_value=track.max_value,
-                unit=track.unit,
+                # Only the settings given; DepthTrackInput owns the defaults.
+                **given_depth_series_settings(
+                    format=track.format or depth_file_format_of_names(record_sources),
+                    agg=track.agg,
+                    style=track.style,
+                    negative_color=track.negative_color,
+                    baseline=track.baseline,
+                    min_value=track.min_value,
+                    max_value=track.max_value,
+                    unit=track.unit,
+                ),
             )
         )
     return {"depth_tracks": tuple(inputs)}

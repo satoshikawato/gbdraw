@@ -15,7 +15,7 @@ from gbdraw.analysis.skew import DeviationScale, deviation_scale
 from gbdraw.auto_sizes import TickedAxisSource
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
 
-from .series_style import DEPTH_UNIT, ScalarAxisStyle, SeriesBaseline, SeriesStyle
+from .series_style import DEFAULT_SERIES_STYLE, DEPTH_UNIT, ScalarAxisStyle, SeriesBaseline, SeriesStyle
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
@@ -124,7 +124,7 @@ def band_samples(
     *,
     closes_at_record_end: bool,
     baseline: float = 0.0,
-    style: SeriesStyle = "area",
+    style: SeriesStyle = DEFAULT_SERIES_STYLE,
 ) -> SeriesSamples | None:
     """The samples of ``frame`` (``position`` and the band fraction ``value_column``) drawn from the band fraction
     ``baseline`` (the band's bottom by default); none for an empty frame."""

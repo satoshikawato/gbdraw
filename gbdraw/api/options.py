@@ -7,7 +7,7 @@ import math
 from numbers import Integral, Real
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, cast
+from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, TypedDict, cast
 
 from pandas import DataFrame
 
@@ -30,6 +30,7 @@ from gbdraw.analysis.collinearity_units import (
     normalize_collinearity_unit_mode,
 )
 from gbdraw.analysis.depth import (
+    DEFAULT_DEPTH_AGGREGATION,
     DEPTH_AGGREGATIONS,
     DEPTH_FILE_FORMATS,
     DepthAggregation,
@@ -65,7 +66,15 @@ from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
 from gbdraw.layout.composition import LegendPlacement
-from gbdraw.layout.series_style import DEPTH_UNIT, SERIES_STYLES, SeriesBaseline, SeriesBound, SeriesStyle
+from gbdraw.layout.series_style import (
+    DEFAULT_SERIES_BASELINE,
+    DEFAULT_SERIES_STYLE,
+    DEPTH_UNIT,
+    SERIES_STYLES,
+    SeriesBaseline,
+    SeriesBound,
+    SeriesStyle,
+)
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.mode_profiles import (
     linear_wrap_default_overrides,
@@ -237,10 +246,10 @@ class DepthTrackInput:
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
     format: DepthFileFormat = "auto"
-    agg: DepthAggregation = "mean"
-    style: SeriesStyle = "area"
+    agg: DepthAggregation = DEFAULT_DEPTH_AGGREGATION
+    style: SeriesStyle = DEFAULT_SERIES_STYLE
     negative_color: str | None = None
-    baseline: SeriesBaseline = "auto"
+    baseline: SeriesBaseline = DEFAULT_SERIES_BASELINE
     min_value: SeriesBound = None
     max_value: SeriesBound = None
     unit: str = DEPTH_UNIT
@@ -319,6 +328,40 @@ class DepthTrackInput:
             check_depth_range(self.min_value, self.max_value, log_scale=False, fields=("min_value", "max_value"))
         if not isinstance(self.unit, str):
             raise ValidationError("DepthTrackInput.unit must be a string (empty for no unit).")
+
+
+class DepthSeriesSettings(TypedDict, total=False):
+    """The series settings of a :class:`DepthTrackInput` that a surface was given; one left out is the input's
+    default, so the CLI and the beginner API hold no copy of it."""
+
+    format: DepthFileFormat
+    agg: DepthAggregation
+    style: SeriesStyle
+    negative_color: str
+    baseline: SeriesBaseline
+    min_value: SeriesBound
+    max_value: SeriesBound
+    unit: str
+
+
+def given_depth_series_settings(
+    *,
+    format: DepthFileFormat | None = None,
+    agg: DepthAggregation | None = None,
+    style: SeriesStyle | None = None,
+    negative_color: str | None = None,
+    baseline: SeriesBaseline | None = None,
+    min_value: SeriesBound = None,
+    max_value: SeriesBound = None,
+    unit: str | None = None,
+) -> DepthSeriesSettings:
+    """The settings that were given (not None), for ``DepthTrackInput(..., **settings)``."""
+
+    given = {
+        "format": format, "agg": agg, "style": style, "negative_color": negative_color, "baseline": baseline,
+        "min_value": min_value, "max_value": max_value, "unit": unit,
+    }
+    return cast(DepthSeriesSettings, {name: value for name, value in given.items() if value is not None})
 
 
 def _checked_word(value: object, words: Sequence[str], field_name: str) -> None:

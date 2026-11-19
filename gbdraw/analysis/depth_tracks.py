@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.analysis.depth import (
+    DEFAULT_DEPTH_AGGREGATION,
     DEPTH_RANGE_FIELDS,
     DepthAggregation,
     DepthCoverage,
@@ -29,7 +30,14 @@ from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.io.colors import check_user_color
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import bind_record_transforms
-from gbdraw.layout.series_style import DEPTH_UNIT, SeriesBaseline, SeriesBound, SeriesStyle
+from gbdraw.layout.series_style import (
+    DEFAULT_SERIES_BASELINE,
+    DEFAULT_SERIES_STYLE,
+    DEPTH_UNIT,
+    SeriesBaseline,
+    SeriesBound,
+    SeriesStyle,
+)
 from gbdraw.legend.sources import DepthLegendSource, LegendSlotSource
 from gbdraw.render_stages import render_stage
 from gbdraw.tracks.parsing import depth_slot_track_index, slot_legend_label
@@ -66,9 +74,9 @@ class DepthTrackStyle:
     large_tick_interval: float | None
     small_tick_interval: float | None
     tick_font_size: float | None
-    series_style: SeriesStyle = "area"
+    series_style: SeriesStyle = DEFAULT_SERIES_STYLE
     negative_color: str | None = None
-    baseline: SeriesBaseline = "auto"
+    baseline: SeriesBaseline = DEFAULT_SERIES_BASELINE
     min_value: SeriesBound = None
     max_value: SeriesBound = None
     unit: str = DEPTH_UNIT
@@ -93,10 +101,10 @@ class DepthTrackSpec:
     large_tick_interval: float | None = None
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
-    agg: DepthAggregation = "mean"
-    style: SeriesStyle = "area"
+    agg: DepthAggregation = DEFAULT_DEPTH_AGGREGATION
+    style: SeriesStyle = DEFAULT_SERIES_STYLE
     negative_color: str | None = None
-    baseline: SeriesBaseline = "auto"
+    baseline: SeriesBaseline = DEFAULT_SERIES_BASELINE
     min_value: SeriesBound = None
     max_value: SeriesBound = None
     unit: str = DEPTH_UNIT

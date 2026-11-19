@@ -512,6 +512,48 @@ def test_a_table_source_keeps_its_settings(tmp_path: Path) -> None:
     assert (track.style, track.unit) == ("line", "")
 
 
+# --- One owner of the defaults ---------------------------------------------------------------------------------------
+
+_SERIES_SETTINGS = ("format", "agg", "style", "negative_color", "baseline", "min_value", "max_value", "unit")
+
+
+def _given_settings(monkeypatch: pytest.MonkeyPatch, module, build) -> list[dict[str, object]]:
+    """The series settings each DepthTrackInput that ``build`` makes through ``module`` is given."""
+
+    calls: list[dict[str, object]] = []
+
+    def recording(**kwargs: object) -> DepthTrackInput:
+        calls.append({key: value for key, value in kwargs.items() if key in _SERIES_SETTINGS})
+        return DepthTrackInput(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(module, "DepthTrackInput", recording)
+    build()
+    return calls
+
+
+def test_the_cli_and_the_beginner_api_pass_only_the_settings_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review r1 M4: the CLI and gbdraw.DepthTrackOptions wrote every default again, so a change of a default in
+    DepthTrackInput (the request, the Session and the Web read it there) would have left them drawing the old one."""
+
+    import gbdraw.api.record_planning as record_planning
+    import gbdraw.interface as interface
+
+    assert _given_settings(monkeypatch, record_planning, lambda: _cli_tracks(circular_cli, "--depth_track", "a.tsv")) == [{}]
+    assert _given_settings(monkeypatch, record_planning, lambda: _cli_tracks(
+        circular_cli, "--depth_track", "a.tsv", "--depth_track_style", "line", "--depth_track_max", "auto",
+        "--depth_track_unit", "",
+    )) == [{"style": "line", "max_value": "auto", "unit": ""}]
+    table = pd.DataFrame({"reference_name": ["NC_012920.1"], "position": [1], "depth": [2]})
+
+    def kwargs(track: gbdraw.DepthTrackOptions) -> None:
+        interface._depth_kwargs((track,), record_count=1, mode="circular")
+
+    assert _given_settings(monkeypatch, interface, lambda: kwargs(gbdraw.DepthTrackOptions(source=table))) == [{}]
+    assert _given_settings(monkeypatch, interface, lambda: kwargs(
+        gbdraw.DepthTrackOptions(source=table, agg="sum", baseline=0.5, unit="")
+    )) == [{"agg": "sum", "baseline": 0.5, "unit": ""}]
+
+
 # --- A file named as BED ---------------------------------------------------------------------------------------------
 
 

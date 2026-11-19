@@ -82,7 +82,7 @@ from gbdraw.layout.record_transform import detected_topology, drawn_circular, re
 from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, depth_file_format_of_names
 from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.core.numeric import parse_ascii_finite_float
-from gbdraw.layout.series_style import DEPTH_UNIT, SERIES_STYLES, SeriesBaseline, SeriesBound
+from gbdraw.layout.series_style import SERIES_STYLES, SeriesBaseline, SeriesBound
 from gbdraw.render_stages import render_stage
 from gbdraw.layout.record_placement import FeatureAnchorPlacement, FeatureAnchorStatus, resolve_record_row_positions
 from gbdraw.layout.similarity_alignment import (
@@ -99,6 +99,7 @@ from .options import (
     LinearWrapDefaults,
     CircularDiagramOptions,
     DepthTrackInput,
+    given_depth_series_settings,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
@@ -1522,11 +1523,11 @@ def _cli_text(value: object | None) -> str | None:
     return str(value).strip() if value is not None else None
 
 
-def _cli_word(value: object | None, words: Sequence[_Word], default: _Word, *, field_name: str) -> _Word:
-    """``value`` as one of ``words`` (``default`` when unset)."""
+def _cli_word(value: object | None, words: Sequence[_Word], *, field_name: str) -> _Word | None:
+    """``value`` as one of ``words`` (None when not given)."""
 
     if value is None:
-        return default
+        return None
     for word in words:
         if str(value).strip() == word:
             return word
@@ -1549,10 +1550,12 @@ def cli_series_bound(value: object | None, *, field_name: str) -> SeriesBound:
     return "auto" if text == "auto" else _cli_number(text, field_name=field_name, words="auto")
 
 
-def cli_series_baseline(value: object | None, *, field_name: str) -> SeriesBaseline:
-    """A series' ``--depth_track_baseline``: a number, ``auto`` or ``mean``."""
+def cli_series_baseline(value: object | None, *, field_name: str) -> SeriesBaseline | None:
+    """A series' ``--depth_track_baseline``: a number, ``auto`` or ``mean`` (None when not given)."""
 
-    text = str(value).strip().lower() if value is not None else "auto"
+    if value is None:
+        return None
+    text = str(value).strip().lower()
     if text == "auto":
         return "auto"
     return "mean" if text == "mean" else _cli_number(text, field_name=field_name, words="auto or mean")
@@ -1605,18 +1608,19 @@ def depth_track_inputs_from_cli(
                     small_ticks[index], field_name="depth_track_small_tick_intervals"
                 ),
                 tick_font_size=depth_track_number(font_sizes[index], field_name="depth_track_tick_font_sizes"),
-                # Unstated, a file named as BED reads as BED (an explicit auto reads by the columns).
-                format=_cli_word(
-                    formats[index], DEPTH_FILE_FORMATS, depth_file_format_of_names(sources),
-                    field_name="depth_track_formats",
+                # Only the settings given; DepthTrackInput owns the defaults. Unstated, a file named as BED reads as
+                # BED (an explicit auto reads by the columns).
+                **given_depth_series_settings(
+                    format=_cli_word(formats[index], DEPTH_FILE_FORMATS, field_name="depth_track_formats")
+                    or depth_file_format_of_names(sources),
+                    agg=_cli_word(aggs[index], DEPTH_AGGREGATIONS, field_name="depth_track_aggs"),
+                    style=_cli_word(styles[index], SERIES_STYLES, field_name="depth_track_styles"),
+                    negative_color=_cli_text(negative_colors[index]) or None,
+                    baseline=cli_series_baseline(baselines[index], field_name="depth_track_baselines"),
+                    min_value=cli_series_bound(min_values[index], field_name="depth_track_min_values"),
+                    max_value=cli_series_bound(max_values[index], field_name="depth_track_max_values"),
+                    unit=None if units[index] is None else str(units[index]),
                 ),
-                agg=_cli_word(aggs[index], DEPTH_AGGREGATIONS, "mean", field_name="depth_track_aggs"),
-                style=_cli_word(styles[index], SERIES_STYLES, "area", field_name="depth_track_styles"),
-                negative_color=_cli_text(negative_colors[index]) or None,
-                baseline=cli_series_baseline(baselines[index], field_name="depth_track_baselines"),
-                min_value=cli_series_bound(min_values[index], field_name="depth_track_min_values"),
-                max_value=cli_series_bound(max_values[index], field_name="depth_track_max_values"),
-                unit=DEPTH_UNIT if units[index] is None else str(units[index]),
             )
         )
     return tuple(inputs)

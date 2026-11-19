@@ -26,6 +26,9 @@ SeriesBaseline = Literal["auto", "mean"] | float
 SeriesBound = float | Literal["auto"] | None
 # The text after the axis numbers of a depth series that names no unit of its own.
 DEPTH_UNIT = "x"
+# How a series draws and the value it is drawn from when it does not say (gbdraw.api.DepthTrackInput's defaults).
+DEFAULT_SERIES_STYLE: SeriesStyle = "area"
+DEFAULT_SERIES_BASELINE: SeriesBaseline = "auto"
 
 
 @dataclass(frozen=True)
@@ -98,4 +101,4 @@ class ScalarAxisStyle:
         return self.show_axis and self.show_ticks and self.axis_labels == "numbered"
 
 
-__all__ = ["SERIES_STYLES", "ScalarAxisStyle", "SeriesBaseline", "SeriesPaint", "SeriesStyle"]
+__all__ = ["DEFAULT_SERIES_BASELINE", "DEFAULT_SERIES_STYLE", "SERIES_STYLES", "ScalarAxisStyle", "SeriesBaseline", "SeriesPaint", "SeriesStyle"]

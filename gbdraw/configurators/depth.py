@@ -7,7 +7,15 @@ from __future__ import annotations
 
 from gbdraw.config.models import RenderProfile
 from gbdraw.config.models.objects import ScalarAxisLabelStyle
-from gbdraw.layout.series_style import DEPTH_UNIT, ScalarAxisStyle, SeriesBaseline, SeriesPaint, SeriesStyle
+from gbdraw.layout.series_style import (
+    DEFAULT_SERIES_BASELINE,
+    DEFAULT_SERIES_STYLE,
+    DEPTH_UNIT,
+    ScalarAxisStyle,
+    SeriesBaseline,
+    SeriesPaint,
+    SeriesStyle,
+)
 
 # The stroke of a ``line`` series when the Depth stroke width is 0, which would draw nothing (D-25).
 LINE_SERIES_MIN_STROKE_PX = 1.0
@@ -67,10 +75,10 @@ class DepthConfigurator:
         # The axis labels are measured and drawn in the figure's font (OV-2757).
         self.font_family: str = str(cfg.objects.text.font_family)
         self.axis_labels: ScalarAxisLabelStyle = cfg.objects.depth.axis_labels
-        self.series_style: SeriesStyle = "area"
+        self.series_style: SeriesStyle = DEFAULT_SERIES_STYLE
         # The paint of the part below the baseline; None: the series colour.
         self.negative_color: str | None = None
-        self.baseline: SeriesBaseline = "auto"
+        self.baseline: SeriesBaseline = DEFAULT_SERIES_BASELINE
         # The text after each axis number and in the range label; empty for none.
         self.unit: str = DEPTH_UNIT
 
