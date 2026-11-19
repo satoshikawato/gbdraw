@@ -293,10 +293,15 @@ export const WORK_ALLOWLIST = [
     // rule commit prepares its candidate rules (one request) and, as a join,
     // asks Python where the joined rows go (synthesisQualifiers names the
     // qualifiers it reads, synthesizeColorRules writes the rows); the rows
-    // stay on the displayed Result, so no rerender. It runs after the Load, so
-    // it leaves the rule preparation of the rows above as they were (OV-286).
+    // stay on the displayed Result. It runs after the Load, so it leaves the
+    // rule preparation of the rows above as they were (OV-286). A Result
+    // admitted at Load carries no Legend row facts, so before the Restore
+    // reads them it asks Python to draw the drawing once (OV-2412): the
+    // rerender prepares the committed request's rules (one more
+    // evaluateRules) and renders; its compile of Generate's plan is not a
+    // live compile.
     kind: 'Legend rename onto a deleted row (Restore and merge)', stages: ['fills', 'legend', 'legendFills', 'rules', 'strokes'],
-    compiles: 2, requests: ['evaluateRules', 'synthesisQualifiers', 'synthesizeColorRules'],
+    compiles: 2, requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesisQualifiers', 'synthesizeColorRules'],
     before: (page) => deleteLegendRow(page, 'Two'),
     run: async (page) => {
       await renameRow(page, 'Fifth', 'Two');
