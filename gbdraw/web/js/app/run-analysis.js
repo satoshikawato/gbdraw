@@ -6269,6 +6269,11 @@ export const createRunAnalysis = ({
       const paint = await prepareCommittedPaintCandidate(drawing, committed, isCurrent, liveSettingWrites);
       if (!paint) return notAdmitted();
       const { canonical, drawnPaint, rules: candidateRules } = paint;
+      // Nor is a Result drawn from Feature visibility rules that changed while it ran: an Undo of a rule edit asks
+      // for no rerender when the shown Result draws its rules, so this one runs again from them (OV-3845). The
+      // rules are read as the request reads them, before any edit can land (`executeShownDrawingCandidate`).
+      const requestVisibilityTable = () => serializeFeatureVisibilityRules(drawing.featureVisibilityRules.value);
+      const drawnVisibilityTable = requestVisibilityTable();
       /** @type {TimingEntry[]} */
       const timingEntries = [];
       const execution = await executeShownDrawingCandidate(drawing, {
@@ -6276,7 +6281,7 @@ export const createRunAnalysis = ({
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'reflow',
-        shouldAdmit: paint.shouldAdmit,
+        shouldAdmit: () => paint.shouldAdmit() && requestVisibilityTable() === drawnVisibilityTable,
         prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
           featureColorOverrides: drawing.featureColorOverrides,

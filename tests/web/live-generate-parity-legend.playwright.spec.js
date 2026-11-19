@@ -2594,6 +2594,90 @@ test('a Restore of one row that waits for a rerender restores it after the delet
   await expectLiveEqualsGenerate(page, { label: 'a Restore of one row after its deleted rows were copied' });
 });
 
+// An Undo made while the rerender of a visibility rule removal runs brings the
+// rule back. That rerender drew the figure without the rule, so its Result is
+// not kept: the rerender runs again from the restored rule, and the Restore
+// that waited for it shows the Legend order Generate draws (OV-3845).
+test('an Undo inside the rerender of a visibility rule removal leaves the Legend order Generate draws (OV-3845)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, FL1_OFF);
+  await deleteLegendRow(page, 'repeat_region');
+  await holdNextRerender(page);
+  await page.evaluate(() => { void window.__GBDRAW_APP__.removeFeatureVisibilityRule(0); });
+  await insideHeldRerender(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    window.__heldRestore = app.restoreDeletedLegendEntry(app.deletedLegendEntries
+      .findIndex((entry) => (entry.originalCaption || entry.caption) === 'repeat_region'));
+  });
+  // The rerender is held, so the Undo is not followed by a settle here.
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  expect(await page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.activeDrawing()
+    .featureVisibilityManualRules.length), 'the Undo brings the rule back').toBe(1);
+  await releaseRerender(page);
+  await evaluateWithRetainedPromise(page, async () => { await window.__heldRestore; delete window.__heldRestore; });
+  await settleLive(page);
+  expect((await legendEditorState(page)).deleted, 'the Restore applied').toEqual([]);
+  await expectLiveEqualsGenerate(page, { label: 'an Undo inside the rule removal\'s rerender' });
+});
+
+// A live setting whose rerender fails is not drawn: its value waits for its
+// next change or a Generate (PD-OI-102), and the figure shown stays the one
+// the committed Session draws. A Restore then reads the Legend row facts of
+// that figure, which are current for it, so it applies at once; the Generate
+// that draws the setting lists the rows it draws (OV-2412).
+test('a Restore after a failed live setting rerender restores the row the shown figure draws, and Generate lists its rows', async ({ page }) => {
+  test.setTimeout(300_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  // Linear draws no GC content track by default.
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.show_gc = true; });
+  await generate(page);
+  await deleteLegendRow(page, 'GC content');
+  await installPageProbe(page, () => {
+    const hooks = window.__GBDRAW_TEST_HOOKS__;
+    const probe = { failing: true, failed: 0 };
+    window.__LIVE_SETTING_FAILS__ = probe;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      beforeDiagramGenerationResponse: async () => {
+        if (!probe.failing) return;
+        probe.failed += 1;
+        throw new Error('The rerender fails (test hook).');
+      }
+    };
+    return () => {
+      window.__GBDRAW_TEST_HOOKS__ = hooks;
+      delete window.__LIVE_SETTING_FAILS__;
+    };
+  });
+  // Show GC Content off with its checkbox: a live setting, one History step.
+  await page.evaluate(() => {
+    const input = document.querySelector('input[type=checkbox][aria-describedby~="help-linear-show-gc-content"]');
+    if (!input || input.disabled || !input.checked) throw new Error('no checked, enabled Show GC Content checkbox');
+    input.click();
+  });
+  await settleLive(page);
+  expect(await page.evaluate(() => window.__LIVE_SETTING_FAILS__.failed), 'the live setting\'s rerender ran and failed').toBe(1);
+  expect(await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const restored = await app.restoreDeletedLegendEntry(app.deletedLegendEntries
+      .findIndex((entry) => (entry.originalCaption || entry.caption) === 'GC content'));
+    return { restored, refused: app.notice.text === 'Updating diagram. Retry after the update finishes.' };
+  }), 'the Restore applies, not refused').toEqual({ restored: true, refused: false });
+  await settleLive(page);
+  expect({ ...(await legendEditorState(page)), edits: null, failed: await page.evaluate(() => window.__LIVE_SETTING_FAILS__.failed) },
+    'the shown figure draws GC content, so its row is listed; no further run was asked for').toEqual({
+    listed: expect.arrayContaining(['GC content']), deleted: [], edits: null, failed: 1
+  });
+  await page.evaluate(() => { window.__LIVE_SETTING_FAILS__.failing = false; });
+  await generate(page);
+  const generated = await legendEditorState(page);
+  expect({ listed: generated.listed.includes('GC content'), deleted: generated.deleted },
+    'the Generate that draws GC content off lists no GC content row').toEqual({ listed: false, deleted: [] });
+  await expectLiveEqualsGenerate(page, { label: 'a Restore after a failed live setting rerender, then Generate' });
+});
+
 // A Restore pressed inside a rerender that fails: the drawing still owes
 // Python's facts of its edits, and so does the rerender the Restore asks for
 // once more, so the Restore is refused with the reason and the row stays

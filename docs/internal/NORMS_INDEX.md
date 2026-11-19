@@ -707,6 +707,7 @@ under "Cited ids without a record".
 - [PD-OI-102](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-102-live-settings-redraw-the-result-when-a-value-is-committed): Live settings redraw the Result when a value is committed. ACCEPTED, concern `web.settings.live-application`, scenario revision 1.
   - `tests/web/circular-track-measure-input.playwright.spec.js`
   - `tests/web/helpers/live-work-allowlist.mjs`
+  - `tests/web/live-generate-parity-legend.playwright.spec.js`
   - `tests/web/live-setting-application-gt.test.mjs`
   - `tests/web/live-setting-application.playwright.spec.js`
   - `tests/web/live-setting-application.test.mjs`
