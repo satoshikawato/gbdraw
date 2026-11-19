@@ -23,7 +23,8 @@ import {
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 import {
-  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, labelTextOf
+  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, keptLabelSourceRecord,
+  labelTextOf, labelSourceTextOf as recordedLabelSourceTextOf
 } from '../../services/preview-affordances.js';
 
 /**
@@ -685,11 +686,11 @@ const resolveCompleteLabelVisualUnit = (svg, textEl, index = null) => {
 const labelFeatureAssignments = (svg, labelElements, mode) => assignFeatureIdsToLabels(
   svg, labelElements, collectFeatureGeometry(svg), mode
 );
-// A label's source text: its feature row's recorded source text, else the
-// text the binder recorded on the label, else the text it shows.
+// A label's source text, by the rule the Result's admission shares
+// (services/preview-affordances.js): its feature row's, else the label's record,
+// else the text it shows.
 /** @param {{ labelSourceText?: string | null } | null | undefined} row @param {Element} element */
-const labelSourceTextOf = (row, element) => row?.labelSourceText
-  ?? element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? labelTextOf(element);
+const labelSourceTextOf = (row, element) => recordedLabelSourceTextOf(row?.labelSourceText, element);
 // A label's feature row: the drawing's row of the feature's identity (R2).
 /** @param {DrawingState} drawing @param {LabelFeature | null | undefined} feature */
 const rowOf = (drawing, feature) => {
@@ -1006,22 +1007,32 @@ export const createFeatureLabelActions = ({
   // override, else the bulk override of its source text, else that source
   // text. A label edited, imported, undone, or reset while another Result was
   // displayed therefore shows the current intent here (R3).
+  // `textChanged`: a label shows another text. `recordChanged`: a label keeps
+  // another source-text record when the Result is written, though it shows the
+  // same text; Load records the rows' source texts only on labels that name
+  // their feature, so this writes the record of a label only the binder tied to
+  // its row (a Result saved before labels named their features).
   /** @param {DrawingState} drawing @param {Element} svg */
   const projectLabelTextIntent = (drawing, svg) => {
-    let changed = false;
+    let textChanged = false;
+    let recordChanged = false;
     const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const row = labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
       const sourceText = labelSourceTextOf(row, textEl);
+      const keptRecord = keptLabelSourceRecord(textEl);
       textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
       // The source text is free text, so the bulk table is read by own key.
       const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
       const desiredText = row?.labelText ?? bulkText ?? sourceText;
-      if (labelTextOf(textEl) === desiredText) return;
+      if (labelTextOf(textEl) === desiredText) {
+        recordChanged ||= keptLabelSourceRecord(textEl) !== keptRecord;
+        return;
+      }
       setLabelText(textEl, desiredText);
-      changed = true;
+      textChanged = true;
     });
-    return changed;
+    return { textChanged, recordChanged };
   };
 
   /**
@@ -1110,7 +1121,7 @@ export const createFeatureLabelActions = ({
       const key = textEl.getAttribute(LABEL_KEY_ATTRIBUTE);
       if (!key) return;
       const text = labelTextOf(textEl);
-      const sourceText = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || text;
+      const sourceText = recordedLabelSourceTextOf(null, textEl);
       const featureId = textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '';
       const kind = textEl.querySelector('textPath') ? 'embedded' : 'regular';
       nextEntries.push({
@@ -1251,10 +1262,7 @@ export const createFeatureLabelActions = ({
       textEl.style.cursor = 'text';
       textEl.setAttribute(LABEL_EDITABLE_ATTRIBUTE, 'true');
       textEl.setAttribute(LABEL_KEY_ATTRIBUTE, `label-${index + 1}`);
-      const currentText = labelTextOf(textEl);
-      if (!textEl.hasAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE)) {
-        textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, currentText);
-      }
+      // The source-text record is the projection's to write (`projectLabelTextIntent`, which runs right after).
       const featureId = featureAssignments.get(textEl);
       if (featureId) {
         textEl.setAttribute(LABEL_FEATURE_ID_ATTRIBUTE, featureId);
@@ -1281,12 +1289,13 @@ export const createFeatureLabelActions = ({
   // `textChanged`: a label shows another text, which only Python fits.
   /** @param {DrawingState} drawing @param {Element} svg @param {{ queueIncompleteVisibility?: boolean }} [options] */
   const projectLabelIntent = (drawing, svg, { queueIncompleteVisibility = true } = {}) => {
-    const textChanged = projectLabelTextIntent(drawing, svg);
+    const { textChanged, recordChanged } = projectLabelTextIntent(drawing, svg);
     const visibilityProjection = applyStoredVisibilityOverridesToSvg(drawing, svg);
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
     const changed = textChanged || visibilityProjection.changed;
-    if (changed) commitLabelEdit();
+    // A record alone is committed too, so the Result's text holds it without a later write (OV-3848).
+    if (changed || recordChanged) commitLabelEdit();
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
       queueLabelReflow(true);
     }
@@ -1744,7 +1753,7 @@ export const createFeatureLabelActions = ({
       let hasUntrackableMatch = false;
       const displayed = displayedFeatures(drawing);
       svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((/** @type {Element} */ textEl) => {
-        const candidateSource = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) || '';
+        const candidateSource = recordedLabelSourceTextOf(null, textEl);
         if (candidateSource !== sourceText) return;
         matchedCount += 1;
         const candidate = labelFeature(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);

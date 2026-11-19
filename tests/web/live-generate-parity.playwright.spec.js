@@ -1087,9 +1087,9 @@ test.describe('a Result displayed after its intent changed', () => {
           await expectLiveEqualsGenerate(loaded, { label: 'Reset, Save, Load, then the other drawing' });
           await loaded.context().close();
         });
-        // What stays until Generate: nothing in a loaded Session says what the bytes
-        // of a Result hold, and a Load alone moves no label.
-        test(`Save and Load after Reset Settings from the other drawing leave a label text until the next Generate (${both})`, async ({ page, browser }, testInfo) => {
+        // The Result's text records a renamed label's text before the Web renamed it (OV-3848), so the loaded
+        // drawing shows the reset label text without a rerender, as it does without the Save and as Generate draws it.
+        test(`Save and Load after Reset Settings from the other drawing show the reset label text as Generate draws it (${both})`, async ({ page, browser }, testInfo) => {
           test.setTimeout(240_000);
           await openBothDrawings(page, { mode, results: 'single', reflow });
           await popupEdit(page, feature, { labelText: 'walk label' });
@@ -1100,9 +1100,10 @@ test.describe('a Result displayed after its intent changed', () => {
           await expectNoRerenderOfDisplay(loaded, () => switchDrawing(loaded, mode));
           const drawnTexts = () => loaded.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll('svg text[data-label-feature-id]')]
             .map((element) => element.textContent));
-          expect(await drawnTexts(), 'the label text stays').toContain('walk label');
+          const shownAfterLoad = await drawnTexts();
+          expect(shownAfterLoad, 'the reset label text shows').not.toContain('walk label');
           await generate(loaded);
-          expect(await drawnTexts(), 'Generate draws the reset text').not.toContain('walk label');
+          expect(await drawnTexts(), 'Generate draws the same texts').toEqual(shownAfterLoad);
           await loaded.context().close();
         });
         test(`Reset Settings from the other drawing after a Load reaches a label text the Result draws (${both})`, async ({ page, browser }, testInfo) => {

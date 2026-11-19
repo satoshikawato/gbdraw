@@ -383,20 +383,6 @@ export const createResultPaintRecord = ({ resultRuntimeKey }) => {
       )));
     },
     /**
-     * A Generate that moves a record's rows to its new key (OV-1949) moves them
-     * after its Results were committed; the request drew the moved rows
-     * (`moved`), which the Results' record takes then, so the moved rows ask
-     * for no rerender (OV-1983).
-     * @param {readonly SvgResultEntry[]} results The Results the Generate committed.
-     * @param {EditorPaintState} moved
-     */
-    moveDrawn(results, moved) {
-      results.forEach((result) => {
-        const record = recordOf(result);
-        if (record) record.drawn = moved;
-      });
-    },
-    /**
      * What the bytes of `results` show now, in their order, for a figure
      * History holds (OV-2436): a Result not displayed shows its record's
      * `shown` (one without a record is recorded by its next display, as

@@ -26,6 +26,9 @@ globalThis.document = {
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
 globalThis.alert = () => {};
+// Load parses a Result it writes a record into (OV-3848).
+const { installFakeSvgDom } = await import('./fake-svg-dom.mjs');
+installFakeSvgDom();
 installSessionImportWorker();
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
@@ -163,6 +166,59 @@ test('a Session 51 Load reads every drawing\'s LOSAT caches, each at its drawing
   assert.deepEqual([...rowsAt(loaded, 'losatCache'), ...rowsAt(loaded, 'losatDerivedCache')].sort(), session.drawings
     .flatMap((_, index) => [`cache-entry-dropped drawings[${index}].losatCache.entries[0]`, `cache-entry-dropped drawings[${index}].losatDerivedCache`])
     .sort());
+});
+
+// OV-3848: Load records a renamed label's source text on each drawing's Result
+// from that drawing's own saved rows (its draft part, read by its ID), so a
+// Session saved at once holds the record a label click would have written. The
+// fake SVG DOM serializes a Result as parsed, so the case reads the record on
+// the SVG each Result is parsed into when Load writes it.
+test('a Session 51 Load records each drawing\'s renamed label source text on that drawing\'s Result, from its own rows', async () => {
+  const session = v49Session('drawings-circular-linear');
+  /** @type {Record<string, [string, string]>} The renamed label of each drawing: its rendered feature ID and source text. */
+  const renamed = { circular: ['f24a47546', 's-rRNA'], linear: ['f255e1d17', 'protein ninF'] };
+  for (const entry of session.drawings) {
+    const [featureId, sourceText] = renamed[entry.id];
+    const shown = `${entry.id} renamed`;
+    const [result] = entry.results;
+    // The Result as Python draws the edit: the label shows the edited text, with no record.
+    const drawn = result.content.replace(
+      new RegExp(`(<text[^>]*data-label-feature-id="${featureId}"[^>]*>(?:<textPath[^>]*>)?)${sourceText}<`), `$1${shown}<`
+    );
+    assert.notEqual(drawn, result.content, `${entry.id}: the label is in the Result`);
+    assert.equal(drawn.includes('data-label-source-text'), false);
+    result.content = drawn;
+    entry.features = {
+      ...entry.features,
+      featureOverrides: {
+        [JSON.stringify(['record-1', featureId])]: {
+          recordKey: 'record-1', biologicalFeatureId: featureId, featureVisibility: null, labelVisibility: null,
+          labelText: shown, labelSourceText: sourceText
+        }
+      }
+    };
+  }
+  const FakeParser = globalThis.DOMParser;
+  /** @type {{ querySelectorAll: (selector: string) => { getAttribute: (name: string) => string | null }[] }[]} */
+  const parsed = [];
+  globalThis.DOMParser = class extends FakeParser {
+    /** @param {string} content @param {string} type */
+    parseFromString(content, type) {
+      const document = super.parseFromString(content, type);
+      parsed.push(document.documentElement);
+      return document;
+    }
+  };
+  try {
+    await load(session);
+  } finally {
+    globalThis.DOMParser = FakeParser;
+  }
+  /** @param {string} featureId */
+  const recordsOf = (featureId) => parsed.flatMap((svg) => svg.querySelectorAll(`text[data-label-feature-id="${featureId}"]`))
+    .map((label) => label.getAttribute('data-label-source-text'));
+  assert.deepEqual(Object.fromEntries(Object.entries(renamed).map(([id, [featureId]]) => [id, recordsOf(featureId)])),
+    { circular: ['s-rRNA'], linear: ['protein ninF'] });
 });
 
 // N2: each loaded drawing installs the inputs paired with it; no drawing

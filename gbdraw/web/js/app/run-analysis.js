@@ -371,6 +371,37 @@ const forcedLabelFeatureIds = (operations, { features, diagramOptions }) => {
 const getNow = () => (typeof globalThis.performance?.now === 'function' ? performance.now() : Date.now());
 /** @param {number} ms */
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
+
+/** @param {DrawingState} drawing @param {WebState['featureEditRemovalCount']} removalCount @returns {GenerateIntentCheckpoint} */
+const captureGenerateIntent = (drawing, removalCount) => ({
+  placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
+  ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
+  removed: Number(removalCount.value) || 0
+});
+/** @param {DrawingState} drawing @param {WebState['featureEditRemovalCount']} removalCount @param {GenerateIntentCheckpoint} checkpoint */
+const restoreGenerateIntent = (drawing, removalCount, { placements, annotationSets, removed }) => {
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
+  ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
+  removalCount.value = removed;
+};
+/**
+ * The run's drawing takes the rows of a Generate (`pruneUnmatchedFeatureOverrides`: the edits it removes, and the rows
+ * of the records whose key changed, OV-1949) as its Result is installed, before the Result mounts, so its binding
+ * reads the rows the request drew (OV-3950). Returns what puts back, on the run's rollback, the rows its artifact
+ * handle does not hold (`GenerateIntentCheckpoint`); the handle restores the per-feature edits and strokes.
+ * @param {DrawingState} drawing
+ * @param {WebState['featureEditRemovalCount']} removalCount
+ * @param {Omit<Parameters<typeof pruneUnmatchedFeatureOverrides>[0], 'featureEdits' | 'paint' | 'annotationSets' | 'annotationSetRows'>} request
+ * @returns {() => void}
+ */
+const takeGeneratedRows = (drawing, removalCount, request) => {
+  const before = captureGenerateIntent(drawing, removalCount);
+  removalCount.value = pruneUnmatchedFeatureOverrides({
+    featureEdits: drawing.slices.featureEdits, paint: drawing.slices.paint, annotationSets: drawing.slices.annotationSets,
+    annotationSetRows: drawing.annotationSets, ...request
+  });
+  return () => restoreGenerateIntent(drawing, removalCount, before);
+};
 /**
  * One record's FASTA text as the LOSAT search reads it: the browser or Worker extraction, and for a protein
  * search the Worker's protein map and identity fields.
@@ -1870,9 +1901,6 @@ const materializeCliHelperFiles = (files) => Promise.all(files.map(async (file) 
  *   number of the edits its request draws (Generate before it reads `drawing`'s edits, the other runs right after their
  *   request is final, in the same task as that read); it calls the function returned once its Results are committed
  *   (OV-2412).
- * @property {(results: readonly SvgResultEntry[], moved: EditorPaintState) => void} moveDrawnPaint
- *   The Result paint record's port: a Generate drew the rows it moved to new record keys (`moved`; its bound paint
- *   when it moved none), which its Results' record takes once the drawing holds them (OV-1949, OV-1983).
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
@@ -1933,7 +1961,6 @@ export const createRunAnalysis = ({
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
   startLegendFactsDraw,
-  moveDrawnPaint,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   askChoice = async () => 'cancel',
   showNotice = () => {}
@@ -2206,12 +2233,16 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactFinalizeCount', 1);
       recordSessionLifecycleEvent('artifact.finalization-completed');
     },
-    /** @param {HistoryArtifactHandle} handle */
-    async restore(handle) {
+    /**
+     * @param {HistoryArtifactHandle} handle
+     * @param {(() => void) | null} [putBackRows] Puts back the rows a Generate's drawing took that the handle does not hold.
+     */
+    async restore(handle, putBackRows = null) {
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
       const currentAlert = errorLog.value;
       try {
         await restoreGeneratedArtifactHandle(handle);
+        putBackRows?.();
       } finally {
         // Snapshot restoration clones presentation. Retain the notification
         // that owned the rollback boundary, without deriving its cause here.
@@ -2975,6 +3006,9 @@ export const createRunAnalysis = ({
     let activatedGeneratedArtifactCandidate = null;
     /** @type {ReadyReceipt | null} */
     let acceptedCandidateReadyReceipt = null;
+    // Puts back the rows the drawing took with the activated candidate (`takeGeneratedRows`) that its handle does not hold.
+    /** @type {(() => void) | null} */
+    let putBackGeneratedRows = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
       ?.proteinIdentityManifest ?? proteinIdentityManifest.value;
     /** @type {LegacyProteinCandidateEnvelope | null} */
@@ -3034,7 +3068,7 @@ export const createRunAnalysis = ({
       recordSessionLifecycleEvent('artifact.rollback-started');
       await previewRuntime.restorePreviousSelectedResult({
         handle: committedArtifactHandle,
-        restore: () => generatedArtifactTransactionOwner.restore(committedArtifactHandle)
+        restore: () => generatedArtifactTransactionOwner.restore(committedArtifactHandle, putBackGeneratedRows)
       });
       activatedGeneratedArtifactCandidate = null;
       acceptedCandidateReadyReceipt = null;
@@ -3192,16 +3226,16 @@ export const createRunAnalysis = ({
       }
       candidateRules = colorCandidate.rules;
       requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
-      // The paint the request draws (its one producer), read as it is built, with the palette its commit applies: as its
-      // Result binds (`bound`, the record keys the drawing names until the commit moves its rows) and with the rows
-      // moved to their new keys (`movedPaint`, OV-1949).
+      // The paint the request draws (its one producer), read as it is built, with the palette its commit applies: of the
+      // drawing as the request starts (`bound`) and with the rows moved to their new keys (`movedPaint`, OV-1949), which
+      // its Results are drawn from and bind with (OV-1983, OV-3950).
       const requestPaint = requestPaintOf(requestDrawing, Object.freeze({
         name: String(drawing.selectedPalette?.value || appliedPaletteName.value || 'default'), colors: { ...drawing.currentColors.value }
       }), originalLegendOrder);
       // OV-1949 (DESIGN 2-3, A1, A4): the records this run draws are matched by identity with the
       // committed request's records, and the rows of each record whose key changes move to its new key.
-      // The request reads the moved rows; the drawing takes them when the run succeeds
-      // (`pruneUnmatchedFeatureOverrides`). Feature fills are rebuilt from the moved rules.
+      // The request reads the moved rows; the drawing takes them with its Result, before the Result mounts
+      // (`takeGeneratedRows`), and a rollback puts them back. Feature fills are rebuilt from the moved rules.
       identitySources = await readDrawingRecordIdentities(drawing);
       throwIfGenerationCanceled();
       if (generationToken !== latestGenerationToken) return { status: 'stale' };
@@ -5488,7 +5522,7 @@ export const createRunAnalysis = ({
         phase: 'generate',
         bindingOptions: {
           isIncrementalEdit: false,
-          drawnPaint: withKeptFills(requestPaint.bound, candidateCommit.featureColorOverrides),
+          drawnPaint: withKeptFills(movedPaint, candidateCommit.featureColorOverrides),
           requiredLabelFeatureIds,
           optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
         },
@@ -5503,6 +5537,21 @@ export const createRunAnalysis = ({
       generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
         drawing,
         selectedResultIndex: nextSelectedResultIndex
+      });
+      // Owner decision Q3 = A (design Q4 3.4, 6.3): a Generate that replaced a
+      // source removes only the edits whose feature that source no longer has,
+      // and the edits of records the request dropped; Python names them. Then
+      // the rows of the records whose key changed move to their new keys (OV-1949).
+      // The drawing takes them with its Result, before the Result mounts, so its
+      // binding reads the rows the request drew; a rollback puts them back (OV-3950).
+      putBackGeneratedRows = takeGeneratedRows(drawing, featureEditRemovalCount, {
+        notices: sourceReplaced ? canonicalExecution.featureIdentityNotices : [],
+        replacedRecordKeys: [...replacedRecordKeys],
+        previousRecords: sourceReplaced ? previousRequestRecords : [],
+        currentRecords: canonical.renderRequest.records || [],
+        retainedRecords: offRecordRequestRecords(drawing.recordsOff),
+        biologicalFeatures: candidateBiologicalFeatures,
+        moves: recordMoves
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
       selectedFeatureRecordIdx.value = 0;
@@ -5553,24 +5602,6 @@ export const createRunAnalysis = ({
         await restoreCommittedArtifact();
         return { status: 'stale' };
       }
-      // Owner decision Q3 = A (design Q4 3.4, 6.3): a Generate that replaced a
-      // source removes only the edits whose feature that source no longer has,
-      // and the edits of records the request dropped; Python names them. Then
-      // the rows of the records whose key changed move to their new keys (OV-1949).
-      featureEditRemovalCount.value = pruneUnmatchedFeatureOverrides({
-        featureEdits: drawing.slices.featureEdits,
-        paint: drawing.slices.paint,
-        annotationSets: drawing.slices.annotationSets,
-        annotationSetRows: drawing.annotationSets,
-        notices: sourceReplaced ? canonicalExecution.featureIdentityNotices : [],
-        replacedRecordKeys: [...replacedRecordKeys],
-        previousRecords: sourceReplaced ? previousRequestRecords : [],
-        currentRecords: canonical.renderRequest.records || [],
-        retainedRecords: offRecordRequestRecords(drawing.recordsOff),
-        biologicalFeatures: candidateBiologicalFeatures,
-        moves: recordMoves
-      });
-      moveDrawnPaint(candidateCommit.results, withKeptFills(movedPaint, candidateCommit.featureColorOverrides));
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -5743,17 +5774,11 @@ export const createRunAnalysis = ({
               // them, and the removal count, with this step: the per-feature
               // edits, strokes, and rules through the artifact handle, the
               // placements and annotation sets through this checkpoint.
-              captureIntentCheckpoint: () => ({
-                placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
-                ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
-                removed: Number(featureEditRemovalCount.value) || 0
-              }),
+              captureIntentCheckpoint: () => captureGenerateIntent(drawing, featureEditRemovalCount),
               // The checkpoint is what `captureIntentCheckpoint` above returned.
-              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ { placements, annotationSets, removed }) => {
-                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
-                ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
-                featureEditRemovalCount.value = removed;
-              },
+              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ checkpoint) => restoreGenerateIntent(
+                drawing, featureEditRemovalCount, checkpoint
+              ),
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
                 historyRecovery = 'restore-failed';

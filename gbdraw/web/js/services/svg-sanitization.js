@@ -2,8 +2,9 @@
 import { LEGACY_SVG_ATTRIBUTE_RENAMES } from '../contracts/schema.generated.js';
 import { LEGEND_MERGED_ROW } from './result-records.generated.js';
 import { ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SET_ID_ATTRIBUTE } from './drawn-attributes.generated.js';
-// A Session saved before OV-3848 holds the label binder's marks in its Results.
-import { LABEL_BINDER_ATTRIBUTES } from './preview-affordances.js';
+// A Session saved before OV-3848 holds the label binder's marks in its Results:
+// admission drops them; the source-text record is a Result's own.
+import { LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE } from './preview-affordances.js';
 
 export const SVG_SANITIZE_OPTIONS = Object.freeze({
   USE_PROFILES: { svg: true },
@@ -43,7 +44,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-legend-name',
     'data-legend-owner',
     LEGEND_MERGED_ROW,
-    ...LABEL_BINDER_ATTRIBUTES,
+    LABEL_SOURCE_TEXT_ATTRIBUTE,
     'data-label-feature-id',
     'data-gbdraw-label-binding-schema',
     'data-gbdraw-label-visibility-preview',
@@ -187,7 +188,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'animateTransform',
     'image'
   ],
-  FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror']
+  FORBID_ATTR: ['name', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onerror', LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE]
 });
 
 /**

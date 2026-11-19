@@ -1,7 +1,8 @@
 // @ts-check
 // Marks that the preview adds to a mounted Result and that saving and export
-// remove (services/svg-serialization.js stripTransientPreviewState), and the
-// one writer of the Preview's classes there.
+// remove (services/svg-serialization.js stripTransientPreviewState), the
+// label source-text record, and the one writer of the Preview's classes there.
+import { FEATURE_LABEL_SELECTOR, LABEL_FEATURE_ID_ATTRIBUTE } from './drawn-groups.js';
 
 // A match band that the preview made a button (role, tabindex and the
 // translated aria-label; app/feature-editor/svg-actions.js
@@ -11,20 +12,25 @@ export const PREVIEW_MATCH_BUTTON_ATTRIBUTE = 'data-gbdraw-preview-match';
 
 // The marks the label binder (app/feature-editor/label-actions.js bindLabels)
 // writes on each label of a mounted Result it binds for editing: that it is
-// editable, its key in the Features list, and the text it showed when bound
-// (its source text). Python writes none of them. A Result's text (History,
-// Sessions) is written without the first two, and with the source text only
-// on a label whose shown text differs from it: like a paint base
-// (result-paint-bases.js), that is the record of the text Python drew, which
-// an Undo of the edit returns to while no feature row holds it. An export
-// strips the record too. So neither depends on whether a label was clicked,
-// and a renamed label's old text does not leave the page (OV-3848).
+// editable and its key in the Features list. Python writes neither, a
+// Result's text (History, Sessions) holds neither, and Load drops them
+// (services/svg-sanitization.js).
+// The source-text record: a label's source text (the text it shows without
+// label edits) where that differs from the text it shows. Like a paint base
+// (result-paint-bases.js), it travels with the Result through History and
+// Sessions, so an Undo of an edit returns to it while no feature row holds
+// it; an export strips it. Its value has one rule, `labelSourceTextOf`, and
+// the Result's text holds it independent of clicks: a Result entering the
+// page (Generate, a rerender, Load) records it from the feature rows
+// (`recordLabelSourceTexts`), the label projection writes it on each bound
+// label of the mounted Result by the same rule and commits the Result when that
+// changes the record it keeps (a label Load could not tie to its row), and
+// serialization drops one equal to the shown text (`keptLabelSourceRecord`). So neither a
+// saved Session nor an export depends on whether a label was clicked, and a
+// renamed label's old text does not leave the page (OV-3848).
 export const LABEL_EDITABLE_ATTRIBUTE = 'data-label-editable';
 export const LABEL_KEY_ATTRIBUTE = 'data-label-key';
 export const LABEL_SOURCE_TEXT_ATTRIBUTE = 'data-label-source-text';
-export const LABEL_BINDER_ATTRIBUTES = Object.freeze([
-  LABEL_EDITABLE_ATTRIBUTE, LABEL_KEY_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE
-]);
 // The labels the binder made editable.
 export const EDITABLE_LABEL_SELECTOR = `text[${LABEL_EDITABLE_ATTRIBUTE}="true"]`;
 
@@ -35,17 +41,103 @@ export const labelTextOf = (textEl) => {
   return textEl.textContent || '';
 };
 
-/** @param {Element} root A copy of the mounted Result that saving or an export writes. */
+/**
+ * A label's source text, by the one rule the label actions, the projection
+ * and the admission share: its feature row's recorded source text, else the label's
+ * record, else the text it shows.
+ * @param {string | null | undefined} rowSourceText
+ * @param {Element} textEl
+ * @returns {string}
+ */
+export const labelSourceTextOf = (rowSourceText, textEl) => rowSourceText
+  ?? textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? labelTextOf(textEl);
+
+/**
+ * The source-text record a label keeps when its Result is written (saved, or a
+ * History step): its record, unless that equals the shown text.
+ * @param {Element} textEl
+ * @returns {string | null}
+ */
+export const keptLabelSourceRecord = (textEl) => {
+  const record = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE);
+  return record === null || record === labelTextOf(textEl) ? null : record;
+};
+
+/**
+ * Drops the binder's marks and every source-text record equal to the shown text.
+ * @param {Element} root A copy of the mounted Result that saving or an export writes, or an admitted Result.
+ * @returns {boolean} whether it changed the SVG
+ */
 export const stripLabelBinderMarks = (root) => {
+  let changed = false;
   root.querySelectorAll(`[${LABEL_EDITABLE_ATTRIBUTE}], [${LABEL_KEY_ATTRIBUTE}]`).forEach((element) => {
     element.removeAttribute(LABEL_EDITABLE_ATTRIBUTE);
     element.removeAttribute(LABEL_KEY_ATTRIBUTE);
+    changed = true;
   });
   root.querySelectorAll(`[${LABEL_SOURCE_TEXT_ATTRIBUTE}]`).forEach((element) => {
-    if (element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) === labelTextOf(element)) {
+    if (keptLabelSourceRecord(element) === null) {
       element.removeAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE);
+      changed = true;
     }
   });
+  return changed;
+};
+
+/**
+ * The fields of a feature row (a draft row of the drawing or a Session) that
+ * the source-text records read.
+ * @typedef {object} LabelSourceRow
+ * @property {string} recordKey
+ * @property {string} biologicalFeatureId
+ * @property {string | null} [labelSourceText]
+ */
+
+/**
+ * The source text each feature row records, by Result and by the rendered
+ * feature ID its labels name (`data-label-feature-id`); `targetsOf` gives a
+ * row's rendered features (services/feature-catalog.js featureRowTargets).
+ * @param {Readonly<Record<string, LabelSourceRow>> | null | undefined} rows
+ * @param {(row: LabelSourceRow) => readonly { resultIndex: number, renderedId: string }[]} targetsOf
+ * @returns {Map<number, Map<string, string>>}
+ */
+export const labelSourceTextsByResult = (rows, targetsOf) => {
+  /** @type {Map<number, Map<string, string>>} */
+  const byResult = new Map();
+  Object.values(rows || {}).forEach((row) => {
+    const sourceText = row.labelSourceText;
+    if (typeof sourceText !== 'string' || !sourceText) return;
+    targetsOf(row).forEach(({ resultIndex, renderedId }) => {
+      const sources = byResult.get(resultIndex) || new Map();
+      sources.set(renderedId, sourceText);
+      byResult.set(resultIndex, sources);
+    });
+  });
+  return byResult;
+};
+
+/**
+ * THE writer of a Result's source-text records when it enters the page
+ * (Generate, a rerender, Load): each label of a feature whose row records a
+ * source text holds it by `labelSourceTextOf`, then the binder's marks and the
+ * records equal to the shown text leave.
+ * @param {Element} root The admitted Result.
+ * @param {ReadonlyMap<string, string>} rowSources The rows' source texts by rendered feature ID.
+ * @returns {boolean} whether it changed the SVG
+ */
+export const recordLabelSourceTexts = (root, rowSources) => {
+  let changed = false;
+  if (rowSources.size > 0) {
+    root.querySelectorAll(FEATURE_LABEL_SELECTOR).forEach((textEl) => {
+      const rowSource = rowSources.get(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '');
+      if (rowSource === undefined) return;
+      const sourceText = labelSourceTextOf(rowSource, textEl);
+      if (sourceText === labelTextOf(textEl) || textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) === sourceText) return;
+      textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
+      changed = true;
+    });
+  }
+  return stripLabelBinderMarks(root) || changed;
 };
 
 /** @param {Element} root An export's copy of the Result. */

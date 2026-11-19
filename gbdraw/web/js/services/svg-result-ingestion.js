@@ -4,6 +4,7 @@
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
 /** @import { SpecificColorRule } from './specific-color-rules.js' */
 /** @import { SvgSanitizer } from './svg-sanitization.js' */
+/** @import { LabelSourceRow } from './preview-affordances.js' */
 /** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
@@ -44,6 +45,7 @@ import { NO_DRAWN_FEATURES, otherFeatureRowKey, ruleLegendCaptions } from './spe
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { LABEL_EDITABLE_ATTRIBUTE, recordLabelSourceTexts } from './preview-affordances.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
@@ -1433,6 +1435,9 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {'circular' | 'linear'} mode
  * @property {boolean} resultsRecordPythonPaint The Session's Results carry records of Python's paint
  *   (`SourceFacts`, read from the file's own version: a Session 27-44 Python converted saved none).
+ * @property {Readonly<Record<string, LabelSourceRow>>} [featureOverrides]
+ *   The drawing's saved feature rows, whose label source texts the Results record (OV-3848,
+ *   `createSavedResultPlan`'s `labelSources`).
  */
 
 /** @param {string} name @param {unknown} left @param {unknown} right */
@@ -1715,9 +1720,11 @@ const nameSavedRuleRows = (svg, edits) => {
  * @param {FeatureCatalogAdmission} catalogAdmission
  * @param {SavedResultEdits | null} edits
  * @param {LegacyResultNormalization | null} [legacy]
+ * @param {ReadonlyMap<number, ReadonlyMap<string, string>>} [labelSources] The source text each saved feature
+ *   row records, by Result and rendered feature ID (services/preview-affordances.js labelSourceTextsByResult).
  * @returns {SvgMutationPlan}
  */
-export const createSavedResultPlan = (results, catalogAdmission, edits, legacy = null) => {
+export const createSavedResultPlan = (results, catalogAdmission, edits, legacy = null, labelSources = new Map()) => {
   const editsShown = edits && [
     edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
   ].some((overrides) => Object.keys(overrides || {}).length > 0);
@@ -1728,7 +1735,13 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const captioned = Boolean(edits?.rules.some((rule) => text(rule.cap)));
   const namesRuleRows = (/** @type {{ content?: unknown }} */ result) => captioned && SAVED_COLOR_ID.test(String(result?.content ?? ''));
   const rekeyed = edits?.legendRekeys ?? new Map();
-  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords && rekeyed.size === 0 && !results.some(namesRuleRows)) {
+  // The rows' label source texts (`labelSources`), and a Result an older build
+  // saved with the label binder's marks (OV-3848).
+  const recordsLabels = (/** @type {{ content?: unknown }} */ result, /** @type {number} */ resultIndex) => (
+    labelSources.has(resultIndex) || String(result?.content ?? '').includes(LABEL_EDITABLE_ATTRIBUTE)
+  );
+  if (legacyNormalizationCount === 0 && renames.size === 0 && !needsRecords && rekeyed.size === 0 && !results.some(namesRuleRows)
+    && !results.some(recordsLabels)) {
     return createEmptySvgMutationPlan(results.length);
   }
   const savedEdits = /** @type {SavedResultEdits} */ (edits);
@@ -1748,7 +1761,10 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
           ? [(/** @type {SvgResultRoot} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
           : []),
         ...(renames.size > 0 ? [(/** @type {SvgResultRoot} */ svg) => recordSavedLegendKeys(svg, renames)] : []),
-        ...(namesRuleRows(result) ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits)] : [])
+        ...(namesRuleRows(result) ? [(/** @type {SvgResultRoot} */ svg) => nameSavedRuleRows(svg, savedEdits)] : []),
+        ...(recordsLabels(result, resultIndex)
+          ? [(/** @type {SvgResultRoot} */ svg) => recordLabelSourceTexts(svg, labelSources.get(resultIndex) ?? new Map())]
+          : [])
       ];
       return transforms.length > 0
         ? Object.freeze({ ...freezeEmptyOperations(), callerTransforms: Object.freeze(transforms) })

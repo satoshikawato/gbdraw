@@ -15,7 +15,8 @@ import { hasOwnEntry } from '../utils/own-entry.js';
 import { defaultLegendKeyOrder, isLegendOrderEdited, ownLegendColor } from '../services/legend-svg.js';
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
-import { biologicalFeatureKey } from '../services/feature-catalog.js';
+import { featureRowTargets, overrideKeyTargets } from '../services/feature-catalog.js';
+import { labelSourceTextsByResult, recordLabelSourceTexts } from '../services/preview-affordances.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
 import { NO_DRAWN_FEATURES, drawnRuleMatches, featureColorEditColor, inRuleGroup, legendRowType, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
@@ -37,7 +38,8 @@ import { draftLegendRows, normalizedLegendEntries } from '../services/legend-dra
  *   a Result without a catalog (`displayedFeatureAddressing`).
  * @property {Record<string, SavedFeatureColorEdit>} [featureColorOverrides]
  * @property {Record<string, SavedStrokeEdit>} [featureStrokeOverrides]
- * @property {Record<string, CanonicalFeatureOverride>} [featureOverrides]
+ * @property {Record<string, CanonicalFeatureOverride & { labelSourceText?: string | null }>} [featureOverrides]
+ *   The drawing's draft rows: a row's Web-only `labelSourceText` is the source text its labels record.
  * @property {readonly (LegendEntryInput | null | undefined)[]} [legendEntries]
  * @property {readonly (LegendEntryInput | null | undefined)[]} [deletedLegendEntries]
  * @property {string[]} [originalLegendOrder]
@@ -488,31 +490,11 @@ export const editorPaintDomains = (changes) => [...new Set((Array.isArray(change
 
 /**
  * @param {EditorAddressing} catalogAdmission
- * @param {string} key
- * @returns {{ resultIndex: number, renderedId: string }[]}
- */
-const resolvedStableTargets = (catalogAdmission, key) => (
-  catalogAdmission.renderedTargetsByOverrideKey.get(key) || []
-);
-
-/**
- * @param {EditorAddressing} catalogAdmission
  * @param {string} renderedId
  * @returns {ReadonlySet<number>}
  */
 const renderedResultIndexes = (catalogAdmission, renderedId) => (
   catalogAdmission.resultIndexesByRenderedId.get(renderedId) || new Set()
-);
-
-// Per-feature edits name a source identity in the drawing of the catalog's
-// mode; each Result of that mode draws it with its own rendered ID (design Q4
-// 6.2, R2).
-/**
- * @param {EditorAddressing} catalogAdmission
- * @param {CanonicalFeatureOverride | null | undefined} row
- */
-const identityTargets = (catalogAdmission, row) => (
-  resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
 );
 
 
@@ -576,7 +558,7 @@ const compilePlanBundle = ({
   runStage('fills', () => {
     Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
       const color = normalizePaint(featureColorEditColor(rawOverride), 'feature fill');
-      const targets = resolvedStableTargets(catalogAdmission, key);
+      const targets = overrideKeyTargets(catalogAdmission, key);
       if (!color || targets.length === 0) return;
       normalizedFeatureColorOverrides[key] = rawOverride && typeof rawOverride === 'object'
         ? { ...cloneJsonValue(rawOverride, {}), color }
@@ -626,10 +608,11 @@ const compilePlanBundle = ({
       });
       return;
     }
+    // A row names a source identity; each Result draws it with its own rendered ID (design Q4 6.2, R2).
     Object.values(featureOverrides || {}).forEach((row) => {
       const featureMode = text(row?.featureVisibility).toLowerCase();
       if (featureMode !== 'on' && featureMode !== 'off') return;
-      identityTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
+      featureRowTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
         const operations = operationsByResult[resultIndex];
         if (!operations) return;
         operations.featureVisibility.push({ renderedId, mode: featureMode });
@@ -641,7 +624,7 @@ const compilePlanBundle = ({
   runStage('labels', () => {
     Object.values(featureOverrides || {}).forEach((row) => {
       const labelMode = text(row?.labelVisibility).toLowerCase();
-      identityTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
+      featureRowTargets(catalogAdmission, row).forEach(({ resultIndex, renderedId }) => {
         const operations = operationsByResult[resultIndex];
         if (!operations) return;
         if (typeof row?.labelText === 'string') {
@@ -793,7 +776,7 @@ const compilePlanBundle = ({
     const named = namedLegendCaption(override, rules) === caption;
     const row = named ? caption : ruleRowOf({ cap: caption, color: text(edit?.color) });
     const renderedIds = renderedIdsByEditRow.get(row) || new Set();
-    resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
+    overrideKeyTargets(catalogAdmission, key).forEach(({ renderedId }) => {
       if (!renderedId) return;
       renderedIds.add(/** @type {RenderedFeatureId} */ (renderedId));
       if (!named) ruleDrawnIds.add(/** @type {RenderedFeatureId} */ (renderedId));
@@ -861,7 +844,7 @@ const compilePlanBundle = ({
       const strokeWidth = hasOwn(rawOverride, 'strokeWidth')
         ? normalizeStrokeWidth(rawOverride.strokeWidth)
         : null;
-      const targets = resolvedStableTargets(catalogAdmission, key);
+      const targets = overrideKeyTargets(catalogAdmission, key);
       if ((!strokeColor && strokeWidth === null) || targets.length === 0) return;
       targets.forEach(({ resultIndex, renderedId }) => {
         operationsByResult[resultIndex].featureStrokes.push({
@@ -935,6 +918,28 @@ export const compileDirectEditorMutationPlan = (options = /** @type {EditorPlanO
   compilePlanBundle(options).plan
 );
 
+/**
+ * The per-Result transforms of a Result Python drew, each followed by the
+ * writer of the rows' label source-text records on that Result (OV-3848); the
+ * live projection keeps them on the displayed Result.
+ * @param {SvgResultTransform[] | undefined} resultTransforms
+ * @param {EditorPlanOptions['featureOverrides']} featureOverrides
+ * @param {EditorAddressing} catalogAdmission
+ * @returns {SvgResultTransform[]}
+ */
+const withLabelSourceRecords = (resultTransforms = [], featureOverrides, catalogAdmission) => {
+  const transforms = [...resultTransforms];
+  labelSourceTextsByResult(featureOverrides, (row) => featureRowTargets(catalogAdmission, row)).forEach((sources, resultIndex) => {
+    const own = transforms[resultIndex];
+    /** @type {SvgResultTransform} */
+    const records = (svg) => recordLabelSourceTexts(svg, sources);
+    transforms[resultIndex] = typeof own === 'function'
+      ? (svg, context) => [own(svg, context) !== false, records(svg, context)].includes(true)
+      : records;
+  });
+  return transforms;
+};
+
 /** @param {CandidateCommitOptions} options */
 export const prepareCandidateRenderCommit = ({
   generationResponse,
@@ -945,7 +950,11 @@ export const prepareCandidateRenderCommit = ({
   replacedResults = null,
   ...editorState
 }) => {
-  const bundle = compilePlanBundle({ catalogAdmission, ...editorState });
+  const bundle = compilePlanBundle({
+    catalogAdmission,
+    ...editorState,
+    resultTransforms: withLabelSourceRecords(editorState.resultTransforms, editorState.featureOverrides, catalogAdmission)
+  });
   return {
     results: admitCurrentGeneratedResults(generationResponse, {
       catalogAdmission,
