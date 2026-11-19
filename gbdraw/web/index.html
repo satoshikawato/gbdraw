@@ -7706,8 +7706,8 @@
                                                       :text="t('The offset counts along this feature’s strand: a positive offset moves the record start downstream (toward the 3′ end), a negative offset upstream. For a feature without a strand it counts along the original record.')"></help-tip>
                                         </span>
                                         <span id="feature-record-rotation-offset-error"
-                                              v-if="featureRecordRotationDraft.offsetError"
-                                              class="basis-full text-[10px] text-red-700">{{ tm(featureRecordRotationDraft.offsetError) }}</span>
+                                              v-show="featureRecordRotationDraft.offsetError"
+                                              class="basis-full text-[10px] text-red-700">{{ featureRecordRotationDraft.offsetError ? tm(featureRecordRotationDraft.offsetError) : '' }}</span>
                                     </div>
                                 </fieldset>
                                 <div class="mt-3">
@@ -7723,18 +7723,18 @@
                                     <p id="feature-record-rotation-orient-note" class="ms-5 text-[10px]"
                                        :class="featureRecordRotationDraft.orientCapability.enabled ? 'text-slate-500' : 'text-amber-700'">{{ featureRecordRotationDraft.orientCapability.enabled ? t('Reverse-complements the record when this feature is on the − strand.') : tm(featureRecordRotationDraft.orientCapability.message) }}</p>
                                 </div>
-                                <p v-if="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
-                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview() }}</p>
-                                <p v-if="featureRecordRotationDraft.preview" data-record-rotation-preview
+                                <p v-show="featureRecordRotationDraft.pendingPreview" id="feature-record-rotation-pending" data-record-rotation-pending
+                                   class="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 break-words">{{ featureRecordRotationDraft.pendingPreview ? featureRecordRotationDraft.pendingPreview() : '' }}</p>
+                                <p v-show="featureRecordRotationDraft.preview" data-record-rotation-preview
                                    class="mt-3 flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
-                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview() }}</span>
+                                    <span id="feature-record-rotation-preview" class="min-w-0 break-words">{{ featureRecordRotationDraft.preview ? featureRecordRotationDraft.preview() : '' }}</span>
                                     <help-tip id="feature-record-rotation-coordinate-note" :label="t('About these coordinates')"
                                               :text="t('Coordinates refer to the original record.')"></help-tip>
                                 </p>
                                 </template>
                                 <run-blocked-reason id="feature-record-rotation-run-reason" class="mt-2"></run-blocked-reason>
                                 <p id="feature-record-rotation-reason"
-                                   v-if="featureRecordRotationDraft.disabledReason.length"
+                                   v-show="featureRecordRotationDraft.disabledReason.length"
                                    class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ errorText(featureRecordRotationDraft.disabledReason) }}</p>
                                 <p aria-live="polite"
                                    class="mt-2 min-h-4 text-[10px]"

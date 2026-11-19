@@ -50,6 +50,16 @@ const chooseCustomPosition = async (actions, reference, offset) => {
   await actions.getByLabel('Shifted by (bp)', { exact: true }).fill(String(offset));
 };
 
+// An aria-describedby that names a missing element describes nothing (OV-3843): every id a visible control in the
+// Rotate record section names is there, shown or not.
+const expectDescriptionsResolve = async (actions) => {
+  expect(await actions.evaluate((root) => [...root.querySelectorAll('[aria-describedby]')]
+    .filter((element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false }))
+    .flatMap((element) => element.getAttribute('aria-describedby').split(/\s+/).filter(Boolean)
+      .filter((id) => !document.getElementById(id)).map((id) => `${id} <- ${element.textContent.trim() || element.tagName}`))),
+  'aria-describedby without a target').toEqual([]);
+};
+
 const makeCircularRecord = (recordId, gene, start, end) => `LOCUS       ${recordId.padEnd(24)} 360 bp    DNA     circular UNA 01-JAN-2000
 DEFINITION  feature popup record rotation acceptance.
 ACCESSION   ${recordId}
@@ -132,11 +142,13 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect(actions.locator('[data-record-rotation-preview]'))
     .toContainText(/^NC_012920\.1 will start at [\d,]+ · orientation unchanged/);
   await expect(actions.getByLabel('Record starts at', { exact: true })).toHaveCount(0);
+  await expectDescriptionsResolve(actions);
 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   await chooseCustomPosition(actions, 'midpoint', 2);
+  await expectDescriptionsResolve(actions);
   await disclosure.click();
   await expect(actions).toBeHidden();
   await disclosure.click();
@@ -540,10 +552,11 @@ test('Apply on Generate stages rotations that one Generate applies together', as
     .toHaveText('Record rotation will apply on the next Generate Diagram.');
   await expect(actions.locator('[data-record-rotation-pending]'))
     .toHaveText('Pending for Generate: chromosome_I will start at 21 · orientation unchanged');
-  await expect(actions.locator('[data-record-rotation-preview]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-preview]')).toBeHidden();
+  await expectDescriptionsResolve(actions);
   await closePopup();
   actions = await openRotation('parB');
-  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-pending]')).toBeHidden();
   await actions.getByRole('radio', { name: 'End of the record', exact: true }).check();
   await actions.getByRole('button', { name: 'Apply when I Generate', exact: true }).click();
   await expect(actions.locator('[data-record-rotation-pending]'))
@@ -563,7 +576,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(async () => (await snapshot()).drafts).toEqual({ chromosome_I: 21 });
   actions = await openRotation('parB');
-  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-pending]')).toBeHidden();
   await expect(actions.locator('[data-record-rotation-preview]'))
     .toHaveText('chromosome_II will start at 151 · orientation unchanged');
   await page.keyboard.press('ControlOrMeta+Shift+z');
@@ -590,7 +603,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
   expect(await lastStarts()).toEqual([21, 226]);
   await expect(pendingNotice).toHaveCount(0);
   actions = await openRotation('dnaA');
-  await expect(actions.locator('[data-record-rotation-pending]')).toHaveCount(0);
+  await expect(actions.locator('[data-record-rotation-pending]')).toBeHidden();
   await closePopup();
 
   // Stage chromosome II again, then Apply and regenerate chromosome I only:
