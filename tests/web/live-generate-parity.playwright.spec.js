@@ -1087,7 +1087,7 @@ test.describe('a Result displayed after its intent changed', () => {
           await expectLiveEqualsGenerate(loaded, { label: 'Reset, Save, Load, then the other drawing' });
           await loaded.context().close();
         });
-        // The Result's text records the text Python drew for a renamed label (OV-3848), so the loaded
+        // The Result's text records a renamed label's text before the Web renamed it (OV-3848), so the loaded
         // drawing shows the reset label text without a rerender, as it does without the Save and as Generate draws it.
         test(`Save and Load after Reset Settings from the other drawing show the reset label text as Generate draws it (${both})`, async ({ page, browser }, testInfo) => {
           test.setTimeout(240_000);

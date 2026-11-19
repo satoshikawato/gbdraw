@@ -4411,3 +4411,95 @@ test('a gzip Circular reference stages for the LOSAT ring plan as Generate names
   assert.deepEqual(stagedBytes, chosen);
   assert.equal(gunzipSync(stagedBytes).toString('utf8'), text);
 });
+
+// OV-3950: a Generate's drawing takes the rows it moves to new record keys before its Result mounts; a Generate
+// rolled back after that (here a Cancel while the new Result mounts) puts back what its artifact handle does not
+// hold: the Feature placements, the annotation sets and the removal count.
+test('a Generate rolled back after it moved a record\'s rows puts back placements, annotation sets and the removal count', async () => {
+  const { setFeaturePlacementRow } = await import('../../gbdraw/web/js/services/drawing/feature-edits.js');
+  const { ANNOTATION_SETS_SLICE } = await import('../../gbdraw/web/js/services/drawing/annotation-sets.js');
+  const { buildDisambiguatedRecordEntries } = await import('../../gbdraw/web/js/services/record-options.js');
+  installShownDrawing('circular');
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'moved-rows';
+  drawing.form.show_depth = false;
+  drawing.form.multi_record_canvas = false;
+  drawing.adv.circular_track_slots_enabled = false;
+  drawing.circularConservation.enabled = false;
+  drawing.annotationSets.splice(0);
+  setCircularFile(new AuditFile(['LOCUS movedrows\nORIGIN\n        1 acgtacgt\n//\n'], 'moved-rows.gb'));
+  Object.assign(modeDrawing(state, 'circular').files, boundFiles({
+    c_depth: [], c_conservation_blasts: [], c_conservation_fastas: [], c_conservation_sequence_sources: []
+  }));
+  modeDrawing(state, 'circular').circularRecordList.value = [];
+  Object.assign(modeDrawing(state, 'circular').circularRecordDiscovery, { status: 'idle', error: '', inputType: '', sources: [] });
+  // Card record-1 holds two records; the committed request drew a region of its record 2 under the card's key,
+  // and this Generate draws the record under its own key: its rows move from `record-1` to `record-1:2`.
+  const identitySources = {
+    mode: 'circular',
+    cards: new Map([['record-1', buildDisambiguatedRecordEntries([{ recordId: 'r1' }, { recordId: 'r2' }])]])
+  };
+  const committedRecords = [{ recordKey: 'record-1', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 1 },
+    windows: [{ start: 1, end: 4, reverseComplement: false, column: null }] }];
+  const placementRow = { recordKey: 'record-1', biologicalFeatureId: 'f1', placement: { kind: 'main' } };
+  setFeaturePlacementRow(drawing.slices.featureEdits, JSON.stringify(['record-1', 'f1']), placementRow);
+  ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets: [{ id: 'set', annotations: [
+    { target: { kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId: 'f1' } }
+  ] }] });
+  state.featureEditRemovalCount.value = 3;
+  const before = structuredClone({
+    placements: drawing.featurePlacementOverrides,
+    annotationSets: drawing.annotationSets,
+    removed: state.featureEditRemovalCount.value
+  });
+  let atMount = null;
+  let runner;
+  const previewRuntime = createImmediatePreviewRuntime({
+    onEvent(name) {
+      if (name !== 'test.preview-mounted') return;
+      atMount = structuredClone({ placements: Object.keys(drawing.featurePlacementOverrides),
+        annotationKeys: drawing.annotationSets.flatMap((set) => set.annotations.map((item) => item.target.recordKey)) });
+      runner.cancelRunAnalysis();
+    }
+  });
+  runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    previewRuntime,
+    state,
+    recordDisplayRows: { value: [] },
+    readRecordIdentitySources: async () => identitySources,
+    // No source is replaced: the move alone decides the rows.
+    isCurrentFeature: () => true,
+    getCommittedCanonicalSession: () => ({ renderRequest: { mode: 'circular', records: committedRecords }, resources: {} }),
+    writeSessionDocumentFile,
+    serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => serializeActiveRenderFiles(state, activeDrawing),
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+  workerHelperResponses.splice(0, workerHelperResponses.length, {
+    ok: true,
+    result: { records: [{ selector: '#1', record_id: 'movedrows', record_length: 8 }] }
+  });
+  const generated = result('moved-rows.svg', 'moved-rows');
+  workerResponses.push(response(generated, validCatalog(generated.name)));
+  const outcome = await runner.runAnalysis();
+  const request = workerMessages.filter(({ type }) => type === 'run').at(-1).payload.request;
+  assert.deepEqual(outcome, { status: 'canceled' }, JSON.stringify([state.errorLog.value, request.records]));
+  // The drawing had taken the moved rows when the Result mounted.
+  assert.deepEqual(atMount, { placements: [JSON.stringify(['record-1:2', 'f1'])], annotationKeys: ['record-1:2'] });
+  assert.deepEqual(structuredClone({
+    placements: drawing.featurePlacementOverrides,
+    annotationSets: drawing.annotationSets,
+    removed: state.featureEditRemovalCount.value
+  }), before);
+  drawing.annotationSets.splice(0);
+  setFeaturePlacementRow(drawing.slices.featureEdits, JSON.stringify(['record-1', 'f1']), null);
+  state.featureEditRemovalCount.value = 0;
+});

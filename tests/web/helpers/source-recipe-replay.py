@@ -26,7 +26,7 @@ from tests.utils.svg_compare import compare_svgs  # noqa: E402
 # baseProfile that the Web SVG sanitizer drops.
 IGNORED = {
     "data-label-feature-id", "data-gbdraw-label-binding-schema",
-    # The text Python drew for a label the Web renamed, which Undo returns to (services/preview-affordances.js);
+    # The label's text before the Web renamed it, which Undo returns to (services/preview-affordances.js);
     # an export drops it.
     "data-label-source-text",
     "data-record-key", "data-record-translation-x", "data-record-translation-y",
