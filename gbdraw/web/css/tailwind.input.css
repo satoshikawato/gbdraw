@@ -105,12 +105,13 @@
        the "(auto)" value drawn behind a transparent input. */
     .form-input-compact { font-size: max(10px, var(--ui-text-floor, 0px)); padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
     /* A field at least as wide as its hint: a hidden copy of the hint in the field's padding and border shares the
-       field's grid cell and sets its width; a number field adds room for its spin buttons (15px in Chromium). The
-       field fills the cell. A row of such fields wraps where they do not fit (OV-3900). */
+       field's grid cell and sets its width; a number field adds room for its spin buttons, --number-spin-width, which
+       app/field-hint.js measures (15px in Chromium) and which writes the copy's hint and kind. The field fills the
+       cell. A row of such fields wraps where they do not fit (OV-3900). */
     .hint-width-field { display: grid; }
     .hint-width-field > * { grid-area: 1 / 1; }
     .hint-width-field > [data-hint-width] { visibility: hidden; white-space: nowrap; padding-inline: 0.25rem; }
-    .hint-width-field > [data-hint-width="number"] { padding-inline-end: calc(0.25rem + 16px); }
+    .hint-width-field > [data-hint-width="number"] { padding-inline-end: calc(0.25rem + var(--number-spin-width, 0px)); }
     .hint-width-field > input { width: 0; min-width: 100%; }
     .auto-value-input { display: block; width: 100%; box-sizing: border-box; background: transparent; position: relative; z-index: 1; }
     .track-slot-geometry-input { height: 1.5rem; padding-inline-end: 1.55rem !important; background: transparent; position: relative; z-index: 1; }
@@ -122,6 +123,9 @@
     /* A closed select ends a chosen value too long for it with an ellipsis instead of cutting it (OV-1523), and so does
        a field's hint (a Thai Default at the 12px floor in the definition line's Size field). */
     select, input:placeholder-shown { text-overflow: ellipsis; }
+    /* The house tooltip: a help tip's text (HelpTip, components.js) and the whole hint of a cut field
+       (app/field-hint.js), placed by utils/tooltip-placement.js. */
+    .ui-tooltip { @apply fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-start leading-relaxed; }
     .form-checkbox { @apply h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500; }
 
     /* Not text-base: its 24 px line height would survive a per-element text size. */

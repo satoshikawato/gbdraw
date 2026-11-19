@@ -623,19 +623,41 @@ test('a Linear definition line Style row holds its hints and Color state in ever
     if (fit.misfits.length) misfits[tag] = fit.misfits;
   }
   expect(misfits).toEqual({});
-  // A hint wider than its field (a field made narrow, as a narrow pane can) ends with an ellipsis, and the pointer on
-  // the field shows the whole hint as its title until the hint fits again.
+  // A hint wider than its field (a field made narrow, as a narrow pane can) ends with an ellipsis. While the hint is
+  // shown and the field is under the pointer or holds the focus, the house tooltip shows it whole (app/field-hint.js);
+  // the field gets no title. Soft checks, so a run on a base without the tooltip lists every miss.
   await menu(page).selectOption('de');
   await expect.poll(() => pageLanguage(page)).toBe('de');
   const size = page.locator('details[data-definition-line-style] input[type="number"]').first();
+  const tip = page.locator('.ui-tooltip[role="tooltip"]');
   await size.evaluate((field) => { field.previousElementSibling.style.display = 'none'; field.parentElement.style.width = '2rem'; });
   expect(await size.evaluate((field) => getComputedStyle(field).textOverflow)).toBe('ellipsis');
   await size.hover();
-  await expect(size).toHaveAttribute('title', 'Standard');
-  await size.evaluate((field) => { field.previousElementSibling.style.display = ''; field.parentElement.style.width = ''; });
+  await expect.soft(tip, 'the pointer on the cut field shows its whole hint').toHaveText('Standard');
+  await expect.soft(size, 'the field has no title').not.toHaveAttribute('title');
+  const [field, shown] = [await size.boundingBox(), (await tip.count()) ? await tip.boundingBox() : null];
+  expect.soft(shown && field && (shown.y + shown.height <= field.y || shown.y >= field.y + field.height), 'the tooltip sits above or below the field').toBe(true);
+  await size.focus();
+  await page.keyboard.type('1');
+  await expect.soft(tip, 'OV-3902: a value typed with the pointer resting hides the tooltip').toHaveCount(0);
+  await expect.soft(size, 'OV-3902: a field holding a value has no hint title').not.toHaveAttribute('title');
+  await page.keyboard.press('Backspace');
+  await expect.soft(tip, 'OV-3902: clearing the value shows it again without a pointer move').toHaveText('Standard');
+  await page.keyboard.type('-');
+  await expect.soft(tip, "OV-3902: a number field holding '-' shows no hint, so no tooltip").toHaveCount(0);
+  await expect.soft(size, "OV-3902: a number field holding '-' has no hint title").not.toHaveAttribute('title');
+  await page.keyboard.press('Backspace');
+  await size.evaluate((input) => input.blur());
   await page.mouse.move(0, 0);
+  await expect.soft(tip, 'neither pointed at nor focused: no tooltip').toHaveCount(0);
+  await size.focus();
+  await expect.soft(tip, 'OV-3903: keyboard focus on the cut field shows its whole hint').toHaveText('Standard');
+  await page.keyboard.press('Escape');
+  await expect.soft(tip, 'Escape hides the tooltip').toHaveCount(0);
+  await size.evaluate((input) => { input.previousElementSibling.style.display = ''; input.parentElement.style.width = ''; input.blur(); });
   await size.hover();
-  await expect(size).not.toHaveAttribute('title');
+  await size.focus();
+  await expect.soft(tip, 'a field that fits its hint shows no tooltip').toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

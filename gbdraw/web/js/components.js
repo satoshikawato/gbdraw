@@ -2,6 +2,7 @@
 /** @import { InputFileRef } from './services/history-files.js' */
 /** @import { InputFileKind } from './services/drawing/inputs.js' */
 /** @import { Wording } from './utils/i18n.js' */
+/** @import { TooltipPlacement } from './utils/tooltip-placement.js' */
 import { state } from './state.js';
 import {
   colorSwatchView,
@@ -15,6 +16,7 @@ import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
 import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { limitedList, moreLine } from './utils/limited-list.js';
+import { placeTooltip } from './utils/tooltip-placement.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
@@ -194,43 +196,13 @@ export const HelpTip = {
     const keyboardFocus = ref(false);
     const pinned = ref(false);
     const visible = computed(() => hovered.value || keyboardFocus.value || pinned.value);
-    const style = reactive({ top: '0px', left: '0px' });
+    const style = reactive(/** @type {Partial<TooltipPlacement>} */ ({}));
     const trigger = ref(null);
     const tooltip = /** @type {Ref<HTMLElement | null>} */ (ref(null));
+    // Centred on the icon, above it or below it (utils/tooltip-placement.js).
     const position = () => {
       if (!trigger.value) return;
-      const rect = trigger.value.getBoundingClientRect();
-
-      // Get viewport width and tooltip max width
-      const viewportWidth = window.innerWidth;
-      const tooltipMaxWidth = 260; // max-w-250px + extra margin
-      const halfWidth = tooltipMaxWidth / 2;
-      const gap = 12; // gap between icon and tooltip
-
-      // Centered on the icon
-      let left = rect.left + rect.width / 2;
-      let top = rect.top - gap;
-      let transform = 'translate(-50%, -100%)'; // above the icon
-
-      // Prevent overflow on left/right (keep at least 10px from viewport edges)
-      if (left < halfWidth + 10) {
-        left = halfWidth + 10;
-      } else if (left > viewportWidth - halfWidth - 10) {
-        left = viewportWidth - halfWidth - 10;
-      }
-
-      // Prevent overflow at the top: show below when the icon is within 60 px
-      // of it (header and browser frame) or the shown tooltip would not fit
-      // above (OV-2449: a long timing note).
-      const height = tooltip.value ? tooltip.value.offsetHeight : 0;
-      if (rect.top < 60 || rect.top - gap - height < 8) {
-        top = rect.bottom + gap;
-        transform = 'translate(-50%, 0)'; // transform for below display
-      }
-
-      style.top = `${top}px`;
-      style.left = `${left}px`;
-      style.transform = transform;
+      Object.assign(style, placeTooltip(trigger.value.getBoundingClientRect(), tooltip.value ? tooltip.value.offsetHeight : 0, window.innerWidth));
     };
     // Again once the tooltip is shown, with its height.
     watch(visible, (/** @type {boolean} */ open) => { if (open) { position(); void nextTick(position); } });

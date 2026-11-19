@@ -59,12 +59,12 @@ const BINDING_EXCEPTIONS = new Map([
 
 /** Modules under gbdraw/web/js that write a physical side, with how many writes. */
 const MODULE_EXCEPTIONS = new Map([
-  ['components.js', [2, 'a help tip, centred on its button at viewport coordinates']],
   ['app/result-popups.js', [1, 'a popup at the clicked point, kept inside the viewport (utils/popup-bounds.js)']],
   ['app/feature-selection.js', [1, 'the selection rectangle under the pointer']],
   ['app/feature-editor/svg-actions.js', [3, 'the alignment overlay rings and labels, at figure coordinates (the overlay reads left to right)']],
   ['app/feature-editor/ring-hover.js', [1, 'a ring popup beside the pointer']],
   ['services/export.js', [1, 'the PDF staging box, above and left of the page, outside its scroll area in either direction']],
+  ['utils/tooltip-placement.js', [1, 'the house tooltip (a help tip, the whole hint of a cut field), centred on its anchor at viewport coordinates']],
   ['utils/clipboard.js', [1, 'the copy fallback text area, fixed off the left edge: a fixed box adds no scroll area in either direction']]
 ]);
 

@@ -40,7 +40,7 @@ import { headerFit } from './app/header-fit.js';
 import { committedValue, settleCommittedField } from './app/committed-value.js';
 import { blankNull } from './app/blank-number.js';
 import { keepsListFocus } from './app/list-focus.js';
-import { titleCutHint } from './app/hint-title.js';
+import { FIELD_HINT_LISTENERS, hintWidth } from './app/field-hint.js';
 import { formatFeatureLocation } from './services/feature-utils.js';
 import { UI_LOCALES, joinSentences, numberText, sentenceSeparator, t, thenArrow, thenText, tm, tn, tx, uiLocale } from './utils/i18n.js';
 import { errorText } from './utils/error-text.js';
@@ -85,6 +85,8 @@ app.directive('committed-value', committedValue);
 app.directive('blank-null', blankNull);
 // A keyed list whose rows move keeps the focus in the row it was in (app/list-focus.js).
 app.directive('keeps-list-focus', keepsListFocus);
+// A `.hint-width-field` takes the width of its input's hint (app/field-hint.js).
+app.directive('hint-width', hintWidth);
 // Vue's production build only logs an error raised in a render, watcher,
 // event handler or hook; throw it, as the development build did, so it stays
 // an uncaught page error.
@@ -96,7 +98,6 @@ await showStoredUiLanguage();
 const mountedApp = app.mount('#app');
 window.addEventListener('dragover', refuseStrayFileDrop);
 window.addEventListener('drop', refuseStrayFileDrop);
-// A field's hint cut with an ellipsis shows whole as its title (app/hint-title.js).
-window.addEventListener('pointerover', titleCutHint);
-window.addEventListener('focusin', titleCutHint);
+// A field's hint cut with an ellipsis shows whole in a tooltip (app/field-hint.js).
+for (const [type, listener, capture] of FIELD_HINT_LISTENERS) window.addEventListener(type, listener, capture);
 window.__GBDRAW_APP__ = mountedApp;

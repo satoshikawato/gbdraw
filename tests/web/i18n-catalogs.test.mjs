@@ -724,53 +724,157 @@ test('the UI languages are the seventeen of the Language menu, Latin script firs
 });
 
 // OV-3669: a text style's floor is one custom property, --ui-text-floor, that
-// the figure resets to 0. Every font size the page's own CSS writes (index.html,
-// the component rules and the utilities of css/tailwind.input.css) is either
-// 13px or more, or max(<size>, var(--ui-text-floor, 0px)), or one of the named
-// exceptions below; a form the case cannot read (em, %, a keyword, calc(),
-// clamp(), another var()) fails it. Each text size utility the sources use is
-// 13px or more or takes the floor, and no inline style sets a size.
+// the figure resets to 0. The case reads the CSS the browser gets: the generated
+// css/tailwind.css (tests/web/tailwind-stylesheet.test.mjs pins it to its
+// sources, so a utility or an @apply of any source is in it) and the <style> of
+// index.html. Per selector the last font-size or font declaration wins (an
+// @apply of a floored utility writes the core size, then the floored one).
+// Each is readable: 13px or more, max(<size>, var(--ui-text-floor, 0px)), the
+// parent's size (inherit, 100%, 1em), or one of the named exceptions below; a
+// `font:` shorthand only as inherit. Any other form (a smaller size, em, %,
+// calc(), clamp(), a keyword, another var()) fails it. No class source sets a
+// size inline (a style attribute or binding, or a style write of a module), and
+// a module's CSS text takes the same rule.
 const FONT_SIZE_EXCEPTIONS = new Map([
   // Hides the text of a header button that shows its icon alone.
   ['0 !important', 'no text shown'],
   // The rail entry's icon size (17-20px); its name has its own floored size.
   ['var(--rail-icon)', 'icon size of a rail entry']
 ]);
-test('OV-3669: every small font size of the page reads the text style floor', () => {
+// text-[9px] and text-[10px] are 11px in every locale, by one rule of index.html that takes the floor (asserted below);
+// it floors an element that carries the class, so only these utility selectors count as floored, not an @apply of them.
+const FLOORED_BY_CLASS = new Set(['.text-\\[9px\\]', '.text-\\[10px\\]']);
+// Preflight's sizes for elements no class source writes (asserted below).
+const UNWRITTEN_ELEMENT_SIZES = new Map([['small', '80%'], ['sub', '75%'], ['sup', '75%']]);
+// The exported Interactive SVG's own stylesheet: it is written into the exported file, not into the page.
+const NOT_THE_PAGE = new Set(['gbdraw/web/js/services/standalone-interactivity-assets.js']);
+
+/** The parts of a selector list separated by commas outside parentheses and brackets. */
+const selectorParts = (text) => {
+  const parts = [''];
+  let depth = 0;
+  for (const character of text) {
+    if ('(['.includes(character)) depth += 1;
+    if (')]'.includes(character)) depth -= 1;
+    if (character === ',' && depth === 0) parts.push('');
+    else parts[parts.length - 1] += character;
+  }
+  return parts.map((part) => part.trim().replace(/\s+/g, ' ')).filter(Boolean);
+};
+
+/**
+ * The font size each selector of a stylesheet ends with: the last font-size or font declaration of the selector, in
+ * the context of its at-rules. Keyed by `<at-rules> <selector>`; the value keeps its `!important`.
+ * @param {string} css
+ * @returns {Map<string, { property: string, value: string }>}
+ */
+const finalFontSizes = (css) => {
+  const sizes = new Map();
+  const walk = (text, context) => {
+    let at = 0;
+    while (at < text.length) {
+      const open = text.indexOf('{', at);
+      if (open < 0) return;
+      let depth = 1;
+      let close = open + 1;
+      for (; close < text.length && depth > 0; close += 1) {
+        if (text[close] === '{') depth += 1;
+        if (text[close] === '}') depth -= 1;
+      }
+      const prelude = text.slice(at, open).split(/[;}]/).pop().trim();
+      const body = text.slice(open + 1, close - 1);
+      at = close;
+      if (prelude.startsWith('@')) {
+        if (/^@(media|supports|layer|container)\b/.test(prelude)) walk(body, `${context}${prelude.replace(/\s+/g, ' ')} `);
+        continue;
+      }
+      if (body.includes('{')) {
+        walk(body, `${context}${prelude} `);
+        continue;
+      }
+      for (const declaration of body.split(';')) {
+        const match = /^\s*(font-size|font)\s*:\s*([\s\S]+?)\s*$/.exec(declaration);
+        if (match) for (const selector of selectorParts(prelude)) sizes.set(`${context}${selector}`, { property: match[1], value: match[2] });
+      }
+    }
+  };
+  walk(css.replace(/\/\*[\s\S]*?\*\//g, ''), '');
+  return sizes;
+};
+
+const FLOORED_SIZE = /^max\([\d.]+(px|rem), ?var\(--ui-text-floor, ?0px\)\)$/;
+/** Whether a selector's final font size reads the floor or is large enough. */
+const readableSize = (selector, { property, value }) => {
+  const size = value.replace(/\s*!important$/, '');
+  if (property === 'font') return size === 'inherit';
+  if (FONT_SIZE_EXCEPTIONS.has(value) || UNWRITTEN_ELEMENT_SIZES.get(selector) === value || FLOORED_BY_CLASS.has(selector)) return true;
+  if (['inherit', '100%', '1em'].includes(size) || FLOORED_SIZE.test(size)) return true;
+  const plain = /^([\d.]+)(px|rem)$/.exec(size);
+  return plain !== null && Number(plain[1]) * (plain[2] === 'rem' ? 16 : 1) >= 13;
+};
+
+/** The font sizes of the page's CSS that are not readable, as `<file>: <selector> { <property>: <value> }`. */
+const unreadableFontSizes = (sheets) => sheets.flatMap(([file, css]) => [...finalFontSizes(css)]
+  .filter(([selector, size]) => !readableSize(selector, size))
+  .map(([selector, { property, value }]) => `${file}: ${selector} { ${property}: ${value} }`));
+
+// An inline size: a style attribute or binding that sets font-size or font, a style write of a module.
+const INLINE_FONT_SIZE = [
+  /\sstyle="[^"]*\bfont(-size)?\s*:/g,
+  /:style="[^"]*\bfont(Size|-size)?['"]?\s*:/g,
+  /\.style\.font(Size)?\s*=(?!=)/g,
+  /setProperty\(\s*['"`]font(-size)?['"`]/g,
+  /\.style,\s*\{[^}]*\bfont(Size)?\s*:/g,
+  /\.style\.cssText\s*=\s*[`'"][^`'"]*\bfont(-size)?\s*:/g
+];
+const inlineFontSizes = (source) => INLINE_FONT_SIZE.flatMap((pattern) => [...source.matchAll(pattern)].map((match) => match[0]));
+/** The CSS text a module writes (each `font-size:` in a string), as a stylesheet of one rule per declaration. */
+const moduleCss = (source) => [...source.matchAll(/(?:^|[{;\s`'"])font-size\s*:\s*[^;}`'"\n]+/g)]
+  .map((match, index) => `.css-${index} { ${match[0].replace(/^[{;\s`'"]/, '')} }`).join('\n');
+
+/** The page's stylesheets and class sources as [path, text]. */
+const pageSources = () => {
+  const repository = join(webRoot, '..', '..');
   const html = readFileSync(join(webRoot, 'index.html'), 'utf8');
-  const input = readFileSync(join(webRoot, 'css', 'tailwind.input.css'), 'utf8');
+  return {
+    html,
+    sheets: [
+      ['gbdraw/web/css/tailwind.css', readFileSync(join(webRoot, 'css', 'tailwind.css'), 'utf8')],
+      ['gbdraw/web/index.html <style>', html.slice(html.indexOf('<style>'), html.indexOf('</style>'))]
+    ],
+    sources: classSourcePaths().filter((file) => !NOT_THE_PAGE.has(file)).map((file) => [file, readFileSync(join(repository, file), 'utf8')])
+  };
+};
+
+test('OV-3669: every small font size of the page reads the text style floor', () => {
+  const { html, sheets, sources } = pageSources();
   assert.match(html, /:root\[data-ui-text-style="tall-marks"\] \{ --ui-text-floor: 12px; \}/);
   assert.match(html, /:root svg \{ --ui-text-floor: 0px; \}/);
-  const css = [['index.html', html.slice(html.indexOf('<style>'), html.indexOf('</style>'))], ['tailwind.input.css', input]];
-  const px = (value, unit) => Number(value) * (unit === 'rem' ? 16 : 1);
-  const floored = /^max\([\d.]+(px|rem), var\(--ui-text-floor, 0px\)\)( !important)?$/;
-  const readable = (value) => {
-    const plain = /^([\d.]+)(px|rem)( !important)?$/.exec(value);
-    return floored.test(value) || (plain !== null && px(plain[1], plain[2]) >= 13) || FONT_SIZE_EXCEPTIONS.has(value);
-  };
-  const unread = css.flatMap(([file, text]) => [...text.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/font-size:\s*([^;}]+)/g)]
-    .map((match) => match[1].trim())
-    .filter((value) => !readable(value))
-    .map((value) => `${file}: font-size: ${value}`));
-  assert.deepEqual(unread, []);
-  assert.doesNotMatch(html, /\sstyle="[^"]*font-size/);
-  assert.doesNotMatch(html, /:style="[^"]*font(Size|-size)/);
-  const utility = /\.text-(xs|\\\[[\d.]+(?:px|rem|em)\\\]) \{ font-size: max\(/g;
-  const flooredUtilities = new Set([...input.matchAll(utility)].map((match) => match[1].replace(/\\/g, '')));
-  // text-[9px] and text-[10px] are 11px in every locale, by one rule of index.html that takes the floor.
   assert.match(html, /\[class~="text-\[9px\]"\],\s*\[class~="text-\[10px\]"\] \{\s*font-size: max\(0\.6875rem, var\(--ui-text-floor, 0px\)\) !important;/);
-  ['[9px]', '[10px]'].forEach((size) => flooredUtilities.add(size));
-  // The size of a used utility in px: xs is 12px, the other named sizes are 14px or more; an em size depends on its
-  // parent, so it counts as small.
-  const sizeOf = (size) => {
-    if (size === 'xs') return 12;
-    const length = /^\[([\d.]+)(px|rem|em)\]$/.exec(size);
-    if (!length) return 14;
-    return length[2] === 'em' ? 0 : px(length[1], length[2]);
-  };
-  const used = new Set(classSourcePaths().flatMap((file) => [...readFileSync(join(webRoot, '..', '..', file), 'utf8')
-    .matchAll(/\btext-(xs|\[[\d.]+(?:px|rem|em)\])(?![\w-])/g)].map((match) => match[1])));
-  assert.deepEqual([...used].filter((size) => sizeOf(size) < 13 && !flooredUtilities.has(size)).sort(), []);
+  assert.deepEqual(unreadableFontSizes(sheets), []);
+  assert.deepEqual(sources.flatMap(([file, text]) => inlineFontSizes(text).map((found) => `${file}: ${found}`)), []);
+  assert.deepEqual(unreadableFontSizes(sources.filter(([file]) => file.endsWith('.js')).map(([file, text]) => [file, moduleCss(text)])), []);
+  // Preflight's small, sub and sup sizes stay unread only while no class source writes those elements.
+  assert.deepEqual(sources.filter(([, text]) => /<(small|sub|sup)[\s>]|createElement\(\s*['"`](small|sub|sup)['"`]/.test(text)).map(([file]) => file), []);
+  assert.deepEqual([...UNWRITTEN_ELEMENT_SIZES].filter(([selector, value]) => finalFontSizes(sheets[0][1]).get(selector)?.value !== value), [],
+    'an exception names a Preflight size the stylesheet no longer has');
+});
+
+test('OV-3669: the font size reader sees the forms that miss the floor', () => {
+  const unread = (css) => unreadableFontSizes([['x.css', css]]);
+  assert.deepEqual(unread('.text-xs{font-size:0.75rem;line-height:1rem}\n.text-xs { font-size: max(0.75rem, var(--ui-text-floor, 0px)) }'), []);
+  assert.deepEqual(unread('.a{font-size:max(0.75rem, var(--ui-text-floor, 0px));font-size:11px}'), ['x.css: .a { font-size: 11px }']);
+  assert.deepEqual(unread('.text-\\[80\\%\\]{font-size:80%}'), ['x.css: .text-\\[80\\%\\] { font-size: 80% }']);
+  assert.deepEqual(unread('.b{font-size:calc(10px + 1px)} .c{font-size:var(--x)} .d{font-size:smaller} .e{font-size:0.7em}').length, 4);
+  assert.deepEqual(unread('.foo{font-size:10px}'), ['x.css: .foo { font-size: 10px }'], 'an @apply of text-[10px] is not floored by the class rule');
+  assert.deepEqual(unread('.text-\\[10px\\]{font-size:10px}'), []);
+  assert.deepEqual(unread('.f{font:10px sans-serif} .g{font:inherit}'), ['x.css: .f { font: 10px sans-serif }']);
+  assert.deepEqual(unread('@media (min-width: 640px){.sm\\:text-xs{font-size:0.75rem}}'), ['x.css: @media (min-width: 640px) .sm\\:text-xs { font-size: 0.75rem }']);
+  assert.deepEqual(unread('h1,h2{font-size:inherit} code,kbd{font-size:1em} button,input{font-size:100%} .h{font-size:13px} .i{font-size:1rem}'), []);
+  assert.deepEqual(inlineFontSizes('<b style="font-size: 9px"></b> <b :style="{ fontSize: s }"></b> <b :style="{ fontFamily: f }"></b>').length, 2);
+  assert.deepEqual(inlineFontSizes("el.style.fontSize = '10px'; el.style.font = x; el.style.setProperty('font-size', '9px'); Object.assign(el.style, { fontSize: '9px' }); if (el.style.fontSize == y) {}").length, 4);
+  assert.deepEqual(inlineFontSizes("const label = { fontSize: record.fontSize, font: msg('x') };"), []);
+  assert.deepEqual(unreadableFontSizes([['m.js', moduleCss("const css = `.x { font-size: 10px; } .y { font-size: max(10px, var(--ui-text-floor, 0px)); }`;")]]), ['m.js: .css-0 { font-size: 10px }']);
 });
 
 // A copy of utils/i18n.js with one more language read right to left, `qaa`

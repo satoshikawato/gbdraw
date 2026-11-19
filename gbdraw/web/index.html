@@ -5737,7 +5737,7 @@
                                             <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span> <setting-note setting="definition-text"></setting-note></summary>
                                             <div class="flex flex-wrap items-end gap-1.5 pt-1.5" data-definition-line-style-row>
                                                 <label class="input-label !block min-w-16 text-[9px]">{{ t('Size') }}
-                                                    <span class="hint-width-field"><span class="form-input form-input-compact" data-hint-width="number" aria-hidden="true">{{ t('Default') }}</span><input type="number" min="0.1" step="0.5" v-committed-value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} font size', { label: row.label })" :disabled="!semanticMutationAvailable"></span>
+                                                    <span class="hint-width-field"><span class="form-input form-input-compact" data-hint-width aria-hidden="true"></span><input type="number" v-hint-width min="0.1" step="0.5" v-committed-value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} font size', { label: row.label })" :disabled="!semanticMutationAvailable"></span>
                                                 </label>
                                                 <div>
                                                     <div class="input-label text-[9px] mb-1">{{ t('Weight') }}</div>
@@ -5751,7 +5751,7 @@
                                                     <div class="flex items-center gap-1">
                                                         <input v-if="getDefinitionLineStyleColorMode(row.key) === 'color'" type="color" v-committed-value="getDefinitionLineStyleSwatchValue(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white" :title="t('{label} color', { label: row.label })" :aria-label="t('{label} definition line color', { label: row.label })" :disabled="!semanticMutationAvailable">
                                                         <span v-else class="h-6 min-w-8 whitespace-nowrap px-0.5 border border-slate-200 rounded shrink-0 bg-slate-50 text-[10px] text-slate-500 inline-flex items-center justify-center" :title="t('{label} color: {state}', { label: row.label, state: getDefinitionLineStyleColorMode(row.key) === 'none' ? t('None') : t('Auto') })" :aria-label="t('{label} definition line color state', { label: row.label })" :data-definition-line-color-state="getDefinitionLineStyleColorMode(row.key)">{{ getDefinitionLineStyleColorMode(row.key) === 'none' ? t('None') : t('Auto') }}</span>
-                                                        <span class="hint-width-field flex-1"><span class="form-input form-input-compact" data-hint-width="text" aria-hidden="true">{{ t('Default') }}</span><input type="text" v-committed-value="getDefinitionLineStyleFill(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} definition line fill value', { label: row.label })" :disabled="!semanticMutationAvailable"></span>
+                                                        <span class="hint-width-field flex-1"><span class="form-input form-input-compact" data-hint-width aria-hidden="true"></span><input type="text" v-hint-width v-committed-value="getDefinitionLineStyleFill(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} definition line fill value', { label: row.label })" :disabled="!semanticMutationAvailable"></span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -10592,7 +10592,7 @@
         </button>
         <Teleport to="body">
             <span :id="descriptionId" hidden>{{ text }}</span>
-            <div v-if="visible" ref="tooltip" :style="style" role="tooltip" aria-hidden="true" class="fixed z-[9999] px-3 py-2 bg-slate-800 text-white text-xs rounded-md shadow-lg max-w-[250px] pointer-events-none transition-opacity text-start leading-relaxed">
+            <div v-if="visible" ref="tooltip" :style="style" role="tooltip" aria-hidden="true" class="ui-tooltip">
                  {{ text }}
             </div>
         </Teleport>
