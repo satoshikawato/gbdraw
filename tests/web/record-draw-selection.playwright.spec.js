@@ -483,7 +483,7 @@ test('the Circular Auto notes and slot estimates show the sizes Generate draws f
   // Separate diagrams of both records: each takes the sizes of its own length.
   await setLongRecordDrawn(true);
   await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
-  await expect(labelFontNote(page)).toHaveText('Auto (by genome size)');
+  await expect(labelFontNote(page)).toHaveText('by length (auto)');
   await generateAndWaitForResult(page);
   expect(await drawnLabelFontSizes(page)).toEqual([[14], [8]]);
 

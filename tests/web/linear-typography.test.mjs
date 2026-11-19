@@ -10,8 +10,8 @@ const autoValues = createAutoValueDisplay(withDrawings({
   form: { scale_style: 'ruler' },
   adv: {}
 }));
-assert.equal(autoValues.autoValueText('scaleFontSize'), 'Auto (by genome size)');
-assert.equal(autoValues.autoValueText('rulerLabelFontSize'), 'Auto (by genome size)');
+assert.equal(autoValues.autoValueText('scaleFontSize'), 'by length (auto)');
+assert.equal(autoValues.autoValueText('rulerLabelFontSize'), 'by length (auto)');
 
 const linked = { value: true };
 const adv = { scale_font_size: null, ruler_label_font_size: null };

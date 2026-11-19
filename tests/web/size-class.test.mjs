@@ -184,8 +184,8 @@ test('OV-494: the Circular Auto notes show the sizes of the records Generate dra
 
   // Separate diagrams: the 30 kb record is drawn short and the 300 kb record long.
   const separate = circularNotes(circularDrawing());
-  assert.equal(separate.autoValueText('labelFontSize'), 'Auto (by genome size)');
-  assert.equal(separate.autoValueText('circularFeatureWidth'), 'Auto (by genome size)');
+  assert.equal(separate.autoValueText('labelFontSize'), 'by length (auto)');
+  assert.equal(separate.autoValueText('circularFeatureWidth'), 'by length (auto)');
   assert.equal(separate.autoValueText('scaleInterval'), 'by record length (auto)');
 
   assert.equal(circularNotes(circularDrawing({ circular_record_selector: 'short' })).autoValueText('labelFontSize'), '14 px (auto)');
@@ -209,7 +209,7 @@ test('OV-493: the Linear Label Font Size note follows the records in the label s
   for (const scope of ['all', 'orthogroup_top', 'none']) {
     assert.equal(notes(scope).autoValueText('labelFontSize'), '5 px (auto)', scope);
   }
-  assert.equal(notes('first', []).autoValueText('labelFontSize'), 'Auto (by genome size)');
+  assert.equal(notes('first', []).autoValueText('labelFontSize'), 'by length (auto)');
 });
 
 // OV-518: Generate crops the one record of a single choice to its region
@@ -399,10 +399,10 @@ test('the Circular window and scale interval hints follow each record\'s own Aut
   const cases = vectors.autoValues.filter((/** @type {{ recordValues?: unknown }} */ entry) => entry.recordValues);
   assert.ok(cases.some((/** @type {{ mode: string }} */ entry) => entry.mode === 'circular'), 'a Circular vector exists');
   const hints = /** @type {const} */ ([
-    ['window', 'dinucleotideWindow', 'Auto (by genome size)'],
-    ['step', 'dinucleotideStep', 'Auto (by genome size)'],
-    ['depth_window', 'depthWindow', 'Auto (by genome size)'],
-    ['depth_step', 'depthStep', 'Auto (by genome size)'],
+    ['window', 'dinucleotideWindow', 'by length (auto)'],
+    ['step', 'dinucleotideStep', 'by length (auto)'],
+    ['depth_window', 'depthWindow', 'by length (auto)'],
+    ['depth_step', 'depthStep', 'by length (auto)'],
     ['objects.scale.interval', 'scaleInterval', 'by record length (auto)']
   ]);
   for (const entry of cases) {
@@ -454,7 +454,7 @@ test('a Depth series field without its own tick shows the drawing\'s tick as its
     assert.equal(own.autoValueText('depthSmallTick'), '1000 (auto)', mode);
     assert.equal(own.autoValueText('depthTickFont', series), '9 px (auto)', mode);
     const none = display({});
-    assert.equal(none.autoValueText('depthLargeTick'), 'endpoints only', mode);
+    assert.equal(none.autoValueText('depthLargeTick'), 'ends (auto)', mode);
     assert.equal(none.autoValueText('depthSmallTick'), 'None', mode);
     assert.match(none.autoValueText('depthTickFont', series), /^\d+(\.\d)? px \(auto\)$/, mode);
     assert.notEqual(none.autoValueText('depthTickFont', series), '9 px (auto)', mode);

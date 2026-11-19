@@ -3628,7 +3628,7 @@ test('a signed bedGraph set as a line with a negative color, a baseline and no u
   expect(reloaded.groups).toEqual(web.groups);
 });
 
-// OV-3885 and the words of the series controls: at the desktop sidebar each
+// OV-3885, OV-3886 and the words of the series controls: at the desktop sidebar each
 // Depth setting shows its words whole and on one line, inside its box.
 test('the Depth settings show their words whole in both modes (OV-3885)', async ({ page }) => {
   test.setTimeout(300000);
@@ -3637,8 +3637,18 @@ test('the Depth settings show their words whole in both modes (OV-3885)', async 
   await openApp(page, { waitForPalette: false });
   // The lines of an element's text (a flex item has one client rect however
   // many lines its text takes, so count the line boxes of the text itself),
-  // whether an ellipsis cuts it, and whether it or the help tip after it ends
+  // whether an ellipsis cuts it (its text is wider than the room inside its
+  // padding; its scroll width leaves the end padding out, so it misses a text
+  // that runs into that padding), and whether it or the help tip after it ends
   // past the bordered box that holds it.
+  const cutByEllipsis = (element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const style = getComputedStyle(element);
+    const room = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    return range.getBoundingClientRect().width > room + 0.5;
+  };
+  await page.evaluate(`window.cutByEllipsis = ${cutByEllipsis.toString()};`);
   const shownWhole = (locator) => locator.evaluate((element) => {
     const range = document.createRange();
     range.selectNodeContents(element);
@@ -3648,7 +3658,7 @@ test('the Depth settings show their words whole in both modes (OV-3885)', async 
     return {
       text: element.textContent.trim(),
       lines: tops.size,
-      cut: element.scrollWidth > element.clientWidth + 0.5,
+      cut: window.cutByEllipsis(element),
       outside: right > element.parentElement.closest('.rounded').getBoundingClientRect().right + 0.5
     };
   });
@@ -3689,6 +3699,25 @@ test('the Depth settings show their words whole in both modes (OV-3885)', async 
     await negativeColor.fill('#d62728');
     await expect(negativeState).toHaveText('Custom');
     expect(await shownWhole(negativeState), mode).toEqual({ text: 'Custom', lines: 1, cut: false, outside: false });
+    // OV-3886: every auto text of the Depth settings box and of the series row shows whole, without an ellipsis.
+    const autoTexts = await page.evaluate(async (shownMode) => {
+      await document.fonts.ready;
+      const box = document.querySelector(`input[type=checkbox][aria-describedby="help-${shownMode}-shared-y-axis"]`).closest('div.rounded');
+      const series = document.querySelector(`select[aria-describedby^="help-${shownMode}-depth-format-"]`).closest('.rounded.border');
+      return [box, series].flatMap((root) => Array.from(root.querySelectorAll('.auto-value-placeholder'), (span) => ({
+        field: span.parentElement.querySelector('input').getAttribute('aria-label'),
+        text: span.textContent.trim(),
+        cut: window.cutByEllipsis(span)
+      })));
+    }, mode);
+    expect(autoTexts.filter((row) => row.cut), mode).toEqual([]);
+    expect(autoTexts, mode).toEqual(expect.arrayContaining([
+      { field: 'Depth Max', text: 'from data (auto)', cut: false },
+      { field: 'Depth large tick', text: 'ends (auto)', cut: false },
+      ...(mode === 'circular'
+        ? [{ field: 'Depth Window', text: 'by length (auto)', cut: false }]
+        : [{ field: 'Depth height', text: '10 px (auto)', cut: false }])
+    ]));
   }
 });
 

@@ -123,7 +123,7 @@ const formatShortLong = (values, formatter, activeLength = null) => {
   const longText = formatter(values.long);
   if (!shortText || !longText) return '';
   if (shortText === longText) return withAuto(shortText);
-  return t('Auto (by genome size)');
+  return t('by length (auto)');
 };
 
 /**
@@ -543,7 +543,7 @@ const dinucleotideWindowText = (state, drawing, field) => {
 
   // Each field by itself: the records may share a window and not a step (Python's record_auto_values).
   const value = sharedLengthValue(state, (length) => slidingWindowForLength(length)?.[field] ?? null);
-  return value !== null ? withAuto(formatBp(value)) : t('Auto (by genome size)');
+  return value !== null ? withAuto(formatBp(value)) : t('by length (auto)');
 };
 
 /**
@@ -561,7 +561,7 @@ const depthWindowText = (state, drawing, field) => {
     const preset = slidingWindowForLength(length);
     return preset ? depthWindowValue(preset[field], field) : null;
   });
-  return value !== null ? withAuto(formatBp(value)) : t('Auto (by genome size)');
+  return value !== null ? withAuto(formatBp(value)) : t('by length (auto)');
 };
 
 /** @param {RecordLengthState} state @param {DrawingState} drawing */
@@ -637,11 +637,11 @@ const autoTextByKey = (state, drawing, key, context = null) => {
     case 'depthWindow': return depthWindowText(state, drawing, 'window');
     case 'depthStep': return depthWindowText(state, drawing, 'step');
     case 'depthMin': return t('0 or below (auto)');
-    case 'depthMax': return t('from depth data (auto)');
+    case 'depthMax': return t('from data (auto)');
     case 'circularDepthWidth': return circularWidthText(state, drawing, 'depth');
     case 'linearDepthHeight': return withAuto(formatPx(DEFAULTS.linear.depthHeightPx));
     case 'linearDepthTrackHeight': return withAuto(formatPx(parsePositiveNumber(drawing?.adv?.depth_height) ?? DEFAULTS.linear.depthHeightPx));
-    case 'depthLargeTick': return depthSeriesTickText(drawing, 'large_tick_interval', t('endpoints only'));
+    case 'depthLargeTick': return depthSeriesTickText(drawing, 'large_tick_interval', t('ends (auto)'));
     case 'depthSmallTick': return depthSeriesTickText(drawing, 'small_tick_interval', t('None'));
     case 'depthTickFont': return withAuto(formatPx(depthTickFontSize(state, drawing, context)));
     case 'conservationReference': return drawing?.circularConservation?.source === 'losat' ? t('subject') : t('detect side');

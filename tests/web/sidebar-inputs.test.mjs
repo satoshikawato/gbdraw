@@ -98,8 +98,8 @@ test('Auto window values follow the known Linear record lengths', async () => {
   const { withDrawings } = await import(pathToFileURL(join(process.cwd(), 'tests/web/helpers/drawing-state.mjs')));
   const linear = () => withDrawings({ mode: { value: 'linear' }, form: {}, adv: {} });
   const unknown = createAutoValueDisplay(linear());
-  assert.equal(unknown.autoValueText('dinucleotideWindow'), 'Auto (by genome size)');
-  assert.equal(unknown.autoValueText('depthWindow'), 'Auto (by genome size)');
+  assert.equal(unknown.autoValueText('dinucleotideWindow'), 'by length (auto)');
+  assert.equal(unknown.autoValueText('depthWindow'), 'by length (auto)');
   const known = createAutoValueDisplay(linear(), { linearRecordLengths: () => [40_000, 2_500_000] });
   assert.equal(known.autoValueText('dinucleotideWindow'), '10 kbp (auto)');
   assert.equal(known.autoValueText('dinucleotideStep'), '1 kbp (auto)');
