@@ -7,6 +7,11 @@
   record, such as a mitochondrial D-loop written `join(16024..16569,1..576)`,
   is now drawn as one block across the origin. A Circular diagram with
   `--display_start_coordinate` drew a stroked seam across it at the origin.
+- Fixed: A join whose two parts touch at both ends and so cover the whole
+  circular record, such as `join(51..100,1..50)` on a 100 bp record, is now
+  drawn as one block round the circle, in the whole view and from a display
+  start, with its label inside the block in the whole view. Both views drew a
+  seam where the parts meet at the origin.
 - Fixed: A join over the origin that leaves base 1 out, such as
   `join(2901..3000,2..100)`, now shows its 1-base gap and connector line in the
   whole Circular view as it does from a display start, and its label stands on
@@ -23,6 +28,4 @@
   at both ends of a circular record are drawn as two blocks, each with its own
   strand, in the whole view as from a display start. From a display start, the
   label of a two-part join that covers both ends of a circular record with
-  parts that touch or overlap each other stands on the middle of its longer
-  part; in the whole view, the label of such a join whose parts touch stands
-  on its first part instead of outside the circle at the origin.
+  parts that overlap each other stands on the middle of its longer part.
