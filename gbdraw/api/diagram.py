@@ -2368,6 +2368,9 @@ class _LinearComparisonModes(NamedTuple):
     """The normalized comparison options of a Linear assembly."""
 
     protein_blastp_mode: str
+    # The (query, subject) pairs a Pairwise search compares: the listed pairs, else on rows that do not stand one
+    # record each in record order every pair of adjacent rows read from the upper row (OV-3870); None for the
+    # consecutive records.
     protein_pairs: tuple[tuple[int, int], ...] | None
     pairwise_match_style: str
     collinearity_anchor_mode: CollinearityAnchorMode
@@ -2548,10 +2551,12 @@ def _linear_comparison_modes(
     protein_pairs = _linear_protein_pairs(records, inputs, layout)
     searched_pairs = protein_pairs
     if searched_pairs is None and protein_blastp_mode == LOSATP_MODE_WIRE["pairwise"]:
-        # Pairwise without listed pairs searches every adjacent-row pair (OV-3728).
-        searched_pairs = record_pairs_between_adjacent_rows(
-            resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1]
-        )
+        # Pairwise without listed pairs searches each record of a row against each record of the next row
+        # (OV-3728), the upper-row record as the query, as nucleotide searches read them (OV-3870).
+        rows = resolve_record_row_positions(records, layout.multi_record_positions if layout is not None else None)[1]
+        searched_pairs = record_pairs_between_adjacent_rows(rows, order="rows")
+        if grid_display_pairs(rows) is not None:
+            protein_pairs = searched_pairs
     _refuse_pairs_of_two_sources(searched_pairs, inputs.linear_comparisons)
     pairwise_match_style = normalize_pairwise_match_style(inputs.pairwise_match_style)
     anchor_mode = normalize_collinearity_anchor_mode(str(inputs.collinearity_anchor_mode))
@@ -2746,9 +2751,8 @@ def _linear_protein_frames(
     if modes.protein_blastp_mode == "pairwise":
         # The listed pairs, else a row layout's pairs, else consecutive records;
         # one plan for every pair, so records of one file share a database.
-        pairwise_pairs = modes.protein_pairs if modes.protein_pairs is not None else modes.row_comparison_pairs
-        cache_filenames = _linear_losat_cache_filenames(records, presentations, pairwise_pairs)
-        analysis = _linear_protein_analysis(assembly, features, "pairwise", cache_filenames, pairwise_pairs)
+        cache_filenames = _linear_losat_cache_filenames(records, presentations, modes.protein_pairs)
+        analysis = _linear_protein_analysis(assembly, features, "pairwise", cache_filenames, modes.protein_pairs)
         return analysis.comparisons, inputs.orthogroups, None
     if modes.protein_blastp_mode == "orthogroup":
         cache_filenames = _linear_losat_cache_filenames(records, presentations, modes.row_comparison_pairs)

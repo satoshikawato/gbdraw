@@ -178,6 +178,33 @@ def test_pairwise_searches_the_query_file_against_the_subject_file(tmp_path: Pat
 
 
 @pytest.mark.linear
+def test_unlisted_pairwise_pairs_search_each_upper_row_record_against_the_row_below(tmp_path: Path) -> None:
+    """OV-3870: records #1 and #2 stand in the lower row, record #3 above them. Pairwise without listed pairs searches
+    each record of a row against each record of the next row, so record #3 is the query of both searches, as in a
+    nucleotide search and in the Web, whatever the record order."""
+
+    _inputs(tmp_path)
+    table = tmp_path / "rows.tsv"
+    table.write_text(
+        "gbk\trow\n"
+        f"{tmp_path / 'BGC0000708.gbk'}\t2\n"
+        f"{tmp_path / 'BGC0000709.gbk'}\t2\n"
+        f"{tmp_path / 'BGC0000711.gbk'}\t1\n",
+        encoding="utf-8",
+    )
+    session, searches = _run(tmp_path, "rows", ["--records_table", str(table)], "pairwise")
+
+    # One query (record #3) against two subjects.
+    assert len(searches) == 2
+    assert len({frozenset(_fasta_ids(search["query"])) for search in searches}) == 1
+    assert len({frozenset(_fasta_ids(search["subject"])) for search in searches}) == 2
+    assert [
+        (entry["queryRecordInstanceKey"], entry["subjectRecordInstanceKey"])
+        for entry in session["losatCache"]["entries"]
+    ] == [("record-3", "record-1"), ("record-3", "record-2")]
+
+
+@pytest.mark.linear
 def test_single_record_files_search_each_pair(tmp_path: Path) -> None:
     _inputs(tmp_path)
     files = [str(tmp_path / name) for name in ("BGC0000708.gbk", "BGC0000709.gbk", "BGC0000711.gbk")]

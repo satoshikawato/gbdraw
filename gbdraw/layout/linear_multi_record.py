@@ -252,10 +252,10 @@ def record_pairs_between_adjacent_rows(
     of a row against every record of the next row".
 
     ``order="records"`` reads each pair as (lower record index, higher record index), in record order: the pairs a
-    drawing displays (``grid_display_pairs``) and a protein search compares. ``order="rows"`` reads the same pairs
-    from the record of the upper row, by upper row and then by record within each row: the (query, subject) pairs a
-    nucleotide search compares, as the Web's adjacent edges read. The two differ only when a later record stands
-    in an upper row."""
+    drawing of Similarity groups or Collinear blocks displays (``grid_display_pairs``). ``order="rows"`` reads the
+    same pairs from the record of the upper row, by upper row and then by record within each row: the (query,
+    subject) pairs every search without listed pairs compares (nucleotide and LOSATP Pairwise, OV-3870), as the
+    Web's adjacent edges read. The two differ only when a later record stands in an upper row."""
 
     if any(not isinstance(row, int) or isinstance(row, bool) or row < 0 for row in rows_by_record):
         raise ValidationError("Linear rows must be non-negative integers.")

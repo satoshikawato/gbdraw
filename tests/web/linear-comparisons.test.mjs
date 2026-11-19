@@ -71,6 +71,14 @@ assert.deepEqual(adjacentRowPairs(sequences, twoRows, true), [
   ['a', 'c'], ['a', 'd'], ['b', 'c'], ['b', 'd']
 ]);
 assert.deepEqual(adjacentRowPairs(sequences, sparseRows), [['a', 'b'], ['b', 'c']]);
+// Rows out of record order: each pair is read from its upper-row record, by upper row and then by record, as
+// Python's record_pairs_between_adjacent_rows(rows, order="rows") reads them for every search without listed
+// pairs (tests/test_linear_multi_record_layout.py, the same rows (1, 1, 0, 0, 2); OV-3870).
+assert.deepEqual(adjacentRowPairs(
+  [...sequences, { uid: 'e' }],
+  [{ uid: 'a', row: 2 }, { uid: 'b', row: 2 }, { uid: 'c', row: 1 }, { uid: 'd', row: 1 }, { uid: 'e', row: 3 }],
+  true
+), [['c', 'a'], ['c', 'b'], ['d', 'a'], ['d', 'b'], ['a', 'e'], ['b', 'e']]);
 assert.deepEqual(adjacentRowPairs(sequences, sparseRows, true), [
   ['a', 'b'], ['b', 'c'], ['b', 'd']
 ]);
