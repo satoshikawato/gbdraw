@@ -120,7 +120,7 @@ const withEstimate = await refusedSave(async () => ({ quota: 5000, usage: 1000 }
 assert.deepEqual([withEstimate.error.code, withEstimate.error.stage, withEstimate.error.operation], ['SESSION_SIZE_LIMIT', 'write', 'session-save']);
 assert.deepEqual(withEstimate.error.context, {
   storageNeedBytes: documentBytes + genome.byteLength + gzipInput.byteLength, storageFreeBytes: 4000,
-  largestInputs: 'My genome.gb, reads.tsv.gz'
+  largestInputs: ['My genome.gb', 'reads.tsv.gz']
 });
 assert.equal(withEstimate.releasedCopies.length, 2, 'the copies written before the refusal are given back');
 const withoutEstimate = await refusedSave(null);

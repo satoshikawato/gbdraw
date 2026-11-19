@@ -89,6 +89,15 @@ export const getQualifierFirstValue = (feature, key) => {
   return firstValueText(qualifierValueOf(feature, normalizedKey));
 };
 
+/**
+ * The caption of a feature with no name: its type and location ("CDS at
+ * 1..300"). It is data, not UI text: a Legend row and a default label take it
+ * into the figure and the Session, which read alike in every UI language
+ * (PD-OI-106), so it is not translated.
+ * @param {FeatureLike | null | undefined} feature
+ */
+export const unnamedFeatureCaption = (feature) => `${feature?.type} at ${formatFeatureRange(feature)}`;
+
 /** @param {FeatureLike | null | undefined} feature */
 export const getFeatureCaption = (feature) => {
   const caption = firstNonInternalProteinDisplayText(
@@ -100,7 +109,7 @@ export const getFeatureCaption = (feature) => {
     feature?.locus_tag,
     feature?.note
   );
-  return caption || `${feature?.type} at ${formatFeatureRange(feature)}`;
+  return caption || unnamedFeatureCaption(feature);
 };
 
 // Python owns `location_parts[].display` (1-based INSDC). A feature without
@@ -188,7 +197,8 @@ export const locationRangeText = (part, grouped = false) => {
 };
 
 // The 1-based coordinates of every part, without the strand. Also the location
-// of the fallback caption of an unnamed feature, here and in the rule editor.
+// of an unnamed feature's caption (`unnamedFeatureCaption`). Coordinates, not a
+// shown list: they keep this order and these bytes in every UI language (PD-OI-106).
 /** @param {FeatureLike | null | undefined} feature */
 export const formatFeatureRange = (feature) => featureLocationParts(feature).map((part) => {
   const display = String(part?.display || '').trim();

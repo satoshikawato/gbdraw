@@ -184,6 +184,27 @@ test('Remove asks first: the dialog names the card and its records, Cancel remov
   assert.deepEqual(cards.cards.value.map((card) => card.uid), ['record-1', 'record-3']);
 });
 
+// The removal question names every file the removal takes, as a Linear File's does (`fileCardFilesName`): not the
+// header line's "no FASTA" or "No file", and also a file of the other input type the card still holds.
+test('the removal question names the files the removal takes, in both modes by one owner', async () => {
+  const { fileCardFilesName } = await import('../../gbdraw/web/js/app/file-card.js');
+  const { cards } = makeCards({ inputType: 'gff', sources: [
+    { uid: 'a', gb: null, gff: file('a.gff3'), fasta: null },
+    { uid: 'b', gb: null, gff: null, fasta: null },
+    { uid: 'c', gb: file('c.gb'), gff: file('c.gff3'), fasta: file('c.fa') }
+  ] });
+  const asked = (uid) => {
+    cards.requestRemoval(uid);
+    const name = cards.removalName.value;
+    cards.cancelRemoval();
+    return name;
+  };
+  assert.deepEqual(['a', 'b', 'c'].map(asked), ['a.gff3', 'File 2', 'c.gb + c.gff3 + c.fa']);
+  assert.deepEqual(cards.cards.value.map((card) => card.line), ['a.gff3 + no FASTA', 'No file', 'c.gff3 + c.fa'], 'the header line is unchanged');
+  assert.equal(cards.removalName.value, 'Unavailable File');
+  assert.equal(fileCardFilesName({ gb: file('x.gb') }, 0), 'x.gb');
+});
+
 test('the Choose records list of several cards groups its rows by file, sorted and searched within each file', async () => {
   const source = {
     key: 'circular', name: 'a.gb + b.gb',

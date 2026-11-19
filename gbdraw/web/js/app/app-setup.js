@@ -214,7 +214,7 @@ import {
 import {
   diagnosticError, losatGeneticCodeHint, normalizeCaughtError, normalizeUserFacingError
 } from '../utils/error-normalization.js';
-import { shownRunInfoNoteParts } from './run-info.js';
+import { shownRunInfoNotes } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import { pythonLegendRowKeys, stepRefitsDrawnLegend } from '../services/legend-draft-rows.js';
 /** @import { HistoryChangeLike } from '../services/setting-application.js' */
@@ -4452,7 +4452,7 @@ export const createAppSetup = () => {
     downloadCliHelperFiles,
     runInfoElapsedText,
     runInfoReproducibilityText,
-    shownRunInfoNoteParts,
+    shownRunInfoNotes,
     runInfoHasCliHelperFiles,
     resetSettings,
     resetShownDrawing,

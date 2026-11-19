@@ -6,7 +6,7 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import {
   INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
 } from '../contracts/schema.generated.js';
-import { fillText, msg, numberText } from './i18n.js';
+import { englishListText, fillText, msg, numberText } from './i18n.js';
 import { SELECTOR_TEXT } from './selector-syntax.js';
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',
@@ -558,14 +558,23 @@ const NOT_A_SESSION = Object.freeze({
   JSON_FORMAT: PHRASES.notASession, CONTAINER_DAMAGED: REASONS.CONTAINER_DAMAGED, CONTAINER_NO_DOCUMENT: REASONS.CONTAINER_NO_DOCUMENT
 });
 /**
+ * Shown items as one value of a text (file names, identifiers, version runs):
+ * the shown text lists them as the UI language does (`itemListText`, or
+ * `listText` when `and`); the English text writes `A, B, C` (or English
+ * "and", `englishListText`).
+ * @typedef {object} ErrorTextList
+ * @property {readonly string[]} items
+ * @property {true} [and] The list ends in "and".
+ */
+/**
  * One sentence or phrase of a user-facing error text. `text` is the English
  * template and its catalog key; each `{name}` takes `params[name]`: a part is
- * shown through its own key, a string or a number as written (identifiers,
- * file names, counts). A `verbatim` text is no key: it is shown as written
- * (Python words it, D-09).
+ * shown through its own key, a list as the UI language lists items, a string
+ * or a number as written (identifiers, file names, counts). A `verbatim` text
+ * is no key: it is shown as written (Python words it, D-09).
  * @typedef {object} ErrorTextPart
  * @property {string} text
- * @property {Readonly<Record<string, string | number | ErrorTextPart>>} [params]
+ * @property {Readonly<Record<string, string | number | ErrorTextPart | ErrorTextList>>} [params]
  * @property {true} [verbatim]
  */
 /**
@@ -588,13 +597,22 @@ export const reasonText = (reason) => (Object.hasOwn(REASONS, reason) ? REASONS[
  * @typedef {(text: string, params?: Readonly<Record<string, string | number>>) => string} PartText
  */
 /**
+ * A list value as a text writes it: the English text (`englishList`), or the shown text (`shownList` in
+ * utils/error-text.js).
+ * @typedef {(list: ErrorTextList) => string} ListText
+ */
+/** @type {ListText} */
+const englishList = ({ items, and }) => (and ? englishListText(items) : items.join(', '));
+/**
  * @param {ErrorTextPart} part
  * @param {PartText} shown
+ * @param {ListText} list
  * @returns {string}
  */
-const renderPart = (part, shown) => {
+const renderPart = (part, shown, list) => {
   const { params } = part;
-  const values = params && Object.fromEntries(Object.entries(params).map(([name, value]) => [name, typeof value === 'object' ? renderPart(value, shown) : value]));
+  const values = params && Object.fromEntries(Object.entries(params).map(([name, value]) => [name,
+    typeof value !== 'object' ? value : 'items' in value ? list(value) : renderPart(value, shown, list)]));
   return part.verbatim ? fillText(part.text, values) : shown(part.text, values);
 };
 /**
@@ -603,10 +621,11 @@ const renderPart = (part, shown) => {
  * @param {readonly ErrorTextPart[]} parts
  * @param {PartText} [shown] the shown text of a key with its values
  * @param {string} [separator] between two parts
+ * @param {ListText} [list] the text of a list value
  * @returns {string}
  */
-export const renderErrorText = (parts, shown = fillText, separator = ' ') =>
-  parts.map((part) => renderPart(part, shown)).join(separator);
+export const renderErrorText = (parts, shown = fillText, separator = ' ', list = englishList) =>
+  parts.map((part) => renderPart(part, shown, list)).join(separator);
 /**
  * A part of a table text with the code text its placeholders name, if any (`REASON_CODE_TEXT`, `MESSAGE_CODE_TEXT`).
  * @param {string} text
@@ -627,7 +646,7 @@ const capParts = (parts, limit) => {
   const kept = [];
   let length = -1;
   for (const part of parts) {
-    length += 1 + renderPart(part, fillText).length;
+    length += 1 + renderPart(part, fillText, englishList).length;
     if (length > limit) break;
     kept.push(part);
   }
@@ -683,7 +702,7 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [labelCapacityInner] The same for the inner labels.
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
- * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
+ * @property {readonly string[]} [readSessionVersions] The Session versions this app reads, one run each ("27–33", "44").
  * @property {string} [geneticCodes] The NCBI genetic codes LOSAT reads, as Python names them ("1–6, 9–16, 21–33").
  * @property {string} [cardUid] The Linear card whose LOSAT Gencode was refused, whose input "Show in Comparison" focuses.
  * @property {number} [sessionBytes] The size in bytes of the settings and results (`gbdraw-session.json`) of a Session
@@ -691,7 +710,8 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [sessionByteLimit] The size in bytes of settings and results that the browser loads at most.
  * @property {number} [storageNeedBytes] The browser storage in bytes that a refused Load or Save needs.
  * @property {number} [storageFreeBytes] The free browser storage in bytes the browser estimated; absent with no estimate.
- * @property {string} [largestInputs] The file names of the largest inputs of a Session that Save refused.
+ * @property {readonly string[]} [largestInputs] The file names of the largest inputs of a Session that Save refused,
+ *   largest first.
  * @property {string} [inputName] The name of the input file that could not be read (a gzip file over its expanded cap).
  * @property {string} [losatMessage] The first line LOSAT wrote about a run that exited with an error, as written.
  * @property {number} [limit] An export format's size limit per side, in its unit (EXPORT_LIMIT), or the expanded size
@@ -933,6 +953,21 @@ const typedTrackValidation = (error) => {
  */
 const identifier = (value, domain, fallback) => typeof value === 'string' && value.length <= 80 && domain.has(value) ? value : fallback;
 /**
+ * A producer's text as one line of at most `limit` characters, shown as text; '' for no text.
+ * @param {unknown} value
+ * @param {number} limit
+ * @returns {string}
+ */
+const oneLine = (value, limit) => (typeof value === 'string'
+  ? value.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, limit).trimEnd() : '');
+/**
+ * Session versions as runs ("27–33", "44"), at most 40 of them.
+ * @param {unknown} value
+ * @returns {value is string[]}
+ */
+const isVersionRuns = (value) => Array.isArray(value) && value.length > 0 && value.length <= 40
+  && value.every((run) => typeof run === 'string' && /^[0-9]{1,4}(?:\u2013[0-9]{1,4})?$/.test(run));
+/**
  * @param {DiagnosticContext | null | undefined} value The producer's context, unvalidated.
  * @returns {UserFacingContext}
  */
@@ -952,7 +987,7 @@ const contextFor = (value) => {
     if (Number.isSafeInteger(value[key]) && value[key] >= 1 && value[key] <= 1e12) context[key] = value[key];
   }
   // The Web names the feature of a reported placement row (nameFeaturePlacementFailure).
-  const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
+  const caption = oneLine(value.featureCaption, 80);
   if (caption) context.featureCaption = caption;
   // Python alone decides whether a record ID can be shown (gbdraw/web_support/error_adapter.py); else it sends the position.
   if (typeof value.recordName === 'string' && value.recordName !== '') context.recordName = value.recordName;
@@ -961,10 +996,8 @@ const contextFor = (value) => {
   if (Number.isSafeInteger(value.latestSessionVersion)) context.latestSessionVersion = value.latestSessionVersion;
   if (typeof value.geneticCodes === 'string' && /^[0-9\u2013, ]{1,80}$/.test(value.geneticCodes)) context.geneticCodes = value.geneticCodes;
   if (typeof value.cardUid === 'string' && /^[A-Za-z0-9_.:~-]{1,128}$/.test(value.cardUid)) context.cardUid = value.cardUid;
-  if (typeof value.readSessionVersions === 'string' && /^[0-9\u2013, and]{1,200}$/.test(value.readSessionVersions)) {
-    context.readSessionVersions = value.readSessionVersions;
-  }
-  // A refused Save: both sizes together, or neither; the names are one line of at most 200 characters.
+  if (isVersionRuns(value.readSessionVersions)) context.readSessionVersions = [...value.readSessionVersions];
+  // A refused Save: both sizes together, or neither.
   if (Number.isSafeInteger(value.sessionBytes) && Number.isSafeInteger(value.sessionByteLimit)
     && value.sessionBytes > 0 && value.sessionByteLimit > 0) {
     context.sessionBytes = value.sessionBytes;
@@ -975,14 +1008,15 @@ const contextFor = (value) => {
     context.storageNeedBytes = value.storageNeedBytes;
     if (Number.isSafeInteger(value.storageFreeBytes) && value.storageFreeBytes >= 0) context.storageFreeBytes = value.storageFreeBytes;
   }
-  const inputs = typeof value.largestInputs === 'string' ? value.largestInputs.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
-  if (inputs) context.largestInputs = inputs;
+  // At most three names of at most 80 characters each, each on one line.
+  const inputs = (Array.isArray(value.largestInputs) ? value.largestInputs : []).slice(0, 3)
+    .map((name) => oneLine(name, 80)).filter(Boolean);
+  if (inputs.length) context.largestInputs = inputs;
   // Python's Generate refusal cuts the name at the same bound (gbdraw/web_support/error_adapter.py).
-  const inputName = typeof value.inputName === 'string'
-    ? value.inputName.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, INPUT_NAME_CHARACTERS).trimEnd() : '';
+  const inputName = oneLine(value.inputName, INPUT_NAME_CHARACTERS);
   if (inputName) context.inputName = inputName;
   // LOSAT's own words: one line of at most 200 characters, shown as text.
-  const losatMessage = typeof value.losatMessage === 'string' ? value.losatMessage.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200).trimEnd() : '';
+  const losatMessage = oneLine(value.losatMessage, 200);
   if (losatMessage) context.losatMessage = losatMessage;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
@@ -1034,7 +1068,7 @@ const sessionVersionGuidance = ({ reason, sessionVersion, latestSessionVersion, 
     return { text: PHRASES.sessionTooNew, params: { version: sessionVersion, latest: latestSessionVersion } };
   }
   if (reason === 'SESSION_VERSION_UNSUPPORTED' && readSessionVersions) {
-    return { text: PHRASES.sessionUnsupported, params: { version: sessionVersion, versions: readSessionVersions } };
+    return { text: PHRASES.sessionUnsupported, params: { version: sessionVersion, versions: { items: readSessionVersions, and: true } } };
   }
   return null;
 };
@@ -1063,7 +1097,7 @@ const sessionLimitParts = ({ code, operation, context }) => {
     }
     return [free === undefined ? { text: PHRASES.storageNotSavedNoEstimate, params: { need } }
       : { text: PHRASES.storageNotSaved, params: { need, free } },
-    ...(largestInputs === undefined ? [] : [{ text: PHRASES.largestInputs, params: { inputs: largestInputs } }]),
+    ...(largestInputs === undefined ? [] : [{ text: PHRASES.largestInputs, params: { inputs: { items: largestInputs } } }]),
     { text: PHRASES.storageSaveRemedy }];
   }
   if (sessionBytes === undefined || sessionByteLimit === undefined) return null;
@@ -1163,12 +1197,19 @@ export const losatFailureRepeats = (error) => error.code === 'LOSAT_RUNTIME'
   && (error.context.losatMessage !== undefined || error.context.reason === 'TRAP');
 
 /**
+ * The genetic codes as Python names them ("1–6, 9–16, 21–33"), one run per item, so the shown text lists them as the
+ * UI language lists items.
+ * @param {string} codes
+ * @returns {ErrorTextList}
+ */
+const geneticCodeRuns = (codes) => ({ items: codes.split(', ') });
+/**
  * The sentence that lists the genetic codes LOSAT reads, as a refused code's Generation Error says it: a Linear card
  * marks a typed code LOSAT does not read with it before Generate (OV-3326).
  * @param {string} codes The tables as Python names them (`LOSAT_GENETIC_CODE_TEXT`).
  * @returns {ErrorTextPart[]}
  */
-export const losatGeneticCodeHint = (codes) => [{ text: PHRASES.geneticCodes, params: { codes } }];
+export const losatGeneticCodeHint = (codes) => [{ text: PHRASES.geneticCodes, params: { codes: geneticCodeRuns(codes) } }];
 
 /**
  * Whether the same Generate would stop on the same comparison setting again: a LOSAT failure that repeats
@@ -1286,7 +1327,7 @@ export const normalizeUserFacingError = (value, {
       : (REASONS[/** @type {string} */ (reason)] ? codeTextPart(REASONS[/** @type {string} */ (reason)], REASON_CODE_TEXT[/** @type {string} */ (reason)])
         : DEFINITIONS[result.code][2] ? { text: /** @type {string} */ (DEFINITIONS[result.code][2]) } : null))),
     losatMessage !== undefined && { text: PHRASES.losatReported, params: { message: shownLosatMessage(losatMessage) } },
-    reason === 'GENETIC_CODE' && geneticCodes !== undefined && { text: PHRASES.geneticCodes, params: { codes: geneticCodes } },
+    reason === 'GENETIC_CODE' && geneticCodes !== undefined && { text: PHRASES.geneticCodes, params: { codes: geneticCodeRuns(geneticCodes) } },
     reason === 'NOT_NUCLEOTIDE' && letter && { text: PHRASES.letter, params: { letter } },
     reason === 'NOT_SEQUENCE' && letter && { text: PHRASES.queryLetter, params: { letter } },
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
@@ -1311,7 +1352,7 @@ export const normalizeUserFacingError = (value, {
   Number.isSafeInteger(summaryLimit) ? Math.max(0, Math.min(summaryLimit, 1000)) : 1000);
   result.summary = renderErrorText(result.summaryParts);
   const detail = [`Code: ${result.code}`, `Operation: ${result.operation}`, `Stage: ${result.stage}`,
-    ...Object.entries(result.context).map(([key, item]) => `${key}: ${item}`),
+    ...Object.entries(result.context).map(([key, item]) => `${key}: ${Array.isArray(item) ? item.join(', ') : item}`),
     ...result.secondary.map((item) => `Secondary: ${item.code} / ${item.stage}`)].join('\n');
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);

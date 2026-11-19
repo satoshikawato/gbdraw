@@ -10,8 +10,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { diagnosticError, generationRecoveryGuidance, liveEditFailure, normalizeUserFacingError, operationErrorTitle, renderErrorText }
-  from '../../gbdraw/web/js/utils/error-normalization.js';
+import { diagnosticError, generationRecoveryGuidance, liveEditFailure, losatGeneticCodeHint, normalizeUserFacingError, operationErrorTitle,
+  renderErrorText } from '../../gbdraw/web/js/utils/error-normalization.js';
+import { LOSAT_GENETIC_CODE_TEXT } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { errorText } from '../../gbdraw/web/js/utils/error-text.js';
 import { SOURCE_LOCALE, setUiLocale, t, tm } from '../../gbdraw/web/js/utils/i18n.js';
 import { errorTextKeys, errorVocabulary } from './helpers/error-text-keys.mjs';
@@ -38,7 +39,7 @@ const corpus = () => {
     { slotTrack: 'ticks', keptInsidePx: 5, keptInsideTracks: 'gc_content' },
     { labelFitCounts: 'Overlapping label pairs: 2. Crossing leader pairs: 0.', exceptionType: 'ValueError', positionUnit: 'python-character', position: 4 },
     { columnCount: 5, recordCount: 2, reason: 'SESSION_TOO_NEW', sessionVersion: 99, latestSessionVersion: 47 },
-    { reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 30, readSessionVersions: '27–33, 39–42, and 44' },
+    { reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 30, readSessionVersions: ['27–33', '39–42', '44'] },
     { field: 'schema', reason: 'FIELDS' }
   ];
   for (const code of ['INPUT_INVALID', 'TRACK_LAYOUT', 'COMPARISON_INPUT', 'DECORATION_CONTINUITY', 'LABEL_LAYOUT']) {
@@ -53,7 +54,8 @@ const corpus = () => {
 /** Every text of a part and of the parts in its values. */
 const partTexts = (part) => [
   ...(part.verbatim ? [] : [part.text]),
-  ...Object.values(part.params || {}).flatMap((value) => (typeof value === 'object' ? partTexts(value) : []))
+  // A list value holds shown items, no key.
+  ...Object.values(part.params || {}).flatMap((value) => (typeof value === 'object' && !('items' in value) ? partTexts(value) : []))
 ];
 
 test('in English the display of the parts is the composed summary and note', () => {
@@ -202,4 +204,29 @@ test('the overlay and ring corrections name the options and rings the UI shows',
     assert.doesNotMatch(summary(reason), /Use Overlay|an Overlay annotation/, reason);
   }
   assert.match(summary('RING_LOSAT_PROGRAM'), /for comparison rings\.$/);
+});
+
+// A list value (the Session versions a refusal names, the largest inputs of a refused Save, a table's choices) is
+// shown items: the English text writes "A, B" (or English "and"); the shown text lists them as the UI language does.
+test('a list value reads as English in the English text and as the UI language lists items in the shown text', async () => {
+  const parts = [
+    { text: 'Unsupported session version: {version}. This gbdraw reads Session versions {versions}.',
+      params: { version: 34, versions: { items: ['27–33', '39–42', '44'], and: true } } },
+    { text: 'Largest inputs: {inputs}.', params: { inputs: { items: ['a.gb', 'b.tsv'] } } }
+  ];
+  const english = 'Unsupported session version: 34. This gbdraw reads Session versions 27–33, 39–42, and 44. Largest inputs: a.gb, b.tsv.';
+  assert.equal(renderErrorText(parts), english);
+  assert.equal(errorText(parts), english);
+  try {
+    await setUiLocale('fa', async () => ({ default: {} }));
+    assert.equal(renderErrorText(parts), english, 'the English text is the same in every UI language');
+    const shown = errorText(parts);
+    assert.ok(shown.includes('⁧⁨27–33⁩، ⁨39–42⁩، و ⁨44⁩⁩'), shown);
+    assert.ok(shown.includes('⁧⁨a.gb⁩، ⁨b.tsv⁩⁩'), shown);
+    // The genetic codes Python names as one text ("1–6, 9–16, 21–33") are listed run by run too.
+    const codes = errorText(losatGeneticCodeHint(LOSAT_GENETIC_CODE_TEXT));
+    assert.ok(codes.includes(`⁧${LOSAT_GENETIC_CODE_TEXT.split(', ').map((run) => `⁨${run}⁩`).join('، ')}⁩`), codes);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
 });

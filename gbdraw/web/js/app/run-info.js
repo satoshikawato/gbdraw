@@ -16,7 +16,8 @@ import {
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
 import { identityScalePathForMode } from '../mode-profiles.js';
-import { msg, t } from '../utils/i18n.js';
+import { msg, t, tn } from '../utils/i18n.js';
+import { errorText, errorValueText } from '../utils/error-text.js';
 import { hashSelector, recordIndexSelector } from '../utils/selector-syntax.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
@@ -47,7 +48,7 @@ import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/losat-cache.js' */
-/** @import { ErrorTextPart } from '../utils/error-normalization.js' */
+/** @import { ErrorTextList, ErrorTextPart } from '../utils/error-normalization.js' */
 /** @import { RecordPlace, RecordPlaceInput } from '../contracts/card-windows.generated.js' */
 
 /**
@@ -263,18 +264,28 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
 };
 
 /**
- * The helper files a note names: up to three file names, then how many more.
+ * The helper files a note names and how many they are: up to three file names,
+ * listed as the UI language lists items, then how many more. The count is
+ * the files the note names (one name each), which chooses its one or several
+ * wording.
+ * @typedef {{ files: ErrorTextPart | ErrorTextList, count: number }} HelperFileList
+ */
+/**
  * @param {readonly { name?: unknown, path?: unknown }[] | null | undefined} files
- * @returns {ErrorTextPart}
+ * @returns {HelperFileList}
  */
 const helperFileList = (files) => {
-  const names = Array.from(new Set((Array.isArray(files) ? files : [])
+  const listed = Array.isArray(files) ? files : [];
+  const names = Array.from(new Set(listed
     .map((file) => String(file?.name || fallbackNameFromPath(file?.path)).trim())
     .filter(Boolean)));
-  if (names.length === 0) return { text: msg('generated helper files') };
-  if (names.length <= 3) return { text: names.join(', '), verbatim: true };
+  if (names.length === 0) return { files: { text: msg('generated helper files') }, count: listed.length };
+  if (names.length <= 3) return { files: { items: names }, count: names.length };
   const rest = names.length - 3;
-  return { text: rest === 1 ? msg('{names}, and one more') : msg('{names}, and {count} more'), params: { names: names.slice(0, 3).join(', '), count: rest } };
+  return {
+    files: { text: rest === 1 ? msg('{names}, and one more') : msg('{names}, and {count} more'), params: { names: { items: names.slice(0, 3) }, count: rest } },
+    count: names.length
+  };
 };
 
 /** @param {unknown} selector */
@@ -2622,22 +2633,26 @@ export const LOSAT_RING_EVALUE_SCALE_NOTE = msg('LOSATN and TLOSATX similarity r
 const SOURCE_HELPER_FILE_NOTE = msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.');
 const SOURCE_HELPER_FILES_NOTE = msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.');
 const UNMAPPED_PATHS_NOTE = msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
-const NEEDS_HELPER_FILE = msg('Needs the file {files} from "Download reproducibility files"');
-const NEEDS_HELPER_FILES = msg('Needs the files {files} from "Download reproducibility files"');
 
 /**
- * The notes the Run info tab shows: the one owner of that choice. The stored Run info keeps every note
- * (`reproducibility.notes` and `noteParts`, unchanged); the tab shows only the notes a reader acts on, and
- * says what a Source recipe helper needs in one line. A note is known by its message key, the identity
- * its part carries.
+ * The notes the Run info tab shows, as shown texts: the one owner of that choice. The stored Run info keeps every
+ * note (`reproducibility.notes` and `noteParts`, unchanged); the tab shows only the notes a reader acts on, and
+ * says what a Source recipe helper needs in one line, one counted sentence (`tn`) whose count the stored note
+ * carries, so a language words one, two or more files its own way. A note is known by its message key, the
+ * identity its part carries.
  * @param {readonly ErrorTextPart[]} noteParts the stored `reproducibility.noteParts`
- * @returns {ErrorTextPart[]}
+ * @returns {string[]}
  */
-export const shownRunInfoNoteParts = (noteParts) => noteParts.flatMap((part) => {
-  if (part.text === SOURCE_HELPER_FILE_NOTE) return [{ text: NEEDS_HELPER_FILE, params: part.params }];
-  if (part.text === SOURCE_HELPER_FILES_NOTE) return [{ text: NEEDS_HELPER_FILES, params: part.params }];
+export const shownRunInfoNotes = (noteParts) => noteParts.flatMap((part) => {
+  if (part.text === SOURCE_HELPER_FILE_NOTE || part.text === SOURCE_HELPER_FILES_NOTE) {
+    const { files, count } = part.params ?? {};
+    // `buildRunInfo` writes both; Run info lives only in this page's memory, so no other note reaches here.
+    if (typeof count !== 'number' || typeof files !== 'object') return [errorText([part])];
+    return [tn(count, 'Needs the file {files} from "Download reproducibility files"', 'Needs the files {files} from "Download reproducibility files"',
+      { files: errorValueText(files) })];
+  }
   return [UNMAPPED_PATHS_NOTE, LOSAT_EVALUE_SCALE_NOTE, LOSAT_RING_EVALUE_SCALE_NOTE, LOSAT_DATABASE_SCOPE_NOTE].includes(part.text)
-    ? [part] : [];
+    ? [errorText([part])] : [];
 });
 
 /** @type {Readonly<Record<string, string>>} */
@@ -2811,6 +2826,8 @@ export const buildRunInfo = ({
   const hasLosatHelpers = sourceHelpers.some(
     (helper) => /losat|blast/i.test(`${helper.slot} ${helper.name}`)
   );
+  const sourceHelperList = helperFileList(sourceHelpers);
+  const exactHelperList = helperFileList(exact?.helperFiles);
   // Each note is one part (one or two sentences of one key).
   /** @type {ErrorTextPart[]} */
   const noteParts = [];
@@ -2821,10 +2838,8 @@ export const buildRunInfo = ({
     if (exact) noteParts.push({ text: msg('Exact replay remains available from the committed canonical session.') });
   } else if (sourceHelpers.length > 0) {
     level = hasLosatHelpers ? 'session-recommended' : 'requires-helper-files';
-    noteParts.push({
-      text: sourceHelpers.length === 1 ? SOURCE_HELPER_FILE_NOTE : SOURCE_HELPER_FILES_NOTE,
-      params: { files: helperFileList(sourceHelpers) }
-    });
+    // The count goes with the note, so the tab's one line words the file or files in every language (`shownRunInfoNotes`).
+    noteParts.push({ text: sourceHelperList.count === 1 ? SOURCE_HELPER_FILE_NOTE : SOURCE_HELPER_FILES_NOTE, params: sourceHelperList });
     noteParts.push({
       text: msg('To get the uploaded inputs, results, and LOSAT cache back in the web app, save the Session (a {extension} file) and load it again; you do not need to keep these TSV files for that.'),
       params: { extension: '.gbdraw' }
@@ -2842,10 +2857,10 @@ export const buildRunInfo = ({
   }
   if (exact && exact.helperFiles.length > 0) {
     noteParts.push({
-      text: exact.helperFiles.length === 1
+      text: exactHelperList.count === 1
         ? msg('Exact replay references {files}, which is included in "Download reproducibility files".')
         : msg('Exact replay references {files}, which are included in "Download reproducibility files".'),
-      params: { files: helperFileList(exact.helperFiles) }
+      params: { files: exactHelperList.files }
     });
   }
   /** @type {ErrorTextPart[]} */
@@ -2853,14 +2868,14 @@ export const buildRunInfo = ({
     sourceAvailable
       ? (
           sourceHelpers.length > 0
-            ? { text: sourceHelpers.length === 1 ? msg('Source recipe helper file: {files}.') : msg('Source recipe helper files: {files}.'),
-              params: { files: helperFileList(sourceHelpers) } }
+            ? { text: sourceHelperList.count === 1 ? msg('Source recipe helper file: {files}.') : msg('Source recipe helper files: {files}.'),
+              params: { files: sourceHelperList.files } }
             : { text: msg('The Source recipe uses only the original source files.') }
         )
       : { text: msg('The Source recipe is unavailable.') },
     exact && exact.helperFiles.length > 0
-      ? { text: exact.helperFiles.length === 1 ? msg('Exact replay file: {files}.') : msg('Exact replay files: {files}.'),
-        params: { files: helperFileList(exact.helperFiles) } }
+      ? { text: exactHelperList.count === 1 ? msg('Exact replay file: {files}.') : msg('Exact replay files: {files}.'),
+        params: { files: exactHelperList.files } }
       : { text: msg('No Exact replay file is available.') }
   ];
 

@@ -12,7 +12,7 @@ import { circularSourceInputs, inputTypeSpec } from '../services/input-types.js'
 import { formatRecordLength } from '../services/record-options.js';
 import { errorText } from '../utils/error-text.js';
 import { t, tm, tn } from '../utils/i18n.js';
-import { fileCardLine } from './file-card.js';
+import { fileCardFilesName, fileCardLine } from './file-card.js';
 import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 /** @import { DiagramMode, DrawingState, SessionBusy } from '../state.js' */
 /** @import { CircularSource } from '../services/drawing/inputs.js' */
@@ -171,6 +171,8 @@ export const createCircularFileCards = ({
   // The File removal dialog: the card it asks about, by uid.
   const removal = reactive({ open: false, uid: '' });
   const removalTarget = computed(() => (removal.open ? cards.value.find((card) => card.uid === removal.uid) || null : null));
+  // The question names every file the removal takes, as a Linear File's does (`fileCardFilesName`).
+  const removalName = computed(() => (removalTarget.value ? fileCardFilesName(removalTarget.value.source, removalTarget.value.index) : t('Unavailable File')));
   /** @param {string} uid */
   const requestRemoval = (uid) => Object.assign(removal, { open: true, uid });
   const cancelRemoval = () => Object.assign(removal, { open: false, uid: '' });
@@ -184,7 +186,7 @@ export const createCircularFileCards = ({
   };
 
   return {
-    addZone, cards, isFolded, setFolded, addFiles, readError, recordPlace, removal, removalTarget, requestRemoval,
+    addZone, cards, isFolded, setFolded, addFiles, readError, recordPlace, removal, removalTarget, removalName, requestRemoval,
     cancelRemoval, applyRemoval
   };
 };

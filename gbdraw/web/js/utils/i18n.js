@@ -187,15 +187,25 @@ const LTR_RUN = new RegExp(String.raw`(?:${LTR_WORD}[ \u00A0])*${LTR_UNIT}${LTR_
 const ONE_PLACEHOLDER = /^\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 
 /**
- * Puts each value that `params` gives in place of its `{name}`; any other
- * placeholder stays. The values go in as they are: the English text of an
- * error (utils/error-normalization.js) and every left-to-right language.
+ * A value as a text shows it: a number as `numberText` writes it, so every
+ * number of a sentence reads alike (`1,234 of 4,321`) whichever call gives
+ * it; a text value keeps its characters.
+ * @param {string | number} value
+ * @returns {string}
+ */
+const valueText = (value) => (typeof value === 'number' ? numberText(value) : value);
+
+/**
+ * Puts each value that `params` gives in place of its `{name}` (`valueText`);
+ * any other placeholder stays. No isolates: the English text of an error
+ * (utils/error-normalization.js), a stored text and every left-to-right
+ * language.
  * @param {string} text
  * @param {TranslationParams | undefined} params
  * @returns {string}
  */
 export const fillText = (text, params) => (params
-  ? text.replace(PLACEHOLDER, (/** @type {string} */ whole, /** @type {string} */ name) => (Object.hasOwn(params, name) ? String(params[name]) : whole))
+  ? text.replace(PLACEHOLDER, (/** @type {string} */ whole, /** @type {string} */ name) => (Object.hasOwn(params, name) ? valueText(params[name]) : whole))
   : text);
 
 /**
@@ -216,34 +226,22 @@ const holdsValue = (run, params) => [...run.matchAll(PLACEHOLDER)].some(([, name
 const isolatedRun = (run, params) => {
   if (!holdsValue(run, params)) return run;
   if (ONE_PLACEHOLDER.test(run)) return `${FSI}${fillText(run, params)}${PDI}`;
-  return `${LRI}${run.replace(PLACEHOLDER, (/** @type {string} */ whole, /** @type {string} */ name) => (Object.hasOwn(params, name) ? `${FSI}${String(params[name])}${PDI}` : whole))}${PDI}`;
+  return `${LRI}${run.replace(PLACEHOLDER, (/** @type {string} */ whole, /** @type {string} */ name) => (Object.hasOwn(params, name) ? `${FSI}${valueText(params[name])}${PDI}` : whole))}${PDI}`;
 };
 
 /**
- * The values of a shown text: each number as `numberText` writes it, so every
- * number of a sentence reads alike (`1,234 of 4,321`), whichever call shape
- * gives it; a text value keeps its characters.
- * @param {TranslationParams} params
- * @returns {TranslationParams}
- */
-const shownValues = (params) => Object.fromEntries(Object.entries(params)
-  .map(([name, value]) => [name, typeof value === 'number' ? numberText(value) : value]));
-
-/**
- * The shown text with its values (`fillText`, numbers as `shownValues` writes
- * them). In a right-to-left language each left-to-right run that holds a
- * given value is isolated (`isolatedRun`), so a file name, a number or a term
- * keeps its own order inside the sentence; a left-to-right language shows the
- * values as they are, so its texts keep their bytes. A text that is stored (a
- * Session value) is filled without isolates: `fillText(t(key), params)`.
+ * The shown text with its values (`fillText`). In a right-to-left language
+ * each left-to-right run that holds a given value is isolated
+ * (`isolatedRun`), so a file name, a number or a term keeps its own order
+ * inside the sentence; a left-to-right language shows the values as they
+ * are, so its texts keep their bytes. A text that is stored (a Session
+ * value) is filled without isolates: `fillText(t(key), params)`.
  * @param {string} text
  * @param {TranslationParams | undefined} params
  */
-const substitute = (text, params) => {
-  if (!params) return text;
-  const values = shownValues(params);
-  return shownLocale().dir === 'rtl' ? text.replace(LTR_RUN, (run) => isolatedRun(run, values)) : fillText(text, values);
-};
+const substitute = (text, params) => (params && shownLocale().dir === 'rtl'
+  ? text.replace(LTR_RUN, (run) => isolatedRun(run, params))
+  : fillText(text, params));
 
 /**
  * The text of a catalog value that is read as one string. Plural forms are a
@@ -466,9 +464,19 @@ export const listText = (items) => {
   const { tag, dir } = shownLocale();
   if (dir === 'rtl') return rightToLeftList(new Intl.ListFormat(tag, { type: 'conjunction' }).formatToParts(items));
   if (tag !== SOURCE_LOCALE) return new Intl.ListFormat(tag, { type: 'conjunction' }).format(items);
-  if (items.length < 3) return items.join(' and ');
-  return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
+  return englishListText(items);
 };
+
+/**
+ * A list that ends in "and" as English writes it ("A", "A and B", "A, B, and
+ * C"): `listText` in English, and the English text of an error in every UI
+ * language (utils/error-normalization.js).
+ * @param {readonly string[]} items
+ * @returns {string}
+ */
+export const englishListText = (items) => (items.length < 3
+  ? items.join(' and ')
+  : `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`);
 
 /**
  * Shown items one after the other with no conjunction (record ids, gene

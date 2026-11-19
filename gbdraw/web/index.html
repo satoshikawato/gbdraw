@@ -4336,8 +4336,8 @@
                             <p v-if="sequenceSearch.noHitText" role="status" data-sequence-search-no-hits class="text-[10px] text-slate-700">{{ sequenceSearch.noHitText }}</p>
                             <div v-if="sequenceSearch.shownOutcome && sequenceSearch.shownOutcome.setId" data-sequence-search-hits class="space-y-1">
                                 <div class="flex flex-wrap gap-1" role="group" :aria-label="t('Query whose hits are shown')">
-                                    <button type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === ''" @click="sequenceSearch.chooseChip('')">{{ t('All') }} ({{ sequenceSearch.shownOutcome.hits.length }})</button>
-                                    <button v-for="chip in sequenceSearch.chips" :key="chip.name" type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === chip.name" @click="sequenceSearch.chooseChip(chip.name)">{{ chip.name }} ({{ chip.count }})</button>
+                                    <button type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === ''" @click="sequenceSearch.chooseChip('')">{{ t('All') }} ({{ numberText(sequenceSearch.shownOutcome.hits.length) }})</button>
+                                    <button v-for="chip in sequenceSearch.chips" :key="chip.name" type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === chip.name" @click="sequenceSearch.chooseChip(chip.name)">{{ chip.name }} ({{ numberText(chip.count) }})</button>
                                 </div>
                                 <!-- Fits the 320 px pane: the Query and Record cell takes the width left and truncates, the
                                      numbers keep their width, and short headers name their columns in full. -->
@@ -4853,7 +4853,7 @@
                                                     <span class="truncate">{{ t('Linear track stack') }}</span>
                                                     <help-tip :text="t('Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. A record without a Depth TSV for that series does not draw it, but its space in the stack stays reserved.')"></help-tip>
                                                 </div>
-                                                <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ linearTrackSlots().length }}</span>
+                                                <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ numberText(linearTrackSlots().length) }}</span>
                                             </div>
                                             <div
                                                 v-for="entry in linearTrackStackEntries()"
@@ -5254,7 +5254,7 @@
                                                     <span class="truncate">{{ t('Radial track stack') }}</span>
                                                     <help-tip :text="t('Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside Axis or Move inside Axis to cross the Axis.')"></help-tip>
                                                 </div>
-                                                <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ circularTrackSlots().length }}</span>
+                                                <span class="shrink-0 rounded border border-slate-200 bg-slate-50 px-1 py-0.5 text-[9px] leading-none text-slate-500">{{ numberText(circularTrackSlots().length) }}</span>
                                             </div>
                                             <div
                                                 v-for="entry in circularTrackStackEntries()"
@@ -8647,7 +8647,7 @@
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                             <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">{{ t('Reset Fill Color') }}</h3>
                             <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
-                                <i18n-text :text="tn(resetColorDialog.siblingCount, 'There is {count} other feature with the legend name &quot;{name}&quot;.', 'There are {count} other features with the legend name &quot;{name}&quot;.', { count: '{count}' })"><template #count><span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
+                                <i18n-text :text="tn(resetColorDialog.siblingCount, 'There is {count} other feature with the legend name &quot;{name}&quot;.', 'There are {count} other features with the legend name &quot;{name}&quot;.', { count: '{count}' })"><template #count><span class="font-bold text-blue-600">{{ numberText(resetColorDialog.siblingCount) }}</span></template><template #name><span class="font-bold text-blue-600">{{ shownLegendName(resetColorDialog.caption) }}</span></template></i18n-text>
                                 <br>{{ t('How do you want to reset the color?') }}
                             </p>
 
@@ -8694,7 +8694,7 @@
                             </div>
                             <div class="border border-slate-200 rounded p-3">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('Results') }}</div>
-                                <div dir="ltr" class="mt-1 font-mono font-semibold text-slate-700">{{ lastRunInfo.resultCount }}</div>
+                                <div dir="ltr" class="mt-1 font-mono font-semibold text-slate-700">{{ numberText(lastRunInfo.resultCount) }}</div>
                             </div>
                             <div class="border border-slate-200 rounded p-3">
                                 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">{{ t('CLI rerun') }}</div>
@@ -8759,7 +8759,7 @@
                         </div>
 
                         <div class="space-y-1 text-xs text-slate-500 leading-relaxed">
-                            <p v-for="(note, idx) in shownRunInfoNoteParts(lastRunInfo.reproducibility.noteParts)" :key="`run-info-note-${idx}`">{{ errorText([note]) }}</p>
+                            <p v-for="(note, idx) in shownRunInfoNotes(lastRunInfo.reproducibility.noteParts)" :key="`run-info-note-${idx}`">{{ note }}</p>
                         </div>
                     </div>
                     <div v-else class="h-full flex items-center justify-center text-slate-500 text-sm">
@@ -8807,7 +8807,7 @@
                             </div>
                             <template v-for="group in similarityAlignmentReview.groups" :key="group.id">
                                 <h3 v-if="group.title" class="alignment-review-section" :class="{ 'is-need': group.cards.some((card) => card.needsChoice) }"
-                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ group.cards.length }}</span><span class="sr-only">{{ ' ' }}{{ tn(group.cards.length, '({count} record)', '({count} records)') }}</span></h3>
+                                    :data-alignment-section="group.id">{{ group.title }}<span class="count" aria-hidden="true">{{ numberText(group.cards.length) }}</span><span class="sr-only">{{ ' ' }}{{ tn(group.cards.length, '({count} record)', '({count} records)') }}</span></h3>
                                 <template v-for="card in group.cards" :key="card.recordKey">
                                 <component :is="card.kind === 'reference' ? 'section' : 'fieldset'"
                                            v-for="record in [card.row || similarityAlignmentDraft.reference]"
@@ -9512,7 +9512,7 @@
                                 :aria-label="t('Toggle feature search')">
                             <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
                             <span>{{ t('Search') }}</span>
-                            <span v-if="previewFeatureSearchHiddenMatchCount !== null" class="preview-search-count">· {{ previewFeatureSearchHiddenMatchCount }}</span>
+                            <span v-if="previewFeatureSearchHiddenMatchCount !== null" class="preview-search-count">· {{ numberText(previewFeatureSearchHiddenMatchCount) }}</span>
                         </button>
                         <!-- Select region: a drag along a record's axis selects a span (turning it on turns Layout edit off). -->
                         <button v-if="svgContent" type="button" @click="regionSelect.toggle()"
@@ -9683,7 +9683,7 @@
              data-circular-source-removal-dialog
              @cancel="circularFileCards.cancelRemoval()" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
-            <h2 id="circular-source-removal-title" class="break-all text-base font-bold text-slate-800">{{ t('Remove {name}?', { name: circularFileCards.removalTarget.value ? circularFileCards.removalTarget.value.line : t('Unavailable File') }) }}</h2>
+            <h2 id="circular-source-removal-title" class="break-all text-base font-bold text-slate-800">{{ t('Remove {name}?', { name: circularFileCards.removalName.value }) }}</h2>
             <p id="circular-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
                 <template v-if="!circularFileCards.removalTarget.value">{{ t('This File is no longer available. Cancel and try again.') }}</template>
                 <template v-else-if="circularFileCards.removalTarget.value.records.length">{{ tn(circularFileCards.removalTarget.value.records.length, 'It contains {count} record.', 'It contains {count} records.') }}</template>
@@ -9903,7 +9903,7 @@
                     <input type="search" v-model="fontSettings.installedPicker.query" class="form-input form-input-compact" :aria-label="t('Search installed fonts')" :placeholder="t('Search installed fonts')" data-history-ignore>
                     <ul class="max-h-64 overflow-y-auto text-xs" :aria-label="t('Installed font families')">
                         <li v-for="entry in fontSettings.filteredInstalledFamilies.value" :key="entry.family">
-                            <button type="button" class="w-full text-start px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ entry.faces.length }})</span></button>
+                            <button type="button" class="w-full text-start px-1 py-0.5 hover:bg-slate-100" :style="{ fontFamily: JSON.stringify(entry.family) }" data-history-managed @click="fontSettings.chooseInstalledFamily(entry.family)">{{ entry.family }} <span class="text-slate-400">({{ numberText(entry.faces.length) }})</span></button>
                         </li>
                     </ul>
                 </template>
@@ -10268,7 +10268,7 @@
                     </div>
                 </div>
                 <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
-                    <span data-find-files-count class="me-auto text-xs text-slate-600">{{ findInOtherFiles.dialog.count }}</span>
+                    <span data-find-files-count class="me-auto text-xs text-slate-600">{{ numberText(findInOtherFiles.dialog.count) }}</span>
                     <p v-if="findInOtherFiles.dialog.createReason" data-find-files-create-reason class="basis-full text-end text-xs text-slate-600">{{ findInOtherFiles.dialog.createReason }}</p>
                     <button type="button" data-history-ignore data-find-files-back @click="findInOtherFiles.back()" class="btn btn-secondary btn-sm">{{ t('Back') }}</button>
                     <button type="button" data-history-ignore data-find-files-cancel @click="findInOtherFiles.close()" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>

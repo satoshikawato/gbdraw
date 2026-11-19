@@ -180,7 +180,7 @@ export const parseAnnotationTableWithNotice = (text) => {
     for (const [column, choices] of Object.entries(ENUM_COLUMNS)) {
       if (!row[column]) continue;
       row[column] = row[column].toLowerCase();
-      if (!choices.includes(row[column])) throw cellRefusal(rowNumber, column, { text: msg('expected {choices}.'), params: { choices: choices.join(', ') } });
+      if (!choices.includes(row[column])) throw cellRefusal(rowNumber, column, { text: msg('expected {choices}.'), params: { choices: { items: choices } } });
     }
     validateStyle(row, rowNumber);
     if (row.hatch_cross) boolValue(row.hatch_cross);

@@ -279,11 +279,11 @@ function* jsonFragments(value, ancestors = new Set(), container = 'root') {
  * files were uploaded under (`webFiles.resourceOriginalNames`), else the
  * stored resource name.
  * @param {Record<string, unknown>} data The Session document.
- * @returns {string}
+ * @returns {string[]}
  */
 const largestInputNames = (data) => {
   const { resources, webFiles } = data;
-  if (!isPlainObject(resources)) return '';
+  if (!isPlainObject(resources)) return [];
   const uploadedNames = isPlainObject(webFiles) && isPlainObject(webFiles.resourceOriginalNames)
     ? webFiles.resourceOriginalNames
     : {};
@@ -299,7 +299,7 @@ const largestInputNames = (data) => {
     });
   }
   return inputs.sort((a, b) => b.size - a.size).slice(0, LARGEST_INPUT_COUNT)
-    .map((input) => input.name).join(', ');
+    .map((input) => input.name);
 };
 
 /**

@@ -529,7 +529,7 @@ assert.throws(() => validateSessionAuthorityInventory({
     assert.throws(() => readSessionInput({ format: 'gbdraw-session', version }), (error) => {
       assert.deepEqual(error.context, reason === 'SESSION_TOO_NEW'
         ? { field: 'schema', reason, sessionVersion: version, latestSessionVersion: 51 }
-        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: '27–33, 39–42, 44, and 46–51' });
+        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: ['27–33', '39–42', '44', '46–51'] });
       return true;
     });
     // The version is read before the format.

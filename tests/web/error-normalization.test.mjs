@@ -41,11 +41,11 @@ const versionRefusal = (context) => normalizeUserFacingError({ code: 'INPUT_INVA
   context: { field: 'schema', ...context } }, { operation: 'session-load' }).summary;
 assert.match(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 49, latestSessionVersion: 48 }),
   /Session version 49 is newer than this gbdraw supports \(48\)\./);
-assert.match(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '27–33, 39–42, 44, and 46–48' }),
+assert.match(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: ['27–33', '39–42', '44', '46–48'] }),
   /Unsupported session version: 34\. This gbdraw reads Session versions 27–33, 39–42, 44, and 46–48\./);
 assert.doesNotMatch(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 99, latestSessionVersion: 48 }), /Check the required fields/);
 // A context word list that is not a version list is dropped, not shown.
-assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '<b>27</b>' }), /<b>/);
+assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: ['<b>27</b>'] }), /<b>/);
 // Receipt session.file-container: the settings and results over the browser's cap,
 // on Save and on Load, and browser storage too short for the inputs, on Load and on
 // Save with and without an estimate: the receipt's texts, exactly, and no Retry (it
@@ -64,10 +64,10 @@ assert.equal(sessionLimit({ storageNeedBytes: 3 * 1024 * 1024 * 1024, storageFre
   'The Session was not loaded: its inputs need 3072.0 MB of browser storage and 1536.0 MB is free. '
   + 'Free up disk space, then load it again. The gbdraw command line can draw this Session.');
 const saveStorage = sessionLimit({ storageNeedBytes: 700 * 1024 * 1024, storageFreeBytes: 100 * 1024 * 1024,
-  largestInputs: 'depth-a.tsv, depth\u0007b.tsv, ' + 'x'.repeat(400) }, 'session-save');
-assert.match(saveStorage.summary, /^The Session was not saved: it needs up to 700\.0 MB of browser storage and 100\.0 MB is free\. Largest inputs: depth-a\.tsv, depth b\.tsv, x{1,200}\. Free up disk space, or close private windows, then save again\.$/);
+  largestInputs: ['depth-a.tsv', 'depth\u0007b.tsv', 'x'.repeat(400), 'fourth.tsv'] }, 'session-save');
+assert.match(saveStorage.summary, /^The Session was not saved: it needs up to 700\.0 MB of browser storage and 100\.0 MB is free\. Largest inputs: depth-a\.tsv, depth b\.tsv, x{80}\. Free up disk space, or close private windows, then save again\.$/);
 assert.deepEqual(saveStorage.actions, ['select-input']);
-assert.equal(sessionLimit({ storageNeedBytes: 700 * 1024 * 1024, largestInputs: 'genome.gbk' }, 'session-save').summary,
+assert.equal(sessionLimit({ storageNeedBytes: 700 * 1024 * 1024, largestInputs: ['genome.gbk'] }, 'session-save').summary,
   'The Session was not saved: the browser has no room for it (up to 700.0 MB). Largest inputs: genome.gbk. '
   + 'Free up disk space, or close private windows, then save again.');
 // What is free is dropped without what is needed.
@@ -679,7 +679,7 @@ test('a Circular placement names the room the GC rows keep inside it and their r
   // OV-2314: a row whose own (typed) width is wider than the band is the failed row, with its width
   // (tests/test_circular_radial_layout.py, HmmtDNA with a GC content row of w=8).
   const wide = layout({ reason: 'CANNOT_FIT', slotIndex: 2, slotWidthPx: 3120, innerPx: 0, outerPx: 386, slotTrack: 'gc_content' });
-  assert.match(wide.summary, /^A circular track does not fit\. Track row 3\. Track width: 3120 px\. Move the track.* Available band: 0–386 px\. To make room, do one of the following\. Select Hide GC Content, or reduce GC Content Width \(with Custom Track Slots on, the row width\)\.$/);
+  assert.match(wide.summary, /^A circular track does not fit\. Track row 3\. Track width: 3,120 px\. Move the track.* Available band: 0–386 px\. To make room, do one of the following\. Select Hide GC Content, or reduce GC Content Width \(with Custom Track Slots on, the row width\)\.$/);
   // Unknown or repeated names are dropped; nothing is left of a list without a known name.
   assert.equal(layout({ reason: 'CANNOT_FIT', keptInsideTracks: 'gc_skew,PRIVATE,gc_skew' }).context.keptInsideTracks, 'gc_skew');
   for (const keptInsideTracks of ['PRIVATE', '', ['gc_content'], 7]) {

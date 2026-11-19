@@ -90,6 +90,12 @@ test('TSV cannot silently replace invalid known annotation choices', () => {
   for (const [column, value] of [['coordinate_space', 'typo'], ['lane', '-1'], ['lane', '1.5']]) {
     assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\t${column}\ns\ta\tband\t1\t8\t${value}\n`));
   }
+  // The refusal names the choices as one list value, which the shown text lists as the UI language lists items.
+  assert.throws(() => parseAnnotationTable('set_id\tid\tmark\tstart\tend\ns\ta\tarrow\t1\t8\n'), (error) => {
+    assert.equal(error.message, "Annotation table row 2, column 'mark': expected line, bracket, band, highlight.");
+    assert.deepEqual(error.parts[0].params.reason.params.choices, { items: ['line', 'bracket', 'band', 'highlight'] });
+    return true;
+  });
   const local = parseAnnotationTable('set_id\tid\tmark\tstart\tend\tcoordinate_space\ns\ta\tBAND\t1\t8\tLOCAL\n')[0].annotations[0];
   assert.equal(local.mark, 'band');
   assert.equal(local.target.coordinateSpace, 'local');

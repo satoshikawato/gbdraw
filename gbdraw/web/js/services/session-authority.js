@@ -157,9 +157,9 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 ]);
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
-// The versions this reader takes (`SUPPORTED_SESSION_VERSIONS`), in words,
-// for the refusal of another version (OV-1253); session-authority.test.mjs
-// pins the text, "27–33, 39–42, 44, and 46–50" today.
+// The versions this reader takes (`SUPPORTED_SESSION_VERSIONS`), one run each,
+// for the refusal of another version (OV-1253), which lists them as the UI
+// language lists items; session-authority.test.mjs pins the runs.
 const READ_SESSION_VERSIONS = (() => {
   /** @type {[number, number][]} */
   const runs = [];
@@ -168,8 +168,7 @@ const READ_SESSION_VERSIONS = (() => {
     if (last && version === last[1] + 1) last[1] = version;
     else runs.push([version, version]);
   }
-  const words = runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`));
-  return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
+  return Object.freeze(runs.map(([first, end]) => (first === end ? String(first) : `${first}\u2013${end}`)));
 })();
 const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
 // The newest version this app reads; Save may still write an older one (SESSION_VERSION).

@@ -7,7 +7,7 @@
 import { circularInputComplete, circularSourceInputs, inputSourceFiles } from '../services/input-types.js';
 import { groupLinearSourceRecords, linearCardInputComplete, setLinearSourceFolded } from '../services/linear-sources.js';
 import { t } from '../utils/i18n.js';
-import { chosenFileName, fileCardLine } from './file-card.js';
+import { fileCardFilesName, fileCardLine } from './file-card.js';
 /** @import { DiagramMode, DrawingState, LinearSeq } from '../state.js' */
 /** @import { InputSlot } from '../services/input-types.js' */
 /** @import { FoldedLinearSources, LinearSourceGroup } from '../services/linear-sources.js' */
@@ -41,10 +41,7 @@ export const createLinearFileCards = ({ shownDrawingOfMode, shownLinearSeqs, lin
    * row holds, which a removal takes, also one of the other input type.
    * @param {LinearSourceGroup} source
    */
-  const linearSourceFileName = (source) => {
-    const names = [source.sequence.gb, source.sequence.gff, source.sequence.fasta].filter(Boolean).map(chosenFileName);
-    return names.length ? names.join(' + ') : t('File {n}', { n: linearSourceGroups.value.indexOf(source) + 1 });
-  };
+  const linearSourceFileName = (source) => fileCardFilesName(source.sequence, linearSourceGroups.value.indexOf(source));
   /** A File card's header line (`fileCardLine`). @param {LinearSourceGroup} source */
   const linearCardFileLine = (source) => {
     const drawing = shownDrawingOfMode('linear');

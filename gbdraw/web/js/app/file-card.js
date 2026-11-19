@@ -15,6 +15,19 @@ const FILE_SLOT_NAMES = Object.freeze({ gb: 'GenBank', gff: 'GFF3', fasta: 'FAST
 export const chosenFileName = (file) => String(file?.name || t('Unnamed file'));
 
 /**
+ * The name a File's dialogs give it, in both modes (the removal question):
+ * every file the card holds, also one of the other input type, which a
+ * removal takes, joined with ` + `; `File {n}` for a card with none.
+ * @param {Readonly<Partial<Record<InputSlot, { name?: string } | null>>>} slots
+ * @param {number} index the card's 0-based place in its list
+ * @returns {string}
+ */
+export const fileCardFilesName = (slots, index) => {
+  const names = [slots.gb, slots.gff, slots.fasta].flatMap((file) => (file ? [chosenFileName(file)] : []));
+  return names.length ? names.join(' + ') : t('File {n}', { n: index + 1 });
+};
+
+/**
  * What a File card's header line says of the slots its input type shows: each
  * file's name, "no FASTA" for a slot still empty, "No file" for none.
  * @param {string} inputType

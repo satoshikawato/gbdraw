@@ -26,7 +26,7 @@ const {
   buildSourceRecipe,
   quoteShellArg,
   reproducibilityLabel,
-  shownRunInfoNoteParts,
+  shownRunInfoNotes,
   summarizeLosatRuntimes
 } = await import(pathToFileURL(modulePath));
 const { adoptCurrentSessionResources, createSessionResourceFileView, fileBackedDescriptor } = await import(
@@ -2000,7 +2000,7 @@ test('Run Info states the LOSAT E-value scale only when LOSAT comparisons are pr
   const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
   assert(!without.reproducibility.notes.includes(LOSAT_EVALUE_SCALE_NOTE));
   // A Result made before stored the database note, which stays true of it and is still shown.
-  assert.deepEqual(shownRunInfoNoteParts([{ text: LOSAT_DATABASE_SCOPE_NOTE }]), [{ text: LOSAT_DATABASE_SCOPE_NOTE }]);
+  assert.deepEqual(shownRunInfoNotes([{ text: LOSAT_DATABASE_SCOPE_NOTE }]), [LOSAT_DATABASE_SCOPE_NOTE]);
 });
 
 // PD-OI-018 revision 6 (OV-3319): a Circular Result with LOSAT rings states the rings' scale, the reference genome
@@ -2014,7 +2014,7 @@ test('Run Info states the similarity ring E-value scale of a Circular Result wit
   assert.match(LOSAT_RING_EVALUE_SCALE_NOTE, /with every record of those files counted, drawn or not/);
   assert.doesNotMatch(LOSAT_RING_EVALUE_SCALE_NOTE, /CLI/);
   assert(!buildRunInfo({ mode: 'circular', sourceRecipe: recipe }).reproducibility.notes.includes(LOSAT_RING_EVALUE_SCALE_NOTE));
-  assert.deepEqual(shownRunInfoNoteParts([{ text: LOSAT_RING_EVALUE_SCALE_NOTE }]), [{ text: LOSAT_RING_EVALUE_SCALE_NOTE }]);
+  assert.deepEqual(shownRunInfoNotes([{ text: LOSAT_RING_EVALUE_SCALE_NOTE }]), [LOSAT_RING_EVALUE_SCALE_NOTE]);
 });
 
 test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (D9/D10)', () => {
@@ -2106,7 +2106,7 @@ test('OV-1678: in Simplified Chinese the Run info shows its notes, files descrip
 // ui-copy-diet (2026-11-02): the Run info keeps every note; the tab shows only the notes a reader acts on, and
 // says what a Source recipe helper needs in one line.
 test('the Run info tab shows the notes a reader acts on, from the stored notes', async () => {
-  const { errorText } = await import(pathToFileURL(join(tempDir, 'js', 'utils', 'error-text.js')));
+  const { setUiLocale, SOURCE_LOCALE } = await import(pathToFileURL(join(tempDir, 'js', 'utils', 'i18n.js')));
   const helper = (count) => buildRunInfo({
     mode: 'linear',
     args: ['--gbk', '/seq_0.gb', '/seq_1.gb', ...Array.from({ length: count }, (_, index) => ['-b', `/blast_${index}.txt`]).flat()],
@@ -2121,19 +2121,30 @@ test('the Run info tab shows the notes a reader acts on, from the stored notes',
   for (const count of [1, 2]) {
     const stored = helper(count);
     assert.equal(stored.notes.length, 3, 'the stored notes keep the helper and Session restore notes');
-    assert.deepEqual(shownRunInfoNoteParts(stored.noteParts).map((part) => errorText([part])), [
+    assert.equal(stored.noteParts[0].params.count, count, 'the stored note carries its file count');
+    assert.deepEqual(shownRunInfoNotes(stored.noteParts), [
       count === 1
-        // One key for one file and one for several, each naming its class noun, so every language words both.
+        // One counted sentence (tn) whose forms name the class noun, so every language words one, two or more files.
         ? 'Needs the file pair_0.tsv from "Download reproducibility files"'
         : 'Needs the files pair_0.tsv, pair_1.tsv from "Download reproducibility files"',
       LOSAT_EVALUE_SCALE_NOTE
     ]);
   }
+  // Arabic has a form for two: the stored count chooses it, and the names are listed with the Arabic comma.
+  const other = 'Needs the files {files} from "Download reproducibility files"';
+  try {
+    await setUiLocale('ar', async () => ({ default: { 'Needs the file {files} from "Download reproducibility files"': 'يلزم الملف {files}',
+      [other]: { two: 'يلزم الملفان {files}', few: 'تلزم الملفات {files}', many: 'تلزم الملفات {files}', other: 'تلزم الملفات {files}' } } }));
+    const [two] = shownRunInfoNotes(helper(2).noteParts);
+    assert.equal(two, 'يلزم الملفان \u2068\u2067\u2068pair_0.tsv\u2069، \u2068pair_1.tsv\u2069\u2069\u2069');
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
   const plain = buildRunInfo({ mode: 'circular', args: ['--gbk', '/seq.gb'], fileMetadata: { '/seq.gb': { name: 'seq.gb', kind: 'uploaded' } } });
   assert.deepEqual(plain.reproducibility.notes, ['The Source recipe can be rerun with the uploaded file names shown here.']);
-  assert.deepEqual(shownRunInfoNoteParts(plain.reproducibility.noteParts), []);
+  assert.deepEqual(shownRunInfoNotes(plain.reproducibility.noteParts), []);
   const unread = { text: 'Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.' };
-  assert.deepEqual(shownRunInfoNoteParts([{ text: 'Source recipe unavailable: {reason}', params: { reason: { text: 'x' } } }, unread]), [unread]);
+  assert.deepEqual(shownRunInfoNotes([{ text: 'Source recipe unavailable: {reason}', params: { reason: { text: 'x' } } }, unread]), [unread.text]);
 });
 
 test('the download description counts its helper files', () => {

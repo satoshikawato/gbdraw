@@ -8,13 +8,27 @@
 // English text. Templates
 // reach it through `app.config.globalProperties` (app.js).
 import { renderErrorText } from './error-normalization.js';
-import { sentenceSeparator, tm } from './i18n.js';
+import { itemListText, listText, sentenceSeparator, tm } from './i18n.js';
 
-/** @import { ErrorTextPart } from './error-normalization.js' */
+/** @import { ErrorTextList, ErrorTextPart } from './error-normalization.js' */
+
+/**
+ * A list value as the UI language lists shown items.
+ * @param {ErrorTextList} list
+ * @returns {string}
+ */
+const shownList = ({ items, and }) => (and ? listText(items) : itemListText(items));
 
 /**
  * The shown text of error text parts.
  * @param {readonly ErrorTextPart[]} parts
  * @returns {string}
  */
-export const errorText = (parts) => renderErrorText(parts, tm, sentenceSeparator());
+export const errorText = (parts) => renderErrorText(parts, tm, sentenceSeparator(), shownList);
+
+/**
+ * The shown text of one value of a part: a part through its key, a list as the UI language lists items.
+ * @param {ErrorTextPart | ErrorTextList} value
+ * @returns {string}
+ */
+export const errorValueText = (value) => ('items' in value ? shownList(value) : errorText([value]));

@@ -559,6 +559,16 @@ test('OV-3839: no tn() call passes its count as {count}', () => {
   assert.deepEqual(problems, []);
 });
 
+// A count a template writes outside a text (a chip's `(12)`, a badge, an <i18n-text> slot) reads like every count of
+// a text: numberText writes it, so 1,234 is grouped there too. `row.length` of the window rows is already its text
+// ("1,234 bp", services/record-options.js).
+test('index.html writes every count it shows outside a text through numberText', () => {
+  const html = compiledHtml(readFileSync(join(webRoot, 'index.html'), 'utf8'));
+  const raw = [...html.matchAll(/\{\{\s*([A-Za-z_$][\w$.()]*?(?:\.length|[cC]ount|[tT]otal))\s*\}\}/g)]
+    .map(([, expression]) => expression).filter((expression) => expression !== 'row.length');
+  assert.deepEqual(raw, []);
+});
+
 test('a locale shows its catalog and falls back to English', async () => {
   const catalog = Object.freeze({
     'Save Session': 'セッションを保存',

@@ -12,7 +12,7 @@ import { settleCommittedField } from '../committed-value.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
-import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
+import { getFeatureColorRuleHash, unnamedFeatureCaption } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, drawnRuleMatches, legendColorCopies, legendRowRules, listedRuleRowRemoval,
   prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions, specificRuleHasQualifier
@@ -775,7 +775,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
 
   /** @param {ColorFeature} feat */
   const getIndividualFeatureLabel = (feat) => {
-    return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${formatFeatureRange(feat)}`;
+    return feat.product || feat.gene || feat.locus_tag || unnamedFeatureCaption(feat);
   };
 
   // First entry per normalized feature ID (the first-match rule of a linear scan).
