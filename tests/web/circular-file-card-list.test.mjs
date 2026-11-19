@@ -107,6 +107,25 @@ test('records not read yet: a card with its files says Not inspected', () => {
   assert.deepEqual(waiting.cards.cards.value.map((card) => [card.ready, card.recordsLine]), [[false, '']]);
 });
 
+// OV-3099: while a card waits for a file, no card's records are read, and the Source records line said nothing.
+// It now says what the first waiting card needs, named as its header names it.
+test('a card waiting for a file: the Source records line says which file it needs', () => {
+  const pair = { uid: 'record-1', gb: null, gff: file('NC_013668.gff3'), fasta: file('NC_013668.fasta') };
+  const gffOnly = { uid: 'record-2', gb: null, gff: file('NC_013668-reannotated.gff3'), fasta: null };
+  const fastaOnly = { uid: 'record-3', gb: null, gff: null, fasta: file('b.fasta') };
+  const line = (sources, status = 'idle', inputType = 'gff') => makeCards({ inputType, sources, status }).cards.waitingLine.value;
+  assert.equal(line([pair, gffOnly, fastaOnly]),
+    'File 2 needs its FASTA file before the records can be inspected.');
+  assert.equal(line([pair, fastaOnly]), 'File 2 needs its GFF3 file before the records can be inspected.');
+  assert.equal(line([gffOnly, pair]), 'File 1 needs its FASTA file before the records can be inspected.');
+  // A card that holds no file of the input type (GenBank cards after a switch to GFF3 + FASTA).
+  assert.equal(line(SAKAI()), 'File 1 needs its files before the records can be inspected.');
+  // Nothing to say with no card, and none once every card holds its files.
+  assert.equal(line([]), '');
+  assert.equal(line([pair], 'deferred'), '');
+  assert.equal(line(SAKAI(), 'ready', 'gb'), '');
+});
+
 test('a file of several records: the records line counts them and a Topology card names its #k', () => {
   const { cards } = makeCards({
     sources: [{ uid: 'record-1', gb: file('two.gb'), gff: null, fasta: null }, { uid: 'record-2', gb: file('mito.gb'), gff: null, fasta: null }],

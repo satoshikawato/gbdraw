@@ -30,6 +30,23 @@ export const fileCardLine = (inputType, slots) => {
 };
 
 /**
+ * What a File card still waiting for a file needs before records are read,
+ * named as its header names it ("File 2 needs its FASTA file …"); '' when it
+ * holds every file of the input type.
+ * @param {string} inputType
+ * @param {Readonly<Partial<Record<InputSlot, { name?: string } | null>>>} slots
+ * @param {number} index The card's 0-based place in the list.
+ */
+export const fileCardNeedLine = (inputType, slots, index) => {
+  const empty = linearCardFileFields(inputType).filter((field) => !slots[field]);
+  if (empty.length === 0) return '';
+  const card = t('File {n}', { n: index + 1 });
+  return empty.length === 1
+    ? t('{card} needs its {kind} file before the records can be inspected.', { card, kind: FILE_SLOT_NAMES[empty[0]] })
+    : t('{card} needs its files before the records can be inspected.', { card });
+};
+
+/**
  * The props of one card.
  * @typedef {object} FileCardProps
  * @property {'linear' | 'circular'} mode Names the card's data attributes (`data-<mode>-source-card`).
