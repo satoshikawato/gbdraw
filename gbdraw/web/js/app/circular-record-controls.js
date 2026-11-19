@@ -19,7 +19,7 @@ import { circularMarkRecordCounts, settledCircularCardMarks } from '../services/
 import { cardHoldsRecordKey, cardRowsLeaving } from '../services/record-draw-selection.js';
 import { cardCropWindow } from '../services/drawing/inputs.js';
 import { circularRangesWithoutCard, circularRecordEntries, circularRecordRange } from '../services/record-options.js';
-import { msg, t } from '../utils/i18n.js';
+import { itemListText, msg, t } from '../utils/i18n.js';
 import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../services/layout-preferences.js';
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { chooseRecordLayout } from '../services/one-circle-layout.js';
@@ -339,7 +339,7 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, show
       } while (!sameEntries(asked, depthNow()));
       const named = inScope.length > 1;
       const items = leaving.flatMap(({ drawingId, rows }) => rows.map(({ k, record, files }) => {
-        const texts = { n: k, files: files.join(', '), drawing: drawingTabLabels(barTabs(), [drawingId]).join('') };
+        const texts = { n: k, files: itemListText(files), drawing: drawingTabLabels(barTabs(), [drawingId]).join('') };
         if (named) return record ? t('#{n} {record} in {drawing}: {files}', { ...texts, record }) : t('#{n} in {drawing}: {files}', texts);
         return record ? t('#{n} {record}: {files}', { ...texts, record }) : t('#{n}: {files}', texts);
       }));

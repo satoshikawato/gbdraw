@@ -441,6 +441,29 @@ test('a Replace whose Depth files change while it reads names them as they are, 
   unbind();
 });
 
+// The Depth files a record would lose are shown items: the UI language's separator, each file isolated in Persian
+// (itemListText), never an English ", " written by the dialog.
+test('the Replace question lists the Depth files of a record as the UI language lists shown items', async () => {
+  const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
+  const { bindRows, unbind } = await twoRecordsWithDepth(null);
+  const [card] = circular.circularSources.map((source) => source.uid);
+  bindRows([['a.tsv', null], ['c.tsv', 'e.tsv']]);
+  try {
+    await setUiLocale('fa', async () => ({ default: {} }));
+    const pending = pickCardFile(card, 'gb', genbank('a.gb', ['A1', 40]));
+    await settle();
+    // ⟨ FSI, ⟦ LRI, ⟪ RLI, ⟩ PDI.
+    const isolated = (text) => text.replaceAll('⟨', '\u2068').replaceAll('⟦', '\u2066').replaceAll('⟪', '\u2067').replaceAll('⟩', '\u2069');
+    assert.deepEqual(app.choicePrompt.items, [isolated('⟦#⟨2⟩⟩ ⟨B1⟩: ⟨⟪⟨c.tsv⟩، ⟨e.tsv⟩⟩⟩')], 'the files of record 2 as one list of Persian items');
+    app.resolveChoicePrompt('cancel');
+    await pending;
+    await settle();
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+  unbind();
+});
+
 // A drawing switch does not supersede the pick, so the notice says the file was not put on the card (D-09).
 test('a drawing switch while a Replace reads its new file ends the Replace without writing, and says so', async () => {
   const history = window.__GBDRAW_HISTORY__;
