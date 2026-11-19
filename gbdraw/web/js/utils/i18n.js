@@ -35,6 +35,7 @@
  * @property {string} sentenceSeparator What separates two sentences shown one after the other.
  * @property {UiTextStyle} textStyle How the page sets its small UI text (the page's `data-ui-text-style`).
  * @property {TextDirection} dir The direction the page reads in this language: the page's `dir`.
+ * @property {string} listSeparator What separates shown items listed without a conjunction (`itemListText`).
  */
 /**
  * How the page sets the UI text of a locale; index.html reads it from the
@@ -93,29 +94,31 @@ export const SOURCE_LOCALE = 'en';
 /**
  * The languages of the header Language menu, in its order: English, the
  * Latin-script languages by name, the Cyrillic ones by name, Thai, then East
- * Asian (PD-OI-106). Japanese and Chinese put no space between sentences.
+ * Asian (PD-OI-106). Japanese and Chinese put no space between sentences;
+ * Persian and Arabic separate listed items with the Arabic comma ، (I18N_STYLE:
+ * Persian and Arabic punctuation).
  * @type {readonly Readonly<UiLocaleOption>[]}
  */
 export const UI_LOCALES = Object.freeze([
-  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ', textStyle: 'no-caps', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ar'), name: 'العربية', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'rtl' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('fa'), name: 'فارسی', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'rtl' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr' }),
-  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ', textStyle: 'no-caps', dir: 'ltr' })
+  Object.freeze({ tag: SOURCE_LOCALE, name: 'English', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('id'), name: 'Bahasa Indonesia', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('de'), name: 'Deutsch', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('es'), name: 'Español', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('fr'), name: 'Français', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('it'), name: 'Italiano', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pl'), name: 'Polski', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('pt'), name: 'Português', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('vi'), name: 'Tiếng Việt', sentenceSeparator: ' ', textStyle: 'no-caps', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('tr'), name: 'Türkçe', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ru'), name: 'Русский', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('uk'), name: 'Українська', sentenceSeparator: ' ', textStyle: 'cased', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ar'), name: 'العربية', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'rtl', listSeparator: '، ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('fa'), name: 'فارسی', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'rtl', listSeparator: '، ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('th'), name: 'ไทย', sentenceSeparator: ' ', textStyle: 'tall-marks', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ja'), name: '日本語', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hans'), name: '简体中文', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('zh-Hant'), name: '繁體中文', sentenceSeparator: '', textStyle: 'no-caps', dir: 'ltr', listSeparator: ', ' }),
+  Object.freeze({ tag: /** @type {UiLocale} */ ('ko'), name: '한국어', sentenceSeparator: ' ', textStyle: 'no-caps', dir: 'ltr', listSeparator: ', ' })
 ]);
 // Separates the context of `tx` from its text in a catalog key.
 export const CONTEXT_SEPARATOR = '\u0004';
@@ -163,6 +166,10 @@ const RLI = '\u2067';
 const PDI = '\u2069';
 // The direction marks Intl.ListFormat writes into a right-to-left list (fa); isolates take their place.
 const DIRECTION_MARKS = /[\u200E\u200F]/g;
+// A conjunction و that a list pattern writes against the next item (Arabic: `A وB`).
+const GLUED_AND = /و$/u;
+// A shown text that begins with an Arabic letter, after the isolates and marks in front of it.
+const ARABIC_LETTER_START = /^[\u061C\u200E\u200F\u2066-\u2069]*(?=\p{L})\p{Script=Arabic}/u;
 // A left-to-right run of a text: placeholders, Latin letters, digits and the number signs # % ‰ + - − /,
 // with one . , or : between two of them (`#{n}`, `{value}%`, `{done}/{total}`, `{record}:{start}`), a
 // range or a size between two of them (`{start}–{end}`, `{from}..{to}`, `{width} × {height}`), and the
@@ -408,24 +415,62 @@ export const thenText = (first, then) => (shownLocale().dir === 'rtl'
   : `${first} ${thenArrow()} ${then}`);
 
 /**
+ * A part of a list: an item, or the text the list pattern writes between items.
+ * @typedef {{ type: 'element' | 'literal', value: string }} ListPart
+ */
+
+/**
+ * A list in a right-to-left language: one right-to-left isolate (RLI ... PDI)
+ * with each item an isolate of its own (FSI ... PDI), so the list reads right
+ * to left also inside a sentence's isolate and an item keeps its own order.
+ * The direction marks a pattern may write go. A conjunction و that the pattern
+ * writes against the next item (Arabic) stays there before an item that
+ * begins with an Arabic letter and is set apart with a space before any other
+ * (a digit, a Latin name): I18N_STYLE 21.4 (`وملف`, `و GenBank`, `و 5`).
+ * No parts show as the empty text.
+ * @param {readonly ListPart[]} parts
+ * @returns {string}
+ */
+const rightToLeftList = (parts) => (parts.length ? `${RLI}${parts.map(({ type, value }, index) => {
+  if (type === 'element') return `${FSI}${value}${PDI}`;
+  const literal = value.replace(DIRECTION_MARKS, '');
+  const next = parts[index + 1];
+  return next && GLUED_AND.test(literal) && !ARABIC_LETTER_START.test(next.value) ? `${literal} ` : literal;
+}).join('')}${PDI}` : '');
+
+/**
  * Shown texts as one list: "A", "A and B", "A, B, and C" in English, the
- * locale's own list pattern (Intl.ListFormat) in the other locales. In a
- * right-to-left language the list is one right-to-left isolate (RLI ... PDI)
- * and each item an isolate of its own (FSI ... PDI), without the direction
- * marks the pattern may write, so the list reads right to left also inside a
- * sentence's isolate and an item keeps its own order.
+ * locale's own list pattern (Intl.ListFormat) in the other locales, read
+ * right to left in a right-to-left language (`rightToLeftList`).
  * @param {readonly string[]} items
  * @returns {string}
  */
 export const listText = (items) => {
   const { tag, dir } = shownLocale();
-  if (dir === 'rtl') {
-    const parts = new Intl.ListFormat(tag, { type: 'conjunction' }).formatToParts(items);
-    return `${RLI}${parts.map(({ type, value }) => (type === 'element' ? `${FSI}${value}${PDI}` : value.replace(DIRECTION_MARKS, ''))).join('')}${PDI}`;
-  }
+  if (dir === 'rtl') return rightToLeftList(new Intl.ListFormat(tag, { type: 'conjunction' }).formatToParts(items));
   if (tag !== SOURCE_LOCALE) return new Intl.ListFormat(tag, { type: 'conjunction' }).format(items);
   if (items.length < 3) return items.join(' and ');
   return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
+};
+
+/**
+ * Shown items one after the other with no conjunction (record ids, gene
+ * names, file names, ranges, translated names), separated by the shown
+ * language's `listSeparator`: `A, B, C` in English and every left-to-right
+ * language (the bytes of `items.join(', ')`), `A، B، C` in Persian and
+ * Arabic, read right to left there (`rightToLeftList`). No items show as the
+ * empty text. A list that ends in "and" is `listText`.
+ * @param {readonly string[]} items each already a shown text
+ * @returns {string}
+ */
+export const itemListText = (items) => {
+  const { dir, listSeparator } = shownLocale();
+  if (dir !== 'rtl') return items.join(listSeparator);
+  return rightToLeftList(items.flatMap((value, index) => {
+    /** @type {ListPart} */
+    const element = { type: 'element', value };
+    return index ? [{ type: 'literal', value: listSeparator }, element] : [element];
+  }));
 };
 
 // Every number of the UI and of an exported interactive file reads alike in every

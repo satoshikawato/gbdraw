@@ -2,8 +2,7 @@
 // The proposal of Find in other files (PD-OI-123) as the dialog shows it. Python made every value (the windows, which
 // are ticked at first and why the others are not, the genes found, the window numbers of the drawing, the alignments
 // removed); these functions only word them. A window is found by its identity in the plan: its File and its column.
-import { msg, t, tm, tn } from '../../utils/i18n.js';
-import { itemListText } from '../../utils/item-list.js';
+import { itemListText, msg, t, tm, tn } from '../../utils/i18n.js';
 import { diagnosticError } from '../../utils/error-normalization.js';
 import { LOCATE_OPERATION, circledNumber, windowGeneSpan, windowSpanText } from '../../services/find-in-other-files.js';
 

@@ -13,8 +13,7 @@ import {
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 import { italicSegments } from './utils/markup-preview.js';
 import { parseMarkupInertly } from './utils/inert-markup.js';
-import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
-import { itemListText } from './utils/item-list.js';
+import { itemListText, msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { limitedList, moreLine } from './utils/limited-list.js';
 import { detectedTopologyNote } from './services/record-display-model.js';
 import { specificRuleHasQualifier } from './services/specific-color-rules.js';

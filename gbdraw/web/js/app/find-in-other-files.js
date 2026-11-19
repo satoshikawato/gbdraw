@@ -6,8 +6,7 @@
 // Create adds a project step, through the drawing list.
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-import { t, tm, tn } from '../utils/i18n.js';
-import { itemListText } from '../utils/item-list.js';
+import { itemListText, t, tm, tn } from '../utils/i18n.js';
 import { reactive } from '../utils/reactivity.js';
 import { resolveComparisonThresholds } from '../mode-profiles.js';
 import { formatRecordLength } from '../services/record-options.js';

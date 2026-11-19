@@ -22,8 +22,7 @@ const { createPasteTargets } = await import('../../gbdraw/web/js/app/region-draw
 
 const { buildSimilarityAlignmentResetReceipt } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
-const { SOURCE_LOCALE, setUiLocale, t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
-const { itemListText } = await import('../../gbdraw/web/js/utils/item-list.js');
+const { SOURCE_LOCALE, itemListText, setUiLocale, t, tm } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { templateBinding } = await import('./helpers/template-binding.mjs');
 const { errorText } = await import('../../gbdraw/web/js/utils/error-text.js');
 const reviewView = await import('../../gbdraw/web/js/services/alignment-review-view.js');

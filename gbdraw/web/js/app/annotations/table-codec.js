@@ -6,8 +6,7 @@
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
-import { t } from '../../utils/i18n.js';
-import { itemListText } from '../../utils/item-list.js';
+import { itemListText, t } from '../../utils/i18n.js';
 import { featureSelector, hashSelector } from '../../utils/selector-syntax.js';
 import {
   annotationRecordSelectorValue,

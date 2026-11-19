@@ -481,7 +481,7 @@ test('typing in Start or End counts the genes once typing pauses', async () => {
 });
 
 // The ends a window reaches and the genes of a File are shown items: ", " between them in English, the Arabic comma
-// with each item isolated in Persian (utils/item-list.js).
+// with each item isolated in Persian (itemListText in utils/i18n.js).
 test('the contig ends and the gene lists of a File are joined as the UI language joins shown items', async () => {
   const plan = { ...searchPlan(), files: [
     filePlan('a', [planned('a', 'A', 1, 1, 9000, { genes: [1], ends: [true, true] })], [], coverage(['p1'], [], ['p2', 'p3']))

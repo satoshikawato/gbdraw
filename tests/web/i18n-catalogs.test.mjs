@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 
 import { makeTempDirSync, removeTempDir } from './helpers/temp-dir.cjs';
 import {
-  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, numberText, pluralTranslation, sentenceBody, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
+  CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, itemListText, joinSentences, listText, msg, numberText, pluralTranslation, sentenceBody, sentenceSeparator, setUiLocale, t, textParts, thenText, tm, tn, tx, uiLocale,
   uiLocaleOf
 } from '../../gbdraw/web/js/utils/i18n.js';
 import { COLLINEAR_COLOR_MODE_TEXT, memberValueLabelKeys } from '../../gbdraw/web/js/services/pairwise-match-popup.js';
@@ -928,7 +928,7 @@ const loadWithRightToLeftFixture = async () => {
   assert.equal(source.split(opening).length, 2, 'the fixture inserts its language at the start of UI_LOCALES');
   const directory = makeTempDirSync('i18n-rtl-');
   const path = join(directory, 'i18n.js');
-  writeFileSync(path, source.replace(opening, `${opening}  Object.freeze({ tag: 'qaa', name: 'qaa', sentenceSeparator: ' ', textStyle: 'cased', dir: 'rtl' }),\n`));
+  writeFileSync(path, source.replace(opening, `${opening}  Object.freeze({ tag: 'qaa', name: 'qaa', sentenceSeparator: ' ', textStyle: 'cased', dir: 'rtl', listSeparator: ', ' }),\n`));
   try {
     return await import(pathToFileURL(path).href);
   } finally {
@@ -1083,11 +1083,13 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
       if (UI_LOCALES.find((row) => row.tag === tag)?.dir === 'rtl') {
         // A right-to-left language isolates the list whole and each item in it; without the isolates and the
-        // direction marks the text is the locale's own pattern.
+        // direction marks the text is the locale's own pattern, with the Arabic و set apart before a Latin item.
         const plain = (items) => listText(items).replace(/[\u2066-\u2069]/g, '');
+        const pattern = (items) => expected.format(items).replace(/[\u061C\u200E\u200F]/g, '').replace(/ و(?=[A-Z])/g, ' و ');
         assert.equal(listText(['A']), ISOLATED('⟪⟨A⟩⟩'), tag);
-        assert.equal(plain(['A', 'B']), expected.format(['A', 'B']).replace(/[\u061C\u200E\u200F]/g, ''), tag);
-        assert.equal(plain(['A', 'B', 'C']), expected.format(['A', 'B', 'C']).replace(/[\u061C\u200E\u200F]/g, ''), tag);
+        assert.equal(listText([]), '', tag);
+        assert.equal(plain(['A', 'B']), pattern(['A', 'B']), tag);
+        assert.equal(plain(['A', 'B', 'C']), pattern(['A', 'B', 'C']), tag);
         continue;
       }
       assert.equal(listText(['A']), 'A', tag);
@@ -1099,6 +1101,52 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
     for (const [tag, two, three] of [['id', 'A dan B', 'A, B, dan C'], ['vi', 'A và B', 'A, B và C'], ['th', 'AและB', 'A B และC']]) {
       await setUiLocale(tag, async () => ({ default: {} }));
       assert.deepEqual([listText(['A', 'B']), listText(['A', 'B', 'C'])], [two, three], tag);
+    }
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// I18N_STYLE 21.4: Arabic writes the conjunction و apart, with a space, before an item that begins with a digit or a Latin
+// letter (و GenBank, و 5) and against an item that begins with an Arabic letter (وملف); Intl.ListFormat glues it to every
+// item. Persian writes و apart before every item, as its pattern does.
+test('an Arabic list sets و apart before an item that does not begin with an Arabic letter; Persian keeps its pattern', async () => {
+  try {
+    await setUiLocale('ar', async () => ({ default: {} }));
+    assert.equal(listText(['ملف', 'سجل']), ISOLATED('⟪⟨ملف⟩ و⟨سجل⟩⟩'));
+    assert.equal(listText(['ملف', 'GenBank']), ISOLATED('⟪⟨ملف⟩ و ⟨GenBank⟩⟩'));
+    assert.equal(listText(['NC_1', '5 ملفات', 'سجل', 'gene (x)']), ISOLATED('⟪⟨NC_1⟩ و ⟨5 ملفات⟩ و⟨سجل⟩ و ⟨gene (x)⟩⟩'));
+    // An item that begins with an isolate is read from its first letter: `#1 ← #2` begins with #.
+    assert.equal(listText(['سجل', thenText('#1', '#2')]), ISOLATED('⟪⟨سجل⟩ و ⟨⟪⟨#1⟩ ← ⟨#2⟩⟩⟩⟩'));
+    assert.equal(listText(['سجل', '⁨ملف⁩']), ISOLATED('⟪⟨سجل⟩ و⟨⟨ملف⟩⟩⟩'));
+    await setUiLocale('fa', async () => ({ default: {} }));
+    assert.equal(listText(['فایل', 'رکورد']), ISOLATED('⟪⟨فایل⟩ و ⟨رکورد⟩⟩'));
+    assert.equal(listText(['فایل', 'GenBank', 'رکورد']), ISOLATED('⟪⟨فایل⟩، ⟨GenBank⟩، و ⟨رکورد⟩⟩'));
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// Shown items one after the other with no conjunction (record ids, gene names, file names): each UI language's
+// separator (`listSeparator`); a left-to-right language keeps the bytes of `join(', ')`, Persian and Arabic write ،
+// with each item isolated and the list read right to left.
+test('a list of items without a conjunction takes the separator of the UI language', async () => {
+  assert.deepEqual(UI_LOCALES.filter(({ listSeparator }) => listSeparator !== ', ').map(({ tag, listSeparator }) => [tag, listSeparator]),
+    [['ar', '، '], ['fa', '، ']]);
+  for (const items of [[], ['NC_000913'], ['NC_000913', 'NC_002695'], ['contig start', 'contig end', 'x']]) {
+    assert.equal(itemListText(items), items.join(', '), JSON.stringify(items));
+  }
+  try {
+    for (const { tag, dir } of UI_LOCALES) {
+      await setUiLocale(tag, async () => ({ default: {} }));
+      const shown = itemListText(['NC_1', 'gene (x)', 'شروع کانتیگ']);
+      if (dir === 'rtl') {
+        assert.equal(shown, ISOLATED('⟪⟨NC_1⟩، ⟨gene (x)⟩، ⟨شروع کانتیگ⟩⟩'), tag);
+        assert.equal(itemListText([]), '', tag);
+        assert.equal(itemListText(['NC_1']), ISOLATED('⟪⟨NC_1⟩⟩'), tag);
+      } else {
+        assert.equal(shown, 'NC_1, gene (x), شروع کانتیگ', tag);
+      }
     }
   } finally {
     await setUiLocale(SOURCE_LOCALE);

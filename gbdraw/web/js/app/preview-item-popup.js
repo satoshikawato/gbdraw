@@ -25,8 +25,7 @@ import {
 } from '../services/record-display-model.js';
 import { orientLinearCard } from '../services/linear-card-windows.js';
 import { appliedFeatureColorOf, colorSwatchView } from '../utils/color-utils.js';
-import { msg, numberText, t, tn, tm, tx } from '../utils/i18n.js';
-import { itemListText } from '../utils/item-list.js';
+import { itemListText, msg, numberText, t, tn, tm, tx } from '../utils/i18n.js';
 
 /**
  * @typedef {{ label: string, value: string }} PreviewItemFact

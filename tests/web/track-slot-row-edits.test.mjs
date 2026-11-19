@@ -767,6 +767,7 @@ const REACH_SENTENCE = 'This row starts at or extends to a track that this chang
 // Each question names the rows in its own sentence key with a form per count, so that a language writes "Track row" in
 // the case and number the sentence needs: Arabic writes the dual for two rows (no phrase is inserted into the sentence).
 const isolated = (text) => text.replaceAll('⟨', '\u2068').replaceAll('⟪', '\u2067').replaceAll('⟩', '\u2069'); // dev's isolates of an inserted value (i18n.js)
+// Arabic writes و apart before a digit (I18N_STYLE 21.4).
 test('a track row question is one sentence of the UI language, with the Arabic dual for two rows', async () => {
   const { SOURCE_LOCALE, setUiLocale } = await import(pathToFileURL(join(tempRoot, 'utils', 'i18n.js')));
   try {
@@ -782,7 +783,7 @@ test('a track row question is one sentence of the UI language, with the Arabic d
     await editor.setEnabled(row, false, { target: { checked: false } });
     const rowNumber = editor.slots().indexOf(row) + 1;
     assert.equal(questions[0].title, isolated(`هل تريد إيقاف صف المسار ⟨${rowNumber}⟩؟`));
-    assert.deepEqual(questions[0].actions.map((action) => action.label), [isolated(`إيقاف صفَّي المسار ⟨⟪⟨${rowNumber}⟩ و⟨4⟩⟩⟩`)]);
+    assert.deepEqual(questions[0].actions.map((action) => action.label), [isolated(`إيقاف صفَّي المسار ⟨⟪⟨${rowNumber}⟩ و ⟨4⟩⟩⟩`)]);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }

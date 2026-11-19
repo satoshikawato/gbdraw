@@ -8,8 +8,7 @@
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { Wording } from '../utils/i18n.js' */
 import { diagnosticError } from '../utils/error-normalization.js';
-import { msg, t, tm } from '../utils/i18n.js';
-import { itemListText } from '../utils/item-list.js';
+import { itemListText, msg, t, tm } from '../utils/i18n.js';
 
 const ORIENTATION_FAILURE = /** @type {const} */ ({ stage: 'helper', operation: 'decideAutoOrientation' });
 
