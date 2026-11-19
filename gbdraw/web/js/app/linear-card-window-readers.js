@@ -8,7 +8,7 @@
 import { cardWindowList } from '../services/linear-card-windows.js';
 import { windowBases } from '../services/record-options.js';
 import { linearLayoutCells } from '../services/linear-record-layout.js';
-import { numberText, t } from '../utils/i18n.js';
+import { numberText, t, thenText } from '../utils/i18n.js';
 /** @import { DiagramMode, DrawingState, LinearSeq, WebState } from '../state.js' */
 /** @import { LinearSeqWindow } from '../services/drawing/inputs.js' */
 /** @import { CardRecordFacts } from '../services/linear-card-windows.js' */
@@ -119,8 +119,8 @@ export const createLinearCardWindowReaders = ({
         return {
           ...window, index, number, label: number ?? index + 1,
           originText: length === null || window.start === null || window.end === null || recordLength === null ? ''
-            : t('{start} → {recordEnd} → 1 → {end}: {length} bp across the origin.', {
-                start: numberText(window.start), recordEnd: numberText(recordLength), end: numberText(window.end), length: numberText(length)
+            : t('{path}: {length} bp across the origin.', {
+                path: thenText(numberText(window.start), numberText(recordLength), numberText(1), numberText(window.end)), length: numberText(length)
               }),
           gapText: gap && number !== null && second !== null
             ? t('{bp} bp of the record lie between windows {first} and {second} and are left out.', {

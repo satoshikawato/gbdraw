@@ -1,6 +1,6 @@
 // @ts-check
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
-import { t, tx } from '../utils/i18n.js';
+import { t, thenText, tx } from '../utils/i18n.js';
 
 /**
  * A mark an annotation region is drawn with (Python's annotation `mark`).
@@ -164,7 +164,7 @@ export const overlayFollowsNote = (slot) => {
   const anchor = normalizeOptionalText(params.anchor_slot);
   if (!anchor) return '';
   const target = normalizeOptionalText(params.to_slot);
-  return target ? t('follows {anchor} → {target}', { anchor, target }) : t('follows {anchor}', { anchor });
+  return t('follows {rows}', { rows: target ? thenText(anchor, target) : anchor });
 };
 
 /** @param {unknown} value @param {{ estimate?: boolean, variesByRecord?: boolean }} [options] */

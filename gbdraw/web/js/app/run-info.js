@@ -2622,7 +2622,8 @@ export const LOSAT_RING_EVALUE_SCALE_NOTE = msg('LOSATN and TLOSATX similarity r
 const SOURCE_HELPER_FILE_NOTE = msg('The Source recipe references a browser-generated file: {files}. Use "Download reproducibility files" to save it next to the uploaded inputs before running the command in a terminal.');
 const SOURCE_HELPER_FILES_NOTE = msg('The Source recipe references browser-generated files: {files}. Use "Download reproducibility files" to save them next to the uploaded inputs before running the command in a terminal.');
 const UNMAPPED_PATHS_NOTE = msg('Some browser virtual paths could not be mapped to visible file names, so this command is only an approximation.');
-const NEEDS_HELPER_FILES = msg('Needs {files} from "Download reproducibility files"');
+const NEEDS_HELPER_FILE = msg('Needs the file {files} from "Download reproducibility files"');
+const NEEDS_HELPER_FILES = msg('Needs the files {files} from "Download reproducibility files"');
 
 /**
  * The notes the Run info tab shows: the one owner of that choice. The stored Run info keeps every note
@@ -2633,9 +2634,8 @@ const NEEDS_HELPER_FILES = msg('Needs {files} from "Download reproducibility fil
  * @returns {ErrorTextPart[]}
  */
 export const shownRunInfoNoteParts = (noteParts) => noteParts.flatMap((part) => {
-  if (part.text === SOURCE_HELPER_FILE_NOTE || part.text === SOURCE_HELPER_FILES_NOTE) {
-    return [{ text: NEEDS_HELPER_FILES, params: part.params }];
-  }
+  if (part.text === SOURCE_HELPER_FILE_NOTE) return [{ text: NEEDS_HELPER_FILE, params: part.params }];
+  if (part.text === SOURCE_HELPER_FILES_NOTE) return [{ text: NEEDS_HELPER_FILES, params: part.params }];
   return [UNMAPPED_PATHS_NOTE, LOSAT_EVALUE_SCALE_NOTE, LOSAT_RING_EVALUE_SCALE_NOTE, LOSAT_DATABASE_SCOPE_NOTE].includes(part.text)
     ? [part] : [];
 });

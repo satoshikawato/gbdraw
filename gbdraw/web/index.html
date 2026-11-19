@@ -2628,7 +2628,7 @@
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Loading session…') }}</span>
                     <span v-if="featureDetailsPending && !sessionBusyReason && !sessionSavePending && !sessionImportPending" data-feature-details-pending role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Preparing feature details…') }}</span>
                 </div>
-                <span id="session-save-help" class="sr-only">{{ t('Save stores the current Result and generation settings draft. It does not Generate.') }}</span>
+                <span id="session-save-help" class="sr-only">{{ t('Save Session stores the current Result and generation settings draft. It does not Generate.') }}</span>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
                     <span class="app-session-label truncate text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{{ t('Session') }}</span>
                     <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start" :disabled="!semanticMutationAvailable">
@@ -4335,7 +4335,7 @@
                             <p v-if="sequenceSearch.panel.busy" role="status" class="text-[10px] text-amber-700 break-words">{{ tm(sequenceSearch.panel.busy) }}</p>
                             <p v-if="sequenceSearch.noHitText" role="status" data-sequence-search-no-hits class="text-[10px] text-slate-700">{{ sequenceSearch.noHitText }}</p>
                             <div v-if="sequenceSearch.shownOutcome && sequenceSearch.shownOutcome.setId" data-sequence-search-hits class="space-y-1">
-                                <div class="flex flex-wrap gap-1" role="group" :aria-label="t('Show the hits of')">
+                                <div class="flex flex-wrap gap-1" role="group" :aria-label="t('Query whose hits are shown')">
                                     <button type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === ''" @click="sequenceSearch.chooseChip('')">{{ t('All') }} ({{ sequenceSearch.shownOutcome.hits.length }})</button>
                                     <button v-for="chip in sequenceSearch.chips" :key="chip.name" type="button" class="btn btn-secondary px-1.5 py-0.5 text-[10px]" :aria-pressed="sequenceSearch.panel.chip === chip.name" @click="sequenceSearch.chooseChip(chip.name)">{{ chip.name }} ({{ chip.count }})</button>
                                 </div>
@@ -5444,7 +5444,7 @@
                                                         </div>
                                                     </div>
                                                     <details class="track-slot-more" :data-track-slot-more="entry.slot.id" :open="circularTrackSlotOptionsOpen(entry.slot)" @toggle="setCircularTrackSlotOptionsOpen(entry.slot, $event)">
-                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span class="sr-only">{{ t('Circular track slot {id}', { id: entry.slot.id }) }}{{ ' ' }}</span><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700">{{ ' ' }}{{ t('· gaps set') }}</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700">{{ ' ' }}{{ t('· custom colors') }}</span></span></summary>
+                                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span class="sr-only">{{ t('Circular track slot {id}', { id: entry.slot.id }) }}{{ ' ' }}</span><span>{{ circularTrackSlotOptionsSummary(entry.slot) }}<span v-if="entry.slot.inner_gap_px || entry.slot.outer_gap_px" class="text-slate-700">{{ ' · ' }}{{ t('custom gaps') }}</span><span v-if="entry.slot.renderer === 'dinucleotide_skew' && (circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') || circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))" class="text-slate-700">{{ ' · ' }}{{ t('custom colors') }}</span></span></summary>
                                                         <div class="mt-1 space-y-1">
                                                             <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                                 <div class="track-slot-field">
@@ -8469,7 +8469,7 @@
                                 </button>
 
                                 <p v-if="featureStyleScopeDialog.matchingRule || featureStyleScopeDialog.siblingCount > 0 || featureStyleScopeLabelOptions.displayLabel || featureStyleScopeLabelOptions.annotationLabel"
-                                   class="choice-group-label">{{ t('All features sharing') }}</p>
+                                   class="choice-group-label">{{ t('All features that share one of these') }}</p>
 
                                 <button v-if="featureStyleScopeDialog.matchingRule"
                                         @click="handleFeatureStyleScopeChoice('rule')"
@@ -10047,7 +10047,7 @@
                         <div v-else-if="regionDrawings.dialog.returnedToAuto.length" data-region-drawing-returned>
                             <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
                             <ul class="mt-0.5 list-disc space-y-0.5 ps-5">
-                                <li v-for="item in regionDrawings.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
+                                <li v-for="item in regionDrawings.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {change}', { setting: item.label, change: thenText(item.explicit, item.auto) }) }}</li>
                             </ul>
                         </div>
                         <p v-else class="mt-2">{{ t('Every setting is carried over.') }}</p>
@@ -10257,7 +10257,7 @@
                     <div v-if="findInOtherFiles.dialog.returnedToAuto.length" data-find-files-returned>
                         <p class="font-semibold text-slate-700">{{ t('These sizes return to Auto for the new length:') }}</p>
                         <ul class="mt-0.5 list-disc space-y-0.5 ps-5">
-                            <li v-for="item in findInOtherFiles.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {explicit} → {auto}', { setting: item.label, explicit: item.explicit, auto: item.auto }) }}</li>
+                            <li v-for="item in findInOtherFiles.dialog.returnedToAuto" :key="item.setting" class="break-words">{{ t('{setting}: {change}', { setting: item.label, change: thenText(item.explicit, item.auto) }) }}</li>
                         </ul>
                     </div>
                     <div v-if="findInOtherFiles.dialog.notCarried.length" data-find-files-not-carried class="mt-1">

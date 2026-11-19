@@ -270,10 +270,16 @@ const valuesEquivalent = (left, right) => {
   return String(left ?? '').trim() === String(right ?? '').trim();
 };
 
-/** @param {unknown} value */
-const displayFilterValue = (value) => {
-  if (value === null || value === undefined || String(value).trim() === '') return t('unset');
-  return String(value).trim();
+/**
+ * One filter of the summary: its bound with the value, or its own text when the field is empty (a cleared input),
+ * so no word stands in for a number inside the bound.
+ * @param {unknown} value
+ * @param {(value: string) => string} bound
+ * @param {() => string} unset
+ */
+const filterLine = (value, bound, unset) => {
+  const text = value === null || value === undefined ? '' : String(value).trim();
+  return text === '' ? unset() : bound(text);
 };
 
 /** @param {ComparisonFilterValues} filters */
@@ -291,10 +297,10 @@ const projectFilterSummary = (filters) => {
       : defaults.alignment_length
   });
   const text = [
-    t('E-value ≤ {value}', { value: displayFilterValue(values.evalue) }),
-    t('Bitscore ≥ {value}', { value: displayFilterValue(values.min_bitscore) }),
-    t('Identity ≥ {value}%', { value: displayFilterValue(values.identity) }),
-    t('Length ≥ {value}', { value: displayFilterValue(values.alignment_length) })
+    filterLine(values.evalue, (value) => t('E-value ≤ {value}', { value }), () => t('E-value not set')),
+    filterLine(values.min_bitscore, (value) => t('Bitscore ≥ {value}', { value }), () => t('Bitscore not set')),
+    filterLine(values.identity, (value) => t('Identity ≥ {value}%', { value }), () => t('Identity not set')),
+    filterLine(values.alignment_length, (value) => t('Length ≥ {value}', { value }), () => t('Length not set'))
   ].join(' · ');
   // `values` has exactly the four keys of ComparisonState, built above.
   const isDefault = /** @type {(keyof ComparisonState)[]} */ (Object.keys(values)).every((key) => valuesEquivalent(values[key], defaults[key]));

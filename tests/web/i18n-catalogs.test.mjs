@@ -1354,11 +1354,41 @@ test('every `one` text of a tn() call is a catalog key', () => {
   for (const key of ['{count} color rule', 'The chosen feature already points left.', '({count} record)']) assert.ok(keys.has(key), key);
 });
 
-test('OV-1415: the words a declined label table names as changed are a key, shown in the UI language', async () => {
-  const { RULE_INPUT_CHANGE_WORDS } = await import('../../gbdraw/web/js/utils/error-normalization.js');
-  assert.ok(new Set(sourceCalls().map((call) => call.key)).has(RULE_INPUT_CHANGE_WORDS));
-  const source = readFileSync(join(jsRoot, 'services', 'label-import-plan.js'), 'utf8');
-  assert.match(source, /\{ inputs: tm\(RULE_INPUT_CHANGE_WORDS\) \}/);
+// OV-1415, I18N_STYLE 1.3: a declined label table names what changed inside one whole sentence, never a phrase key
+// inserted into another key.
+test('OV-1415: the sentences that decline a table for changed rule inputs are whole keys', async () => {
+  const keys = new Set(sourceCalls().map((call) => call.key));
+  assert.ok(keys.has("Not applied: colors, color rules, the Legend, or the diagram's inputs changed while the table loaded. Load the table again."));
+  assert.ok(!keys.has("colors, color rules, the Legend, or the diagram's inputs"), 'no phrase key to insert');
+  assert.ok(!keys.has('Not applied: {inputs} changed while the table loaded. Load the table again.'));
+  assert.equal(Object.hasOwn(await import('../../gbdraw/web/js/utils/error-normalization.js'), 'RULE_INPUT_CHANGE_WORDS'), false);
+});
+
+// "a, then b" between two values is written by code (thenText in utils/i18n.js), which points the arrow along the
+// reading order and isolates both sides; a key that writes → between two placeholders would point backwards in a
+// right-to-left language.
+test('no English key writes an arrow between two inserted values', async () => {
+  const { keys } = await sourceKeys();
+  assert.deepEqual([...keys.keys()].filter((key) => /\}\s*[→←]\s*\{/.test(key)), []);
+});
+
+test('a path of several steps reads along the reading order, each step isolated in a right-to-left language', async () => {
+  assert.equal(thenText('5,000', '9,000', '1', '200'), '5,000 → 9,000 → 1 → 200');
+  try {
+    await setUiLocale('fa', async () => ({ default: {} }));
+    assert.equal(thenText('5,000', '9,000', '1', '200'), ISOLATED('⟪⟨5,000⟩ ← ⟨9,000⟩ ← ⟨1⟩ ← ⟨200⟩⟩'));
+    assert.equal(t('{path}: {length} bp across the origin.', { path: thenText('9', '10', '1', '2'), length: '4' }),
+      ISOLATED('⟨⟪⟨9⟩ ← ⟨10⟩ ← ⟨1⟩ ← ⟨2⟩⟩⟩: ⟦⟨4⟩ bp across the origin⟩.'));
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
+// I18N_STYLE 1.3: a group label, option or status tag reads whole; no key is completed by the text after it.
+test('the fragment keys of the hit chips and the slot options summary are gone', () => {
+  const keys = new Set(sourceCalls().map((call) => call.key));
+  for (const fragment of ['Show the hits of', '· gaps set', '· custom colors']) assert.ok(!keys.has(fragment), fragment);
+  for (const whole of ['Query whose hits are shown', 'custom gaps', 'custom colors']) assert.ok(keys.has(whole), whole);
 });
 
 // OV-1690: the record list status is one key, so a locale writes its own
@@ -1509,13 +1539,13 @@ test('sentences with a count or a qualifier are whole keys, and none is built fr
     'Exact replay references {files}, which is included in "Download reproducibility files".',
     'Exact replay references {files}, which are included in "Download reproducibility files".',
     'Your files never leave this device',
-    'All features sharing',
+    'All features that share one of these',
     'Room kept toward the center for the inside tracks: {px} px.',
     'Room kept toward the center for the inside tracks (among them GC content, GC skew, and the scale): {px} px.',
     'number of groups in a block\u0004Similarity groups'
   ]) assert.ok(keys.has(key), key);
   for (const key of [
-    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same',
+    '{first} and {second}', 'the scale', 'a qualifier', 'entirely in your browser', 'This tool runs {where} using WebAssembly (Pyodide).', 'All features with the same', 'All features sharing',
     // OV-2435: a color rule needs a qualifier, so no sentence names a rule without one.
     '{feature} where a qualifier matches “{pattern}”', 'Any feature where a qualifier matches “{pattern}”'
   ]) assert.ok(!keys.has(key), key);

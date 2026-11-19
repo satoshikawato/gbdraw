@@ -454,6 +454,9 @@ test('filter summary always reports actual values and compares against mode-prof
     custom.filterSummary,
     'E-value ≤ 1e-20 · Bitscore ≥ 85 · Identity ≥ 97.5% · Length ≥ 120'
   );
+  // A field the user cleared names its own state, never a word inside the bound ("Identity ≥ unset%").
+  const cleared = project(plan, { filters: { evalue: '', min_bitscore: null, identity: ' ', alignment_length: 120 } });
+  assert.equal(cleared.filterSummary, 'E-value not set · Bitscore not set · Identity not set · Length ≥ 120');
 });
 
 test('retained dormant draft count does not become an active pair count', () => {

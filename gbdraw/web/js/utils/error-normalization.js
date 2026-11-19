@@ -280,10 +280,6 @@ const REASON_CODE_TEXT = Object.freeze({
   COLOR: COLOR_FORMS,
   REPLY_TOO_LARGE: SESSION_COMMANDS, FASTA_NO_ENTRIES: { sign: '>' }, FONT_FILE: { trueType: '.ttf', openType: '.otf', trueTypeCollection: '.ttc', openTypeCollection: '.otc' }
 });
-// What a decline names as changed under an evaluation of rule inputs (OV-447,
-// OV-449): the label table import and the Specific rules import read it here.
-// A key of its own (OV-1415): the label table's notice shows it with `tm`.
-export const RULE_INPUT_CHANGE_WORDS = msg("colors, color rules, the Legend, or the diagram's inputs");
 // The code of an engine that ran out of memory (its DEFINITIONS entry below): the service that owns the Worker
 // replaces that engine when a reply carries it.
 export const OUT_OF_MEMORY_CODE = 'OUT_OF_MEMORY';
@@ -322,8 +318,10 @@ const DEFINITIONS = Object.freeze({
   // OV-1206: the Specific rules owner (`runSpecificRuleWrite`) retried while
   // the rule inputs kept changing and gave up. Its result names no cause, so
   // one phrase covers a redraw too: the label table decline words a redraw
-  // apart (OV-449), which here would need a wider port from the owner.
-  RULE_INPUTS_CHANGED: [`The Specific rules file was not applied: ${RULE_INPUT_CHANGE_WORDS} changed while it was applied. Retry the table import.`, ['retry']],
+  // apart (OV-449), which here would need a wider port from the owner. The
+  // label table's decline names the same inputs in its own whole sentence
+  // (services/label-import-plan.js; I18N_STYLE 1.3).
+  RULE_INPUTS_CHANGED: ['The Specific rules file was not applied: colors, color rules, the Legend, or the diagram\'s inputs changed while it was applied. Retry the table import.', ['retry']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
   INPUT_UNREADABLE: ['An input could not be read. Replace or reselect it.', ['select-input', 'retry']],

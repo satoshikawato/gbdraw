@@ -2,7 +2,7 @@
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED, recordTargetError } from '../record-display-options.js';
 import { normalizeCaughtError, renderErrorText } from '../../utils/error-normalization.js';
-import { msg, numberText, t } from '../../utils/i18n.js';
+import { msg, numberText, t, thenText } from '../../utils/i18n.js';
 /** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
 /** @import { Wording } from '../../utils/i18n.js' */
 /** @import { CommittedDisplayRow, ResolvedRecordTransform } from '../record-display-options.js' */
@@ -345,7 +345,7 @@ const previewFor = ({ recordLabel, resolved, committedReverseComplement }) => {
     committedReverseComplement
   });
   return before && after && before !== after
-    ? () => `${sentence()} · ${t('feature strand {before} → {after}', { before, after })}`
+    ? () => `${sentence()} · ${t('feature strand {change}', { change: thenText(before, after) })}`
     : sentence;
 };
 

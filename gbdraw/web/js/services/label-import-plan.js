@@ -7,9 +7,8 @@
 import { escapeRegexLiteral } from './feature-selector.js';
 import { featureIdentityKeyOf } from './feature-placement.js';
 import { serializeLabelOverrideRows } from './label-override-table.js';
-import { RULE_INPUT_CHANGE_WORDS } from '../utils/error-normalization.js';
 /** @import { Wording } from '../utils/i18n.js' */
-import { joinSentences, t, tm, tn } from '../utils/i18n.js';
+import { joinSentences, t, tn } from '../utils/i18n.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
 /** @import { ExtractedFeature } from './feature-metadata-extraction.js' */
 /** @import { LabelOverrideTsvRow, StoredLabelOverrideRow } from './label-override-table.js' */
@@ -86,7 +85,7 @@ export const planLabelImport = (labels, rows, winners) => {
 const declinedSentence = (reason) => ({
   'label-intent': () => t('Not applied: label text, label visibility, or feature visibility changed while the table loaded. The changes were kept. Load the table again.'),
   diagram: () => t('Not applied: the displayed diagram changed while the table loaded. Load the table again.'),
-  'rule-inputs': () => t('Not applied: {inputs} changed while the table loaded. Load the table again.', { inputs: tm(RULE_INPUT_CHANGE_WORDS) }),
+  'rule-inputs': () => t("Not applied: colors, color rules, the Legend, or the diagram's inputs changed while the table loaded. Load the table again."),
   'no-diagram': () => t('No diagram is shown, so nothing was applied.')
 })[reason]();
 

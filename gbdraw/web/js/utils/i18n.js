@@ -401,18 +401,20 @@ export const thenArrow = () => (shownLocale().dir === 'rtl' ? '←' : '→');
 
 /**
  * "a, then b" written outside a catalog text (`#1 → #2`, current →
- * restored): `a → b` in a left-to-right language; in a right-to-left one
- * `a ← b` as one right-to-left isolate (RLI ... PDI) with each side isolated
- * (FSI ... PDI), so it reads right to left also inside a sentence's isolate
- * or a list item, and each side keeps its own order. Use `thenArrow()` only
- * where the arrow stands between two elements rendered apart.
+ * restored, a path `5,000 → 9,000 → 1 → 200`): `a → b` in a left-to-right
+ * language; in a right-to-left one `a ← b` as one right-to-left isolate
+ * (RLI ... PDI) with each step isolated (FSI ... PDI), so it reads right to
+ * left also inside a sentence's isolate or a list item, and each step keeps
+ * its own order. A key never writes this arrow between two placeholders. Use
+ * `thenArrow()` only where the arrow stands between two elements rendered
+ * apart.
  * @param {string} first
- * @param {string} then
+ * @param {...string} then the steps after `first`, at least one
  * @returns {string}
  */
-export const thenText = (first, then) => (shownLocale().dir === 'rtl'
-  ? `${RLI}${FSI}${first}${PDI} ${thenArrow()} ${FSI}${then}${PDI}${PDI}`
-  : `${first} ${thenArrow()} ${then}`);
+export const thenText = (first, ...then) => (shownLocale().dir === 'rtl'
+  ? `${RLI}${[first, ...then].map((step) => `${FSI}${step}${PDI}`).join(` ${thenArrow()} `)}${PDI}`
+  : [first, ...then].join(` ${thenArrow()} `));
 
 /**
  * A part of a list: an item, or the text the list pattern writes between items.

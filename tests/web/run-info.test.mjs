@@ -2123,8 +2123,9 @@ test('the Run info tab shows the notes a reader acts on, from the stored notes',
     assert.equal(stored.notes.length, 3, 'the stored notes keep the helper and Session restore notes');
     assert.deepEqual(shownRunInfoNoteParts(stored.noteParts).map((part) => errorText([part])), [
       count === 1
-        ? 'Needs pair_0.tsv from "Download reproducibility files"'
-        : 'Needs pair_0.tsv, pair_1.tsv from "Download reproducibility files"',
+        // One key for one file and one for several, each naming its class noun, so every language words both.
+        ? 'Needs the file pair_0.tsv from "Download reproducibility files"'
+        : 'Needs the files pair_0.tsv, pair_1.tsv from "Download reproducibility files"',
       LOSAT_EVALUE_SCALE_NOTE
     ]);
   }
