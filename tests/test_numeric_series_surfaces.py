@@ -98,7 +98,7 @@ def test_cli_values_go_to_their_tracks_in_order(module) -> None:
 def test_cli_series_values_are_checked() -> None:
     with pytest.raises(ValidationError, match="depth_track_units count must be one or equal"):
         _cli_tracks(circular_cli, "--depth_track", "a", "--depth_track", "b", "--depth_track_unit", "x", "y", "z")
-    with pytest.raises(ValidationError, match="depth_track_baselines values must be finite numbers or auto or mean"):
+    with pytest.raises(SystemExit):
         _cli_tracks(circular_cli, "--depth_track", "a", "--depth_track_baseline", "middle")
     with pytest.raises(SystemExit):
         _cli_tracks(circular_cli, "--depth_track", "a", "--depth_track_style", "bar")
@@ -207,7 +207,7 @@ def test_a_drawing_refuses_a_global_depth_range_out_of_order_as_the_series_reade
     depth = tmp_path / "depth.tsv"
     depth.write_text("NC_012920.1\t1\t5\n")
     overrides = {"objects.depth.min_depth": 5, "objects.depth.max_depth": 1}
-    with pytest.raises(ValidationError, match=r"^min_depth must be <= max_depth\.$") as caught:
+    with pytest.raises(ValidationError, match=r"^min_depth must be <= max_depth; got 5 and 1\.$") as caught:
         gbdraw.draw_circular(
             gbdraw.read_genbank(_HMMT),
             options=gbdraw.CircularOptions(
@@ -231,7 +231,7 @@ def test_a_drawing_refuses_a_global_depth_range_out_of_order_as_the_series_reade
         ({"baseline": math.nan}, "DepthTrackInput.baseline must be a finite number"),
         ({"min_value": math.inf}, 'DepthTrackInput.min_value must be a finite number or "auto"'),
         ({"max_value": True}, 'DepthTrackInput.max_value must be a finite number or "auto"'),
-        ({"min_value": 2, "max_value": 1}, "DepthTrackInput.min_value must be <= DepthTrackInput.max_value"),
+        ({"min_value": 2, "max_value": 1}, "min_value must be <= max_value; got 2 and 1"),
         ({"unit": None}, "DepthTrackInput.unit must be a string"),
         ({"negative_color": " "}, "DepthTrackInput.negative_color must be a non-empty string or None"),
     ],
@@ -246,17 +246,97 @@ def test_a_log_scaled_series_refuses_a_negative_range(tmp_path: Path) -> None:
     records = gbdraw.read_genbank(_HMMT)
     with pytest.raises(ValidationError, match="A log-scaled depth range must not be negative") as refused:
         _render_api(records, (track,), normalize=True)
+    # The series' own bound, named as the series' (review r1 L2: a reason of its own, which names Log Scale).
     assert refused.value.diagnostic == {
-        "code": "INPUT_INVALID", "field": "min_depth", "reason": "NONNEGATIVE", "seriesIndex": 0
+        "code": "INPUT_INVALID", "field": "min_value", "reason": "LOG_SCALE_NEGATIVE", "seriesIndex": 0
     }
 
 
-def _render_api(records, tracks, *, normalize: bool = False) -> str:
+@pytest.mark.parametrize(
+    ("series", "overrides", "field"),
+    [
+        ({"min_value": 5.0}, {"objects.depth.max_depth": 3}, "min_value"),
+        ({"max_value": 3.0}, {"objects.depth.min_depth": 5}, "max_value"),
+        ({"min_value": 5.0, "max_value": "auto"}, {"objects.depth.max_depth": 3}, None),
+    ],
+)
+def test_a_series_bound_that_crosses_the_global_bound_is_refused_naming_the_bound_and_the_series(
+    tmp_path: Path, series: dict[str, object], overrides: dict[str, object], field: str | None
+) -> None:
+    """Review r1 M3: a series' Min above the global Depth Max (or its Max below the global Depth Min) was refused
+    without a diagnostic, so the Web named neither the field nor the series; ``auto`` takes the series' own bound."""
+
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    track = DepthTrackInput(source=_signed_bedgraph(tmp_path / "s.bg"), **series)  # type: ignore[arg-type]
+    records = gbdraw.read_genbank(_HMMT)
+    if field is None:
+        assert "<path" in _render_api(records, (track,), overrides=overrides)
+        return
+    with pytest.raises(ValidationError, match="must be <=") as refused:
+        _render_api(records, (track,), overrides=overrides)
+    assert refused.value.diagnostic == {"code": "INPUT_INVALID", "field": field, "reason": "ORDER", "seriesIndex": 0}
+    payload = serialize_web_error(refused.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == (
+        "INPUT_INVALID", {"field": field, "reason": "ORDER", "seriesIndex": 0}
+    )
+
+
+@pytest.mark.parametrize("module", [circular_cli, linear_cli])
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--depth_max", "3", "--depth_track_min", "5"], "depth track 1: --depth_track_min must be <= --depth_max"),
+        (["--depth_min", "5", "--depth_track_max", "3"], "depth track 1: --depth_min must be <= --depth_track_max"),
+        (["--depth_track_min", "4", "--depth_track_max", "3"], "--depth_track_min must be <= --depth_track_max"),
+        (["--depth_track_min", "abc"], "--depth_track_min values must be finite numbers or auto"),
+        (["--depth_track_max", "1e999"], "--depth_track_max values must be finite numbers or auto"),
+        (["--depth_track_baseline", "top"], "--depth_track_baseline values must be finite numbers, auto or mean"),
+        (["--depth_track_min", "-1", "--depth_log_scale"], "depth track 1: --depth_track_min must be >= 0 with --depth_log_scale"),
+    ],
+)
+def test_the_cli_refuses_a_series_range_by_its_option_names(
+    module, argv: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Review r1 L3 and M3: the series' range options were refused under internal names (depth_track_min_values,
+    min_depth) or not at all until the drawing; they are refused by the option names, as the global range is."""
+
+    with pytest.raises(SystemExit):
+        module._get_args(["--gbk", "x.gb", "--depth_track", "a.tsv", *argv])
+    assert message in capsys.readouterr().err
+    # Equal bounds are a flat series, not a refusal; auto is the series' own bound.
+    flat = ["--depth_track_min", "3", "--depth_track_max", "3", "--depth_min", "5", "--depth_track_baseline", "mean"]
+    assert module._get_args(["--gbk", "x.gb", "--depth_track", "a.tsv", *flat]).depth_track_min == ["3"]
+    assert module._get_args(["--gbk", "x.gb", "--depth_track", "a.tsv", "--depth_track_min", "auto", "--depth_max", "-1"])
+
+
+def test_a_series_word_out_of_its_menu_names_its_field() -> None:
+    """Review r1 L1: a format, window value or style out of its words names its field for the Web."""
+
+    for field, value in (("format", "wig"), ("agg", "median"), ("style", "bar")):
+        with pytest.raises(ValidationError) as refused:
+            DepthTrackInput(source="a.tsv", **{field: value})  # type: ignore[arg-type]
+        assert refused.value.diagnostic == {"code": "INPUT_INVALID", "field": field, "reason": "CHOICE"}
+
+
+def test_a_bed_row_that_ends_before_it_starts_is_refused_in_bed_words(tmp_path: Path) -> None:
+    """Review r1 L4: a BED row out of order was refused with the bedGraph and samtools wording."""
+
+    from gbdraw.analysis.depth import parse_depth_tsv
+
+    path = tmp_path / "sites.bed"
+    path.write_text("rec1\t20\t10\n", encoding="utf-8")
+    message, diagnostic = _refusal(lambda: parse_depth_tsv(str(path), file_format="bed"))
+    assert diagnostic == {"code": "DEPTH_INVALID", "reason": "BED_INTERVAL"}
+    assert message.startswith("BED rows are a reference name") and "bedGraph" not in message
+
+
+def _render_api(records, tracks, *, normalize: bool = False, overrides: dict[str, object] | None = None) -> str:
     from gbdraw.api.diagram import assemble_circular_diagram_from_record
     from gbdraw.api.assembly_inputs import CircularAssemblyInputs
     from gbdraw.api.config import apply_config_overrides
 
-    cfg = apply_config_overrides(None, {"objects.depth.normalize": normalize})
+    cfg = apply_config_overrides(None, {"objects.depth.normalize": normalize, **(overrides or {})})
     canvas = assemble_circular_diagram_from_record(
         records[0], CircularAssemblyInputs(depth_tracks=tracks, cfg=cfg, legend="right")
     )

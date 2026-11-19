@@ -52,13 +52,14 @@ min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_interval depth_axis_
 conservation_ring_width conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio
 multi_record_column_gap_ratio multi_record_row_gap_ratio
 protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
+min_value max_value negativeColor baseline format agg style unit
 """.split())
 
 # Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
 # owner (utils/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
 DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE NO_RECORDS REGION_INVALID DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_INVALID TRACK_LAYOUT LABEL_LAYOUT LOSAT_RUNTIME FEATURE_PLACEMENT FEATURE_IDENTITY MODE_SETTING HELPER_PROTOCOL EXPORT_LIMIT".split())
-DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
+DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE CHOICE LOG_SCALE_NEGATIVE BED_INTERVAL POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL
 POSITIVE_OR_AUTO POSITIVE_INTEGER_OR_AUTO NONNEGATIVE_INTEGER PERCENT INCREASING UNKNOWN_CONFIG_PATH
 DINUCLEOTIDE CANNOT_FIT CENTER_RESERVED THREE_COLUMNS DEPTH_COLUMNS INTERVAL DEPTH_VALUES FILENAME FILENAME_LENGTH
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL WINDOWED_FILE_COMPARISON COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLLINEAR_MERGE_ORIENTATION COLOR SEARCH_FRAME GENETIC_CODE
@@ -130,7 +131,6 @@ _CONSTRAINTS = {
     "must be non-empty text without NUL": "REQUIRED",
     "must be an integer greater than or equal to 0": "NONNEGATIVE_INTEGER",
     "must be an integer greater than or equal to 1": "POSITIVE_INTEGER",
-    "must be <= max_depth": "ORDER",
 }
 
 _EXACT = {

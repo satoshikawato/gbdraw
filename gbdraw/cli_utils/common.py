@@ -39,12 +39,18 @@ from gbdraw.config.models.objects import (
 from gbdraw.core.figure_length import argparse_figure_length
 from gbdraw.core.numeric import JS_WHITESPACE, argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
-from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, check_depth_range
-from gbdraw.analysis.depth_tracks import depth_track_number
+from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, DEPTH_RANGE_FIELDS, check_depth_range
+from gbdraw.analysis.depth_tracks import depth_track_number, series_bound, series_range_fields
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.series_style import SERIES_STYLES
+from gbdraw.layout.series_style import SERIES_STYLES, SeriesBound
 from gbdraw.api.options import DepthTrackInput
-from gbdraw.api.record_planning import DepthTrackCliValues, RecordInputManifest, depth_track_inputs_from_cli
+from gbdraw.api.record_planning import (
+    DepthTrackCliValues,
+    RecordInputManifest,
+    cli_series_baseline,
+    cli_series_bound,
+    depth_track_inputs_from_cli,
+)
 from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
 from gbdraw.features.shapes import parse_feature_shape_assignment
 from gbdraw.labels.label_style import (
@@ -703,13 +709,9 @@ def validate_depth_axis_args(
     """Refuse a depth range or tick interval out of bounds, and a per-track depth number that is not a number
     > 0 or ``auto`` (``track_heights``: also Linear's ``--depth_track_height``)."""
 
-    try:
-        check_depth_range(args.depth_min, args.depth_max, log_scale=bool(args.depth_normalize))
-    except ValidationError as exc:
-        if exc.diagnostic is None:
-            parser.error("--depth_min must be <= --depth_max")
-        option = {"min_depth": "--depth_min", "max_depth": "--depth_max"}[str(exc.diagnostic["field"])]
-        parser.error(f"{option} must be >= 0 with --depth_log_scale")
+    log_scale = bool(args.depth_normalize)
+    _refuse_depth_range(parser, args.depth_min, args.depth_max, log_scale=log_scale, fields=DEPTH_RANGE_FIELDS)
+    _validate_depth_series_ranges(parser, args, log_scale=log_scale)
     require_positive_args(parser, args, "depth_large_tick_interval", "depth_small_tick_interval")
     per_track = (("depth_track_height",) if track_heights else ()) + _DEPTH_TRACK_NUMBER_OPTIONS
     for option_name in per_track:
@@ -719,6 +721,67 @@ def validate_depth_axis_args(
                 depth_track_number(option_value, field_name=f"{option_name}s")
             except ValidationError:
                 parser.error(f"--{option_name} values must be finite numbers > 0 or auto")
+
+
+# The options of the depth range fields ``check_depth_range`` names.
+_DEPTH_RANGE_OPTIONS = {
+    "min_depth": "--depth_min", "max_depth": "--depth_max", "min_value": "--depth_track_min", "max_value": "--depth_track_max",
+}
+
+
+def _refuse_depth_range(
+    parser: argparse.ArgumentParser,
+    low: float | None,
+    high: float | None,
+    *,
+    log_scale: bool,
+    fields: tuple[str, str],
+    where: str = "",
+) -> None:
+    """``check_depth_range`` with its refusal in the CLI's option names (``where``: the depth track it is of)."""
+
+    try:
+        check_depth_range(low, high, log_scale=log_scale, fields=fields)
+    except ValidationError as exc:
+        diagnostic = exc.diagnostic or {}
+        if diagnostic.get("reason") == "ORDER":
+            parser.error(f"{where}{_DEPTH_RANGE_OPTIONS[fields[0]]} must be <= {_DEPTH_RANGE_OPTIONS[fields[1]]}")
+        parser.error(f"{where}{_DEPTH_RANGE_OPTIONS[str(diagnostic.get('field'))]} must be >= 0 with --depth_log_scale")
+
+
+def _validate_depth_series_ranges(parser: argparse.ArgumentParser, args: argparse.Namespace, *, log_scale: bool) -> None:
+    """Refuse a ``--depth_track_min``/``--depth_track_max`` that is not a number or auto and a
+    ``--depth_track_baseline`` that is not a number, auto or mean, then each track's range (its own bounds, else
+    --depth_min/--depth_max) as ``check_depth_range`` does, all by the option names."""
+
+    parsed: dict[str, list[SeriesBound]] = {}
+    for option, words in (("depth_track_min", " or auto"), ("depth_track_max", " or auto"), ("depth_track_baseline", ", auto or mean")):
+        values = getattr(args, option) or []
+        try:
+            if option == "depth_track_baseline":
+                for value in values:
+                    cli_series_baseline(value, field_name=f"{option}s")
+            else:
+                parsed[option] = [cli_series_bound(value, field_name=f"{option}s") for value in values]
+        except ValidationError:
+            parser.error(f"--{option} values must be finite numbers{words}")
+    tracks = len(args.depth_track or [])
+    # One value is every track's; a count that is neither is refused with the series options (depth_track_inputs_from_cli).
+    lows, highs = (
+        values * tracks if len(values) == 1 else values for values in (parsed["depth_track_min"], parsed["depth_track_max"])
+    )
+    if not tracks or len(lows) not in (0, tracks) or len(highs) not in (0, tracks):
+        return
+    for index in range(tracks):
+        low, high = (lows[index] if lows else None), (highs[index] if highs else None)
+        _refuse_depth_range(
+            parser,
+            series_bound(low, args.depth_min),
+            series_bound(high, args.depth_max),
+            log_scale=log_scale,
+            fields=series_range_fields(low, high),
+            where=f"depth track {index + 1}: ",
+        )
 
 
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:

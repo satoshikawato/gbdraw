@@ -14,9 +14,11 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.analysis.depth import (
+    DEPTH_RANGE_FIELDS,
     DepthAggregation,
     DepthCoverage,
     DepthFileFormat,
+    check_depth_range,
     depth_df,
     parse_depth_tsv,
     read_cached_depth_coverage,
@@ -43,6 +45,16 @@ def series_bound(bound: SeriesBound, global_bound: float | None) -> float | None
     if bound is None:
         return global_bound
     return None if bound == "auto" else float(bound)
+
+
+def series_range_fields(min_value: SeriesBound, max_value: SeriesBound) -> tuple[str, str]:
+    """The fields a series' range bounds come from: its own ``min_value``/``max_value`` when it sets a number,
+    else the global ``min_depth``/``max_depth`` (``check_depth_range`` names them in a refusal)."""
+
+    return (
+        "min_value" if isinstance(min_value, (int, float)) else DEPTH_RANGE_FIELDS[0],
+        "max_value" if isinstance(max_value, (int, float)) else DEPTH_RANGE_FIELDS[1],
+    )
 
 
 @dataclass(frozen=True)
@@ -830,7 +842,11 @@ def _series_frame(
 ) -> DataFrame:
     """One series' binned frame of one record (render stage ``depth_frame``); a failure names the series."""
 
+    min_depth = series_bound(spec.min_value, base_config.min_depth)
+    max_depth = series_bound(spec.max_value, base_config.max_depth)
     try:
+        # The range's refusal names the series' own bound when one of them is (the CLI's names: validate_depth_axis_args).
+        check_depth_range(min_depth, max_depth, log_scale=base_config.normalize, fields=series_range_fields(spec.min_value, spec.max_value))
         frame: DataFrame = render_stage(
             "depth_frame",
             depth_df_builder,
@@ -839,8 +855,8 @@ def _series_frame(
             window,
             step,
             circular=circular,
-            min_depth=series_bound(spec.min_value, base_config.min_depth),
-            max_depth=series_bound(spec.max_value, base_config.max_depth),
+            min_depth=min_depth,
+            max_depth=max_depth,
             agg=spec.agg,
             log_scale=base_config.normalize,
         )

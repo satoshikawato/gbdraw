@@ -33,7 +33,8 @@ depth_axis_font_size dinucleotide feature_width_circular depth_width_circular gc
 gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conservation_ring_width
 conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
 multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot to_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
-placement strict compress reserve gapAfter gap_after innerRadius inner_radius outerRadius outer_radius`.split(/\s+/));
+placement strict compress reserve gapAfter gap_after innerRadius inner_radius outerRadius outer_radius
+min_value max_value negativeColor baseline format agg style unit`.split(/\s+/));
 /** @type {Readonly<Record<string, string>>} */
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
@@ -172,7 +173,9 @@ const REASONS = Object.freeze({
   FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
   FONT_NOT_LOADED: 'This font is no longer loaded in this page. Load it again in Font, or choose another font.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
-  FINITE: 'Use a finite number.', POSITIVE_INTEGER: 'Use an integer greater than zero.',
+  FINITE: 'Use a finite number.', CHOICE: 'Choose one of the values this setting\'s menu offers.',
+  LOG_SCALE_NEGATIVE: 'Log Scale draws only values of 0 or more. Turn off Log Scale in the Depth settings to draw values or a range below 0.',
+  POSITIVE_INTEGER: 'Use an integer greater than zero.',
   POSITIVE: 'Use a finite value greater than zero.', POSITIVE_OR_AUTO: 'Use Auto or a finite value greater than zero.',
   NONNEGATIVE_INTEGER: 'Use an integer of zero or greater.', PERCENT: 'Use a finite value between 0 and 100.',
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
@@ -196,6 +199,7 @@ const REASONS = Object.freeze({
   THREE_COLUMNS: 'Supply at least three tab-separated columns.',
   // A depth file's form comes from its column count (gbdraw/analysis/depth.py).
   DEPTH_COLUMNS: 'Supply two tab-separated columns (position, value), three (reference, position, value, as samtools depth writes), or four (reference, start, end, value, as bedGraph). For a BED file, set the series Format to BED.',
+  BED_INTERVAL: 'A BED row is a reference, a 0-based start of 0 or more and an end greater than its start, then an optional name and score.',
   INTERVAL: 'A file of four or more columns is read as bedGraph: reference, 0-based start, end and value, each end greater than its start, and the rows of a reference in increasing order without overlaps. For samtools depth of several samples, set the series Format to samtools depth (its first sample is drawn), or write the file with samtools depth -H.',
   POSITIVE_INTEGER_OR_AUTO: 'Use Auto or an integer greater than zero.',
   DINUCLEOTIDE: 'Use two letters from A, C, G, T, and U, for example GC.',
@@ -414,7 +418,9 @@ const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Pairwise display 
   collinear_color_mode: 'Color mode', circular_multi_record_size_mode: 'Record Size Mode', linear_track_layout: 'Track Layout',
   linear_label_placement: 'Label Placement', overflow: 'Overflow behavior', layer: 'Annotation layer', set_id: 'Annotation set',
   anchor_slot: 'Enabled drawable anchor', to_slot: 'Extend to', renderer: 'Renderer', side: 'Track placement', spacing: 'Spacing',
-  depth_min: 'Depth Min', depth_max: 'Depth Max', min_depth: 'Depth Min', max_depth: 'Depth Max' });
+  depth_min: 'Depth Min', depth_max: 'Depth Max', min_depth: 'Depth Min', max_depth: 'Depth Max',
+  min_value: 'Min', max_value: 'Max', negativeColor: 'Negative color', baseline: 'Baseline', format: 'Format', agg: 'Window value',
+  style: 'Style', unit: 'Unit' });
 const CODES = new Set(Object.keys(DEFINITIONS));
 // Python exception classes the adapter may name for RENDER_FAILED (class names, never messages).
 const EXCEPTION_TYPES = new Set(`ValidationError ParseError ConfigError ExportError GbdrawError ZeroDivisionError

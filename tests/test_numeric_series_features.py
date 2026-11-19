@@ -373,4 +373,6 @@ def test_a_log_scaled_series_refuses_a_negative_value() -> None:
             base_config=_base_config(normalize=True),
         )
     # The failure names the series, as a reader failure does.
-    assert refused.value.diagnostic == {"code": "DEPTH_INVALID", "reason": "NONNEGATIVE", "seriesIndex": 0}
+    # Its reason names the log scale that refuses the values (review r1 L2).
+    assert refused.value.diagnostic == {"code": "DEPTH_INVALID", "reason": "LOG_SCALE_NEGATIVE", "seriesIndex": 0}
+    assert "log-scaled" in str(refused.value)

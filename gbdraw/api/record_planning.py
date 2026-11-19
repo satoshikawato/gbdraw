@@ -1540,14 +1540,18 @@ def _cli_number(text: str, *, field_name: str, words: str) -> float:
     return numeric
 
 
-def _cli_bound(value: object | None, *, field_name: str) -> SeriesBound:
+def cli_series_bound(value: object | None, *, field_name: str) -> SeriesBound:
+    """A series' range bound option (``--depth_track_min``/``--depth_track_max``): a number, ``auto``, or unset."""
+
     text = str(value).strip().lower() if value is not None else ""
     if text in _CLI_UNSET_WORDS:
         return None
     return "auto" if text == "auto" else _cli_number(text, field_name=field_name, words="auto")
 
 
-def _cli_baseline(value: object | None, *, field_name: str) -> SeriesBaseline:
+def cli_series_baseline(value: object | None, *, field_name: str) -> SeriesBaseline:
+    """A series' ``--depth_track_baseline``: a number, ``auto`` or ``mean``."""
+
     text = str(value).strip().lower() if value is not None else "auto"
     if text == "auto":
         return "auto"
@@ -1609,9 +1613,9 @@ def depth_track_inputs_from_cli(
                 agg=_cli_word(aggs[index], DEPTH_AGGREGATIONS, "mean", field_name="depth_track_aggs"),
                 style=_cli_word(styles[index], SERIES_STYLES, "area", field_name="depth_track_styles"),
                 negative_color=_cli_text(negative_colors[index]) or None,
-                baseline=_cli_baseline(baselines[index], field_name="depth_track_baselines"),
-                min_value=_cli_bound(min_values[index], field_name="depth_track_min_values"),
-                max_value=_cli_bound(max_values[index], field_name="depth_track_max_values"),
+                baseline=cli_series_baseline(baselines[index], field_name="depth_track_baselines"),
+                min_value=cli_series_bound(min_values[index], field_name="depth_track_min_values"),
+                max_value=cli_series_bound(max_values[index], field_name="depth_track_max_values"),
                 unit=DEPTH_UNIT if units[index] is None else str(units[index]),
             )
         )

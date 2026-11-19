@@ -546,7 +546,7 @@ def _depth_chunks(resolved_path: str, file_format: DepthFileFormat = "auto") -> 
             f"Unable to parse depth file '{resolved_path}': {exc}",
             diagnostic=_invalid_depth("DEPTH_VALUES"),
         ) from exc
-    _raise_first_failed_check(failed)
+    _raise_first_failed_check(failed, bed=form.stacks)
 
 
 def _parse_depth_file(resolved_path: str, file_format: DepthFileFormat = "auto") -> DepthCoverage:
@@ -680,9 +680,19 @@ def _failed_depth_checks(rows: DataFrame) -> set[str]:
     return {reason for reason, _message, fails in _DEPTH_CHECKS if fails(rows)}
 
 
-def _raise_first_failed_check(failed: set[str]) -> None:
+# The interval check of a BED file's rows (``bed``), which are features, not bedGraph's runs.
+_BED_INTERVAL = (
+    "BED_INTERVAL",
+    "BED rows are a reference name, a 0-based start of 0 or more and an end greater than the start, then an "
+    "optional name and score.",
+)
+
+
+def _raise_first_failed_check(failed: set[str], *, bed: bool = False) -> None:
     for reason, message, _fails in _DEPTH_CHECKS:
         if reason in failed:
+            if bed and reason == "INTERVAL":
+                reason, message = _BED_INTERVAL
             raise ValidationError(message, diagnostic=_invalid_depth(reason))
 
 
@@ -867,17 +877,34 @@ def _window_depth_sums(windows: SlidingWindows, depths: DepthArray) -> NDArray[n
     return prefix[bound_of[starts.size :]] - prefix[bound_of[: starts.size]]
 
 
-def check_depth_range(min_depth: float | None, max_depth: float | None, *, log_scale: bool) -> None:
+# The fields of the global depth range: a bound a series does not set comes from them.
+DEPTH_RANGE_FIELDS = ("min_depth", "max_depth")
+
+
+def check_depth_range(
+    min_depth: float | None,
+    max_depth: float | None,
+    *,
+    log_scale: bool,
+    fields: tuple[str, str] = DEPTH_RANGE_FIELDS,
+) -> None:
     """A value range may be negative, except on a log-scaled axis (which draws only values of 0 or more); its
-    minimum is at most its maximum. Every surface's depth range (CLI, API, request, one series') meets this rule."""
+    minimum is at most its maximum. Every surface's depth range (CLI, API, request, one series') meets this rule.
+
+    ``fields`` names where each bound came from (a series' own ``min_value``/``max_value``, else the global
+    ``min_depth``/``max_depth``); a minimum above the maximum names the series' bound when one is."""
 
     if min_depth is not None and max_depth is not None and min_depth > max_depth:
-        raise ValidationError("min_depth must be <= max_depth.")
-    for name, bound in (("min_depth", min_depth), ("max_depth", max_depth)):
+        field = fields[1] if fields[0] in DEPTH_RANGE_FIELDS and fields[1] not in DEPTH_RANGE_FIELDS else fields[0]
+        raise ValidationError(
+            f"{fields[0]} must be <= {fields[1]}; got {min_depth:g} and {max_depth:g}.",
+            diagnostic={"code": "INPUT_INVALID", "field": field, "reason": "ORDER"},
+        )
+    for name, bound in zip(fields, (min_depth, max_depth)):
         if log_scale and bound is not None and bound < 0:
             raise ValidationError(
                 f"A log-scaled depth range must not be negative; got {name}={bound:g}.",
-                diagnostic={"code": "INPUT_INVALID", "field": name, "reason": "NONNEGATIVE"},
+                diagnostic={"code": "INPUT_INVALID", "field": name, "reason": "LOG_SCALE_NEGATIVE"},
             )
 
 
@@ -885,7 +912,11 @@ def _refuse_negative_values(depths: DepthArray) -> None:
     """Refuse depths of which one is negative: a log-scaled axis draws only values of 0 or more."""
 
     if depths.dtype.kind != "u" and depths.size and float(depths.min()) < 0:
-        raise ValidationError("Depth values must be non-negative.", diagnostic=_invalid_depth("NONNEGATIVE"))
+        raise ValidationError(
+            "A log-scaled depth axis draws only values of 0 or more; this series has values below 0. Turn off the "
+            "depth log scale to draw them.",
+            diagnostic=_invalid_depth("LOG_SCALE_NEGATIVE"),
+        )
 
 
 def depth_df(
@@ -962,6 +993,7 @@ __all__ = [
     "DEPTH_COLUMNS",
     "DEPTH_FILE_FORMATS",
     "DEPTH_FILE_NAME_FORMATS",
+    "DEPTH_RANGE_FIELDS",
     "DepthAggregation",
     "DepthCoverage",
     "DepthFileFormat",

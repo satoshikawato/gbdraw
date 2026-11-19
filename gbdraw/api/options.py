@@ -29,7 +29,13 @@ from gbdraw.analysis.collinearity_units import (
     CollinearityUnitMode,
     normalize_collinearity_unit_mode,
 )
-from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, DepthAggregation, DepthFileFormat
+from gbdraw.analysis.depth import (
+    DEPTH_AGGREGATIONS,
+    DEPTH_FILE_FORMATS,
+    DepthAggregation,
+    DepthFileFormat,
+    check_depth_range,
+)
 from gbdraw.analysis.feature_density import FeatureDensityTrack, unique_feature_density_tracks
 from gbdraw.analysis.conservation import (
     ConservationSearchResult,
@@ -309,18 +315,18 @@ class DepthTrackInput:
             bound = getattr(self, field_name)
             if bound is not None:
                 object.__setattr__(self, field_name, _finite_or_word(bound, ("auto",), f"DepthTrackInput.{field_name}"))
-        if isinstance(self.min_value, float) and isinstance(self.max_value, float) and self.min_value > self.max_value:
-            raise ValidationError(
-                "DepthTrackInput.min_value must be <= DepthTrackInput.max_value.",
-                diagnostic=_invalid_input("min_value", "ORDER"),
-            )
+        if isinstance(self.min_value, float) and isinstance(self.max_value, float):
+            check_depth_range(self.min_value, self.max_value, log_scale=False, fields=("min_value", "max_value"))
         if not isinstance(self.unit, str):
             raise ValidationError("DepthTrackInput.unit must be a string (empty for no unit).")
 
 
 def _checked_word(value: object, words: Sequence[str], field_name: str) -> None:
     if not isinstance(value, str) or value not in words:
-        raise ValidationError(f"{field_name} must be one of: {', '.join(words)}; got {value!r}.")
+        raise ValidationError(
+            f"{field_name} must be one of: {', '.join(words)}; got {value!r}.",
+            diagnostic=_invalid_input(field_name, "CHOICE"),
+        )
 
 
 def _finite_or_word(value: object, words: Sequence[str], field_name: str) -> float | str:

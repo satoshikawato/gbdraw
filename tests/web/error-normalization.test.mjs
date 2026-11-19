@@ -1086,3 +1086,20 @@ test('a field a user can type or choose is named by its control label', () => {
     ['multi_record_row_gap_ratio', 'Row Gap Ratio']
   ]) assert.equal(labels({ code: 'INPUT_INVALID', stage: 'request-validation', context: { field, reason: 'FINITE' } }), label, field);
 });
+
+// Review r1 M3, L1, L2, L4: a series setting's refusal names its field and its series, a negative value under the
+// log scale names Log Scale, and a BED row speaks of BED.
+test('a numeric series refusal names the series setting, Log Scale and BED rows', () => {
+  for (const [field, label] of [['min_value', 'Min'], ['max_value', 'Max'], ['negativeColor', 'Negative color'], ['baseline', 'Baseline'],
+    ['format', 'Format'], ['agg', 'Window value'], ['style', 'Style'], ['unit', 'Unit']]) {
+    assert.match(producerSummary('INPUT_INVALID', { field, reason: 'FINITE', seriesIndex: 0 }), new RegExp(`Depth series 1\\. Field: ${label}\\. Use a finite number\\.$`), field);
+  }
+  assert.equal(producerSummary('INPUT_INVALID', { field: 'min_value', reason: 'ORDER', seriesIndex: 1 }),
+    'An input value is invalid. Depth series 2. Field: Min. The start or minimum must not exceed the end or maximum.');
+  assert.match(producerSummary('INPUT_INVALID', { field: 'format', reason: 'CHOICE', seriesIndex: 0 }), /Field: Format\. Choose one of the values this setting's menu offers\.$/);
+  assert.match(producerSummary('DEPTH_INVALID', { reason: 'LOG_SCALE_NEGATIVE', seriesIndex: 0 }), /Depth series 1\. Log Scale draws only values of 0 or more\. Turn off Log Scale/);
+  assert.match(producerSummary('INPUT_INVALID', { field: 'min_value', reason: 'LOG_SCALE_NEGATIVE', seriesIndex: 0 }), /Field: Min\. Log Scale draws only values/);
+  const bed = producerSummary('DEPTH_INVALID', { reason: 'BED_INTERVAL', seriesIndex: 0 });
+  assert.match(bed, /A BED row is a reference, a 0-based start of 0 or more and an end greater than its start/);
+  assert.doesNotMatch(bed, /bedGraph|samtools/);
+});

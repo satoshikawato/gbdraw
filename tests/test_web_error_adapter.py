@@ -88,7 +88,6 @@ def test_known_native_validation_correction_is_not_unknown(call, code, context):
 
 
 @pytest.mark.parametrize(('message', 'code', 'context'), [
-    ('min_depth must be <= max_depth.', 'INPUT_INVALID', {'field': 'min_depth', 'reason': 'ORDER'}),
     ('bitscore must be a finite value >= 0', 'INPUT_INVALID', {'field': 'bitscore', 'reason': 'NONNEGATIVE'}),
     ('Malformed line in label override file \'PRIVATE_PATH_SENTINEL\' at line 4: expected 5 columns.', 'TABLE_INVALID', {'row': 4, 'columnCount': 5}),
 ])
