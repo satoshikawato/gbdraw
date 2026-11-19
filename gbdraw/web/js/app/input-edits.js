@@ -32,7 +32,7 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
  *   Writes `file` in place of `previous` with the uploader's own write, after asking when another drawing uses `previous`
  *   and then the uploader's `question`.
  * @property {(drawing: DrawingState, uid: string, field: 'gb' | 'gff' | 'fasta', value: InputFileCandidate | InputFileRef | null) => void} replaceCircularSourceFile
- * @property {(sites: readonly DrawingInputSite[], value: NonNullable<InputFileCandidate> | InputFileRef, pickHolds: () => boolean) => Promise<boolean> | null} askCircularSourceReplacement
+ * @property {(sites: readonly DrawingInputSite[], value: File, pickHolds: () => boolean) => Promise<boolean> | null} askCircularSourceReplacement
  *   Asks before the source card files at `sites` are replaced when Depth files would leave with their records; null
  *   when nothing is asked.
  * @property {(drawing: DrawingState, index: number, file: InputFileCandidate | InputFileRef) => unknown} replaceCircularDepthFile

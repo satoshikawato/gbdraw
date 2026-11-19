@@ -1779,13 +1779,21 @@ test('an alignment without one exact reference, of a group not drawn, or not val
     } }), (fixture) => startAlign(fixture)]
   ];
   const outcomes = [];
+  /** @type {string[]} */
+  const texts = [];
   for (const [, fixture, run] of cases) {
     const { status } = await run(fixture);
-    const { code, operation } = fixture.state.errorLog.value;
+    const { code, operation, summaryParts } = fixture.state.errorLog.value;
     outcomes.push({ status, code, operation, drawn: fixture.generationCalls.length, after: fixture.actions.status.value });
+    texts.push(errorText(summaryParts));
   }
   // A failed automatic Apply ends the work as the failed resolve does (`start` awaits it).
   assert.deepEqual(outcomes, cases.map(([code]) => ({ status: 'rejected', code, operation: 'align', drawn: 0, after: 'idle' })));
+  // Each names the button the user selects instead, as the Similarity groups tab labels it.
+  assert.deepEqual(texts.slice(0, 2), [
+    'The clicked feature matches no member of this Similarity group, or more than one. Select Align… in the Similarity groups tab after choosing the exact reference record and feature.',
+    'This Similarity group is not in the shown diagram. Select Align… in the Similarity groups tab after choosing a group and its exact reference record and feature.'
+  ]);
 });
 
 // D-40 (S2, N1): a switch waits for the alignment work in flight, with the reason the Apply line gives.

@@ -1761,7 +1761,9 @@ accession (its record ID without the version, so `NC_000913.3` continues as
 `NC_000913.4`) or, when two records of a file share an accession, with its
 record ID. A record the new file has no such record for keeps neither: the
 question before the Replace names its Depth files, and its edits are not
-moved. When record IDs repeat or are missing in either file, every record's
+moved. When those were the only files of a Depth series, the question also says
+that the series stays empty and that Generate will ask for a file or its
+removal. When record IDs repeat or are missing in either file, every record's
 edits and Depth files go to the record at its place in the file. Edits of
 features the new record lacks are removed. Several Replaces before one
 Generate move the edits and the Depth files alike, from the records the last

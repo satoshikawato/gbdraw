@@ -312,6 +312,18 @@ export const askingAnnotationTrackAdd = ({ askChoice, runUndoable, busy, rows, a
  * @property {(turnOffReaching: () => void) => unknown} apply The removal, with the turning off of the rows that reach what leaves.
  */
 /**
+ * The sentence of a question whose answer leaves Depth series with no file (`series`, each as the question names
+ * it): Generate then asks for a file or the series' removal. A Depth source removal and a File card's Replace
+ * (`createCircularSourceReplacementQuestion`) say it.
+ * @param {readonly string[]} series
+ * @returns {string}
+ */
+export const emptyDepthSeriesText = (series) => tn(series.length,
+  'Depth series {series} stays empty, and Generate will ask for a file or its removal.',
+  'Depth series {series} stay empty, and Generate will ask for a file or their removal.',
+  { series: listText(series) });
+
+/**
  * The title and action of a removal's question.
  * @param {TrackSourceRemoval['kind']} kind @param {{ rows: string, series: number, id: string }} texts
  */
@@ -350,10 +362,7 @@ export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode
       return {
         ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1, id: track }),
         description: joinSentences(...[
-          emptySeries.length === 0 ? '' : tn(emptySeries.length,
-            'Depth series {series} stays empty, and Generate will ask for a file or its removal.',
-            'Depth series {series} stay empty, and Generate will ask for a file or their removal.',
-            { series: listText(emptySeries.map((index) => `#${index + 1}`)) }),
+          emptySeries.length === 0 ? '' : emptyDepthSeriesText(emptySeries.map((index) => `#${index + 1}`)),
           staying.length === 0 ? '' : tn(staying.length,
             '{rows} has no Depth file left. It stays in the stack, turned off.',
             '{rows} have no Depth file left. They stay in the stack, turned off.',
