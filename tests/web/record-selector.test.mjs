@@ -666,6 +666,21 @@ assert.equal(readyController.optionsFor(reuseState.activeDrawing(), reuseState.l
   await successorRead;
   assert.equal(selector.optionsFor(runningSuccessor, runningSuccessor.linearSeqs[0])[1].value, 'Own');
   assert.deepEqual(discovered, [['linear-2', 'reused-row'], ['linear-3', 'reused-row']]);
+
+  // A drawing deleted while its read runs, then brought back by the Undo of the Delete: the late records land in
+  // its own states (no read starts again on Undo), and expand no rows while it is not listed.
+  const undone = linearDrawing('linear-4');
+  drawings = [kept, undone];
+  const undoneRead = selector.refresh(undone);
+  while (reads.length < 4) await new Promise((resolve) => { setImmediate(resolve); });
+  assert.equal(selector.statusFor(undone, undone.linearSeqs[0]), 'loading');
+  drawings = [kept];
+  reads[3]([{ selector: '#1', recordId: 'WhileDeleted', recordLength: 5 }]);
+  await undoneRead;
+  assert.deepEqual(discovered, [['linear-2', 'reused-row'], ['linear-3', 'reused-row']], 'an unlisted drawing reports no records');
+  drawings = [kept, undone];
+  assert.equal(selector.statusFor(undone, undone.linearSeqs[0]), 'ready', 'the Undo of the Delete shows the late read');
+  assert.equal(selector.optionsFor(undone, undone.linearSeqs[0])[1].value, 'WhileDeleted');
 }
 
 // D-37 / OV-2563: a Linear card's annotation catalog source carries the error model its record select

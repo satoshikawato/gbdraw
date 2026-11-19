@@ -143,8 +143,9 @@ const followDrawingCopy = (states, drawing, copy) => {
 /**
  * The members of the `state.js` state that the selector reads; the root passes
  * the whole state. `drawingList()` lists every drawing; a drawing's rows keep
- * their selector state while the drawing holds them, and a drawing no longer
- * listed (deleted, or replaced by a Load) starts no read and takes no result.
+ * their selector state while the drawing holds them; a drawing no longer listed
+ * (deleted, or replaced by a Load) keeps its states, and a read that ends after
+ * it left lands in its own states but reports no records.
  * @typedef {Pick<WebState, 'drawingList' | 'semanticFileWatchersSuppressed' | 'sessionImportRollbackInProgress'
  *   | 'sessionOperationAvailability'>} LinearRecordSelectorState
  */
@@ -267,7 +268,6 @@ export const createLinearRecordSelector = ({
   const isCurrentRequest = (drawing, { generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGenerations.get(drawing)) return false;
     if (recordDiscoverySuppressed()) return false;
-    if (!state.drawingList().some((listed) => listed === drawing)) return false;
     if (drawing.inputType.value !== inputType) return false;
     const currentSeq = drawing.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
@@ -347,6 +347,9 @@ export const createLinearRecordSelector = ({
         replaceState(drawing, uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
+        // A drawing no longer listed keeps the result in its own entry (an Undo of its Delete shows it), and
+        // its records expand no rows: the discovery finds its drawing by ID, which a new drawing may now hold.
+        if (!state.drawingList().some((listed) => listed === drawing)) continue;
         if (onRecordsDiscovered?.({ drawingId: drawing.id, uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
