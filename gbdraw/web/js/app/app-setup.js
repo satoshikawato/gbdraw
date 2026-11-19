@@ -953,7 +953,7 @@ export const createAppSetup = () => {
   const historySnapshots = createHistorySnapshotService({
     state,
     onArtifactSlotsChanged: () => { artifactSlotRevision.value += 1; },
-    fileStore: state.inputFiles,
+    registerFile: state.inputFiles.registerFile,
     nextTick,
     // The discovery owner exists once the runner does; a restore runs after setup.
     discoverDrawingRecords: (drawing) => discoverDrawingRecords(drawing),

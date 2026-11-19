@@ -323,7 +323,7 @@ const {
 
 const artifactSnapshots = createHistorySnapshotService({
   state,
-  fileStore: createInputFileStore(),
+  registerFile: createInputFileStore().registerFile,
   nextTick: window.Vue.nextTick,
   buildUiStateData,
   applyUiStateData,

@@ -27,7 +27,7 @@ const { createInputFileStore } = await import('../../gbdraw/web/js/services/hist
 const { createDrawingSwitch } = await import('../../gbdraw/web/js/app/drawing-switch.js');
 const { readdir, readFile } = await import('node:fs/promises');
 
-const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
+const snapshots = createHistorySnapshotService({ state, registerFile: createInputFileStore().registerFile, currentResults: () => state.results.value });
 snapshots.setGeneratedArtifactRuntimeOwner({
   capture: () => ({ canonical: canonicalRenderArtifactOwner.capture(), cli: 'circular helper files' }),
   restore: (runtime) => { canonicalRenderArtifactOwner.restore(runtime?.canonical ?? null); }
@@ -230,7 +230,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
 // it does not fall back to the drawing's draft palette.
 test('a null applied palette restored in the shown drawing keeps the displayed palette', async () => {
   const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
-  const service = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, applyUiStateData });
+  const service = createHistorySnapshotService({ state, registerFile: createInputFileStore().registerFile, currentResults: () => state.results.value, applyUiStateData });
   installShownDrawing('circular');
   const drawing = modeDrawing(state, 'circular');
   const draftPalette = drawing.selectedPalette.value;
@@ -360,7 +360,7 @@ test('the slot, owner-set and checkpoint captures read the Results through curre
   const written = [{ name: 'shown.svg', content: '<svg id="written"></svg>' }];
   let reads = 0;
   const service = createHistorySnapshotService({
-    state, fileStore: createInputFileStore(), currentResults: () => { reads += 1; return written; }
+    state, registerFile: createInputFileStore().registerFile, currentResults: () => { reads += 1; return written; }
   });
   assert.equal(service.captureArtifactSlot().values.results, written);
   assert.equal(service.captureGeneratedArtifactOwnerSet(state.activeDrawing()).results, written);

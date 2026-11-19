@@ -1208,7 +1208,7 @@ const createLayoutPreferences = () => ({
   };
   const snapshots = createHistorySnapshotService({
     state: withTwoDrawings(state),
-    fileStore,
+    registerFile: fileStore.registerFile,
     currentResults: () => state.results.value,
     nextTick: async () => {},
     buildConfigData: () => ({
@@ -1483,7 +1483,7 @@ const createLayoutPreferences = () => ({
   };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore,
+    registerFile: fileStore.registerFile,
     currentResults: () => state.results.value,
     nextTick: async () => {
       if (!pendingModeReset) return;
@@ -1657,7 +1657,7 @@ const createLayoutPreferences = () => ({
   state.deletedLegendEntries = Object.create({ value: [] });
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore,
+    registerFile: fileStore.registerFile,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
       forbiddenArtifactBuilds += 1;
@@ -1826,7 +1826,7 @@ const createLayoutPreferences = () => ({
   };
   let setting = 'loaded';
   let artifactBuilds = 0;
-  const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore, currentResults: () => state.results.value });
+  const snapshots = createHistorySnapshotService({ state: withDrawings(state), registerFile: fileStore.registerFile, currentResults: () => state.results.value });
   const history = createHistoryManager({
     estimateFileBytes: fileStore.estimateBytes, retainOnlyFiles: fileStore.retainOnly,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
@@ -1879,7 +1879,7 @@ const createLayoutPreferences = () => ({
   };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore,
+    registerFile: fileStore.registerFile,
     buildUiStateData: () => ({}),
     applyUiStateData: () => {},
     currentResults: () => [],
@@ -2072,7 +2072,7 @@ const createLayoutPreferences = () => ({
   let currentResultsReads = 0;
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore,
+    registerFile: fileStore.registerFile,
     nextTick: async () => {},
     clearSimilarityGroupCopyFeedback: () => { copyFeedbackClears += 1; },
     buildUiStateData: () => ({
@@ -2579,7 +2579,7 @@ for (const previousSuppressed of [false, true]) {
   const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore: createInputFileStore(),
+    registerFile: createInputFileStore().registerFile,
     currentResults: () => state.results.value,
     nextTick: async () => {
       assert.equal(state.semanticFileWatchersSuppressed.value, true);
@@ -3867,7 +3867,7 @@ for (const previousSuppressed of [false, true]) {
   };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore: createInputFileStore(),
+    registerFile: createInputFileStore().registerFile,
     currentResults: () => state.results.value,
     nextTick: async () => {},
     buildConfigData: () => ({ form: state.form, adv: state.adv })
@@ -4089,7 +4089,7 @@ for (const previousSuppressed of [false, true]) {
     originalLegendOrder: ref([]), originalLegendColors: ref({}),
     files: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
   }, { circular, linear });
-  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, nextTick: async () => {} });
+  const snapshots = createHistorySnapshotService({ state, registerFile: createInputFileStore().registerFile, currentResults: () => state.results.value, nextTick: async () => {} });
   const rule = { feat: 'CDS', qual: 'product', val: 'kept', color: '#123456', cap: 'Kept' };
   linear.manualSpecificRules.push(rule);
   const handle = snapshots.captureGeneratedArtifactHandle(state.drawingOf('linear'));
@@ -4124,7 +4124,7 @@ for (const previousSuppressed of [false, true]) {
     drawingList: { value: () => [...byId.values()], configurable: true },
     drawingOf: { value: (id) => { if (!byId.has(id)) throw new Error(`Unknown drawing ${id}`); return byId.get(id); }, configurable: true }
   });
-  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, nextTick: async () => {} });
+  const snapshots = createHistorySnapshotService({ state, registerFile: createInputFileStore().registerFile, currentResults: () => state.results.value, nextTick: async () => {} });
   const result = { svg: '<svg id="linear-2"/>' };
   snapshots.installArtifactSlot(createArtifactSlot({ drawing: linear2, values: { results: [result] } }), { drawing: linear2 });
   assert.equal(snapshots.displayedArtifactDrawing().id, 'linear-2', 'an installed slot names its drawing');
