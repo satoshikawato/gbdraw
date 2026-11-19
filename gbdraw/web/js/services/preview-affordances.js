@@ -23,8 +23,9 @@ export const PREVIEW_MATCH_BUTTON_ATTRIBUTE = 'data-gbdraw-preview-match';
 // the Result's text holds it independent of clicks: a Result entering the
 // page (Generate, a rerender, Load) records it from the feature rows
 // (`recordLabelSourceTexts`), the label projection writes it on each bound
-// label of the mounted Result by the same rule, and serialization drops one
-// equal to the shown text (`stripLabelBinderMarks`). So neither a
+// label of the mounted Result by the same rule and commits the Result when that
+// changes the record it keeps (a label Load could not tie to its row), and
+// serialization drops one equal to the shown text (`keptLabelSourceRecord`). So neither a
 // saved Session nor an export depends on whether a label was clicked, and a
 // renamed label's old text does not leave the page (OV-3848).
 export const LABEL_EDITABLE_ATTRIBUTE = 'data-label-editable';
@@ -52,6 +53,17 @@ export const labelSourceTextOf = (rowSourceText, textEl) => rowSourceText
   ?? textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) ?? labelTextOf(textEl);
 
 /**
+ * The source-text record a label keeps when its Result is written (saved, or a
+ * History step): its record, unless that equals the shown text.
+ * @param {Element} textEl
+ * @returns {string | null}
+ */
+export const keptLabelSourceRecord = (textEl) => {
+  const record = textEl.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE);
+  return record === null || record === labelTextOf(textEl) ? null : record;
+};
+
+/**
  * Drops the binder's marks and every source-text record equal to the shown text.
  * @param {Element} root A copy of the mounted Result that saving or an export writes, or an admitted Result.
  * @returns {boolean} whether it changed the SVG
@@ -64,7 +76,7 @@ export const stripLabelBinderMarks = (root) => {
     changed = true;
   });
   root.querySelectorAll(`[${LABEL_SOURCE_TEXT_ATTRIBUTE}]`).forEach((element) => {
-    if (element.getAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE) === labelTextOf(element)) {
+    if (keptLabelSourceRecord(element) === null) {
       element.removeAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE);
       changed = true;
     }

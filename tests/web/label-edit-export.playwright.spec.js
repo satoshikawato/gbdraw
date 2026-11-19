@@ -13,7 +13,7 @@ const { evaluateWithRetainedPromise, warmAppTest: test } = require('./helpers/ap
 const { generate, legendRowColor, open, popupEdit } = require('./helpers/live-generate-parity-steps.cjs');
 const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
-const { readSessionFile } = require('./helpers/session-file.cjs');
+const { readSessionFile, readSessionFileJson, sessionFileBytesOf } = require('./helpers/session-file.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -190,4 +190,56 @@ test('a Session saved after a Generate of a label edit is the same with and with
   }
   expect(sourceTextRecords(saves[0])).toEqual(['alpha protein']);
   expect(saves[0]).toEqual(saves[1]);
+});
+
+// A Result saved before its labels named their features (Sessions 40 to 43) has no
+// `data-label-feature-id`, so Load cannot tie its labels to their rows; the label
+// projection ties them when the Result is shown and writes the record then. It
+// writes it into the Result, so a Save right after Load holds the record, as a
+// Save after the shown Result was written again does.
+test('a loaded Result whose labels name no feature records the renamed label source text without a rewrite', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await popupEdit(page, 'FL1', { labelText: 'renamed label' });
+  await generate(page);
+  const atGenerate = testInfo.outputPath('at-generate.gbdraw');
+  await download(page, 'Save Session', atGenerate, { title: '' });
+
+  // The same Session with Results as a version before label feature IDs saved them: no label names its feature, no record.
+  const document = await readSessionFileJson(atGenerate);
+  let stripped = 0;
+  document.drawings.forEach((drawing) => (drawing.results || []).forEach((result) => {
+    const content = String(result.content);
+    result.content = content.replace(/ data-label-(?:feature-id|source-text)="[^"]*"/g, '');
+    stripped += content.length - result.content.length;
+  }));
+  expect(stripped, 'label feature IDs removed').toBeGreaterThan(0);
+  const unnamed = testInfo.outputPath('unnamed.gbdraw');
+  await fs.writeFile(unnamed, await sessionFileBytesOf(document));
+
+  const saves = [];
+  for (const rewrite of [false, true]) {
+    const loaded = await load(browser, unnamed);
+    try {
+      if (rewrite) {
+        await colorCdsRow(loaded, await colorCdsRow(loaded, '#2a9d8f'));
+      } else {
+        // Writing the record into the Result is no edit: no History step, no unsaved work.
+        expect(await loaded.evaluate(async () => ({
+          canUndo: window.__GBDRAW_APP__.canUndoHistory,
+          unsaved: await window.__GBDRAW_HISTORY__.hasChangesSinceSavePoint()
+        }))).toEqual({ canUndo: false, unsaved: false });
+      }
+      const file = testInfo.outputPath(`loaded-${rewrite ? 'rewritten' : 'at-once'}.gbdraw`);
+      await download(loaded, 'Save Session', file, { title: '' });
+      saves.push(await savedResultSvgs(file));
+    } finally {
+      await loaded.context().close();
+    }
+  }
+  expect(sourceTextRecords(saves[0])).toEqual(['alpha protein']);
+  // A color changed and back keeps the record of Python's swatch fill (`data-gbdraw-base-fill`, OV-3951), which
+  // this case does not judge.
+  const withoutPaintBases = (svgs) => svgs.map((svg) => svg.replace(/ data-gbdraw-base-[a-z-]+="[^"]*"/g, ''));
+  expect(withoutPaintBases(saves[0])).toEqual(withoutPaintBases(saves[1]));
 });

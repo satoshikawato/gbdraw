@@ -23,8 +23,8 @@ import {
 } from '../../services/drawn-groups.js';
 import { joinSentences, msg, t, tm } from '../../utils/i18n.js';
 import {
-  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, labelTextOf,
-  labelSourceTextOf as recordedLabelSourceTextOf
+  EDITABLE_LABEL_SELECTOR, LABEL_KEY_ATTRIBUTE, LABEL_EDITABLE_ATTRIBUTE, LABEL_SOURCE_TEXT_ATTRIBUTE, keptLabelSourceRecord,
+  labelTextOf, labelSourceTextOf as recordedLabelSourceTextOf
 } from '../../services/preview-affordances.js';
 
 /**
@@ -1007,22 +1007,32 @@ export const createFeatureLabelActions = ({
   // override, else the bulk override of its source text, else that source
   // text. A label edited, imported, undone, or reset while another Result was
   // displayed therefore shows the current intent here (R3).
+  // `textChanged`: a label shows another text. `recordChanged`: a label keeps
+  // another source-text record when the Result is written, though it shows the
+  // same text; Load records the rows' source texts only on labels that name
+  // their feature, so this writes the record of a label only the binder tied to
+  // its row (a Result saved before labels named their features).
   /** @param {DrawingState} drawing @param {Element} svg */
   const projectLabelTextIntent = (drawing, svg) => {
-    let changed = false;
+    let textChanged = false;
+    let recordChanged = false;
     const displayed = displayedFeatures(drawing);
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const row = labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
       const sourceText = labelSourceTextOf(row, textEl);
+      const keptRecord = keptLabelSourceRecord(textEl);
       textEl.setAttribute(LABEL_SOURCE_TEXT_ATTRIBUTE, sourceText);
       // The source text is free text, so the bulk table is read by own key.
       const bulkText = ownEntry(drawing.labelTextBulkOverrides, sourceText);
       const desiredText = row?.labelText ?? bulkText ?? sourceText;
-      if (labelTextOf(textEl) === desiredText) return;
+      if (labelTextOf(textEl) === desiredText) {
+        recordChanged ||= keptLabelSourceRecord(textEl) !== keptRecord;
+        return;
+      }
       setLabelText(textEl, desiredText);
-      changed = true;
+      textChanged = true;
     });
-    return changed;
+    return { textChanged, recordChanged };
   };
 
   /**
@@ -1279,12 +1289,13 @@ export const createFeatureLabelActions = ({
   // `textChanged`: a label shows another text, which only Python fits.
   /** @param {DrawingState} drawing @param {Element} svg @param {{ queueIncompleteVisibility?: boolean }} [options] */
   const projectLabelIntent = (drawing, svg, { queueIncompleteVisibility = true } = {}) => {
-    const textChanged = projectLabelTextIntent(drawing, svg);
+    const { textChanged, recordChanged } = projectLabelTextIntent(drawing, svg);
     const visibilityProjection = applyStoredVisibilityOverridesToSvg(drawing, svg);
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
     const changed = textChanged || visibilityProjection.changed;
-    if (changed) commitLabelEdit();
+    // A record alone is committed too, so the Result's text holds it without a later write (OV-3848).
+    if (changed || recordChanged) commitLabelEdit();
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
       queueLabelReflow(true);
     }
