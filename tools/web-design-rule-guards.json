@@ -676,9 +676,36 @@
           "rootCause": "P8",
           "job": "web-contracts-pr",
           "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/shared-value-scope.test.mjs",
+          "rootCause": "P2",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
         }
       ],
-      "allowlists": []
+      "allowlists": [
+        {
+          "path": "tests/web/helpers/drawing-state.mjs",
+          "symbol": "PROJECT_KEYS",
+          "kind": "set"
+        },
+        {
+          "path": "tests/web/helpers/drawing-state.mjs",
+          "symbol": "UI_KEYS",
+          "kind": "set"
+        },
+        {
+          "path": "tests/web/shared-value-scope.test.mjs",
+          "symbol": "ARTIFACT_KEYS_OUTSIDE_SLOT",
+          "kind": "set"
+        },
+        {
+          "path": "tests/web/shared-value-scope.test.mjs",
+          "symbol": "DRAWING_LIFETIME_STORES",
+          "kind": "set"
+        }
+      ]
     },
     {
       "id": "CW",
