@@ -5609,18 +5609,16 @@ def _is_label_embedded_in_segment(
     segment_end: int,
     total_length: int,
 ) -> bool:
-    """Return True when label interval is strictly contained in the target segment."""
+    """Return True when label interval is strictly contained in the target segment, read round the circle from
+    ``segment_start``: a segment over the origin ends before it starts, and one round the whole circle ends a
+    circle's length after it (``end_over_origin``)."""
     label_span = float(label_end) - float(label_start)
-    if label_span <= 0.0:
+    if label_span <= 0.0 or total_length <= 0:
         return False
 
-    if segment_start <= segment_end:
-        return (label_start > float(segment_start)) and (label_end < float(segment_end))
-
-    if total_length <= 0:
-        return False
-
-    feature_span = (float(total_length) - float(segment_start)) + float(segment_end)
+    feature_span = float(segment_end) - float(segment_start)
+    if segment_start > segment_end:
+        feature_span += float(total_length)
     if feature_span <= 0.0:
         return False
 

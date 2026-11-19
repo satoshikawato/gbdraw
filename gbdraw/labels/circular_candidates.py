@@ -7,6 +7,7 @@ from typing import Any
 
 from ..features.coordinates import get_strand
 from ..features.objects import FeatureObject
+from ..svg.circular_features import end_over_origin
 from .circular_types import CircularLabelCandidate
 from .filtering import feature_label
 from .coordinates import display_label_segment
@@ -23,8 +24,8 @@ def _candidate_segment(feature: FeatureObject, total_length: int) -> tuple[float
             key=lambda coordinate: int(coordinate.start), reverse=True,
         )
         start = float(right.start)
-        end = float(left.end)
-        span = (float(total_length) - start) + end
+        end = float(end_over_origin(int(right.start), int(left.end), total_length))
+        span = end - start if end > start else (float(total_length) - start) + end
         middle = (start + (0.5 * span)) % float(total_length)
         # The location's parts carry the strand by name already (``Strand``).
         return start, end, middle, span, right.strand

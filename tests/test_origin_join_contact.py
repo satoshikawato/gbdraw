@@ -22,10 +22,14 @@ from gbdraw.api.requests import (
     CircularDiagramRequest, GenBankInputSource, GffFastaInputSource, InMemoryRecordSource, RecordDisplayOptions,
     RecordInput,
 )
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
+from gbdraw.config.modify import modify_config_dict
+from gbdraw.config.toml import load_config_toml
 from gbdraw.features.factory import FeatureLayerMode, create_feature_layers
+from gbdraw.labels.circular import prepare_label_list
 from gbdraw.labels.circular_candidates import _candidate_segment
 from gbdraw.labels.coordinates import display_label_segment
-from gbdraw.svg.circular_features import circular_feature_parts
+from gbdraw.svg.circular_features import _span_bp, circular_feature_parts
 from gbdraw.layout.record_coordinates import CirclePlace
 
 _LENGTH = 3000
@@ -276,3 +280,78 @@ def test_a_join_over_the_origin_draws_no_seam_there_from_a_display_start(strand)
     assert _seams(feature, _LENGTH, 2000) == []
     assert [part["coord_type"] for part, _ in circular_feature_parts(feature, _LENGTH)] == ["block"]
 
+
+
+def _whole_record(length: int, *parts: tuple[int, int], strand: int = 1) -> SeqRecord:
+    """A ``length`` bp circular record with one CDS "whole" of ``parts``."""
+    record = SeqRecord(Seq(_SEQUENCE[:length]), id="short", name="short", annotations={
+        "topology": "circular", "molecule_type": "DNA",
+    })
+    record.features = [SeqFeature(_join(*parts, strand=strand), type="CDS", qualifiers={"locus_tag": ["whole"]})]
+    return record
+
+
+def _drawn_blocks(feature, total_length: int) -> list[int]:
+    """The bases each drawn block of ``feature`` covers, as the Circular drawer reads them (``_span_bp``)."""
+    return [
+        _span_bp(part, total_length) for part, _ in circular_feature_parts(feature, total_length)
+        if part["coord_type"] == "block"
+    ]
+
+
+def test_a_feature_written_over_the_origin_of_a_short_record_draws_no_seam_from_a_display_start():
+    # OV-3866: a 100 bp record with join(51..100,1..50) from display start 50 drew a stroked seam at the origin,
+    # display offset 100 - 49 = 51; the feature reads round the whole circle.
+    feature = _features(_whole_record(100, (50, 100), (0, 50)), "circular", 50)["whole"]
+    assert feature.joins_over_origin
+    assert _seams(feature, 100, 51) == []
+
+
+@pytest.mark.parametrize("strand", [1, -1])
+@pytest.mark.parametrize("start", [None, 1, 50, 51])
+def test_a_join_over_the_whole_record_draws_one_block_round_the_circle(strand, start):
+    # OV-3866's own case: the parts of join(51..100,1..50) touch at both ends. They join over the origin (the
+    # contact rule takes parts that touch), and the block they make covers the whole circle in every view: the
+    # whole view and display start 1 drew the merged block from base 51 to base 51, which read as 0 bp.
+    parts = ((50, 100), (0, 50)) if strand == 1 else ((0, 50), (50, 100))
+    feature = _features(_whole_record(100, *parts, strand=strand), "circular", start)["whole"]
+    assert feature.joins_over_origin
+    blocks = _drawn_blocks(feature, 100)
+    assert sum(blocks) == 100
+    if start is None or start in (1, 51):
+        assert blocks == [100]
+    else:
+        # Display start 50 cuts the feature at the top of the circle (open edges there, as for any feature over a
+        # display start); the origin is no edge.
+        assert _seams(feature, 100, 51) == []
+
+
+@pytest.mark.parametrize("start", [None, 2])
+def test_a_two_base_join_over_the_origin_draws_one_block(start):
+    # join(2,1) on a 2 bp record: two 1 bp parts that touch at both ends, one block of 2 bp.
+    feature = _features(_whole_record(2, (1, 2), (0, 1)), "circular", start)["whole"]
+    assert feature.joins_over_origin
+    assert _drawn_blocks(feature, 2) == [2]
+
+
+@pytest.mark.parametrize(("length", "parts"), [(100, ((50, 100), (0, 50))), (2, ((1, 2), (0, 1)))])
+def test_the_label_of_a_join_over_the_whole_record_stands_inside_the_middle_of_its_block(length, parts):
+    # The block round the whole circle holds its label like any block it fits in; its ends read as the whole
+    # circle (dev read them as 0 bp and put the label outside the circle, or on one part).
+    feature = _features(_whole_record(length, *parts), "circular")["whole"]
+    start_bp, end_bp, middle, span, _ = _candidate_segment(feature, length)
+    assert (start_bp, end_bp, span, middle) == (parts[0][0], parts[0][0] + length, length, 0)
+    labels = _whole_view_labels(_whole_record(length, *parts))
+    assert labels["whole"]["is_embedded"]
+
+
+def _whole_view_labels(record: SeqRecord) -> dict:
+    """The label entries of ``record``'s whole Circular view (labels outside, ``auto`` rendering), by stable id."""
+    cfg = GbdrawConfig.from_dict(modify_config_dict(load_config_toml("gbdraw.data", "config.toml"), {
+        "labels.rendering": "auto", "labels.filtering.blacklist_keywords": [], "labels.circular.scope": "outer",
+    }))
+    features = _features(record, "circular")
+    return {
+        label["stable_id"]: label
+        for label in prepare_label_list(features, len(record.seq), 390, 0.19, CircularRenderProfile(cfg))
+    }

@@ -235,7 +235,7 @@ def circular_feature_parts(feature_object: "FeatureObject", total_length: int) -
     ``_joined_at_origin``). The feature path and the leader anchor (``circular_feature_edge_radii_at``) read
     these same parts."""
     if feature_object.display_parts is None:
-        merged = _merged_origin_spanning_block(feature_object)
+        merged = _merged_origin_spanning_block(feature_object, total_length)
         if merged is not None:
             return [merged]
     coords = (feature_object.location if feature_object.display_parts is None
@@ -275,15 +275,27 @@ def _joined_at_origin(feature_object: "FeatureObject", total_length: int) -> lis
     pair = (coords[first[-1]], coords[second[0]])
     for low, high in (pair, pair[::-1]):
         if (int(low.end) - int(high.start)) % total_length == 0:
-            joined = low._replace(end=high.end, is_last=low.is_last or high.is_last, open_end=high.open_end)
+            joined = low._replace(
+                end=end_over_origin(int(low.start), int(high.end), total_length),
+                is_last=low.is_last or high.is_last, open_end=high.open_end,
+            )
             return [joined if coord is low else coord for coord in coords if coord is not high]
     return coords
 
 
-def _merged_origin_spanning_block(feature_object: "FeatureObject") -> tuple[CircularCoordDict, bool] | None:
+def end_over_origin(start: int, end: int, total_length: int) -> int:
+    """The end of one block from ``start`` to ``end`` over the origin: ``end``, or ``start`` plus the circle's length
+    when the block closes the circle (its two parts touch at both ends, OV-3866), which ``_span_bp`` and the label
+    embed check read as the whole circle instead of 0 bp."""
+    return end if (end - start) % total_length else start + total_length
+
+
+def _merged_origin_spanning_block(
+    feature_object: "FeatureObject", total_length: int
+) -> tuple[CircularCoordDict, bool] | None:
     """The two blocks of a feature that joins over the origin (``FeatureObject.joins_over_origin``, e.g. a D-loop as
     ``join(end..genome,1..start)``) as one block: from the start of the block that runs to the record's end to
-    the end of the block from its first base."""
+    the end of the block from its first base (``end_over_origin``)."""
     if not feature_object.joins_over_origin:
         return None
     block_coords = [coord for coord in feature_object.location if coord.kind == "block"]
@@ -292,7 +304,7 @@ def _merged_origin_spanning_block(feature_object: "FeatureObject") -> tuple[Circ
         "coord_type": "block",
         "coord_strand": block_coords[0].strand,
         "coord_start": int(right.start),
-        "coord_end": int(left.end),
+        "coord_end": end_over_origin(int(right.start), int(left.end), total_length),
         "open_start": right.open_start,
         "open_end": left.open_end,
     }
@@ -537,6 +549,7 @@ __all__ = [
     "circular_block_edge_radii_at",
     "circular_feature_edge_radii_at",
     "circular_feature_parts",
+    "end_over_origin",
     "generate_circular_arrow_path",
     "generate_circular_arrow_path_with_radii",
     "generate_circular_arrowhead_path",

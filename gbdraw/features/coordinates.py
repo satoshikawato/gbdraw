@@ -99,8 +99,9 @@ def origin_join_order(parts: Sequence[_P], origin_length: int | None) -> list[_P
 
     The one contact rule (OV-3661, OV-3659, OV-3689): on a record whose spans may cross its origin
     (``origin_length``, its length; ``spans_may_cross_origin``), two parts of one strand, one from the record's
-    first base (start 0) and the other to its last (end ``origin_length``), apart from each other. The contact is
-    exact: a part from base 2 leaves base 1 out, and its connector line is drawn. The parts may be written in
+    first base (start 0) and the other to its last (end ``origin_length``), apart or touching (two parts that touch
+    cover the whole record, e.g. join(51..100,1..50) on 100 bp, OV-3866). The contact is exact: a part from base 2
+    leaves base 1 out, and its connector line is drawn. The parts may be written in
     either order (a GFF3 reader sorts its rows into join(1..300,2701..3000)); the result reads over the origin
     (the part to the end, then the part from the start, reversed on the minus strand), so no connector line runs
     round the record between them. The Circular whole view draws the pair as one block, a display start draws it
@@ -110,7 +111,7 @@ def origin_join_order(parts: Sequence[_P], origin_length: int | None) -> list[_P
     if origin_length is None or len(parts) != 2 or parts[0].strand != parts[1].strand:
         return None
     low, high = sorted(parts, key=lambda part: int(part.start))
-    if int(low.start) != 0 or int(high.end) != origin_length or int(low.end) >= int(high.start):
+    if int(low.start) != 0 or int(high.end) != origin_length or int(low.end) > int(high.start):
         return None
     return [low, high] if parts[0].strand == -1 else [high, low]
 
