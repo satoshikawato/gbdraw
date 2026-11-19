@@ -51,7 +51,10 @@ export const ARTIFACT_KEYS_OUTSIDE_SLOT = Object.freeze([
   // `setupDiagramDrag`); History records them per Result (`compositionUserDeltas`). Without a
   // Result nothing shows them (Reset Layout needs a shown figure).
   'legendCurrentOffset', 'diagramOffset', 'plotTitleUserOffset',
-  // Zero at every mount of another Result (`syncLengthBarElement`): the figure carries the drawn position.
+  // Every mount of a Result sets it: zero for a Generate, a Result selection or a drawing switch
+  // (`syncLengthBarElement`), the restored step's own value for a History or Session restore. A drawing
+  // that shows no Result may hold the departing drawing's value (also in its History steps), which no
+  // reader shows: the bar and Reset Layout need a shown Result (OV-3893, not a product defect).
   'lengthBarUserOffset',
   // The slot's own `drawingId`: every slot install and owner-set install writes it from there.
   'generatedDrawingId',
