@@ -563,6 +563,216 @@ def _label_text(label: LinearAnnotationLabel, font_family: str, y_offset_px: flo
     return write_text_runs(text, italic_markup_runs(label.text))
 
 
+class _RecordMarks(NamedTuple):
+    """What every mark of one record's annotation track reads (``linear_annotation_track_content``): the track, the
+    record's placements and identity, its scale (px per bp), the slot's frame and offset, the track's parameters,
+    and the height of one lane of the slot's band."""
+
+    track: ResolvedAnnotationTrack
+    placements: Sequence[PlacedRegionAnnotation]
+    record_id: str
+    record_index: int
+    record_length: int
+    scale: float
+    y_offset_px: float
+    frame: AnnotationSlotFrame
+    params: AnnotationTrackParams
+    slot_lane_height: float
+
+
+class _AnnotationMark(NamedTuple):
+    """One annotation as its parts are drawn: its effective style, its stroke dash (``None`` for a solid stroke),
+    and whether it is an automatic feature underlay."""
+
+    annotation: ResolvedRegionAnnotation
+    style: RegionAnnotationStyle
+    dash: str | None
+    underlay: bool
+
+
+def _annotation_dom_id(track: ResolvedAnnotationTrack, record_index: int, annotation_id: str) -> str:
+    """The id of an annotation's item in the record's track, which its marks and its backed label share."""
+
+    return annotation_dom_id(
+        record_index=record_index,
+        slot_id=track.slot_id,
+        set_id=track.set_id,
+        annotation_id=annotation_id,
+    )
+
+
+def _item_group(record: _RecordMarks, annotation: ResolvedRegionAnnotation, underlay: bool) -> Group:
+    """An annotation's item group, with the attributes that name it; an automatic feature underlay's marks carry
+    the feature's attributes instead (``apply_feature_underlay_dom_attributes``)."""
+
+    track = record.track
+    item_group = Group(id=_annotation_dom_id(track, record.record_index, annotation.id))
+    if not underlay:
+        item_group.attribs.update(
+            {
+                ANNOTATION_ID_ATTRIBUTE: annotation.id,
+                ANNOTATION_SET_ID_ATTRIBUTE: track.set_id,
+                "data-gbdraw-annotation-track-id": track.slot_id,
+                "data-gbdraw-record-id": record.record_id,
+                "data-gbdraw-record-index": str(record.record_index),
+                "data-gbdraw-annotation-mark": annotation.mark,
+                "data-gbdraw-annotation-label": annotation.label,
+            }
+        )
+    return item_group
+
+
+def _annotation_item(
+    record: _RecordMarks, placement: PlacedRegionAnnotation, definitions: dict[str, BaseElement]
+) -> Group:
+    """One annotation's item group with its marks: each part of its mark in its lane, on a wrapped record in an
+    id-less group of its row (``wrap_row_group``). The hatch patterns its marks use go to ``definitions``."""
+
+    annotation = placement.annotation
+    underlay = is_auto_feature_underlay(annotation)
+    style = effective_annotation_style(annotation, record.params)
+    lane = partial(
+        _mark_lane,
+        record.track,
+        placement,
+        record.placements,
+        y_offset_px=record.y_offset_px,
+        frame=record.frame,
+        params=record.params,
+    )
+    lane_center, lane_height = lane(row=annotation.geometry_rows[0], lane_height=record.slot_lane_height)
+    item_group = _item_group(record, annotation, underlay)
+    mark = _AnnotationMark(annotation, style, ",".join(f"{value:g}" for value in style.stroke_dasharray) or None, underlay)
+    parts = mark_parts(annotation, join_origin=record.track.join_origin)
+    row_targets: dict[int, Group] = {}
+    for part_index, part in enumerate(parts, start=1):
+        part_target = item_group
+        if record.frame.row_frames and annotation.display_parts is not None:
+            row = record.frame.row_frames[part.row]
+            part_target = row_targets.get(part.row) or wrap_row_group(part.row, row.shift_y)
+            if part.row not in row_targets:
+                row_targets[part.row] = part_target
+                item_group.add(part_target)
+            lane_center, lane_height = lane(
+                row=part.row, lane_height=_lane_height(record.track, record.placements, row.height_px, record.params)
+            )
+        if annotation.mark in {"band", "highlight"}:
+            _band_part(part_target, definitions, record, mark, part, (part_index, len(parts)), (lane_center, lane_height))
+        else:
+            _line_part(part_target, mark, part, record.scale, (lane_center, lane_height))
+    return item_group
+
+
+def _band_part(
+    target: Group,
+    definitions: dict[str, BaseElement],
+    record: _RecordMarks,
+    mark: _AnnotationMark,
+    part: MarkPart,
+    part_of: tuple[int, int],
+    lane: tuple[float, float],
+) -> None:
+    """One part of a ``band`` or ``highlight`` mark in its ``lane`` (middle y and height, ``_mark_lane``): its
+    rectangle, and, unless it draws both its ends, its border without the edges at its cuts. ``part_of`` is the
+    part's number (from 1) and the count of the mark's parts, which name an automatic feature underlay's
+    rectangles."""
+
+    annotation, style, dash, underlay = mark
+    x1, x2 = float(part.start) * record.scale, float(part.end) * record.scale
+    lane_center, lane_height = lane
+    cap_start, cap_end = part.capped_start, part.capped_end
+    height_factor = _band_height_factor(annotation.mark)
+    rect_x, rect_y, rect_width, rect_height = _band_rect(annotation.mark, lane_center, lane_height, x1, x2)
+    fill = _band_paint(target, definitions, annotation, style, part, part.start, part.end,
+                       record.record_length, record.scale, (rect_y, rect_height))
+    rect = Rect(
+        insert=(rect_x, rect_y),
+        size=(rect_width, rect_height),
+        fill=fill,
+        fill_opacity=style.fill_opacity,
+        stroke="none" if underlay else style.stroke,
+        stroke_width=0 if underlay else style.stroke_width,
+    )
+    if dash:
+        rect.attribs["stroke-dasharray"] = dash
+    if underlay:
+        part_index, part_count = part_of
+        apply_feature_underlay_dom_attributes(
+            rect,
+            annotation,
+            record_id=record.record_id,
+            record_index=record.record_index,
+            part_index=part_index,
+            part_count=part_count,
+            include_stable_id=True,
+        )
+    if not underlay and not (cap_start and cap_end):
+        rect.attribs['stroke'] = 'none'
+        top = lane_center - 0.5 * height_factor * lane_height
+        bottom = lane_center + 0.5 * height_factor * lane_height
+        outline = f"M {path_number(x1)},{path_number(top)} L {path_number(x2)},{path_number(top)} M {path_number(x1)},{path_number(bottom)} L {path_number(x2)},{path_number(bottom)}"
+        for x, capped in ((x1, cap_start), (x2, cap_end)):
+            if capped:
+                outline += f" M {path_number(x)},{path_number(top)} L {path_number(x)},{path_number(bottom)}"
+        border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
+        if dash:
+            border.attribs["stroke-dasharray"] = dash
+        target.add(rect)
+        target.add(border)
+    else:
+        target.add(rect)
+
+
+def _line_part(
+    target: Group, mark: _AnnotationMark, part: MarkPart, scale: float, lane: tuple[float, float]
+) -> None:
+    """One part of a ``line`` or ``bracket`` mark in its ``lane`` (middle y and height, ``_mark_lane``), at
+    ``scale`` px per bp: its line, and a bracket's end caps (``line_cap``: a tick across its lane, or an arrow head
+    at its end and a tick at its start) at the ends it draws."""
+
+    annotation, style, dash, _underlay = mark
+    x1, x2 = float(part.start) * scale, float(part.end) * scale
+    lane_center, lane_height = lane
+    cap_start, cap_end = part.capped_start, part.capped_end
+    line = Line(
+        start=(x1, lane_center),
+        end=(x2, lane_center),
+        fill="none",
+        stroke=style.stroke,
+        stroke_width=style.stroke_width,
+        stroke_linecap="round" if cap_start and cap_end else "butt",
+    )
+    if dash:
+        line.attribs["stroke-dasharray"] = dash
+    target.add(line)
+    if annotation.mark != "bracket" or style.line_cap == "none":
+        return
+    cap = cap_size(lane_height)
+    if style.line_cap == "arrow":
+        path = Path(
+            d=f"M {path_number(x2 - cap)},{path_number(lane_center - cap)} L {path_number(x2)},{path_number(lane_center)} "
+            f"L {path_number(x2 - cap)},{path_number(lane_center + cap)}",
+            fill="none",
+            stroke=style.stroke,
+            stroke_width=style.stroke_width,
+        )
+        if cap_end:
+            target.add(path)
+        if cap_start:
+            target.add(_cap_tick(x1, lane_center, cap, style))
+    else:
+        if cap_start:
+            target.add(_cap_tick(x1, lane_center, cap, style))
+        if cap_end:
+            target.add(_cap_tick(x2, lane_center, cap, style))
+
+
+def _cap_tick(x: float, lane_center: float, cap: float, style: RegionAnnotationStyle) -> Line:
+    """A bracket's tick end cap at ``x``: ``cap`` on each side of its lane's middle."""
+
+    return Line(start=(x, lane_center - cap), end=(x, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width)
+
+
 def linear_annotation_track_content(
     track: ResolvedAnnotationTrack,
     *,
@@ -599,120 +809,12 @@ def linear_annotation_track_content(
     )
     scale = float(bar_length_px) / max(1, int(record_length))
     labels_by_id = {label.annotation_id: label for label in labels}
-
+    record = _RecordMarks(
+        track, placements, record_id, record_index, record_length, scale, y_offset_px, frame, params, slot_lane_height
+    )
     for placement in placements:
-        annotation = placement.annotation
-        auto_feature_underlay = is_auto_feature_underlay(annotation)
-        style = effective_annotation_style(annotation, params)
-        lane = partial(_mark_lane, track, placement, placements, y_offset_px=y_offset_px, frame=frame, params=params)
-        lane_center, lane_height = lane(row=annotation.geometry_rows[0], lane_height=slot_lane_height)
-        item_id = annotation_dom_id(
-            record_index=record_index,
-            slot_id=track.slot_id,
-            set_id=track.set_id,
-            annotation_id=annotation.id,
-        )
-        item_group = Group(id=item_id)
-        if not auto_feature_underlay:
-            item_group.attribs.update(
-                {
-                    ANNOTATION_ID_ATTRIBUTE: annotation.id,
-                    ANNOTATION_SET_ID_ATTRIBUTE: track.set_id,
-                    "data-gbdraw-annotation-track-id": track.slot_id,
-                    "data-gbdraw-record-id": record_id,
-                    "data-gbdraw-record-index": str(record_index),
-                    "data-gbdraw-annotation-mark": annotation.mark,
-                    "data-gbdraw-annotation-label": annotation.label,
-                }
-            )
-        dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        parts = mark_parts(annotation, join_origin=track.join_origin)
-        part_count = len(parts)
-        row_targets: dict[int, Group] = {}
-        for part_index, part in enumerate(parts, start=1):
-            x1, x2 = float(part.start) * scale, float(part.end) * scale
-            cap_start, cap_end = part.capped_start, part.capped_end
-            part_target = item_group
-            if frame.row_frames and annotation.display_parts is not None:
-                row = frame.row_frames[part.row]
-                part_target = row_targets.get(part.row) or wrap_row_group(part.row, row.shift_y)
-                if part.row not in row_targets:
-                    row_targets[part.row] = part_target
-                    item_group.add(part_target)
-                lane_center, lane_height = lane(row=part.row, lane_height=_lane_height(track, placements, row.height_px, params))
-            if annotation.mark in {"band", "highlight"}:
-                height_factor = _band_height_factor(annotation.mark)
-                rect_x, rect_y, rect_width, rect_height = _band_rect(annotation.mark, lane_center, lane_height, x1, x2)
-                fill = _band_paint(part_target, definitions, annotation, style, part, part.start, part.end,
-                                   record_length, scale, (rect_y, rect_height))
-                rect = Rect(
-                    insert=(rect_x, rect_y),
-                    size=(rect_width, rect_height),
-                    fill=fill,
-                    fill_opacity=style.fill_opacity,
-                    stroke="none" if auto_feature_underlay else style.stroke,
-                    stroke_width=0 if auto_feature_underlay else style.stroke_width,
-                )
-                if dash:
-                    rect.attribs["stroke-dasharray"] = dash
-                if auto_feature_underlay:
-                    apply_feature_underlay_dom_attributes(
-                        rect,
-                        annotation,
-                        record_id=record_id,
-                        record_index=record_index,
-                        part_index=part_index,
-                        part_count=part_count,
-                        include_stable_id=True,
-                    )
-                if not auto_feature_underlay and not (cap_start and cap_end):
-                    rect.attribs['stroke'] = 'none'
-                    top = lane_center - 0.5 * height_factor * lane_height
-                    bottom = lane_center + 0.5 * height_factor * lane_height
-                    outline = f"M {path_number(x1)},{path_number(top)} L {path_number(x2)},{path_number(top)} M {path_number(x1)},{path_number(bottom)} L {path_number(x2)},{path_number(bottom)}"
-                    for x, capped in ((x1, cap_start), (x2, cap_end)):
-                        if capped:
-                            outline += f" M {path_number(x)},{path_number(top)} L {path_number(x)},{path_number(bottom)}"
-                    border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
-                    if dash:
-                        border.attribs["stroke-dasharray"] = dash
-                    part_target.add(rect)
-                    part_target.add(border)
-                else:
-                    part_target.add(rect)
-                continue
-            line = Line(
-                start=(x1, lane_center),
-                end=(x2, lane_center),
-                fill="none",
-                stroke=style.stroke,
-                stroke_width=style.stroke_width,
-                stroke_linecap="round" if cap_start and cap_end else "butt",
-            )
-            if dash:
-                line.attribs["stroke-dasharray"] = dash
-            part_target.add(line)
-            if annotation.mark == "bracket" and style.line_cap != "none":
-                cap = cap_size(lane_height)
-                if style.line_cap == "arrow":
-                    path = Path(
-                        d=f"M {path_number(x2 - cap)},{path_number(lane_center - cap)} L {path_number(x2)},{path_number(lane_center)} "
-                        f"L {path_number(x2 - cap)},{path_number(lane_center + cap)}",
-                        fill="none",
-                        stroke=style.stroke,
-                        stroke_width=style.stroke_width,
-                    )
-                    if cap_end:
-                        part_target.add(path)
-                    if cap_start:
-                        part_target.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
-                else:
-                    if cap_start:
-                        part_target.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
-                    if cap_end:
-                        part_target.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
-
-        label = labels_by_id.get(annotation.id)
+        item_group = _annotation_item(record, placement, definitions)
+        label = labels_by_id.get(placement.annotation.id)
         # A backed label is drawn in front of the leader lines (linear_region_label_front_content).
         if label is not None and not label.backed:
             item_group.add(_label_text(label, font_family, float(y_offset_px)))
@@ -745,12 +847,7 @@ def linear_region_label_front_content(
         group_id,
         [
             BackedRegionLabel(
-                annotation_dom_id(
-                    record_index=record_index,
-                    slot_id=track.slot_id,
-                    set_id=track.set_id,
-                    annotation_id=label.annotation_id,
-                ),
+                _annotation_dom_id(track, record_index, label.annotation_id),
                 backing_rect(label.backing, label.font_size),
                 _label_text(label, font_family),
             )

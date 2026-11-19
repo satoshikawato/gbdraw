@@ -259,7 +259,6 @@ FUNCTION_STATEMENTS: dict[str, int] = {
     "gbdraw/labels/linear.py::place_linear_label_row": 62,
     "gbdraw/layout/linear_multi_record.py::solve_linear_horizontal_layout": 63,
     "gbdraw/render/drawers/circular/annotations.py::circular_annotation_track_content": 68,
-    "gbdraw/render/drawers/linear/annotations.py::linear_annotation_track_content": 83,
     "gbdraw/render_stages.py::render_stage": 59,
     "gbdraw/session_contract.py::describe_session_admission": 81,
     "gbdraw/session_io.py::_append_linear_gui_args": 60,
