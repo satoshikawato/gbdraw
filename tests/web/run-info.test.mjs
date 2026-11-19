@@ -1565,6 +1565,29 @@ test('the depth series settings have their CLI flags in the Source recipe and re
     { format: 'bedgraph', agg: 'max', style: 'line', negative_color: '#d62728', baseline: 0.5, min_value: -2, max_value: 'auto', unit: '' },
     { format: 'auto', agg: 'mean', style: 'area', negative_color: null, baseline: 'mean', min_value: null, max_value: 3, unit: 'x' }
   ]);
+
+  // D-33: the CLI reads a file named as BED as BED unless a format is given, so a series that reads such a file by
+  // its columns (Auto, which a user can choose) states auto; a recipe without such a name writes no format flag.
+  const named = withTracks([{}, {}]);
+  named.resources['depth-0'] = resource('depth-track-file', 'Sites.BED', 'input\t0\t10\n');
+  named.webFiles = { ...named.webFiles, resourceOriginalNames: { ...named.webFiles?.resourceOriginalNames, 'depth-0': 'Sites.BED' } };
+  const bedRecipe = await buildSourceRecipe(named);
+  assert.equal(bedRecipe.available, true, bedRecipe.unavailableReason);
+  const bedFlag = bedRecipe.args.indexOf('--depth_track_format');
+  assert.notEqual(bedFlag, -1, JSON.stringify(bedRecipe.args));
+  assert.deepEqual(bedRecipe.args.slice(bedFlag + 1, bedFlag + 3), ['auto', 'auto'], JSON.stringify(bedRecipe.args));
+  const bedReadBack = await evaluatePython([
+    'from gbdraw.circular import _get_args',
+    'from gbdraw.cli_utils.common import depth_track_inputs_from_args',
+    'result = [track.format for track in depth_track_inputs_from_args(_get_args(payload["args"]))]'
+  ].join('\n'), { args: bedRecipe.args.map((token) => bedRecipe.fileMetadata.get(token)?.name || token) });
+  assert.deepEqual(bedReadBack, ['auto', 'auto']);
+  const auto = withTracks([{}]);
+  auto.resources['depth-0'] = resource('depth-track-file', 'sites.bed', 'input\t0\t10\n');
+  auto.webFiles = { ...auto.webFiles, resourceOriginalNames: { ...auto.webFiles?.resourceOriginalNames, 'depth-0': 'sites.bed' } };
+  auto.renderRequest.diagramOptions.depthTracks[0].format = 'bed';
+  const stated = await buildSourceRecipe(auto);
+  assert.equal(stated.args.includes('--depth_track_format'), true, 'a stated format keeps its flag');
 });
 
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {

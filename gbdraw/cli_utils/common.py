@@ -526,8 +526,10 @@ def _add_depth_track_series_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--depth_track_format',
         metavar='FORMAT',
-        help='How each depth track file is read: auto (by its columns), samtools, bedgraph, bed, or '
-        f'position_value. samtools reads the first sample of a file of several. Default: auto. {each}',
+        help='How each depth track file is read: auto, samtools, bedgraph, bed, or position_value. auto reads a '
+        'file named .bed or .bed.gz as bed and any other by its columns, so a three-column BED file named otherwise '
+        'reads as samtools depth unless bed is given. samtools reads the first sample of a file of several. '
+        f'Default: auto. {each}',
         choices=DEPTH_FILE_FORMATS,
         type=str,
         nargs='+')

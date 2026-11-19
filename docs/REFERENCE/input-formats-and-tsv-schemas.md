@@ -158,15 +158,24 @@ metadata always names the endpoint records.
 
 A depth file (a numeric series) is a tab-separated table in one of five
 formats. Each depth track names its format (`--depth_track_format`, the Python
-`format` field); the default, `auto`, tells three of them apart by the number of
-columns in the first row, not by the file name:
+`format` field); the default, `auto`, reads a file whose name ends in `.bed` or
+`.bed.gz` (in any case) as `bed`, and tells the other three apart by the number
+of columns in the first row:
 
 | Format | `auto` reads it at | Fields |
 |---|---|---|
 | `position_value` | 2 columns | a 1-based positive `position` and a value (`depth`) |
 | `samtools` | 3 columns | `reference_name`, a 1-based positive `position`, and a value (`depth`); further value columns (more samples) are ignored |
 | `bedgraph` | 4 or more columns | `reference_name`, a 0-based `start`, an `end` after it, and a value (`depth`); later columns are ignored |
-| `bed` | never: name it | `reference_name`, a 0-based `start`, an `end` after it, then an optional `name` and `score`; later columns are ignored |
+| `bed` | a name ending in `.bed` or `.bed.gz` | `reference_name`, a 0-based `start`, an `end` after it, then an optional `name` and `score`; later columns are ignored |
+
+A three-column BED file has the columns of a `samtools depth` file, so `auto`
+reads one named otherwise (for example `sites.txt`) as samtools depth: give it
+the format `bed`. The name rule applies where a file is given: the command line,
+the Python `gbdraw.DepthTrackOptions`, and the web app, where attaching such a
+file sets the series' **Format** to **BED** (you can change it). A saved Session
+or request records the format, and a typed `gbdraw.api.DepthTrackInput` reads
+its `format` as given.
 
 A bedGraph row gives its value to the positions `start + 1` to `end`, as
 `bedtools genomecov -bg` or `-bga` writes them. The rows of a reference come

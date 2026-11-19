@@ -79,7 +79,7 @@ from gbdraw.io.regions import (
 from gbdraw.layout.linear_wrap import refuse_undrawable_wrap, resolve_wrap_length, wrap_blocking_inputs
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_transform import detected_topology, drawn_circular, reads_over_origin
-from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS
+from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, depth_file_format_of_names
 from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.core.numeric import parse_ascii_finite_float
 from gbdraw.layout.series_style import DEPTH_UNIT, SERIES_STYLES, SeriesBaseline, SeriesBound
@@ -1601,7 +1601,11 @@ def depth_track_inputs_from_cli(
                     small_ticks[index], field_name="depth_track_small_tick_intervals"
                 ),
                 tick_font_size=depth_track_number(font_sizes[index], field_name="depth_track_tick_font_sizes"),
-                format=_cli_word(formats[index], DEPTH_FILE_FORMATS, "auto", field_name="depth_track_formats"),
+                # Unstated, a file named as BED reads as BED (an explicit auto reads by the columns).
+                format=_cli_word(
+                    formats[index], DEPTH_FILE_FORMATS, depth_file_format_of_names(sources),
+                    field_name="depth_track_formats",
+                ),
                 agg=_cli_word(aggs[index], DEPTH_AGGREGATIONS, "mean", field_name="depth_track_aggs"),
                 style=_cli_word(styles[index], SERIES_STYLES, "area", field_name="depth_track_styles"),
                 negative_color=_cli_text(negative_colors[index]) or None,

@@ -105,6 +105,8 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_PROTEIN_CANDIDATE_SCHEMA", "gbdraw.session_io", "LEGACY_PROTEIN_CANDIDATE_SCHEMA"),
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
+    # The file name ends that state a depth file's format: attaching such a file sets its series' Format (D-33).
+    ("DEPTH_FILE_NAME_FORMATS", "gbdraw.analysis.depth", "DEPTH_FILE_NAME_FORMATS"),
     ("GALLERY_SESSION_DRAWN_DRAWINGS", "gbdraw.session_contract", "GALLERY_SESSION_DRAWN_DRAWINGS"),
     # The Session file's entries and its refusals (the twin's vectors pin the rest).
     ("SESSION_DOCUMENT_ENTRY", "gbdraw.session_container", "SESSION_DOCUMENT_ENTRY"),

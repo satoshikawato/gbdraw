@@ -34,7 +34,7 @@ from gbdraw.api.input_summary import log_input_warnings as _log_input_warnings
 from gbdraw.io.comparison_sequences import comparison_genome, read_comparison_sequence_file
 from gbdraw.io.genome import load_fasta as _load_fasta
 from gbdraw.io.record_sequences import detached_records
-from gbdraw.analysis.depth import DepthAggregation, DepthFileFormat
+from gbdraw.analysis.depth import DepthAggregation, DepthFileFormat, depth_file_format_of_names
 from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.layout.series_style import DEPTH_UNIT, SeriesBaseline, SeriesBound, SeriesStyle
 from gbdraw.api.options import (
@@ -207,7 +207,8 @@ class DepthTrackOptions:
     """One depth track (a numeric series), with one source per displayed record when needed.
 
     ``format``, ``agg``, ``style``, ``negative_color``, ``baseline``, ``min_value``, ``max_value`` and ``unit`` are
-    those of :class:`gbdraw.api.DepthTrackInput`, which each track becomes.
+    those of :class:`gbdraw.api.DepthTrackInput`, which each track becomes. An unset ``format`` reads a file named
+    ``.bed`` or ``.bed.gz`` as BED, others by their columns (``auto``).
     """
 
     source: TableSource | Sequence[TableSource | None]
@@ -217,7 +218,7 @@ class DepthTrackOptions:
     large_tick_interval: float | str | None = None
     small_tick_interval: float | str | None = None
     tick_font_size: float | str | None = None
-    format: DepthFileFormat = "auto"
+    format: DepthFileFormat | None = None
     agg: DepthAggregation = "mean"
     style: SeriesStyle = "area"
     negative_color: str | None = None
@@ -924,7 +925,7 @@ def _depth_kwargs(
                     track.small_tick_interval, field_name="depth_track_small_tick_intervals"
                 ),
                 tick_font_size=depth_track_number(track.tick_font_size, field_name="depth_track_tick_font_sizes"),
-                format=track.format,
+                format=track.format if track.format is not None else depth_file_format_of_names(record_sources),
                 agg=track.agg,
                 style=track.style,
                 negative_color=track.negative_color,

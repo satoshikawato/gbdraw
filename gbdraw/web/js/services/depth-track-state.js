@@ -1,5 +1,6 @@
 // @ts-check
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
+import { DEPTH_FILE_NAME_FORMATS } from '../contracts/schema.generated.js';
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { shapeViolations } from '../utils/contract-shape.js';
 import { isUnsetValue, positiveNumberOrNull } from '../utils/field-reading.js';
@@ -121,6 +122,21 @@ export const depthSeriesWords = (key) => {
 export const depthSeriesValueFits = (key, value) => (
   shapeViolations(value, SERIES_SHAPE.fields[key], CANONICAL_REQUEST_DESCRIPTION.types, key).length === 0
 );
+/**
+ * The Format the names of a series' files state (Python's `depth_file_format_of_names`, D-33): the first that a
+ * file's name states by its end (`DEPTH_FILE_NAME_FORMATS`, without case), else the default (Auto, by the columns).
+ * @param {readonly (DepthSlotFile | null | undefined)[]} files
+ * @returns {NonNullable<DepthSeriesSettings['format']>}
+ */
+export const depthFileFormatOfNames = (files) => {
+  for (const file of files) {
+    if (!file) continue;
+    const name = String(file.name ?? '').trim().toLowerCase();
+    const stated = Object.entries(DEPTH_FILE_NAME_FORMATS).find(([end]) => name.endsWith(end));
+    if (stated && depthSeriesValueFits('format', stated[1])) return /** @type {NonNullable<DepthSeriesSettings['format']>} */ (stated[1]);
+  }
+  return /** @type {NonNullable<DepthSeriesSettings['format']>} */ (DEPTH_SERIES_DEFAULTS.format);
+};
 /**
  * A series' settings, each it never set as its default: what its controls show and Generate draws.
  * It asks with `in`, which a reactive view of the draft tracks (`Object.hasOwn` is not tracked, so a

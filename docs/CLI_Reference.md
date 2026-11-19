@@ -397,11 +397,13 @@ options:
                         Depth track fill color(s). Provide one color or one
                         per --depth_track.
   --depth_track_format FORMAT [FORMAT ...]
-                        How each depth track file is read: auto (by its
-                        columns), samtools, bedgraph, bed, or position_value.
-                        samtools reads the first sample of a file of several.
-                        Default: auto. Provide one value or one per
-                        --depth_track.
+                        How each depth track file is read: auto, samtools,
+                        bedgraph, bed, or position_value. auto reads a file
+                        named .bed or .bed.gz as bed and any other by its
+                        columns, so a three-column BED file named otherwise
+                        reads as samtools depth unless bed is given. samtools
+                        reads the first sample of a file of several. Default:
+                        auto. Provide one value or one per --depth_track.
   --depth_track_agg AGG [AGG ...]
                         The value of each window: mean, max (the largest base
                         value), or sum. Default: mean. Provide one value or
@@ -1691,11 +1693,13 @@ options:
                         Depth track fill color(s). Provide one color or one
                         per --depth_track.
   --depth_track_format FORMAT [FORMAT ...]
-                        How each depth track file is read: auto (by its
-                        columns), samtools, bedgraph, bed, or position_value.
-                        samtools reads the first sample of a file of several.
-                        Default: auto. Provide one value or one per
-                        --depth_track.
+                        How each depth track file is read: auto, samtools,
+                        bedgraph, bed, or position_value. auto reads a file
+                        named .bed or .bed.gz as bed and any other by its
+                        columns, so a three-column BED file named otherwise
+                        reads as samtools depth unless bed is given. samtools
+                        reads the first sample of a file of several. Default:
+                        auto. Provide one value or one per --depth_track.
   --depth_track_agg AGG [AGG ...]
                         The value of each window: mean, max (the largest base
                         value), or sum. Default: mean. Provide one value or

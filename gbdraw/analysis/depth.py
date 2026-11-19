@@ -5,7 +5,7 @@
 
 A depth file is a table of numbers along a reference. Its format (``DepthFileFormat``) is stated, or ``auto``:
 then it is told apart by the column count of its first data line (never by the file's name, which the Web does not
-keep): two columns are a 1-based position and a value (``position_value``), three are a reference name, a 1-based
+keep; a file named as BED is stated as ``bed`` before it is read, ``depth_file_format_of_names``): two columns are a 1-based position and a value (``position_value``), three are a reference name, a 1-based
 position and a value (``samtools``, ``samtools depth``), and four or more are a reference name, a 0-based start, an
 exclusive end and a value (``bedgraph``). A ``bed`` file is never told by its columns: its rows are features, each
 adding its score (column 5, else 1) to every base it covers. Values may be negative. Every format is read into one
@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from os import PathLike, fspath
 from pathlib import Path
 from typing import Callable, Generator, Iterable, Iterator, Literal, Mapping, TypeAlias, get_args
 
@@ -35,6 +36,10 @@ DEPTH_COLUMNS = ["reference_name", "position", "depth"]
 # How a depth file reads: by its column count (``auto``), or as the format stated.
 DepthFileFormat = Literal["auto", "samtools", "bedgraph", "bed", "position_value"]
 DEPTH_FILE_FORMATS: tuple[DepthFileFormat, ...] = get_args(DepthFileFormat)
+# The ends of a file name (without case) that state the file's format: a BED file of three columns reads as samtools
+# depth by its columns, so a series whose format is ``auto`` reads a file named so as BED. The CLI and the beginner API
+# apply it where they take a series' files, the Web when a file is attached, so a request records the stated format.
+DEPTH_FILE_NAME_FORMATS: Mapping[str, DepthFileFormat] = {".bed": "bed", ".bed.gz": "bed"}
 # The value of a window: the mean of the bases it counts, their largest value, or their sum.
 DepthAggregation = Literal["mean", "max", "sum"]
 DEPTH_AGGREGATIONS: tuple[DepthAggregation, ...] = get_args(DepthAggregation)
@@ -112,6 +117,19 @@ def checked_depth_file_format(file_format: str) -> DepthFileFormat:
         if file_format == known:
             return known
     raise ValidationError(f"Depth file format must be one of {', '.join(DEPTH_FILE_FORMATS)}; got {file_format!r}.")
+
+
+def depth_file_format_of_names(sources: Iterable[object]) -> DepthFileFormat:
+    """The format the names of a series' files state (``DEPTH_FILE_NAME_FORMATS``): the first a path's name states,
+    else ``auto``. A table or a missing source has no name."""
+
+    for source in sources:
+        if isinstance(source, (str, PathLike)):
+            name = str(fspath(source)).strip().lower()
+            for suffix, file_format in DEPTH_FILE_NAME_FORMATS.items():
+                if name.endswith(suffix):
+                    return file_format
+    return "auto"
 
 
 @dataclass(frozen=True)
@@ -943,6 +961,7 @@ __all__ = [
     "DEPTH_AGGREGATIONS",
     "DEPTH_COLUMNS",
     "DEPTH_FILE_FORMATS",
+    "DEPTH_FILE_NAME_FORMATS",
     "DepthAggregation",
     "DepthCoverage",
     "DepthFileFormat",
@@ -950,6 +969,7 @@ __all__ = [
     "checked_depth_file_format",
     "clear_depth_tsv_cache",
     "depth_df",
+    "depth_file_format_of_names",
     "parse_depth_tsv",
     "read_cached_depth_coverage",
     "read_depth_tsv",

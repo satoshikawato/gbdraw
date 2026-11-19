@@ -147,6 +147,13 @@ export const DEPTH_FILE_SCHEMA = 1;
 // gbdraw/session_io.py: DEPTH_FILE_ENCODING
 export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
 
+// gbdraw/analysis/depth.py: DEPTH_FILE_NAME_FORMATS
+/** @type {Readonly<Record<'.bed' | '.bed.gz', string>>} */
+export const DEPTH_FILE_NAME_FORMATS = Object.freeze({
+  ".bed": 'bed',
+  ".bed.gz": 'bed'
+});
+
 // gbdraw/session_contract.py: GALLERY_SESSION_DRAWN_DRAWINGS
 export const GALLERY_SESSION_DRAWN_DRAWINGS = 1;
 

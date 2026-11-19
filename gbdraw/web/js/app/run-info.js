@@ -15,7 +15,7 @@ import {
   syncLinearSlotsFromAxisIndex
 } from '../services/linear-track-slot-model.js';
 import { countGenBankRecords } from '../services/genbank-header.js';
-import { DEPTH_SERIES_DEFAULTS, SERIES_SETTINGS } from '../services/depth-track-state.js';
+import { DEPTH_SERIES_DEFAULTS, SERIES_SETTINGS, depthFileFormatOfNames } from '../services/depth-track-state.js';
 import { identityScalePathForMode } from '../mode-profiles.js';
 import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
@@ -1711,6 +1711,8 @@ const appendResourceOptions = (args, options, files, colorTablePath) => {
  */
 const appendDepthOptions = (args, options, files) => {
   const tracks = Array.isArray(options.depthTracks) ? options.depthTracks : [];
+  /** Whether the CLI would read a series' recipe files in a format their names state (D-33), not the request's. */
+  let namesStateFormat = false;
   tracks.forEach((track, trackIndex) => {
     const refs = Array.isArray(track?.source) ? track.source : [track?.source];
     const paths = refs.map((ref, recordIndex) => {
@@ -1725,6 +1727,8 @@ const appendDepthOptions = (args, options, files) => {
       throw recipeUnavailable(msg('depth track {n} has no source file.'), { n: trackIndex + 1 });
     }
     args.push('--depth_track', ...paths);
+    namesStateFormat ||= depthFileFormatOfNames(paths.filter(Boolean).map((path) => ({ name: files.visibleName(path) })))
+      !== DEPTH_SERIES_DEFAULTS.format;
   });
   /**
    * @param {string} option
@@ -1746,9 +1750,10 @@ const appendDepthOptions = (args, options, files) => {
   appendTrackValues('--depth_track_small_tick_interval', 'smallTickInterval');
   appendTrackValues('--depth_track_tick_font_size', 'tickFontSize');
   // A series setting has its flag only when a series of the request sets it; each series then gives its value, and
-  // a series without one the token the CLI reads as the default (`depth_track_inputs_from_cli`).
+  // a series without one the token the CLI reads as the default (`depth_track_inputs_from_cli`). The format's flag is
+  // also written when a recipe file's name states a format, which the CLI reads unless the format is given.
   SERIES_SETTINGS.forEach(([, key]) => {
-    if (!tracks.some((track) => Object.hasOwn(track, key))) return;
+    if (!tracks.some((track) => Object.hasOwn(track, key)) && !(key === 'format' && namesStateFormat)) return;
     args.push(DEPTH_SERIES_FLAGS[key], ...tracks.map((track) => depthSeriesToken(
       Object.hasOwn(track, key) ? track[key] : DEPTH_SERIES_DEFAULTS[key]
     )));

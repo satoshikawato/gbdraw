@@ -432,6 +432,56 @@ def test_a_table_source_keeps_its_settings(tmp_path: Path) -> None:
     assert (track.style, track.unit) == ("line", "")
 
 
+# --- A file named as BED ---------------------------------------------------------------------------------------------
+
+
+def _bed3(path: Path) -> Path:
+    """Three overlapping BED3 rows: read as BED, two bases hold 2; read by its columns (samtools), the ends 400,
+    600 and 900 are values at the positions 100, 300 and 500."""
+
+    import gzip
+
+    text = "NC_012920.1\t100\t400\nNC_012920.1\t300\t600\nNC_012920.1\t500\t900\n"
+    if path.name.lower().endswith(".gz"):
+        path.write_bytes(gzip.compress(text.encode("utf-8")))
+    else:
+        path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize("name", ["sites.bed", "Sites.BED.GZ"])
+def test_a_file_named_as_bed_reads_as_bed_unless_a_format_is_given(tmp_path: Path, name: str) -> None:
+    """Under auto a BED3 file read as samtools depth by its columns (its ends drawn as values, review r1 M1, D-33):
+    the CLI and the beginner API read a file named .bed or .bed.gz as BED and record it; a stated format wins."""
+
+    bed = _bed3(tmp_path / name)
+    other = _bed3(tmp_path / "sites.txt")
+    assert _cli_tracks(circular_cli, "--depth_track", str(bed))[0].format == "bed"
+    assert _cli_tracks(circular_cli, "--depth_track", str(bed), "--depth_track_format", "auto")[0].format == "auto"
+    assert _cli_tracks(circular_cli, "--depth_track", str(other))[0].format == "auto"
+    assert _cli_tracks(linear_cli, "--depth_track", "-", str(bed))[0].format == "bed", "a record without a file"
+
+    circular_cli.circular_main([
+        "--gbk", str(_HMMT), "-o", str(tmp_path / "cli"), "-f", "svg", "--depth_track", str(bed), "--save_session",
+    ])
+    from gbdraw.api import load_session_document
+    from gbdraw.session import session_drawing_artifacts
+
+    stored = session_drawing_artifacts(load_session_document(tmp_path / "cli.gbdraw"), "circular").fields
+    assert stored["renderRequest"]["diagramOptions"]["depthTracks"][0]["format"] == "bed"
+    assert re.findall(r">(\[[^<]*\])<", (tmp_path / "cli.svg").read_text(encoding="utf-8")) == ["[0–2x]"]
+
+    records = gbdraw.read_genbank(_HMMT)
+
+    def labels(track: gbdraw.DepthTrackOptions) -> list[str]:
+        svg = gbdraw.draw_circular(records, options=gbdraw.CircularOptions(depth_tracks=(track,))).to_svg()
+        return re.findall(r">(\[[^<]*\])<", svg)
+
+    assert labels(gbdraw.DepthTrackOptions(source=bed)) == ["[0–2x]"]
+    assert labels(gbdraw.DepthTrackOptions(source=bed, format="auto")) == labels(gbdraw.DepthTrackOptions(source=other))
+    assert labels(gbdraw.DepthTrackOptions(source=other)) != ["[0–2x]"]
+
+
 # --- Circular figure bounds ------------------------------------------------------------------------------------------
 
 

@@ -30,6 +30,7 @@ import {
   depthSeriesSettings,
   depthSeriesValueFits,
   depthSeriesWords,
+  depthFileFormatOfNames,
   getDepthTrackFileBaseName,
   SERIES_SETTINGS,
   isDepthSeriesAutoLabel,
@@ -287,6 +288,25 @@ const updateDepthTrackLabelFromFile = (drawing, index, file, previousFiles) => {
     syncDepthTrackSlotLabelsForTrack(drawing, index);
   }
 };
+/**
+ * A series' Format follows the name of a file attached to it while it is the Format the names of the series' files
+ * before gave (D-33): `sites.bed` sets BED on an Auto series, a file that replaces it sets the Format its own name
+ * gives, and a Format the user chose stays.
+ * @param {DrawingState} drawing
+ * @param {number} index
+ * @param {InputFileRef} file
+ * @param {readonly (InputFileRef | null)[]} previousFiles The series' files in the drawing before the change
+ */
+const updateDepthSeriesFormatFromFile = (drawing, index, file, previousFiles) => {
+  const config = drawing.adv.depth_tracks[index];
+  if (!config) return;
+  const before = previousFiles.filter((previous) => previous !== null);
+  const given = before.length ? before.map((previous) => depthFileFormatOfNames([previous])) : [depthFileFormatOfNames([])];
+  if (!given.includes(depthSeriesSettings(config).format)) return;
+  const format = depthFileFormatOfNames([file]);
+  if (format === DEPTH_SERIES_DEFAULTS.format) delete config.format;
+  else config.format = format;
+};
 /** @param {LinearSeq | null | undefined} seq @param {number} index */
 export const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
 
@@ -524,7 +544,10 @@ export const createDepthFiles = ({
           bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', nextDepth);
           turnOffReaching?.();
         }, { setsFile: ref !== null, series: 'same' });
-        if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
+        if (ref) {
+          updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
+          updateDepthSeriesFormatFromFile(drawing, idx, ref, previousFiles);
+        }
       });
     };
     const asked = ref ? null : askTrackSourceRemoval(askingStackPorts('circular_track_slots'), {
@@ -571,7 +594,10 @@ export const createDepthFiles = ({
           });
           turnOffReaching?.();
         }, { setsFile: ref !== null, series: 'same' });
-        if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
+        if (ref) {
+          updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
+          updateDepthSeriesFormatFromFile(drawing, idx, ref, previousFiles);
+        }
       });
     };
     if (ref) return apply();

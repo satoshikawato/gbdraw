@@ -674,6 +674,45 @@ test('New drawing with this style leaves a series label taken from a Depth file 
   assertLeftBehind(copyOf(linear.id, 'linear'), 'Linear to Linear');
 });
 
+// Review r1 M1 (D-33): a BED file of three columns reads as samtools depth by its columns, so attaching a file
+// named .bed or .bed.gz sets its series' Format to BED; a file that replaces it sets the Format its own name gives
+// while the Format is what the names gave; a Format the user chose stays; Undo takes the Format back with the file.
+test('a Depth file named as BED sets its series Format, and a replacement follows its name unless the user chose one', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  /** @param {string} name */
+  const depthFile = (name) => new File(['chr\t1\t3\n'], name);
+  /** @param {string} label @param {() => unknown} edit */
+  const step = (label, edit) => history.runUndoable(label, edit);
+  /** @param {number} [index] */
+  const format = (index = 0) => state.activeDrawing().adv.depth_tracks[index]?.format ?? 'auto';
+
+  app.drawingList.newDrawing('circular');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('sites.bed')));
+  assert.equal(format(), 'bed');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('coverage.tsv')));
+  assert.equal(format(), 'auto', 'a replacement named otherwise reads by its columns again');
+  assert.equal(Object.hasOwn(state.activeDrawing().adv.depth_tracks[0], 'format'), false, 'Auto is left out');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('Sites.BED.GZ')));
+  assert.equal(format(), 'bed');
+  await history.undo();
+  assert.equal(format(), 'auto', 'Undo takes the Format back with the file');
+  await step('Format', () => app.setDepthSeriesSetting(0, 'format', 'position_value'));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('sites.bed')));
+  assert.equal(format(), 'position_value', 'a Format the user chose stays');
+  await step('Format', () => app.setDepthSeriesSetting(0, 'format', 'auto'));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('other.bed')));
+  assert.equal(format(), 'auto', 'an Auto the user chose for a BED-named file stays');
+
+  app.drawingList.newDrawing('linear');
+  const linear = state.activeDrawing();
+  await step('Depth file', () => app.setLinearDepthFile(linear.linearSeqs[0], 0, depthFile('peaks.bed')));
+  assert.equal(format(), 'bed');
+  await step('Depth track', () => app.addLinearDepthTrack());
+  await step('Depth file', () => app.setLinearDepthFile(linear.linearSeqs[0], 1, depthFile('depth.tsv')));
+  assert.deepEqual([format(0), format(1)], ['bed', 'auto'], 'each series follows its own files');
+});
+
 test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;
