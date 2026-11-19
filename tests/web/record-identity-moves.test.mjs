@@ -278,18 +278,23 @@ test('the request of a view-switch Generate reads the moved rows; the drawing ke
   assert.deepEqual(requestFeatureOverrides(drafts.featureOverrides, records), []);
 });
 
-// OV-3846 (D-05, refining D-20): a Replace in the same card continues each
-// record by its record ID when every ID of both files is unique, else by
-// place; a record whose ID the new file lacks continues as the record at its
-// place when no ID names that one. Every row a record holds moves by this one
-// rule: the feature edits here (`recordKeyMoves`), the Depth rows in
-// `resliceCardRows`.
+// OV-3846 (D-05, refining D-20; D-23): a Replace in the same card continues
+// each record by its accession (its record ID without the version) or its
+// record ID when every ID of both files is unique, else by place; a record
+// the new file has no such record for leaves. Every row a record holds moves
+// by this one rule: the feature edits here (`recordKeyMoves`), the Depth rows
+// in `resliceCardRows`.
 test('a reordered Replace moves each record\'s rows to the record with its ID; duplicated IDs follow places', async () => {
   const { continuedRecordPlaces } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['B', 'A']), [1, 0]);
   assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['B']), [-1, 0], 'A leaves; B keeps its rows');
-  assert.deepEqual(continuedRecordPlaces(['A'], ['A2']), [0], 'one record replacing one record keeps it (D-32)');
-  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['A', 'C']), [0, 1]);
+  assert.deepEqual(continuedRecordPlaces(['NC_1.1'], ['NC_1.2']), [0], 'a new version of the record keeps it (D-32)');
+  assert.deepEqual(continuedRecordPlaces(['A.1', 'B.1'], ['B.2', 'A.1']), [1, 0]);
+  assert.deepEqual(continuedRecordPlaces(['A'], ['B']), [-1], 'a record with another ID does not continue A (D-23)');
+  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['A', 'C']), [0, -1]);
+  // Two versions of one accession in a file: the exact ID decides.
+  assert.deepEqual(continuedRecordPlaces(['A.1'], ['A.2', 'A.1']), [1]);
+  assert.deepEqual(continuedRecordPlaces(['A.1', 'A.2'], ['A.3']), [-1, -1]);
   assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['B', 'B']), [0, 1], 'a duplicated ID: by place');
   assert.deepEqual(continuedRecordPlaces(['A', 'A', 'B'], ['B']), [0, -1, -1]);
   const all = (cards) => drawnRecordIdentities(Object.keys(cards).map((recordKey) => ({ recordKey, cardinality: 'all', windows: [] })), circular(cards));
@@ -325,31 +330,102 @@ test('a reordered Replace moves each record\'s rows to the record with its ID; d
 // OV-3846 review (MEDIUM 1): several Replaces of a card before one Generate. The Depth rows move at the read after
 // each Replace and the feature edits at the Generate; both continue from the records the committed request drew
 // (`continuedSinceCommit` for the rows, `recordKeyMoves` for the edits), so the rows of a record never part from its
-// edits. On the step-by-step reading (C, D) -> (B, A) would put A's Depth on B while A's edit stays on A.
+// edits. Where IDs name records the one-step rule composes; a file between them whose IDs repeat goes by place, and
+// there the step-by-step reading would put A's Depth on B while A's edit goes to A.
 test('Replaces before one Generate move a record\'s Depth rows where that Generate moves its feature edits', async () => {
   const { continuedRecordPlaces, continuedSinceCommit, resliceCardRows, cardRowsLeaving } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   const all = (cards) => drawnRecordIdentities(Object.keys(cards).map((recordKey) => ({ recordKey, cardinality: 'all', windows: [] })), circular(cards));
   const committed = new Map([['U', ['A', 'B']]]);
   const card = (...recordIds) => [{ uid: 'U', recordIds }];
-  // (A, B) committed, then (C, D), then (B, A): the rows of (C, D) stood for A and B.
-  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['C', 'D'], ['B', 'A']), [1, 0]);
-  assert.deepEqual(resliceCardRows([['a.tsv'], ['b.tsv']], card('C', 'D'), card('B', 'A'), committed, () => []), [['b.tsv'], ['a.tsv']]);
+  // (A, B) committed, then (A, A), then (B, A): the rows of (A, A) stood for A and B by place.
+  assert.deepEqual(continuedRecordPlaces(['A', 'A'], ['B', 'A']), [0, 1]);
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['A', 'A'], ['B', 'A']), [1, 0]);
+  assert.deepEqual(resliceCardRows([['a.tsv'], ['b.tsv']], card('A', 'A'), card('B', 'A'), committed, () => []), [['b.tsv'], ['a.tsv']]);
   assert.deepEqual(moves(all({ U: ['A', 'B'] }), all({ U: ['B', 'A'] })), { 'U:1': 'U:2', 'U:2': 'U:1' }, 'A\'s edits go to U:2, where A\'s Depth went');
-  assert.deepEqual(cardRowsLeaving([['a.tsv'], ['b.tsv']], card('C', 'D'), card('B', 'A'), committed), []);
-  // (A, B) -> (B, A) -> (A2, B): A's rows go to its new version at A's place, as A's edits do.
-  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['B', 'A'], ['A2', 'B']), [1, 0]);
-  assert.deepEqual(continuedRecordPlaces(['A', 'B'], ['A2', 'B']), [0, 1]);
+  assert.deepEqual(cardRowsLeaving([['a.tsv'], ['b.tsv']], card('A', 'A'), card('B', 'A'), committed), []);
+  // (A.1, B) -> (B, A.2) -> (A.3, B): A's rows go to its newest version, as A's edits do.
+  assert.deepEqual(continuedSinceCommit(['A.1', 'B'], ['B', 'A.2'], ['A.3', 'B']), [1, 0]);
+  assert.deepEqual(continuedRecordPlaces(['A.1', 'B'], ['A.3', 'B']), [0, 1]);
   // (A, B) -> (B) -> (A, B): B's row stays with B (A's row left at the first Replace, which asked).
   assert.deepEqual(continuedSinceCommit(['A', 'B'], ['B'], ['A', 'B']), [1]);
   // A record the committed request did not draw, or a card it did not draw, continues step by step.
-  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['C'], ['B', 'C']), [1], 'C continues A, which leaves: C keeps its row');
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['C'], ['B', 'C']), [1], 'C, new since the Generate, keeps its row');
   assert.deepEqual(continuedSinceCommit(null, ['C', 'D'], ['B', 'A']), continuedRecordPlaces(['C', 'D'], ['B', 'A']));
-  assert.deepEqual(resliceCardRows([['c.tsv']], [{ uid: 'V', recordIds: ['C'] }], [{ uid: 'V', recordIds: ['C2'] }], committed, () => []), [['c.tsv']]);
-  // One record of the new file continues one record: a claim by record ID before a claim by place.
-  assert.deepEqual(continuedSinceCommit(['A'], ['C', 'D'], ['D', 'A2']), [-1, 0]);
+  assert.deepEqual(resliceCardRows([['c.tsv']], [{ uid: 'V', recordIds: ['C.1'] }], [{ uid: 'V', recordIds: ['C.2'] }], committed, () => []), [['c.tsv']]);
+  // One record of the new file continues one record: a claim by its exact ID before one by place.
+  assert.deepEqual(continuedSinceCommit(['A', 'B'], ['A', 'A'], ['A', 'C']), [0, -1]);
   // With no Replace since the Generate it is the one-step rule.
-  for (const [then, next] of [[['A', 'B'], ['B', 'A']], [['A', 'B'], ['B']], [['A'], ['A2']], [['A', 'B'], ['A', 'C']], [['A', 'B'], ['B', 'B']], [['A', 'A', 'B'], ['B']]]) {
+  for (const [then, next] of [[['A', 'B'], ['B', 'A']], [['A', 'B'], ['B']], [['A.1'], ['A.2']], [['A'], ['B']], [['A', 'B'], ['A', 'C']], [['A', 'B'], ['B', 'B']], [['A', 'A', 'B'], ['B']]]) {
     assert.deepEqual(continuedSinceCommit(then, then, next), continuedRecordPlaces(then, next), `${then} -> ${next}`);
+  }
+});
+
+// OV-3846 review of 91340c36c (HIGH 1, D-23): two Replaces of one card before a Generate. Each record's Depth row
+// (moved at the read after each Replace, after the question) and its feature edits (moved at the Generate) end on the
+// same record, and never on a record with another ID: a record continues as the record of the new file with its ID,
+// or with its accession without the version; a record the new file has none for leaves, and the question names it.
+// The one parting left is the user's answer: a Depth row removed at the question while the record comes back with its
+// edits.
+test('two Replaces before a Generate never draw a record\'s Depth or edits on a record with another ID', async () => {
+  const { cardRowsLeaving, resliceCardRows } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const all = (ids) => drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', windows: [] }], circular({ U: ids }));
+  const card = (recordIds) => [{ uid: 'U', recordIds }];
+  /** Depth rows named by their record, the records each question names, and the edit moves of the Generate. */
+  const replaceTwice = (committedIds, ...files) => {
+    const committed = new Map([['U', committedIds]]);
+    let rows = committedIds.map((id) => [`${id}.tsv`]);
+    let marked = committedIds;
+    const asked = [];
+    for (const next of files) {
+      // The question names the rows that hold a file (`circularDepthFilesLeaving`).
+      asked.push(cardRowsLeaving(rows, card(marked), card(next), committed).flatMap(({ row }) => row));
+      rows = resliceCardRows(rows, card(marked), card(next), committed, () => []);
+      marked = next;
+    }
+    return { depth: rows.map((row) => row[0] ?? null), asked, edits: moves(all(committedIds), all(marked)) };
+  };
+  // (a) (A, B) -> (A) -> (B): B's Depth leaves at the first question, A's at the second; B keeps its edits (U:2 -> U).
+  assert.deepEqual(replaceTwice(['A', 'B'], ['A'], ['B']), { depth: [null], asked: [['B.tsv'], ['A.tsv']], edits: { 'U:2': 'U' } });
+  // (b) (A) -> (B) -> (C, B): A leaves at the first question; nothing of A reaches B or C.
+  assert.deepEqual(replaceTwice(['A'], ['B'], ['C', 'B']), { depth: [null, null], asked: [['A.tsv'], []], edits: {} });
+  // (c) (A) -> (A, B) -> (B): A's Depth leaves at the second question, and A's edits do not move onto B.
+  assert.deepEqual(replaceTwice(['A'], ['A', 'B'], ['B']), { depth: [null], asked: [[], ['A.tsv']], edits: {} });
+  // (d) (A.1) -> (C, D) -> (D, A.2): A.1 leaves at the first question; its edits go to its new version A.2.
+  assert.deepEqual(replaceTwice(['A.1'], ['C', 'D'], ['D', 'A.2']), { depth: [null, null], asked: [['A.1.tsv'], []], edits: { U: 'U:2' } });
+  // A single record replaced by a record with another ID leaves (asked); a new version of it continues.
+  assert.deepEqual(replaceTwice(['A'], ['B']), { depth: [null], asked: [['A.tsv']], edits: {} });
+  assert.deepEqual(replaceTwice(['NC_1.1'], ['NC_1.2']), { depth: ['NC_1.1.tsv'], asked: [[]], edits: {} });
+  // Over every two-Replace sequence of files of one or two records with IDs A to D: no Depth row or edit lands on a
+  // record with another ID, and a Depth row and its record's edits (`continuedRecordPlaces`, which `recordKeyMoves`
+  // applies) part only where a question removed the row.
+  const { continuedRecordPlaces } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+  const files = ['A', 'B', 'C', 'D'].flatMap((x) => [[x], ...['A', 'B', 'C', 'D'].filter((y) => y !== x).map((y) => [x, y])]);
+  let checked = 0;
+  for (const a of files) for (const b of files) for (const c of files) {
+    const { depth, asked } = replaceTwice(a, b, c);
+    const direct = continuedRecordPlaces(a, c);
+    a.forEach((id, place) => {
+      const label = `${[a, b, c].map((f) => f.join('')).join(' -> ')}: ${id}`;
+      const depthPlace = depth.indexOf(`${id}.tsv`);
+      if (direct[place] >= 0) assert.equal(c[direct[place]], id, `${label}: edits on another record`);
+      if (depthPlace >= 0) assert.deepEqual([c[depthPlace], direct[place]], [id, depthPlace], `${label}: Depth apart from its edits`);
+      else assert.ok(direct[place] < 0 || asked.flat().includes(`${id}.tsv`), `${label}: Depth left without a question`);
+      checked += 1;
+    });
+  }
+  assert.equal(checked, 7168);
+  // Where a file between them or the new file repeats an ID (by place), a Depth row still goes only where its record's
+  // edits go, or leaves through the question.
+  const repeated = [...files, ...['A', 'B'].map((x) => [x, x])];
+  for (const a of files) for (const b of repeated) for (const c of repeated) {
+    const { depth, asked } = replaceTwice(a, b, c);
+    const direct = continuedRecordPlaces(a, c);
+    a.forEach((id, place) => {
+      const label = `${[a, b, c].map((f) => f.join('')).join(' -> ')}: ${id}`;
+      const depthPlace = depth.indexOf(`${id}.tsv`);
+      if (depthPlace >= 0) assert.equal(direct[place], depthPlace, `${label}: Depth apart from its edits`);
+      else assert.ok(direct[place] < 0 || asked.flat().includes(`${id}.tsv`), `${label}: Depth left without a question`);
+    });
   }
 });
 

@@ -1272,6 +1272,12 @@ const committedReadsOf = (resources) => {
 };
 
 /**
+ * The record lists a committed request's records were drawn from (`committedRecordIdentitySources`), with the cards
+ * whose request file could not be read (`unread`), which keep their list now.
+ * @typedef {RecordIdentitySources & { unread: ReadonlySet<string> }} CommittedRecordSources
+ */
+
+/**
  * The records of the file a committed request names by `ids`, listed once per committed Session
  * (`committedRecordLists`); a failed read is not kept, so a later reading tries again.
  * @param {ReturnType<typeof committedReadsOf>} held @param {readonly string[]} ids @param {unknown} kind
@@ -1297,14 +1303,16 @@ const listCommittedRecords = ({ table, lists }, ids, kind) => {
  * request's own file, read from the Session resource the request names (`listCommittedRecords`). So a Replace made
  * before a Save and Load moves the feature edits and the Depth rows of each record from the records that request drew
  * (`recordKeyMoves`, `circularDepthRowsAfterRead`, D-05), as a Replace in one sitting does. A card whose request file
- * cannot be read keeps its list now, for both, and the read failure is reported (`committedRecordReadFailureCount`).
+ * cannot be read keeps its list now and is named in `unread`, and the read failure is reported
+ * (`committedRecordReadFailureCount`): the Generate moves none of its records' feature edits, and its Depth rows cannot
+ * be placed (`committedCardRecords`), so both stay where they are.
  * @param {{ records: readonly (IdentityRequestRecord & { source?: Readonly<Record<string, unknown>> | null })[],
  *   resources: Readonly<Record<string, unknown>>, sources: RecordIdentitySources,
  *   cards: readonly (Readonly<Partial<Record<import('./input-types.js').InputSlot, InputFileRef | null>>> & { uid: unknown })[],
  *   inputType: unknown, inputFiles: Pick<import('./history-files.js').InputFileStore, 'fileOf'> }} committed
  *   `records` and `resources`: the committed request's; `cards`: the drawing's cards now (its Circular source cards
  *   or Linear cards), whose files `inputType` reads.
- * @returns {Promise<RecordIdentitySources>}
+ * @returns {Promise<CommittedRecordSources>}
  */
 export const committedRecordIdentitySources = async ({ records, resources, sources, cards: drawingCards, inputType, inputFiles }) => {
   /** @param {string} uid the files the card holds now, in the order its input type reads them */
@@ -1315,6 +1323,8 @@ export const committedRecordIdentitySources = async ({ records, resources, sourc
   };
   const cards = new Map(sources.cards);
   const read = new Set();
+  /** @type {Set<string>} */
+  const unread = new Set();
   for (const record of records) {
     const uid = requestRecordCard(String(record.recordKey), sources.cards);
     if (uid === undefined || read.has(uid)) continue;
@@ -1331,11 +1341,12 @@ export const committedRecordIdentitySources = async ({ records, resources, sourc
     } catch (error) {
       // The request's file cannot be read: the card keeps its list now, for the feature edits and the Depth rows.
       recordStructuralMetric('committedRecordReadFailureCount', 1, { card: uid, error: String(error) });
+      unread.add(uid);
       continue;
     }
     cards.set(uid, listed);
   }
-  return { ...sources, cards };
+  return { ...sources, cards, unread };
 };
 
 /** @param {Readonly<InputTypeSpec>} spec The helper operation a failed read of this input names. */
@@ -1416,7 +1427,7 @@ const sameRecordIds = (left, right) => left !== null && left.length === right.le
  * result, since marks null read as the cards as last read, the one form of
  * "the rows stand for the cards read" (OV-3706). Marks stay only while a read
  * is pending. Rows null: the rows stay as they are, because the cards did not
- * change or the rows cannot be placed (a file no longer readable, or a matrix
+ * change or the rows cannot be placed (a file no longer readable, a committed file that cannot be read, or a matrix
  * whose rows are not those of its marks), and then Generate reports the
  * matrix. Null: nothing changes (no matrix, or no marks).
  * @param {{ matrix: DrawingInputFiles['c_depth'], marks: readonly CircularCardMark[] | null,

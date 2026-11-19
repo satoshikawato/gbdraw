@@ -41,7 +41,7 @@ const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: { overrides: payload.configOverrides } }));
 const { CANONICAL_REQUEST_SCHEMA, projectCanonicalSessionRequest } = await import('../../gbdraw/web/js/services/session-request.js');
 const { circularDepthRowsAfterRead, committedRecordIdentitySources, readStoredRecordIdPlaces, readOncePerFile } = await import('../../gbdraw/web/js/services/record-discovery.js');
-const { drawnRecordIdentities, recordKeyMoves, recordSelectorNumber } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
+const { committedCardRecords, drawnRecordIdentities, recordKeyMoves, recordSelectorNumber } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
 const { buildDisambiguatedRecordEntries } = await import('../../gbdraw/web/js/services/record-options.js');
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
@@ -212,10 +212,11 @@ test('after a Load, the committed request\'s records are read from its own file 
   assert.deepEqual(failures().slice(failed), ['card']);
 });
 
-// OV-3846 review (MEDIUM 1): a Session saved after a Replace (third, fourth over the committed first, second) and
-// loaded, then a Replace with (second, first) before the next Generate. The Depth rows move at the read after that
-// Replace and the feature edits at the Generate, both from the records the committed request drew, read from its own
-// file, so first's Depth file and edits stay with first. Step by step, the rows of (third, fourth) would go by place.
+// OV-3846 review (MEDIUM 1): a Session saved after a Replace (first, first over the committed first, second: a
+// repeated ID, so by place) and loaded, then a Replace with (second, first) before the next Generate. The Depth rows
+// move at the read after that Replace and the feature edits at the Generate, both from the records the committed
+// request drew, read from its own file, so first's Depth file and edits stay with first. Step by step, the rows of
+// (first, first) would go by place.
 test('after a Load, a second Replace moves the Depth rows where the next Generate moves the feature edits', async () => {
   const resources = { then: descriptor(genbankOf(['first', 'second']), 'ab.gb') };
   const records = [requestRecord('card:1', { kind: 'recordIndex', index: 0 }, 'then'), requestRecord('card:2', { kind: 'recordIndex', index: 1 }, 'then')];
@@ -226,8 +227,8 @@ test('after a Load, a second Replace moves the Depth rows where the next Generat
   }));
   const depth = await circularDepthRowsAfterRead({
     matrix: [['a.tsv'], ['b.tsv']],
-    // The cards as the Session was saved: its rows stand for (third, fourth).
-    marks: [{ uid: 'card', primaryFile: 'cd', pairedFile: null, recordIds: ['third', 'fourth'] }],
+    // The cards as the Session was saved: its rows stand for (first, first).
+    marks: [{ uid: 'card', primaryFile: 'aa', pairedFile: null, recordIds: ['first', 'first'] }],
     inputs: [{ uid: 'card', spec: null, primaryFile: 'ba', pairedFile: null }],
     records: [[{ record_id: 'second' }, { record_id: 'first' }]],
     fileOf: () => null,
@@ -236,4 +237,30 @@ test('after a Load, a second Replace moves the Depth rows where the next Generat
   assert.deepEqual(depth, { rows: [['b.tsv'], ['a.tsv']] }, 'first\'s Depth file goes to first, at place 2');
   assert.deepEqual(Object.fromEntries(recordKeyMoves(committed, drawnRecordIdentities(records, now))), { 'card:1': 'card:2', 'card:2': 'card:1' },
     'first\'s feature edits go to place 2 too');
+});
+
+// OV-3846 review of 91340c36c (MEDIUM 2): a Session saved with (first, second) committed, loaded, and the card's file
+// replaced by (second, first), when the committed request's file cannot be read. The Generate then reads the card's
+// list now as the records it drew, so first's feature edits stay at place 1; the Depth rows cannot be placed either,
+// so they stay where they are too (and Generate reports the matrix): both keep first's rows at place 1.
+test('after a Load, a committed file that cannot be read keeps a Replace\'s Depth rows and edits where they are', async () => {
+  const resources = { then: descriptor(genbankOf(['first', 'second']), 'ab.gb') };
+  const records = [requestRecord('card:1', { kind: 'recordIndex', index: 0 }, 'missing'), requestRecord('card:2', { kind: 'recordIndex', index: 1 }, 'missing')];
+  const now = { mode: 'circular', cards: new Map([['card', buildDisambiguatedRecordEntries([{ recordId: 'second' }, { recordId: 'first' }])]]) };
+  const picked = new File([genbankOf(['second', 'first'])], 'ba.gb', { type: 'text/plain' });
+  const sources = await committedRecordIdentitySources({
+    records, resources, sources: now, cards: [{ uid: 'card', gb: { fileId: 'picked' } }], inputType: 'gb', inputFiles: { fileOf: (ref) => (ref ? picked : null) }
+  });
+  assert.deepEqual([...sources.unread], ['card']);
+  const committed = drawnRecordIdentities(records, sources);
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(committed, drawnRecordIdentities(records, now))), {}, 'first\'s edits stay at place 1');
+  const depth = await circularDepthRowsAfterRead({
+    matrix: [['a.tsv'], ['b.tsv']],
+    marks: [{ uid: 'card', primaryFile: 'ab', pairedFile: null, recordIds: ['first', 'second'] }],
+    inputs: [{ uid: 'card', spec: null, primaryFile: 'ba', pairedFile: null }],
+    records: [[{ record_id: 'second' }, { record_id: 'first' }]],
+    fileOf: () => null,
+    committed: async () => committedCardRecords(committed, sources.unread)
+  });
+  assert.deepEqual(depth, { rows: null }, 'first\'s Depth file stays at place 1');
 });

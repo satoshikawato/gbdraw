@@ -1757,11 +1757,15 @@ and a record that the Generate does not draw keeps them until it is drawn
 again. A Generate that also replaces or removes the record's file moves none of
 its edits, except after a Replace in the same Circular File card: there each
 record's edits, like its Depth files, go to the record of the new file with its
-record ID; when the new file lacks that ID, or record IDs repeat in either file,
-they go to the record at its place in the file unless another record's ID
-names that one (edits of features the new record lacks are removed). Several
-Replaces before one Generate move the edits and the Depth files alike, from the
-records the last Generate drew. **Undo** of that Generate puts them back. Edits made on an "all
+accession (its record ID without the version, so `NC_000913.3` continues as
+`NC_000913.4`) or, when two records of a file share an accession, with its
+record ID. A record the new file has no such record for keeps neither: the
+question before the Replace names its Depth files, and its edits are not
+moved. When record IDs repeat or are missing in either file, every record's
+edits and Depth files go to the record at its place in the file. Edits of
+features the new record lacks are removed. Several Replaces before one
+Generate move the edits and the Depth files alike, from the records the last
+Generate drew. **Undo** of that Generate puts them back. Edits made on an "all
 records" card of a gbdraw 0.13.0 Session do not follow its records after the
 first Generate splits the card. Resetting **This feature only** on
 one copy leaves the other copies as they are: a rule that names the shared

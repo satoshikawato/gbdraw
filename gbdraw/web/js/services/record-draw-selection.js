@@ -202,11 +202,14 @@ export const recordIdentity = ({ uid, sourceIndex, recordCount }) => (
  * every row a record holds (feature edits, color rule instances, annotations,
  * strokes: `recordKeyMoves`; a record-major Depth matrix: `resliceCardRows`).
  * When every record ID of both files is unique, a record continues as the
- * record of the new file with its ID, so a reordered file keeps each record's
- * rows; a record whose ID the new file lacks continues as the record at its
- * place when no ID names that one (one record replacing one record, a new
- * version of the same genome, D-32). Otherwise (a duplicated or missing ID)
- * every record continues by place. -1: the record leaves.
+ * record of the new file with its accession (its ID without a `.<version>`
+ * suffix) when every accession of both files is unique too, so a new version
+ * of the same genome keeps its rows (D-32), else as the record with its ID;
+ * a reordered file keeps each record's rows. A record the new file has no
+ * such record for leaves (D-23). Otherwise (a duplicated or missing ID in
+ * either file, so no ID names a record) every record continues by place.
+ * A matching ID is the same in every pair of files, so the rule composes over
+ * several Replaces where IDs name records. -1: the record leaves.
  * @param {readonly unknown[]} previous the record IDs of the file then, in file order
  * @param {readonly unknown[]} next the record IDs of the new file, in file order
  * @returns {number[]} for each record then, the 0-based place of its record in the new file, or -1
@@ -216,12 +219,9 @@ export const continuedRecordPlaces = (previous, next) => {
   const [before, after] = [ids(previous), ids(next)];
   const unique = (/** @type {string[]} */ list) => list.every(Boolean) && new Set(list).size === list.length;
   if (!unique(before) || !unique(after)) return before.map((_id, place) => (place < after.length ? place : -1));
-  const kept = new Set(before);
-  return before.map((id, place) => {
-    const byId = after.indexOf(id);
-    if (byId >= 0) return byId;
-    return place < after.length && !kept.has(after[place]) ? place : -1;
-  });
+  const accession = (/** @type {string[]} */ list) => list.map((id) => id.replace(/\.\d+$/, ''));
+  const [from, to] = unique(accession(before)) && unique(accession(after)) ? [accession(before), accession(after)] : [before, after];
+  return from.map((id) => to.indexOf(id));
 };
 
 /**
@@ -229,9 +229,9 @@ export const continuedRecordPlaces = (previous, next) => {
  * held the records `committed` at the last committed Generate (OV-3846). A Generate moves the feature edits of each
  * committed record by `continuedRecordPlaces(committed, next)`, whatever Replaces came between, so a record of
  * `marked` that continues a committed record (`continuedRecordPlaces(committed, marked)`) continues as that record
- * does; one that continues none (new since the Generate, or `committed` null: the card drew nothing) continues by
- * `continuedRecordPlaces(marked, next)`, as does one whose committed record leaves. Each record of the new file
- * continues one record at most: a claim by record ID before a claim by place, then a committed record's before the
+ * does, and leaves where that record leaves; one that continues none (new since the Generate, or `committed` null: the
+ * card drew nothing) continues by `continuedRecordPlaces(marked, next)`. Each record of the new file
+ * continues one record at most: a claim by its exact record ID before one by accession or place, then a committed record's before the
  * record's own, then in file order; a record whose claims are all taken leaves (-1). With `committed` equal to
  * `marked` this is `continuedRecordPlaces(marked, next)`.
  * @param {readonly unknown[] | null} committed the record IDs of the card's file at the last committed Generate
@@ -249,7 +249,7 @@ export const continuedSinceCommit = (committed, marked, next) => {
   const claim = (row, place, id, rank) => ({ row, place, rank: (after[place] === cleanKey(id) ? 0 : 2) + rank });
   const claims = marked.flatMap((id, row) => {
     const from = origin.indexOf(row);
-    return [...(from >= 0 ? [claim(row, direct[from], committed[from], 0)] : []), claim(row, stepwise[row], id, 1)];
+    return [from >= 0 ? claim(row, direct[from], committed[from], 0) : claim(row, stepwise[row], id, 1)];
   }).filter(({ place }) => place >= 0).sort((left, right) => left.rank - right.rank || left.row - right.row);
   const places = marked.map(() => -1);
   /** @type {Set<number>} */
@@ -834,9 +834,21 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
  * A File card at one moment with the record IDs of its file, in file order.
  * @typedef {{ uid: string, recordIds: readonly string[] }} CardRecords
  * The record IDs of each card's file, in file order, as the drawing's committed request drew it, by card uid; a card
- * that request did not draw has none (`continuedSinceCommit`).
- * @typedef {ReadonlyMap<string, readonly string[]>} CommittedCardRecords
+ * that request did not draw has none (`continuedSinceCommit`); null: the file the request drew for that card cannot be
+ * read (a Session Load), so its records' rows cannot be placed.
+ * @typedef {ReadonlyMap<string, readonly string[] | null>} CommittedCardRecords
  */
+
+/**
+ * The `CommittedCardRecords` of the identities of a committed request's records (`drawnRecordIdentities`) and the
+ * cards whose request file could not be read (`unread`, `committedRecordIdentitySources`).
+ * @param {readonly DrawnRecordIdentity[]} identities @param {ReadonlySet<string>} unread
+ * @returns {CommittedCardRecords}
+ */
+export const committedCardRecords = (identities, unread) => new Map([
+  ...identities.map(({ card, cardRecordIds }) => /** @type {[string, readonly string[] | null]} */ ([card, unread.has(card) ? null : cardRecordIds])),
+  ...[...unread].map((uid) => /** @type {[string, readonly string[] | null]} */ ([uid, null]))
+]);
 
 /**
  * The rows of a list that keeps one row per record of a drawing's cards (a
@@ -846,19 +858,21 @@ export const resliceRecordRows = (rows, previous, next, empty) => next.map((iden
  * from the records the committed request drew, as a Generate moves the
  * record's other rows), so a card moved or removed takes its rows along, and
  * a Replace in the same card keeps each record's row with the record of the
- * new file with its record ID, or at its place (D-05, D-20). A record new to
- * the list gets an empty row (`resliceRecordRows`).
+ * new file it continues as (`continuedRecordPlaces`, D-05, D-23). A record new
+ * to the list gets an empty row (`resliceRecordRows`). Null when the rows
+ * cannot be placed (`continuedCardRows`).
  * @template R
  * @param {readonly R[]} rows
  * @param {readonly CardRecords[]} marked
  * @param {readonly CardRecords[]} now
  * @param {CommittedCardRecords} committed
  * @param {() => R} empty
- * @returns {R[]}
+ * @returns {R[] | null}
  */
-export const resliceCardRows = (rows, marked, now, committed, empty) => resliceRecordRows(
-  rows, continuedCardRows(marked, now, committed).map(({ key }) => key), cardRecordKeys(now), empty
-);
+export const resliceCardRows = (rows, marked, now, committed, empty) => {
+  const continued = continuedCardRows(marked, now, committed);
+  return continued && resliceRecordRows(rows, continued.map(({ key }) => key), cardRecordKeys(now), empty);
+};
 
 /**
  * Each record of `cards`, in row order: a record is its card's record at its
@@ -876,19 +890,28 @@ const cardRecordKeys = (cards) => cardRecords(cards).map(({ key }) => key);
  * Each record of `marked`, in row order, with the key (`cardRecords`) of the
  * record of `now` it continues as, null when it leaves (its card removed, or
  * a Replace whose new file has no record for it). The one mapping of a card
- * edit's rows (`resliceCardRows`, `cardRowsLeaving`).
+ * edit's rows (`resliceCardRows`, `cardRowsLeaving`). Null when a card whose
+ * records changed has a committed file that cannot be read: the next Generate
+ * then moves none of its records' feature edits, so its rows stay too.
  * @param {readonly CardRecords[]} marked
  * @param {readonly CardRecords[]} now
  * @param {CommittedCardRecords} committed
- * @returns {{ uid: string, k: number, key: string | null }[]}
+ * @returns {{ uid: string, k: number, key: string | null }[] | null}
  */
-const continuedCardRows = (marked, now, committed) => marked.flatMap(({ uid, recordIds }) => {
-  const after = now.find((card) => card.uid === uid);
-  const places = after ? continuedSinceCommit(committed.get(uid) ?? null, recordIds, after.recordIds) : recordIds.map(() => -1);
-  return recordIds.map((_id, index) => ({
-    uid, k: index + 1, key: places[index] < 0 ? null : expandedRecordKey(uid, places[index] + 1)
-  }));
-});
+const continuedCardRows = (marked, now, committed) => {
+  const unplaceable = marked.some(({ uid, recordIds }) => {
+    const after = now.find((card) => card.uid === uid);
+    return committed.get(uid) === null && after !== undefined
+      && (after.recordIds.length !== recordIds.length || after.recordIds.some((id, place) => id !== recordIds[place]));
+  });
+  return unplaceable ? null : marked.flatMap(({ uid, recordIds }) => {
+    const after = now.find((card) => card.uid === uid);
+    const places = after ? continuedSinceCommit(committed.get(uid) ?? null, recordIds, after.recordIds) : recordIds.map(() => -1);
+    return recordIds.map((_id, index) => ({
+      uid, k: index + 1, key: places[index] < 0 ? null : expandedRecordKey(uid, places[index] + 1)
+    }));
+  });
+};
 
 /**
  * The rows `resliceCardRows` leaves out when the cards change from `marked`
@@ -901,7 +924,7 @@ const continuedCardRows = (marked, now, committed) => marked.flatMap(({ uid, rec
  * @param {CommittedCardRecords} committed
  * @returns {{ uid: string, k: number, row: R }[]}
  */
-export const cardRowsLeaving = (rows, marked, now, committed) => continuedCardRows(marked, now, committed)
+export const cardRowsLeaving = (rows, marked, now, committed) => (continuedCardRows(marked, now, committed) ?? [])
   .flatMap(({ uid, k, key }, index) => (key !== null || index >= rows.length ? [] : [{ uid, k, row: rows[index] }]));
 
 /**
