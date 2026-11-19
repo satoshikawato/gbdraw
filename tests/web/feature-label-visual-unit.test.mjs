@@ -217,6 +217,8 @@ test('one action serializes combined text and visual-unit visibility changes onc
   const harness = buildHarness();
   const textElement = harness.svg.querySelector('text[data-label-key="label-1"]');
   textElement.textContent = 'Original label';
+  // A bound label holds the source-text record the projection wrote when it was bound.
+  textElement.setAttribute('data-label-source-text', 'Original label');
   harness.state.editableLabels.value[0].text = 'Original label';
   harness.state.editableLabels.value[0].sourceText = 'Original label';
   Object.assign(harness.state.clickedFeature.value, {
