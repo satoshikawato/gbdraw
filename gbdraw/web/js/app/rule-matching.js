@@ -304,10 +304,26 @@ export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? 
  */
 
 /**
+ * The features a preparation matches: the page's (`ruleTargets` of its catalog and biological features) unless
+ * given, as a render gives those of the catalog it admits before its commit makes them the page's.
+ * @typedef {{ targets?: RuleFeature[] }} RulePreparationTargets
+ */
+
+// The features the rule matches are read for: the catalog features and the
+// biological ones, each once. The page's (`createRulePreparation`) and those
+// a render admits (app/run-analysis.js) are read as one union, so matches a
+// render records before its commit are the matches the page reads after it.
+/**
+ * @param {{ extractedFeatures: readonly RuleFeature[], biologicalFeatures: readonly RuleFeature[] }} features
+ * @returns {RuleFeature[]}
+ */
+export const ruleTargets = ({ extractedFeatures, biologicalFeatures }) => [...new Set([...extractedFeatures, ...biologicalFeatures])];
+
+/**
  * The rule preparation: every owner that reads rule matches runs through it
  * (R13), as the whole-object `rulePreparation` or as one function of it.
  * @typedef {object} RulePreparation
- * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: { blocked?: () => boolean, view?: boolean } & RuleEvaluationOptions) => boolean | Promise<boolean>} prepare
+ * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: RulePreparationTargets & { blocked?: () => boolean, view?: boolean } & RuleEvaluationOptions) => boolean | Promise<boolean>} prepare
  *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
  *   `options.blocked` says whether a Session operation discards the matches (default: any Session operation);
  *   the other options are the evaluation's.
@@ -318,7 +334,7 @@ export const visibilityTableError = (outcome) => (typeof outcome === 'object' ? 
  *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
  *   `view` marks a preparation that only reads the matches (a popup opening): it does not raise `blocking`.
  * @property {(rules?: readonly Partial<SpecificColorRule>[]) => boolean} isPrepared
- * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: { asGiven?: boolean } & RuleEvaluationOptions) => Promise<RuleCandidate | null>} prepareCandidate
+ * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: RulePreparationTargets & { asGiven?: boolean } & RuleEvaluationOptions) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.asGiven` prepares the rules as they are, without writing them as `normalizeSpecificRule` does.
  * @property {(group: GroupColorEdit, rules: readonly SpecificColorRule[]) => Promise<SynthesizedColorRules>} synthesizeGroup
  *   Python's rules for coloring `group.features` as one group over the rule table `rules` and the whole catalog.
@@ -432,9 +448,9 @@ export const createRulePreparation = ({
     const catalog = toRaw(state.extractedFeatures.value);
     const biology = toRaw(state.biologicalFeatures.value);
     if (!union || union.catalog !== catalog || union.biology !== biology) {
-      union = { catalog, biology, union: [...new Set([
-        ...state.extractedFeatures.value, ...state.biologicalFeatures.value
-      ])] };
+      union = { catalog, biology, union: ruleTargets({
+        extractedFeatures: state.extractedFeatures.value, biologicalFeatures: state.biologicalFeatures.value
+      }) };
     }
     return union.union;
   };
@@ -514,9 +530,8 @@ export const createRulePreparation = ({
   const retain = (rules = []) => { retained = rules; };
   /** @type {RulePreparation['prepare']} */
   const prepare = (rules = state.activeDrawing().manualSpecificRules, {
-    blocked = () => Boolean(state.sessionOperationAvailability()), view = false, ...options
+    blocked = () => Boolean(state.sessionOperationAvailability()), view = false, targets = features(), ...options
   } = {}) => {
-    const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
     if (matchesPrepared(targets, draft)) return true;

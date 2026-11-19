@@ -6,17 +6,18 @@
 /** @import { ColorRuleLegendGroup, RuleLegendIntent, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { DrawnTrack } from '../../services/track-legend-rows.js' */
 /** @typedef {import('../rule-matching.js').GroupColorEdit['scope']} RuleSynthesisScope */
-import { displayedLegendRowColors, draftLegendRowColors, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
+import { displayedLegendRowColors, editLegendRow, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { draftLegendRows } from '../../services/legend-draft-rows.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
-import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
+import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue, literalPatternText, namedFeatureInstance } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
   legendRowFeatureIds,
   legendRowKeys,
+  legendStrokeRowKey,
   setsFeatureStroke
 } from '../../services/legend-svg.js';
 import {
@@ -30,7 +31,7 @@ import {
   setLegendStroke
 } from '../../services/drawing/paint.js';
 import { displayedLegendRowContext } from '../../services/feature-visibility.js';
-import { colorRuleGroupTakes, colorRuleLegendGroups, groupLegendRowKeys, otherFeatureRowKey } from '../../services/specific-color-rules.js';
+import { colorRuleGroupTakes, colorRuleLegendGroups, drawnFeatureRowKeys, groupLegendRowKeys, otherFeatureRowKey } from '../../services/specific-color-rules.js';
 import { drawnBlockStrokeElement, featureStrokeElements } from '../../services/feature-dom.js';
 import { pythonDrawnAttribute } from '../../services/result-paint-bases.js';
 import {
@@ -535,27 +536,30 @@ export const createFeatureColorActions = ({
 
   // The stroke a Legend row edit gives a feature without a stroke edit of its
   // own, which the feature shows once its own edit is removed, as the executor
-  // draws it from Python's row (`legendRowFeatureIds`, OV-123, OV-288). The
+  // draws it: a row reaches the features in it, by the row each feature is in
+  // (`legendRowFeatureIds`, `legendStrokeRowKey`, `drawnFeatureRowKeys`; OV-123, OV-288). The
   // stroked rows are the compile's (`draftLegendRows`): a deleted row strokes
-  // nothing. Null when no row's stroke reaches it.
+  // nothing. Null when no row's stroke reaches it, also while the feature's row
+  // is not known (opening the popup prepares its matches).
   /**
    * @param {DrawingState} drawing
-   * @param {Element} svg
    * @param {ColorFeature} feature
    * @param {string} svgId
    * @returns {{ strokeColor?: unknown, strokeWidth?: unknown } | null}
    */
-  const legendRowStrokeOf = (drawing, svg, feature, svgId) => {
+  const legendRowStrokeOf = (drawing, feature, svgId) => {
     const id = /** @type {RenderedFeatureId} */ (svgId);
-    const drawnFills = [/** @type {[RenderedFeatureId, string]} */ ([id, getFeatureFillElements(svg, svgId)[0]?.getAttribute('fill') || ''])];
-    const namedCaption = normalizeCaption(namedLegendCaption(getFeatureOverride(drawing.featureColorOverrides, feature), drawing.manualSpecificRules));
+    const edit = getFeatureOverride(drawing.featureColorOverrides, feature);
+    const namedCaption = normalizeCaption(namedLegendCaption(edit, drawing.manualSpecificRules));
     const context = displayedLegendRowContext(state, drawing);
     const { pythonRows } = context;
     const rows = draftLegendRows({
       legendEntries: drawing.legendEntries.value, deletedLegendEntries: drawing.deletedLegendEntries.value,
       dormantLegendEntries: drawing.dormantLegendEntries.value, originalLegendOrder: originalLegendOrder.value
     });
-    const draft = draftLegendRowColors({ ...context, paletteColors: appliedFeatureColors(state), drawnTracks: readDrawnTracks() });
+    const featureRows = [/** @type {const} */ ([id, drawnFeatureRowKeys(context, {
+      editRowOf: () => editLegendRow(edit, drawing.manualSpecificRules)
+    }).keyOf(feature)])];
     return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => {
       const row = rows.styledRow(caption);
       if (!row) return false;
@@ -563,10 +567,9 @@ export const createFeatureColorActions = ({
       const reach = {
         listedIds: /** @type {RenderedFeatureId[]} */ (row.entry ? row.entry.featureIds : []),
         namedIds: caption === namedCaption ? [id] : [],
-        ownStrokeIds: [],
-        draftColor: draft.colorOf(row.targetCaption)
+        ownStrokeIds: []
       };
-      return legendRowFeatureIds(reach, pythonRows.get(row.targetCaption)?.color ?? null, drawnFills).length > 0;
+      return legendRowFeatureIds(reach, legendStrokeRowKey(pythonRows, row.targetCaption), featureRows).reached.length > 0;
     })?.[1] || null;
   };
 
@@ -1602,7 +1605,7 @@ export const createFeatureColorActions = ({
     if (!overrideKey || !drawing.featureStrokeOverrides[overrideKey]) return false;
     // Without its own stroke edit, the feature shows its Legend row's stroke,
     // else the stroke Python drew.
-    const rowStroke = legendRowStrokeOf(drawing, svg, feature, svgId);
+    const rowStroke = legendRowStrokeOf(drawing, feature, svgId);
     const drawn = drawnFeatureStroke(getFeatureElements(svg, svgId));
     clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim() || drawn.originalStrokeColor || '';
     clickedFeature.value.strokeWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
@@ -1650,7 +1653,7 @@ export const createFeatureColorActions = ({
     // Without a stroke edit of its own left, the feature shows its Legend row's stroke.
     const rowStroke = setsFeatureStroke({ strokeWidth: override.strokeWidth })
       ? null
-      : legendRowStrokeOf(drawing, svg, feature, clickedFeature.value.svg_id);
+      : legendRowStrokeOf(drawing, feature, clickedFeature.value.svg_id);
     const { strokeColor: _removed, ...kept } = override;
     setFeatureStroke(drawing.slices.paint, key, hasOwn(kept, 'strokeWidth') ? kept : null);
     clickedFeature.value.strokeColor = String(rowStroke?.strokeColor || '').trim()

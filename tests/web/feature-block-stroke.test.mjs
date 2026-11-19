@@ -106,7 +106,8 @@ for (const [mode, elements] of Object.entries(PARTIAL_JOINED_FEATURE)) {
       ...createEmptySvgMutationPlan(1).operationsByResult[0],
       legendStrokes: [{
         caption: 'CDS', strokeColor: '#222222', strokeWidth: 3,
-        reach: { listedIds: [], namedIds: [], ownStrokeIds: [], draftColor: null }
+        // The feature is in the CDS row.
+        reach: { listedIds: [], namedIds: [], ownStrokeIds: [], featureRows: () => [['f22f5f5cf', 'CDS']] }
       }]
     });
     assert.deepEqual(featureStrokes(svg), EDITED);

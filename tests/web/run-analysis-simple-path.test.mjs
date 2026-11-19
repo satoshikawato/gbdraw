@@ -254,9 +254,12 @@ const {
   buildLosatCachePayload,
   createRunAnalysis,
   executeCanonicalRenderCandidate,
+  legendRowMatchesPort,
   requireLegacyProteinReferencesMigrate,
   showDiagramProgress
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
+const { createRulePreparation } = await import('../../gbdraw/web/js/app/rule-matching.js');
+const { ruleMatcher } = await import('../../gbdraw/web/js/services/rule-matchers.js');
 const {
   linearComparisonEdgeKey,
   resolveLinearComparisonPlan
@@ -684,6 +687,55 @@ test('superseded canonical execution stops before catalog and SVG admission', as
   assert.equal(outcome.status, 'superseded');
   assert.equal(admissions, 0);
   assert.equal(commits, 0);
+});
+
+// A Legend row stroke reaches the features in the row, which their rule
+// matches decide: a render whose drawing holds one prepares the matches on the
+// catalog it admits before its commit reads them, and is superseded when the
+// run went stale meanwhile.
+test('a render prepares the admitted catalog\'s matches before its commit, and is superseded when stale after it', async () => {
+  const order = [];
+  const run = (prepareAdmittedMatches, shouldAdmit = () => true) => executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: CANONICAL_REQUEST_SCHEMA }, resources: {} },
+    mode: 'linear',
+    generationExecutor: async () => ({ results: [{ name: 'out.svg', content: '<svg/>' }], metadata: {} }),
+    shouldAdmit,
+    catalogAdmission: () => { order.push('admit'); return { catalog: null, featureState: {} }; },
+    prepareAdmittedMatches,
+    prepareCommit: () => { order.push('commit'); return {}; }
+  });
+  assert.equal((await run(async () => { order.push('prepare'); return true; })).status, 'ok');
+  assert.deepEqual(order.splice(0), ['admit', 'prepare', 'commit']);
+  let current = true;
+  assert.equal((await run(async () => { current = false; return true; }, () => current)).status, 'superseded');
+  assert.deepEqual(order.splice(0), ['admit'], 'the run went stale during the preparation');
+  assert.equal((await run(async () => false)).status, 'superseded');
+  assert.deepEqual(order.splice(0), ['admit'], 'the preparation went stale');
+  assert.equal((await run(null)).status, 'ok');
+  assert.deepEqual(order.splice(0), ['admit', 'commit'], 'a render without the port commits at once');
+});
+
+test('only a drawing with a Legend row stroke prepares the admitted features, with the rules the render draws', async () => {
+  const calls = [];
+  const prepare = async (...args) => { calls.push(args); return { rules: [] }; };
+  const drawing = { id: 'drawing-1' };
+  const rules = [{ feat: 'CDS', qual: 'gene', val: '^ND', color: '#2266aa', cap: 'Complex I' }];
+  assert.equal(legendRowMatchesPort(prepare, drawing, { legendStrokeOverrides: {}, manualSpecificRules: rules }), null);
+  assert.equal(legendRowMatchesPort(prepare, drawing, {}), null);
+  const port = legendRowMatchesPort(prepare, drawing, { legendStrokeOverrides: { 'Complex I': { strokeColor: '#e63946' } }, manualSpecificRules: rules });
+  const extracted = [{ svg_id: 'f1' }];
+  const biological = [{ id: 'b1' }, extracted[0]];
+  assert.equal(await port({ featureState: { extractedFeatures: extracted, biologicalFeatures: biological } }), true);
+  assert.equal(calls.length, 1);
+  const [preparedDrawing, isCurrent, , preparation] = calls[0];
+  assert.equal(preparedDrawing, drawing);
+  assert.equal(isCurrent(), true);
+  assert.equal(preparation.rules, rules);
+  assert.equal(preparation.asGiven, true);
+  assert.deepEqual(preparation.targets, [extracted[0], biological[0]]);
+  assert.ok(preparation.targets[0] === extracted[0] && preparation.targets[1] === biological[0], 'the admitted objects themselves');
+  const stale = legendRowMatchesPort(async () => null, drawing, { legendStrokeOverrides: { 'Complex I': {} }, manualSpecificRules: rules });
+  assert.equal(await stale({ featureState: { extractedFeatures: [], biologicalFeatures: [] } }), false);
 });
 
 test('canonical execution carries the Worker comparison table ID warnings to the committed Result', async () => {
@@ -4411,4 +4463,91 @@ test('a gzip Circular reference stages for the LOSAT ring plan as Generate names
   const stagedBytes = Buffer.from(await staged.blob.arrayBuffer());
   assert.deepEqual(stagedBytes, chosen);
   assert.equal(gunzipSync(stagedBytes).toString('utf8'), text);
+});
+
+// The admitted features reach the rule preparation through both hops of a
+// Generate (`prepareAndAdmitCandidate`, then the preparation's
+// `prepareCandidate`): the commit reads the row matches of the admitted
+// catalog's objects, not of the page's previous features. Keep this case last
+// in the file: the page state its two Generates leave (features whose matches
+// are known) fails the earlier cases, which pass no `isCurrentFeature`.
+test('a Generate with a Legend row stroke prepares the rule matches of the catalog it admits', async () => {
+  installShownDrawing('linear');
+  modeDrawing(state, 'linear').inputType.value = 'gb';
+  const drawing = state.activeDrawing();
+  drawing.form.prefix = 'row-stroke';
+  drawing.form.show_depth = false;
+  drawing.form.multi_record_canvas = false;
+  drawing.linearRecordLayoutEnabled.value = false;
+  drawing.linearRecordRows.splice(0);
+  drawing.linearComparisonPlan.mode = 'none';
+  drawing.linearComparisonPlan.edges.splice(0);
+  drawing.annotationSets.splice(0);
+  drawing.linearSeqs.splice(0, drawing.linearSeqs.length, {
+    uid: 'row-stroke', gb: bound(new AuditFile(['LOCUS rowstroke\nORIGIN\n        1 acgtacgtac\n//\n'], 'row-stroke.gb')),
+    gff: null, fasta: null, depth: null, blast: null, losat_gencode: 1, definition: '', record_subtitle: '',
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false, windows: []
+  });
+  Object.assign(drawing.adv, { linear_track_slots_enabled: false, linear_track_slots: [] });
+  /** @type {number[]} */
+  const evaluated = [];
+  const rulePreparation = createRulePreparation({
+    state,
+    evaluate: async ({ features }) => {
+      evaluated.push(features.length);
+      return { matches: features.map(() => [0]), priorities: features.map(() => [0]) };
+    }
+  });
+  const admitted = [];
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    rulePreparation,
+    isCurrentFeature: () => true,
+    writeSessionDocumentFile,
+    serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
+      serializeActiveRenderFiles(state, activeDrawing, snapshot)
+    ),
+    prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
+    adoptCanonicalRenderArtifacts: () => {},
+    validateAnnotationTargets: () => '',
+    prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => {
+      admitted.push(catalogAdmission.featureState);
+      return {
+        results: structuredClone(generationResponse.results),
+        featureState: featureStateFromCatalog(catalogAdmission.catalog),
+        featureColorOverrides: structuredClone(featureColorOverrides)
+      };
+    },
+    resetPreviewViewport: () => {}
+  }));
+  const generate = async (name) => {
+    const generated = result(`${name}.svg`, name);
+    workerResponses.push(response(generated, validCatalog(generated.name)));
+    assert.deepEqual(await runner.runAnalysis(), { status: 'ok' }, JSON.stringify(state.errorLog.value));
+  };
+  try {
+    await generate('row-stroke-1');
+    const previous = state.extractedFeatures.value;
+    assert.equal(previous.length, 1);
+    const rule = { feat: 'CDS', qual: 'product', val: 'audit', color: '#2266aa', cap: 'Audit row' };
+    drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, rule);
+    drawing.legendStrokeOverrides['Audit row'] = { strokeColor: '#e63946', strokeWidth: 2 };
+    evaluated.splice(0);
+    await generate('row-stroke-2');
+    const rendered = [...admitted.at(-1).renderedFeaturesByResult[0].values()];
+    assert.equal(rendered.length, 1);
+    assert.ok(rendered.every((feature) => !previous.includes(feature)), 'the admitted catalog holds new objects');
+    const matcher = ruleMatcher([rule]);
+    assert.ok(
+      rendered.every((feature) => matcher.firstIfKnown(feature) !== undefined),
+      'the commit reads the matches of the admitted features'
+    );
+    // The page's features first (the request's rules), then the admitted ones (the commit's row strokes):
+    // each time the rendered feature and its biological feature.
+    assert.deepEqual(evaluated, [2, 2]);
+  } finally {
+    drawing.manualSpecificRules.splice(0);
+    delete drawing.legendStrokeOverrides['Audit row'];
+  }
 });

@@ -1,8 +1,8 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
-/** @import { LegendRowReach, PythonLegendKey, RenderedFeatureId } from './legend-svg.js' */
+/** @import { FeatureRowKeys, LegendRowReach, PythonLegendKey, PythonLegendRow, RenderedFeatureId } from './legend-svg.js' */
 /** @import { RenderedIdentityCollection } from './session-feature-metadata.js' */
-/** @import { SpecificColorRule } from './specific-color-rules.js' */
+/** @import { LegendRowFeature, SpecificColorRule } from './specific-color-rules.js' */
 /** @import { SvgSanitizer } from './svg-sanitization.js' */
 /** @import { DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 import {
@@ -23,12 +23,12 @@ import {
   legendRowName,
   legendRowShown,
   legendRowSwatch,
+  legendStrokeRowKey,
   LEGEND_MERGED_ROW,
   namedLegends,
   moveLegendEntryToAnchor,
   orderLegendEntries,
   pythonLegendKey,
-  pythonLegendRow,
   pythonLegendRows,
   pythonOrderedLegendRows,
   recordedGroupOrder,
@@ -40,9 +40,9 @@ import { legendEntryKey } from './drawing/paint.js';
 import { isCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { drawnLegendNames } from './legend-row-names.js';
-import { NO_DRAWN_FEATURES, otherFeatureRowKey, ruleLegendCaptions } from './specific-color-rules.js';
+import { NO_DRAWN_FEATURES, drawnFeatureRowKeys, otherFeatureRowKey, ruleLegendCaptions } from './specific-color-rules.js';
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
-import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
+import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
@@ -143,14 +143,21 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
+ * What a Legend row stroke reaches in one Result: the editor intent's lists,
+ * and the row each feature the Result draws is in, keyed against Python's rows
+ * of the Result the executor styles (`pythonLegendRows`, read once per pass).
+ * @typedef {LegendRowReach & { featureRows: (pythonRows: ReadonlyMap<PythonLegendKey, PythonLegendRow>) => FeatureRowKeys }} LegendStrokeReach
+ */
+
+/**
  * A stroke on a Legend row: its swatch, and the features the row reaches in
- * the Result, which the executor reads from Python's row there (OV-288).
+ * the Result, which the executor finds by the row each feature is in (OV-288).
  * @typedef {object} LegendStrokeOperation
  * @property {PythonLegendKey} caption The row: Python's key, or an editor row's own key.
  * @property {string} strokeColor Empty: the operation sets no color.
  * @property {number | null} strokeWidth Null: the operation sets no width.
  * @property {boolean} [allowMissing]
- * @property {LegendRowReach} reach
+ * @property {LegendStrokeReach} reach
  */
 
 /**
@@ -1005,6 +1012,7 @@ const restorePaintBases = (root, domains, painted) => {
  * @property {boolean} changed Whether a paint attribute changed.
  * @property {() => Map<string, Element[]>} features The elements of each rendered Feature.
  * @property {() => { entries: Map<string, Element[]>, groups: Element[] }} legends The Legend rows by key, and the feature Legend groups.
+ * @property {SvgResultRoot} svg The Result.
  */
 
 /**
@@ -1029,6 +1037,7 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
     /** @type {Map<Element, Set<string>>} */
     painted: new Map(),
     changed: false,
+    svg,
     features() {
       announce();
       if (built.featureElements) return built.featureElements;
@@ -1095,15 +1104,20 @@ const requireFeatureElements = (index, renderedId) => {
 };
 
 // A stroke edit of a feature, its own or its Legend row's, strokes the
-// elements that show the feature's stroke (`featureStrokeElements`).
+// elements that show the feature's stroke (`featureStrokeElements`); `keep`
+// keeps what they show of the attributes it sets (a Legend row whose
+// features are not known yet).
 /**
  * @param {LazyMutationIndex} index
  * @param {FeatureStrokeEdit} stroke
+ * @param {boolean} [keep]
  */
-const strokeFeature = (index, { renderedId, strokeColor, strokeWidth }) => {
+const strokeFeature = (index, { renderedId, strokeColor, strokeWidth }, keep = false) => {
+  /** @type {(element: Element, name: string, value: string | number) => unknown} */
+  const paint = keep ? (element, name) => keepPaintAttribute(index, element, name) : (element, name, value) => setPaintAttribute(index, element, name, value);
   featureStrokeElements(requireFeatureElements(index, renderedId)).forEach((element) => {
-    if (strokeColor) setPaintAttribute(index, element, 'stroke', strokeColor);
-    if (strokeWidth !== null) setPaintAttribute(index, element, 'stroke-width', strokeWidth);
+    if (strokeColor) paint(element, 'stroke', strokeColor);
+    if (strokeWidth !== null) paint(element, 'stroke-width', strokeWidth);
   });
 };
 
@@ -1161,34 +1175,17 @@ const renamedLegendRows = (index, { from, allowMissing }, renames, mayBeAbsent) 
 // be missing from this Result (OV-63). Fills, strokes, renames, and deletes
 // address a row of Python's by Python's key; an addition and its styles address
 // the editor row by its caption; the order addresses the keys the rows show.
-// `restoresFills`: the pass returns the feature fills no operation sets to
-// Python's (a reconcile that shows them).
 // Returns whether a Legend row was added, renamed, hidden, or moved.
 /**
  * @param {LazyMutationIndex} index
  * @param {Pick<SvgMutationOperations, 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder'>} operations
- * @param {{ displayed?: boolean, restoresFills?: boolean, mayBeAbsent?: (caption: string) => boolean }} [options]
+ * @param {{ displayed?: boolean, mayBeAbsent?: (caption: string) => boolean }} [options]
  */
 const applyLegendOperations = (index, operations, {
-  displayed = false, restoresFills = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined)
+  displayed = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined)
 } = {}) => {
   /** @param {SvgMutationOperations['legendFills'][number] | LegendStrokeOperation} operation A fill, a stroke, or the like: each names its row by `caption`. */
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
-  // The fill each drawn feature shows once this pass ends, read once per pass
-  // for the Legend row strokes (perf-014x S5).
-  /** @type {Array<[RenderedFeatureId, string]> | null} */
-  let drawnFills = null;
-  const featureFills = () => {
-    drawnFills ??= [...index.features()].flatMap(([renderedId, elements]) => {
-      const element = filterFeatureFillTargets(elements)[0];
-      if (!element) return [];
-      const fill = restoresFills && !index.painted.get(element)?.has('fill')
-        ? pythonDrawnAttribute(element, 'fill')
-        : element.getAttribute('fill');
-      return [/** @type {[RenderedFeatureId, string]} */ ([renderedId, text(fill)])];
-    });
-    return drawnFills;
-  };
   let changed = false;
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
@@ -1261,13 +1258,14 @@ const applyLegendOperations = (index, operations, {
       setPaintAttribute(index, swatch, 'fill', color);
     });
   });
+  // Read after this pass added its rows, as the feature popup reads the displayed Result.
+  const strokeRows = legendStrokeRowsOf(index, operations.legendStrokes.length > 0);
   operations.legendStrokes.forEach((/** @type {LegendStrokeOperation} */ operation) => {
     const { strokeColor, strokeWidth, reach } = operation;
     const rows = requireRow(operation);
-    const pythonColor = rows.length > 0 ? pythonLegendRow(rows[0]).color : null;
-    legendRowFeatureIds(reach, pythonColor, featureFills()).forEach((renderedId) => (
-      strokeFeature(index, { renderedId, strokeColor, strokeWidth })
-    ));
+    const { reached, pending } = legendRowFeatureIds(reach, strokeRows.rowKey(operation.caption), strokeRows.featureRows(reach));
+    reached.forEach((renderedId) => strokeFeature(index, { renderedId, strokeColor, strokeWidth }));
+    pending.forEach((renderedId) => strokeFeature(index, { renderedId, strokeColor, strokeWidth }, true));
     rows.forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
@@ -1300,6 +1298,38 @@ const applyLegendOperations = (index, operations, {
     index.legends().groups.forEach((group) => { changed = orderLegendGroup(group, captions, displayed) || changed; });
   });
   return changed;
+};
+
+// What the Legend row strokes of one pass read of the Result: its rows
+// (`pythonLegendRows`), read once when the pass strokes a row, after the pass
+// added its rows, as the feature popup reads the displayed Result's.
+// `rowKey`: the key a stroke on a row reaches features by, where the Result
+// shows the row (`legendStrokeRowKey`). `featureRows`: the row keys of the
+// features the Result draws, for each reach (`LegendStrokeReach.featureRows`):
+// one keying per reach (the compile gives the strokes of one Result one
+// reach), every drawn feature with the key the reach gives it, undefined (not
+// known) for one it does not name.
+/**
+ * @param {LazyMutationIndex} index
+ * @param {boolean} strokes Whether the pass strokes a Legend row; without one, no row is read.
+ * @returns {{ rowKey: (key: PythonLegendKey) => PythonLegendKey | null, featureRows: (reach: LegendStrokeReach) => FeatureRowKeys }}
+ */
+const legendStrokeRowsOf = (index, strokes) => {
+  /** @type {ReadonlyMap<PythonLegendKey, PythonLegendRow>} */
+  const pythonRows = strokes ? pythonLegendRows(index.svg) : new Map();
+  /** @type {Map<LegendStrokeReach['featureRows'], FeatureRowKeys>} */
+  const keyed = new Map();
+  return {
+    rowKey: (key) => legendStrokeRowKey(pythonRows, key),
+    featureRows: ({ featureRows }) => {
+      const known = keyed.get(featureRows);
+      if (known) return known;
+      const keys = new Map(featureRows(pythonRows));
+      const rows = [...index.features().keys()].map((id) => /** @type {const} */ ([/** @type {RenderedFeatureId} */ (id), keys.get(/** @type {RenderedFeatureId} */ (id))]));
+      keyed.set(featureRows, rows);
+      return rows;
+    }
+  };
 };
 
 // The executor's one ordering of a feature Legend group (R3). The first change
@@ -1391,7 +1421,7 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
       legendDeletes: operations.legendDeletes.map(allowMissing),
       legendAdds: operations.legendAdds,
       legendOrder: operations.legendOrder
-    }, { displayed: true, restoresFills: domains.includes('featureFills') });
+    }, { displayed: true });
     legendChanged = restoreLegendStructure(index, operations, domains) || legendChanged;
   }
   const restored = restorePaintBases(svg, domains, index.painted);
@@ -1501,11 +1531,9 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     .filter((/** @type {{ resultIndex: number }} */ target) => target.resultIndex === resultIndex).map((/** @type {{ renderedId: RenderedFeatureId }} */ target) => target.renderedId);
   const elementsOf = (/** @type {string} */ renderedId) => index.features().get(renderedId) || [];
 
-  /** @type {Map<string, string>} */
-  const editedFills = new Map();
   /** @type {Map<string, RenderedFeatureId[]>} */
   const namedIdsByCaption = new Map();
-  /** @type {Map<string, { fill_color?: unknown }>} */
+  /** @type {Map<string, LegendRowFeature>} */
   const renderedFeatures = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
   Object.entries(edits.featureColorOverrides).forEach(([key, edit]) => {
     // The cast: an object (the test), whose fields are unchecked.
@@ -1513,7 +1541,6 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     const color = text(fields ? fields.color : edit);
     const caption = text(fields ? fields.caption : '');
     renderedIdsOf(key).forEach((renderedId) => {
-      if (color) editedFills.set(renderedId, color);
       if (caption) namedIdsByCaption.set(caption, [...(namedIdsByCaption.get(caption) || []), /** @type {RenderedFeatureId} */ (renderedId)]);
       filterFeatureFillTargets(elementsOf(renderedId)).forEach((element) => (
         record(element, 'fill', color, renderedFeatures.get(renderedId)?.fill_color)
@@ -1526,13 +1553,9 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     if (setsFeatureStroke(edit)) renderedIdsOf(key).forEach((renderedId) => stroked.push([renderedId, edit]));
   });
   const ownStrokeIds = /** @type {RenderedFeatureId[]} */ (stroked.map(([renderedId]) => renderedId));
-  const drawnFills = [...renderedFeatures].map(([renderedId, feature]) => (
-    /** @type {[RenderedFeatureId, string]} */ ([renderedId, editedFills.get(renderedId) ?? text(feature?.fill_color)])
-  ));
   const rows = index.legends().entries;
-  // A swatch shows its Legend color; its record keeps Python's, which is the
-  // color the row's stroke reaches by (OV-288), so the records come first.
-  // Both stores are keyed by the row's key.
+  // A swatch shows its Legend color; its record keeps Python's. Both stores
+  // are keyed by the row's key.
   Object.entries(edits.legendColorOverrides).forEach(([key, color]) => {
     // A row key is data: only an own entry is a saved color (OV-982).
     const original = ownEntry(edits.originalLegendColors, key);
@@ -1544,18 +1567,21 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   });
   /** @type {Array<[string, SavedStrokeEdit]>} */
   const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
+  // A row's stroke reaches the features in the row, and those that may be in
+  // it while their rule matches are not known (at a Load, none is): a record
+  // is written only where an element shows the edit, so the first compile with
+  // known matches returns the others to Python's stroke.
+  const featureRows = strokedRows.length > 0 ? savedFeatureRows(svg, edits, renderedFeatures) : [];
   strokedRows.forEach(([key, edit]) => {
     const entry = edits.legendEntries.find((row) => legendEntryKey(row) === key);
-    const row = rows.get(key)?.[0];
     /** @type {LegendRowReach} */
     const reach = {
       listedIds: /** @type {RenderedFeatureId[]} */ ((Array.isArray(entry?.featureIds) ? entry.featureIds : []).map(text).filter(Boolean)),
       namedIds: namedIdsByCaption.get(key) || [],
-      ownStrokeIds,
-      draftColor: null
+      ownStrokeIds
     };
-    legendRowFeatureIds(reach, row ? pythonLegendRow(row).color : null, drawnFills)
-      .forEach((renderedId) => stroked.push([renderedId, edit]));
+    const { reached, pending } = legendRowFeatureIds(reach, (rows.get(key) || []).length > 0 ? /** @type {PythonLegendKey} */ (key) : null, featureRows);
+    [...reached, ...pending].forEach((renderedId) => stroked.push([renderedId, edit]));
   });
 
   // Python's stroke of each kind: the one every unedited part of it shows.
@@ -1597,6 +1623,23 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     });
   });
   return recorded;
+};
+
+// The row key of each feature a loaded Result draws (`drawnFeatureRowKeys`),
+// by the saved rules and Python's rows of the Result. The palette is not
+// read: at a Load no rule match is known yet, and a feature of a type no rule
+// names is in its type's own row whatever the palette.
+/**
+ * @param {SvgResultRoot} svg
+ * @param {Pick<SavedResultEdits, 'rules' | 'originalLegendOrder'>} edits
+ * @param {ReadonlyMap<string, LegendRowFeature>} renderedFeatures The Result's catalog features, by rendered id.
+ * @returns {FeatureRowKeys}
+ */
+const savedFeatureRows = (svg, { rules, originalLegendOrder }, renderedFeatures) => {
+  const rowKeys = drawnFeatureRowKeys({
+    rules, pythonRows: pythonLegendRows(svg), features: renderedFeatures.values(), palette: NO_DRAWN_FEATURES.palette, originalLegendOrder
+  });
+  return [...renderedFeatures].map(([renderedId, feature]) => /** @type {const} */ ([/** @type {RenderedFeatureId} */ (renderedId), rowKeys.keyOf(feature)]));
 };
 
 // The renamed generated rows a Session lists, by their caption: main's writer

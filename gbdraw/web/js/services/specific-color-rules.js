@@ -164,8 +164,9 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
 
 /**
  * A displayed feature as the allocation reads it: its type and the fill Python
- * drew it with (a catalog row's `fill_color`), with its known rule matches.
- * @typedef {{ type?: unknown, fill_color?: unknown }} LegendRowFeature
+ * drew it with (a catalog row's `fill_color`), with its known rule matches, and
+ * its rendered id (`svg_id`), by which a Legend row stroke reaches it.
+ * @typedef {{ type?: unknown, fill_color?: unknown, svg_id?: unknown }} LegendRowFeature
  */
 
 /**
@@ -197,6 +198,8 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  *   rule of `rules` that some drawn feature with a known match takes as its first rule, and those features.
  * @property {FeatureLegendRows} rows The feature rows Generate draws for them, a feature of an unknown
  *   match read as one no rule colors.
+ * @property {(feature: LegendRowFeature) => SpecificRuleInput | null | undefined} winnerOf The rule a feature
+ *   takes as its first rule: null for none, undefined while its match is not known.
  */
 
 /**
@@ -352,7 +355,48 @@ export const drawnRuleMatches = ({ rules = [], features = [], palette }) => {
     if (colored) colored.push(feature);
     else takenBy.set(rule, [feature]);
   }
-  return { known, takenBy, rows: featureLegendRows(rules, drawn, palette) };
+  return { known, takenBy, rows: featureLegendRows(rules, drawn, palette), winnerOf };
+};
+
+/**
+ * The Legend row each drawn feature is in, by its key (`drawnFeatureRowKeys`).
+ * @typedef {object} DrawnFeatureRowKeys
+ * @property {boolean} known Whether every drawn feature's match is known.
+ * @property {(feature: LegendRowFeature) => PythonLegendKey | null | undefined} keyOf The key of the row the
+ *   feature is in; null for none; undefined while it is not known: the feature's own match, or (while some
+ *   match is not known) a match that decides whether its type draws its own row or its "other" row.
+ */
+
+// THE one owner of the Legend row each drawn feature is in, by the row's key,
+// as Generate draws it: a feature with a color edit that names a row is in
+// that row (`editRowOf`), any other in the row of the rule it takes
+// (`featureLegendRows().rowOf`), a rule's row by the key the allocation gives
+// it against `context.pythonRows` (`ruleLegendCaptions`). It reads no paint:
+// two rows of one color keep their own features (a Legend row stroke reaches
+// only its row's, Owner 2026-11-14). One pass of the matches.
+/**
+ * @param {LegendRowContext} context
+ * @param {{ editRowOf?: (feature: LegendRowFeature) => FeatureLegendRow | undefined }} [options]
+ *   `editRowOf`: the row a feature's color edit puts it in, undefined for none.
+ * @returns {DrawnFeatureRowKeys}
+ */
+export const drawnFeatureRowKeys = (context, { editRowOf = () => undefined } = {}) => {
+  const matches = drawnRuleMatches(context);
+  const ruleRowKey = ruleLegendCaptions(context, matches);
+  const targeted = new Set((context.rules || []).map((rule) => normalizeSpecificRule(rule).feat));
+  /** @param {FeatureLegendRow} row */
+  const keyOfRow = (row) => (row === null || typeof row === 'string' ? row : ruleRowKey(row));
+  return {
+    known: matches.known,
+    keyOf: (feature) => {
+      const edited = editRowOf(feature);
+      if (edited !== undefined) return keyOfRow(edited);
+      const type = normalizeText(feature.type);
+      const winner = matches.winnerOf(feature);
+      if (winner === undefined || (!matches.known && (targeted.has('*') || targeted.has(type)))) return undefined;
+      return keyOfRow(matches.rows.rowOf(type, winner));
+    }
+  };
 };
 
 // The Python rows N-06 does not compare a rule with, read from the displayed

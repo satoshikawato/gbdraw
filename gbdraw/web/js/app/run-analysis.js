@@ -3,7 +3,7 @@
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
-/** @import { RulePreparation } from './rule-matching.js' */
+/** @import { RulePreparation, RulePreparationTargets } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, NoticeRequest, ShowNotice } from './app-messages.js' */
 /** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
@@ -229,6 +229,8 @@ import {
   prepareReflowResultCommit
 } from './candidate-render.js';
 import { editorPaintState, requestPaintOf, withKeptFills } from './result-paint-record.js';
+import { ruleTargets } from './rule-matching.js';
+import { appliedFeatureColors } from '../utils/color-utils.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -1627,6 +1629,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  *   omits the children texts whose sanitized segments they keep.
  * @property {DrawingId | null} [drawingId] The drawing it renders: the Worker keeps the prepared
  *   inputs of each drawing's last request (A4b).
+ * @property {AdmittedMatchesPort | null} [prepareAdmittedMatches] Prepares, before the commit, the rule
+ *   matches the commit reads on the features of the catalog it admits (`legendRowMatchesPort`); null: none.
  */
 
 // A run's outcome without the candidate History committed (Generate and a run of the committed request).
@@ -1636,6 +1640,39 @@ const withoutArtifactCandidate = (outcome) => {
   const { generatedArtifactCandidate, ...publicOutcome } = outcome;
   return /** @type {T} */ (publicOutcome);
 };
+
+/**
+ * Prepares the rule matches of the features a render admits; false when the run went stale meanwhile.
+ * @typedef {(catalogState: { featureState: Parameters<typeof ruleTargets>[0] }) => Promise<boolean>} AdmittedMatchesPort
+ */
+
+/**
+ * The rule preparation of a render (`prepareAndAdmitCandidate` in `createRunAnalysis`): the rules it
+ * prepares as given, on the features given. Null when the run went stale.
+ * @typedef {(drawing: DrawingState, isCurrent: () => boolean, options: Record<string, unknown>,
+ *   preparation: { rules: readonly SpecificColorRule[], asGiven: boolean } & RulePreparationTargets) => Promise<unknown>} RenderRulePreparation
+ */
+
+// A Legend row stroke reaches the features in the row (candidate-render.js),
+// and a feature's row is read from its rule match, by object identity: a
+// render whose drawing holds a Legend row stroke prepares the matches of the
+// rules it draws on the features of the catalog it admits, before the commit
+// reads them; after the commit they are the page's features
+// (`ruleTargets`), so the page's next preparation finds them prepared. A
+// render without a Legend row stroke asks for nothing more. The preparation
+// returns at once when the matches are known (a catalog the render reused).
+/**
+ * @param {RenderRulePreparation} prepare
+ * @param {DrawingState} drawing
+ * @param {{ legendStrokeOverrides?: Readonly<Record<string, unknown>>, manualSpecificRules?: readonly SpecificColorRule[] }} input
+ *   The commit's editor state (`prepareCommitInput`).
+ * @returns {AdmittedMatchesPort | null}
+ */
+export const legendRowMatchesPort = (prepare, drawing, { legendStrokeOverrides = {}, manualSpecificRules = [] }) => (
+  Object.keys(legendStrokeOverrides).length === 0 ? null : async (catalogState) => Boolean(await prepare(drawing, () => true, {}, {
+    rules: manualSpecificRules, asGiven: true, targets: ruleTargets(catalogState.featureState)
+  }))
+);
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
 export const executeCanonicalRenderCandidate = async ({
@@ -1654,7 +1691,8 @@ export const executeCanonicalRenderCandidate = async ({
   replacedResults = null,
   heldFeatureCatalog = null,
   heldResults = null,
-  drawingId = null
+  drawingId = null,
+  prepareAdmittedMatches = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
@@ -1710,6 +1748,9 @@ export const executeCanonicalRenderCandidate = async ({
     mode
   });
   recordSessionLifecycleEvent('candidate-result-validation-end');
+  if (prepareAdmittedMatches && (!await prepareAdmittedMatches(catalogState) || !shouldAdmit())) {
+    return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
+  }
   recordSessionLifecycleEvent('result-admission-start');
   const commit = measureTiming(
     timingEntries,
@@ -2022,7 +2063,8 @@ export const createRunAnalysis = ({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
       heldResults: shown.results ?? null,
-      drawingId: drawing.id
+      drawingId: drawing.id,
+      prepareAdmittedMatches: legendRowMatchesPort(prepareAndAdmitCandidate, drawing, options.prepareCommitInput ?? {})
     }), legendFactsDrawn };
   };
   // Show Depth off leaves the Depth sources out of the request, so Python cannot name
@@ -2855,15 +2897,20 @@ export const createRunAnalysis = ({
   // render here, the Generate compiler's one trigger of the rule preparation.
   // `isCurrent` is the run's own staleness: the candidate is null when the run
   // went stale during the preparation, and is admitted (`shouldAdmit`) while
-  // the run and the rule inputs it was prepared from stay current.
+  // the run and the rule inputs it was prepared from stay current. A render
+  // also prepares here the rules it draws on the catalog it admits
+  // (`preparation`, `legendRowMatchesPort`).
   /**
    * @param {DrawingState} drawing
    * @param {() => boolean} isCurrent
    * @param {Record<string, any>} [options]
+   * @param {{ rules?: readonly SpecificColorRule[], asGiven?: boolean } & RulePreparationTargets} [preparation]
+   *   The rules to prepare (the drawing's unless given), as given or as `normalizeSpecificRule` writes them, and the
+   *   features to match (the page's unless given).
    */
-  const prepareAndAdmitCandidate = async (drawing, isCurrent, options) => {
-    if (!rulePreparation) return { rules: drawing.manualSpecificRules, shouldAdmit: isCurrent };
-    const candidate = await rulePreparation.prepareCandidate(drawing.manualSpecificRules, options);
+  const prepareAndAdmitCandidate = async (drawing, isCurrent, options, { rules = drawing.manualSpecificRules, asGiven = false, targets } = {}) => {
+    if (!rulePreparation) return { rules, shouldAdmit: isCurrent };
+    const candidate = await rulePreparation.prepareCandidate(rules, { ...options, asGiven, targets });
     if (!candidate || !isCurrent()) return null;
     // Without `asGiven`, the preparation wrote each rule as `normalizeSpecificRule` does.
     return { rules: /** @type {readonly SpecificColorRule[]} */ (candidate.rules), shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent() };
@@ -5308,7 +5355,11 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: candidateRules
+          manualSpecificRules: candidateRules,
+          paletteColors: appliedFeatureColors({
+            paletteDefinitions: state.paletteDefinitions, appliedPaletteName: { value: requestPaint.palette.name },
+            appliedPaletteColors: { value: requestPaint.palette.colors }
+          })
         },
         timingEntries: postGbdrawTimingEntries
       }, legendFactsDrawn);
@@ -5908,7 +5959,8 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: paint.rules
+          manualSpecificRules: paint.rules,
+          paletteColors: appliedFeatureColors(state)
         },
         timingEntries
       });
@@ -6290,7 +6342,8 @@ export const createRunAnalysis = ({
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical.renderRequest),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
-          manualSpecificRules: candidateRules
+          manualSpecificRules: candidateRules,
+          paletteColors: appliedFeatureColors(state)
         },
         timingEntries,
         resultNames: committedResultNames,

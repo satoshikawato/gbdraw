@@ -1052,6 +1052,27 @@ for (const mode of ['circular', 'linear']) {
       await expectLiveEqualsGenerate(page, { label: 'Result 1 after the Restore on Result 2' });
     });
   }
+  // Two rule rows of one color: a stroke on one reaches only the features in
+  // that row, never every feature drawn in the row's color. The palette change
+  // before Generate makes Python draw another feature catalog, whose rule
+  // matches the render prepares before its commit strokes the row.
+  test(`U3a Legend parity (13) stroke one of two rule rows of one color (${mode}, Auto Reflow off)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    await addColorRule(page, ALPHA_ROW);
+    await addColorRule(page, { ...ALPHA_ROW, val: '^FL2$', cap: 'beta' });
+    await generate(page);
+    const strokeColor = '#123456';
+    const fl1 = await page.evaluate(() => window.__GBDRAW_APP__.filteredFeatures.find((item) => item.locus_tag === 'FL1').svg_id);
+    const stroked = (snapshot) => Object.entries(snapshot.features)
+      .filter(([, feature]) => feature.stroke.includes(strokeColor)).map(([id]) => id);
+    await legendRowStrokeColor(page, 'alpha', strokeColor);
+    expect(stroked(await semanticSnapshot(page)), 'the stroke reaches FL1, not FL2 of the beta row').toEqual([fl1]);
+    await switchPalette(page, 'arctic');
+    expect(stroked(await semanticSnapshot(page)), 'after the palette change').toEqual([fl1]);
+    const { generated } = await expectLiveEqualsGenerate(page, { label: 'a stroke on one of two rule rows of one color' });
+    expect(stroked(generated), 'Generate strokes FL1 only').toEqual([fl1]);
+  });
   // U3a review M2: after the deleted type's features are hidden and
   // Generate runs, Python draws no row of it; its row facts say so, and the
   // Restore asks for no rerender.
