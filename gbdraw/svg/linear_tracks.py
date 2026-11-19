@@ -66,12 +66,6 @@ def linear_series_baseline_y(samples: SeriesSamples, frame: LinearTrackFrame) ->
     return float(frame.start_y) + float(frame.track_height) - (float(frame.track_height) * samples.baseline)
 
 
-def _line_desc(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_starts: tuple[int, ...]) -> str:
-    """The open line of a ``line`` series through its samples."""
-
-    return track_polyline(xs, ys, segment_starts)
-
-
 def linear_series_path_desc(
     samples: SeriesSamples,
     frame: LinearTrackFrame,
@@ -82,7 +76,7 @@ def linear_series_path_desc(
     series' windows with a value, closed to the baseline at ``start_y``; a window without a value lies on the
     baseline, so the area breaks there (OV-2799). A band series draws each value as the fraction of the height it
     fills from the bottom of the track, closed to its baseline (``linear_series_baseline_y``). A ``line`` series
-    is its line alone, open."""
+    is its line alone, open (a band series only: a deviation series is an area, ``deviation_samples``)."""
 
     start_x, start_y, record_len, alignment_width, track_height = frame
     scale = samples.deviation
@@ -96,8 +90,6 @@ def linear_series_path_desc(
         max_diff = scale.max_diff
         # A completely flat series draws a flat line (no division by zero).
         ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - scale.mean) / max_diff))
-        if samples.style == "line":
-            return _line_desc(xs, ys, segment_starts)
         return _area_path(start_x, start_y, xs, ys, segment_starts)
     if record_len <= 0 or track_height <= 0:
         return ""
@@ -116,7 +108,7 @@ def linear_series_path_desc(
     xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
     ys = bottom_y - (float(track_height) * np.clip(values, 0.0, 1.0))
     if samples.style == "line":
-        return _line_desc(xs, ys, segment_starts)
+        return track_polyline(xs, ys, segment_starts)
     return _area_path(start_x, linear_series_baseline_y(samples, frame), xs, ys, segment_starts)
 
 

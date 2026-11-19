@@ -914,6 +914,18 @@ export const PROTEIN_COMPARISON_FLAGS = Object.freeze({
   })
 });
 
+// gbdraw/cli_utils/common.py: describe_depth_series_flags()
+export const DEPTH_SERIES_FLAGS = Object.freeze({
+  format: '--depth_track_format',
+  agg: '--depth_track_agg',
+  style: '--depth_track_style',
+  negativeColor: '--depth_track_negative_color',
+  baseline: '--depth_track_baseline',
+  minValue: '--depth_track_min',
+  maxValue: '--depth_track_max',
+  unit: '--depth_track_unit'
+});
+
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
 /** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
 export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({

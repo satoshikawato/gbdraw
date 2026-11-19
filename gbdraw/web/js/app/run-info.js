@@ -29,6 +29,7 @@ import { recordOrderPlaces } from '../services/record-options.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import {
   CIRCULAR_SLOT_UNREAD_PARAM_KEYS,
+  DEPTH_SERIES_FLAGS,
   FEATURE_DENSITY_TRACK_WORDS,
   FEATURE_INSTANCE_SEPARATOR,
   LINEAR_SLOT_UNREAD_PARAM_KEYS,
@@ -44,7 +45,6 @@ import { unitRecordsOf } from '../services/linear-units.js';
 import { LEGEND_EDIT_CONFIG_PATHS } from '../services/legend-draft-rows.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureDensityTrack, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalComparison, CanonicalGeneratedProteinComparison, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { DepthSeriesKey } from '../services/depth-track-state.js' */
 /** @import { LinearUnitRecord, LinearUnitRecords } from '../services/linear-units.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
 /** @import { LosatCacheInfoEntry } from '../services/losat-cache.js' */
@@ -1348,13 +1348,29 @@ const appendInputArgs = async (args, request, files, planRecordPlaces) => {
 };
 
 /**
+ * A value as its CLI token. A negative number JavaScript writes with an exponent (-1e-7) is written in plain
+ * digits (-0.0000001): argparse reads a token that starts with "-" as an option unless it looks like a negative
+ * number, and its pattern has no exponent. The digits are those of the shortest form, so the CLI reads the same number.
+ * @param {unknown} value
+ */
+const cliToken = (value) => {
+  const exponent = typeof value === 'number' ? /^-(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(String(value)) : null;
+  if (!exponent) return String(value);
+  const [, lead, fraction = '', power] = exponent;
+  const digits = `${lead}${fraction}`;
+  const point = 1 + Number(power);
+  if (point <= 0) return `-0.${'0'.repeat(-point)}${digits}`;
+  return point >= digits.length ? `-${digits}${'0'.repeat(point - digits.length)}` : `-${digits.slice(0, point)}.${digits.slice(point)}`;
+};
+
+/**
  * @param {string[]} args
  * @param {string} option
  * @param {unknown} value
  */
 const appendOption = (args, option, value) => {
   if (value === null || value === undefined || value === '') return;
-  args.push(option, String(value));
+  args.push(option, cliToken(value));
 };
 
 /**
@@ -1759,16 +1775,10 @@ const appendDepthOptions = (args, options, files) => {
     )));
   });
 };
-/** The CLI flag of each series setting (gbdraw/cli_utils/common.py `_add_depth_track_series_args`). @type {Readonly<Record<DepthSeriesKey, string>>} */
-const DEPTH_SERIES_FLAGS = Object.freeze({
-  format: '--depth_track_format', agg: '--depth_track_agg', style: '--depth_track_style',
-  negativeColor: '--depth_track_negative_color', baseline: '--depth_track_baseline', minValue: '--depth_track_min',
-  maxValue: '--depth_track_max', unit: '--depth_track_unit'
-});
-// A series setting as its CLI token: a word, a number or a text as it is; unset (null) as '', which the CLI reads as
-// unset (a range bound then takes --depth_min/--depth_max, a negative color the series color).
+// A series setting as its CLI token: a word, a number (`cliToken`) or a text as it is; unset (null) as '', which the
+// CLI reads as unset (a range bound then takes --depth_min/--depth_max, a negative color the series color).
 /** @param {unknown} value */
-const depthSeriesToken = (value) => (value === null ? '' : String(value));
+const depthSeriesToken = (value) => (value === null ? '' : cliToken(value));
 
 /**
  * @param {unknown} value

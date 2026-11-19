@@ -10,6 +10,7 @@ used by both circular and linear diagram commands.
 import argparse
 import csv
 import logging
+import re
 import sys
 from dataclasses import dataclass, replace
 from typing import Sequence, get_args
@@ -43,7 +44,7 @@ from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, DEPTH_
 from gbdraw.analysis.depth_tracks import depth_track_number, series_bound, series_range_fields
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.series_style import SERIES_STYLES, SeriesBound
-from gbdraw.api.options import DepthTrackInput
+from gbdraw.api.options import DepthSeriesSettings, DepthTrackInput
 from gbdraw.api.record_planning import (
     DepthTrackCliValues,
     RecordInputManifest,
@@ -523,6 +524,29 @@ def _add_depth_track_label_color_args(parser: argparse.ArgumentParser) -> None:
         help='Depth track fill color(s). Provide one color or one per --depth_track.',
         type=str,
         nargs='+')
+
+
+# The option of each series setting of a depth track (a field of DepthSeriesSettings), by its parser dest.
+_DEPTH_SERIES_DESTS = {
+    "format": "depth_track_format", "agg": "depth_track_agg", "style": "depth_track_style",
+    "negative_color": "depth_track_negative_color", "baseline": "depth_track_baseline", "min_value": "depth_track_min",
+    "max_value": "depth_track_max", "unit": "depth_track_unit",
+}
+
+
+def describe_depth_series_flags() -> dict[str, str]:
+    """The option of each depth track series setting as the parser spells it, by its request key (camelCase): the
+    Web's Source recipe writes them (``DEPTH_SERIES_FLAGS``, generated)."""
+
+    if set(_DEPTH_SERIES_DESTS) != set(DepthSeriesSettings.__annotations__):
+        raise RuntimeError("_DEPTH_SERIES_DESTS must name each series setting of DepthSeriesSettings once")
+    parser = argparse.ArgumentParser(add_help=False)
+    _add_depth_track_series_args(parser)
+    options = {action.dest: action.option_strings[0] for action in parser._actions if action.option_strings}
+    return {
+        re.sub(r"_([a-z])", lambda match: match.group(1).upper(), field): options[dest]
+        for field, dest in _DEPTH_SERIES_DESTS.items()
+    }
 
 
 def _add_depth_track_series_args(parser: argparse.ArgumentParser) -> None:

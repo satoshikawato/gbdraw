@@ -79,7 +79,8 @@ def _axis_group(axis: ScalarAxis, frame: LinearTrackFrame, axis_group_id: str) -
 def _series_paths(plot: NumericSeriesPlot, desc: str, frame: LinearTrackFrame, group_id: str,
                   row: ScalarRow | None) -> list[ClipPath | Path]:
     """The series path, and for a series with a paint of its own below its baseline the clip of the band below the
-    baseline (one track height deep, so a stroke at the band's bottom is held) and the clipped copy in that paint."""
+    baseline (one track height deep, so a stroke at the band's bottom is held; a line's from half its stroke below
+    the baseline, ``below_clip_inset``) and the clipped copy in that paint."""
 
     paint = plot.paint
     style = {"stroke": paint.stroke, "fill_opacity": paint.fill_opacity, "fill_rule": "evenodd"}
@@ -90,6 +91,7 @@ def _series_paths(plot: NumericSeriesPlot, desc: str, frame: LinearTrackFrame, g
         return [main]
     start_x, start_y, record_len, alignment_width, track_height = frame
     base_y = linear_series_baseline_y(plot.samples, frame)
+    clip_y = base_y + paint.below_clip_inset
     clip_id = stable_svg_id(
         f"{group_id}_clipper_line", "linear-skew-clip", group_id, plot.clip_key, record_len, alignment_width,
         track_height, start_x, start_y, desc,
@@ -102,8 +104,8 @@ def _series_paths(plot: NumericSeriesPlot, desc: str, frame: LinearTrackFrame, g
     clip.add(
         Path(
             d=(
-                f"M{path_point(start_x, base_y)} "
-                f"L{path_point(alignment_width, base_y)} "
+                f"M{path_point(start_x, clip_y)} "
+                f"L{path_point(alignment_width, clip_y)} "
                 f"L{path_point(alignment_width, base_y + track_height)} "
                 f"L{path_point(start_x, base_y + track_height)} z"
             ),

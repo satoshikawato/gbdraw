@@ -65,6 +65,14 @@ class SeriesPaint:
         return self.stroke if self.below_stroke is None else self.below_stroke
 
     @property
+    def below_clip_inset(self) -> float:
+        """How far past the baseline the clip of the part below starts: half the stroke width when that part is
+        stroked in a paint of its own (a ``line``), so a line on its baseline is one colour; 0 for an area, whose
+        part below is its fill."""
+
+        return 0.5 * self.stroke_width if self.below_stroke is not None else 0.0
+
+    @property
     def paints_below(self) -> bool:
         """Whether the part below the baseline has a paint of its own, drawn by a clipped copy of the path."""
 

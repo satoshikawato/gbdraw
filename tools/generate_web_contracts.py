@@ -212,6 +212,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("DRAFT_ANNOTATION_STYLE", "gbdraw.session_request_codec", "describe_draft_annotation_style"),
     # The command line of a protein comparison: the Source recipe writes each setting that differs from its default.
     ("PROTEIN_COMPARISON_FLAGS", "gbdraw.linear", "describe_protein_comparison_flags"),
+    # The option of each depth track series setting: the Source recipe writes a series' settings with them.
+    ("DEPTH_SERIES_FLAGS", "gbdraw.cli_utils.common", "describe_depth_series_flags"),
 )
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's

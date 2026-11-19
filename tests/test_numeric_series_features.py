@@ -376,3 +376,26 @@ def test_a_log_scaled_series_refuses_a_negative_value() -> None:
     # Its reason names the log scale that refuses the values (review r1 L2).
     assert refused.value.diagnostic == {"code": "DEPTH_INVALID", "reason": "LOG_SCALE_NEGATIVE", "seriesIndex": 0}
     assert "log-scaled" in str(refused.value)
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_a_line_on_its_baseline_is_one_colour(mode: str) -> None:
+    """Review r1 L7: the clip of the part below the baseline started at the baseline, so a line on its baseline (a
+    gap of a coverage line, a signed series at 0) was stroked half in each colour. A line's clip starts half its
+    stroke past the baseline; an area's, whose part below is its fill, at the baseline."""
+
+    def clip_edge(style: str) -> float:
+        spec = DepthTrackSpec(id="depth", label="Signal", table=_signed_coverage(), fill_color="#1f77b4", style=style,
+                              negative_color="#d62728")
+        root = ET.fromstring(_spec_svg(mode, spec, **{"objects.depth.stroke_width": 2.5}))
+        # The clip the copy in the negative colour is drawn through.
+        (below,) = [path for path in root.iter(f"{_SVG}path") if "#d62728" in {path.get("fill"), path.get("stroke")}]
+        clip_id = (below.get("clip-path") or "")[len("url(#"):-1]
+        (clip,) = [path for clip in root.iter(f"{_SVG}clipPath") if clip.get("id") == clip_id
+                   for path in clip.iter(f"{_SVG}path")]
+        # Linear: the top of the band below the baseline; Circular: the radius of the disc inside it.
+        numbers = re.findall(r"-?\d+(?:\.\d+)?", clip.get("d") or "")
+        return float(numbers[1]) if mode == "linear" else -float(numbers[1])
+
+    inset = clip_edge("line") - clip_edge("area")
+    assert inset == pytest.approx(1.25 if mode == "linear" else -1.25)

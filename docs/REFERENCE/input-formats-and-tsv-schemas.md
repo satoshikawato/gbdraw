@@ -183,8 +183,10 @@ in increasing order and do not overlap (`sort -k1,1 -k2,2n` sorts a file).
 A BED row is a feature: it adds its score (column 5; 1 when the row has no
 score column or its score is `.`) to every position from `start + 1` to `end`.
 BED rows may overlap and come in any order, so the rows covering a position add
-up: a BED file of variant or insertion sites, read with `--depth_track_agg sum`,
-draws how many fall in each window.
+up: a BED file of one-base sites without a score column (`cut -f1-3` keeps the
+first three), read with `--depth_track_agg sum`, draws how many fall in each
+window. With a score column the scores are summed instead, such as the
+qualities of a BED file made from a VCF.
 
 Values are finite numbers and may be negative, for example a log2 ratio; only
 a log-scaled track (`--depth_log_scale`) refuses a negative value. Files are

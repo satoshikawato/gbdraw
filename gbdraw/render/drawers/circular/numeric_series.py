@@ -213,7 +213,7 @@ def _add_axis(group: Group, axis: ScalarAxis, place: CircularTrackPlace, axis_gr
 def _series_paths(plot: NumericSeriesPlot, desc: str, place: CircularTrackPlace, group_id: str,
                   record_id: str | None) -> list[ClipPath | Path]:
     """The series path, and for a series with a paint of its own below its baseline the clip of the disc inside the
-    baseline and the clipped copy in that paint."""
+    baseline (a line's: inside half its stroke, ``below_clip_inset``) and the clipped copy in that paint."""
 
     paint = plot.paint
     style = {"stroke": paint.stroke, "fill_opacity": paint.fill_opacity, "fill_rule": "evenodd"}
@@ -228,7 +228,7 @@ def _series_paths(plot: NumericSeriesPlot, desc: str, place: CircularTrackPlace,
             *(() if plot.samples.deviation is not None else (baseline_radius,)),
         )
         clip = ClipPath(id=clip_id)
-        clip.add(Path(d=generate_circle_path_desc(baseline_radius, 1.0), fill="white", stroke="none"))
+        clip.add(Path(d=generate_circle_path_desc(baseline_radius - paint.below_clip_inset, 1.0), fill="white", stroke="none"))
         below = Path(d=desc, fill=paint.low_fill, clip_path=f"url(#{clip_id})", clip_rule="nonzero",
                      **{**style, "stroke": paint.low_stroke})
         elements = [clip, main, below]

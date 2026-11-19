@@ -1590,6 +1590,33 @@ test('the depth series settings have their CLI flags in the Source recipe and re
   assert.equal(stated.args.includes('--depth_track_format'), true, 'a stated format keeps its flag');
 });
 
+test('a negative number with an exponent is written in Run Info as digits the CLI reads back (review r1 L5)', async () => {
+  // Review r1 L5: a negative number JavaScript writes with an exponent (-1e-7) was written as such, which argparse
+  // reads as an option; it is written in plain digits that read back as the same number.
+  const tiny = structuredClone(circularCanonical);
+  tiny.renderRequest.diagramOptions.configOverrides['canvas.show_depth'] = true;
+  tiny.renderRequest.diagramOptions.depthTracks = [{
+    source: { resourceId: 'depth-0', representation: 'file' }, label: 'S1', color: '#112233', height: null,
+    largeTickInterval: null, smallTickInterval: null, tickFontSize: null, baseline: -1e-7, minValue: -2.5e-8, maxValue: -1e-21
+  }];
+  tiny.resources['depth-0'] = resource('depth-track-file', 's0.bedgraph', 'input\t0\t10\t-1.5\n');
+  tiny.renderRequest.diagramOptions.configOverrides['objects.depth.min_depth'] = -3e-7;
+  const tinyRecipe = await buildSourceRecipe(tiny);
+  assert.equal(tinyRecipe.available, true, tinyRecipe.unavailableReason);
+  const tinyAfter = (flag) => tinyRecipe.args[tinyRecipe.args.indexOf(flag) + 1];
+  assert.deepEqual(['--depth_track_baseline', '--depth_track_min', '--depth_track_max', '--depth_min'].map(tinyAfter),
+    ['-0.0000001', '-0.000000025', '-0.000000000000000000001', '-0.0000003'], JSON.stringify(tinyRecipe.args));
+  await assertCliParserAccepts(tinyRecipe);
+  const tinyBack = await evaluatePython([
+    'from gbdraw.circular import _get_args',
+    'from gbdraw.cli_utils.common import depth_track_inputs_from_args',
+    'args = _get_args(payload["args"])',
+    'track = depth_track_inputs_from_args(args)[0]',
+    'result = [track.baseline, track.min_value, track.max_value, args.depth_min]'
+  ].join('\n'), { args: tinyRecipe.args.map((token) => tinyRecipe.fileMetadata.get(token)?.name || token) });
+  assert.deepEqual(tinyBack, [-1e-7, -2.5e-8, -1e-21, -3e-7]);
+});
+
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {
