@@ -220,18 +220,30 @@ const isolatedRun = (run, params) => {
 };
 
 /**
- * The shown text with its values (`fillText`). In a right-to-left language
- * each left-to-right run that holds a given value is isolated
- * (`isolatedRun`), so a file name, a number or a term keeps its own order
- * inside the sentence; a left-to-right language shows the values as they
- * are, so its texts keep their bytes. A text that is stored (a Session
- * value) is filled without isolates: `fillText(t(key), params)`.
+ * The values of a shown text: each number as `numberText` writes it, so every
+ * number of a sentence reads alike (`1,234 of 4,321`), whichever call shape
+ * gives it; a text value keeps its characters.
+ * @param {TranslationParams} params
+ * @returns {TranslationParams}
+ */
+const shownValues = (params) => Object.fromEntries(Object.entries(params)
+  .map(([name, value]) => [name, typeof value === 'number' ? numberText(value) : value]));
+
+/**
+ * The shown text with its values (`fillText`, numbers as `shownValues` writes
+ * them). In a right-to-left language each left-to-right run that holds a
+ * given value is isolated (`isolatedRun`), so a file name, a number or a term
+ * keeps its own order inside the sentence; a left-to-right language shows the
+ * values as they are, so its texts keep their bytes. A text that is stored (a
+ * Session value) is filled without isolates: `fillText(t(key), params)`.
  * @param {string} text
  * @param {TranslationParams | undefined} params
  */
-const substitute = (text, params) => (params && shownLocale().dir === 'rtl'
-  ? text.replace(LTR_RUN, (run) => isolatedRun(run, params))
-  : fillText(text, params));
+const substitute = (text, params) => {
+  if (!params) return text;
+  const values = shownValues(params);
+  return shownLocale().dir === 'rtl' ? text.replace(LTR_RUN, (run) => isolatedRun(run, values)) : fillText(text, values);
+};
 
 /**
  * The text of a catalog value that is read as one string. Plural forms are a
@@ -294,15 +306,18 @@ export const pluralTranslation = (rules, entries, count, one, other) => {
   return Object.hasOwn(entries, key) ? textOf(entries[key]) : null;
 };
 
+// The placeholder a slot keeps in place of a count (`I18nText` fills it with an element).
+const COUNT_SLOT = '{count}';
+
 /**
  * The shown text of a count. The shown locale's plural rules
  * (Intl.PluralRules) choose the form, and that form's English text is the
  * catalog key: `fr` and `pt` take `one` for 0 and 1, `en` and `es` for 1
  * only, `ja`, `zh-Hans`, `zh-Hant` and `ko` never. A value with plural
  * forms gives the text of the category (`pluralTranslation`). A missing
- * translation shows the form English chooses. `{count}` is the count as
- * `numberText` writes it (`1,234`) unless `params` gives it (a slot keeps
- * `{ count: '{count}' }`).
+ * translation shows the form English chooses. `{count}` is always the count,
+ * as `numberText` writes it (`1,234`); a `{count}` that `params` gives is
+ * not shown, except the kept placeholder `{ count: '{count}' }` of a slot.
  * @param {number} count
  * @param {string} one
  * @param {string} other
@@ -313,7 +328,7 @@ export const tn = (count, one, other, params) => {
   const english = pluralForm(ENGLISH_PLURALS, count, one, other);
   // Read the locale first: a render that calls `tn()` depends on it.
   const shown = locale.value === SOURCE_LOCALE ? english : pluralTranslation(shownPlurals, catalog, count, one, other) ?? english;
-  return substitute(shown, { count: numberText(count), ...params });
+  return substitute(shown, { ...params, count: params?.count === COUNT_SLOT ? COUNT_SLOT : count });
 };
 
 /**

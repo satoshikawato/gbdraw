@@ -191,7 +191,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions, featureNameParts } from './similarity-alignment.js';
 import { alignmentFeatureName, alignmentRecordName } from '../services/alignment-review-view.js';
-import { ANNOTATION_MARKS, annotationMarkName } from '../services/track-slot-display.js';
+import { ANNOTATION_MARKS, annotationMarkChoice, annotationMarkName } from '../services/track-slot-display.js';
 import { createRecordAutoOrientation } from './record-auto-orientation.js';
 import { createFeatureAnchorAction } from './align-at-feature.js';
 import { createRecordPositionReset } from './record-position-reset.js';
@@ -3927,6 +3927,7 @@ export const createAppSetup = () => {
     circularAnnotationAnchorIsKnown: circularTrackSlotEditor.circularAnnotationAnchorIsKnown,
     annotationTrackMarkOptions: ANNOTATION_MARKS,
     annotationMarkName,
+    annotationMarkChoice,
     circularAnnotationMarkSelected: circularTrackSlotEditor.circularAnnotationMarkSelected,
     setCircularAnnotationMarkSelected: circularTrackSlotEditor.setCircularAnnotationMarkSelected,
     circularAnnotationLaneGapValue: circularTrackSlotEditor.circularAnnotationLaneGapValue,

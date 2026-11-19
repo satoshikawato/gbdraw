@@ -1,16 +1,23 @@
 // @ts-check
+import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { t, thenText, tx } from '../utils/i18n.js';
+/** @import { CanonicalRegionAnnotation } from '../contracts/request.generated.js' */
+/** @import { LiteralShape, ObjectShape } from '../utils/contract-shape.js' */
 
 /**
- * A mark an annotation region is drawn with (Python's annotation `mark`).
- * @typedef {'line' | 'bracket' | 'band' | 'highlight'} AnnotationMark
+ * A mark an annotation region is drawn with: Python's annotation `mark`, as
+ * the generated request contract types it.
+ * @typedef {CanonicalRegionAnnotation['mark']} AnnotationMark
  */
+const ANNOTATION_SHAPE = /** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types.CanonicalRegionAnnotation);
 /**
- * The marks, in the order a track slot's Marks row lists them.
+ * The marks, in Python's order, which a track slot's Marks row, the Mark menu
+ * and the validators read: the values of the generated request description
+ * (the same Literal as `AnnotationMark`), never a copy.
  * @type {readonly AnnotationMark[]}
  */
-export const ANNOTATION_MARKS = Object.freeze(['line', 'bracket', 'band', 'highlight']);
+export const ANNOTATION_MARKS = /** @type {readonly AnnotationMark[]} */ ((/** @type {LiteralShape} */ (ANNOTATION_SHAPE.fields.mark)).values);
 
 /** @param {unknown} value @returns {value is AnnotationMark} */
 export const isAnnotationMark = (value) => ANNOTATION_MARKS.some((mark) => mark === value);
@@ -28,6 +35,19 @@ export const annotationMarkName = (mark) => {
     case 'band': return tx('annotation mark', 'Band');
     case 'highlight': return tx('annotation mark', 'Highlight');
   }
+};
+
+/**
+ * A mark as an annotation's Mark menu offers it: its name (`annotationMarkName`)
+ * with where it is drawn, for the two marks drawn apart from the lane rows.
+ * @param {AnnotationMark} mark
+ * @returns {string}
+ */
+export const annotationMarkChoice = (mark) => {
+  const name = annotationMarkName(mark);
+  if (mark === 'highlight') return t('{mark} (behind features)', { mark: name });
+  if (mark === 'band') return t('{mark} (annotation lane)', { mark: name });
+  return name;
 };
 
 /**

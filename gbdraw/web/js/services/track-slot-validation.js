@@ -1,5 +1,6 @@
 // @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
+import { isAnnotationMark } from './track-slot-display.js';
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { msg, t } from '../utils/i18n.js';
@@ -1000,7 +1001,6 @@ const CUSTOM_TRACK_SIDES = Object.freeze({
   linear: new Set(['above', 'below', 'overlay'])
 });
 
-const ANNOTATION_MARKS = new Set(['line', 'bracket', 'band', 'highlight']);
 const INELIGIBLE_ANCHOR_RENDERERS = new Set(['annotations', 'ticks', 'spacer']);
 const CONSERVATION_MANAGER = 'circular_conservation';
 const PARAM_OWNER = new Map([
@@ -1877,7 +1877,7 @@ const collectCustomTrackIssues = ({
         params.marks !== null &&
         (
           !Array.isArray(params.marks) ||
-          params.marks.some((mark) => !ANNOTATION_MARKS.has(normalizedString(mark)))
+          params.marks.some((mark) => !isAnnotationMark(normalizedString(mark)))
         )
       ) {
         addRowIssue(rowIssues, index, {

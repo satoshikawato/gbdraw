@@ -6,6 +6,8 @@
  */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
+import { CANONICAL_REQUEST_DESCRIPTION } from '../../contracts/request-shape.generated.js';
+import { ANNOTATION_MARKS } from '../../services/track-slot-display.js';
 import { itemListText, t } from '../../utils/i18n.js';
 import { featureSelector, hashSelector } from '../../utils/selector-syntax.js';
 import {
@@ -17,6 +19,7 @@ import {
 import { COLOR_FORMS, renderErrorText } from '../../utils/error-normalization.js';
 import { msg } from '../../utils/i18n.js';
 /** @import { ErrorTextPart } from '../../utils/error-normalization.js' */
+/** @import { LiteralShape, ObjectShape } from '../../utils/contract-shape.js' */
 
 /**
  * An annotation TSV that the import refuses: a table this codec refuses, or a read that the diagnostic model refuses
@@ -51,15 +54,26 @@ const COLUMNS = [
   'stroke_dasharray', 'line_cap', 'fill', 'fill_opacity', 'hatch_angle', 'hatch_spacing', 'hatch_color',
   'hatch_width', 'hatch_cross', 'label_color', 'label_font_size', 'label_orientation', 'label_position', 'label_offset'
 ];
+/**
+ * The values of a literal field of the generated request description (Python's Literal).
+ * @param {string} type @param {string} field
+ * @returns {readonly string[]}
+ */
+const requestLiteral = (type, field) => /** @type {readonly string[]} */ (
+  (/** @type {LiteralShape} */ ((/** @type {ObjectShape} */ (CANONICAL_REQUEST_DESCRIPTION.types[type])).fields[field])).values);
+/**
+ * The columns whose value is one of a Python Literal: the request's own values, never a copy.
+ * @type {Readonly<Record<string, readonly string[]>>}
+ */
 const ENUM_COLUMNS = {
-  mark: ['line', 'bracket', 'band', 'highlight'],
-  coordinate_space: ['source', 'local'],
-  out_of_bounds: ['clip', 'skip', 'error'],
-  envelope: ['outer_bounds', 'segments'],
-  circular_path: ['shortest', 'forward', 'reverse'],
-  line_cap: ['none', 'tick', 'arrow'],
-  label_orientation: ['auto', 'horizontal', 'tangent', 'radial', 'arc'],
-  label_position: ['center', 'start', 'end']
+  mark: ANNOTATION_MARKS,
+  coordinate_space: requestLiteral('CanonicalCoordinateSpan', 'coordinateSpace'),
+  out_of_bounds: requestLiteral('CanonicalCoordinateSpan', 'outOfBounds'),
+  envelope: requestLiteral('CanonicalFeatureSpan', 'envelope'),
+  circular_path: requestLiteral('CanonicalFeatureSpan', 'circularPath'),
+  line_cap: requestLiteral('CanonicalRegionAnnotationStyle', 'lineCap'),
+  label_orientation: requestLiteral('CanonicalRegionAnnotationStyle', 'labelOrientation'),
+  label_position: requestLiteral('CanonicalRegionAnnotationStyle', 'labelPosition')
 };
 const SVG_COLOR_NAMES = new Set(`
   aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue

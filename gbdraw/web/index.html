@@ -4238,10 +4238,10 @@
                                         <p v-if="annotationRecordMissing(item)" class="mt-0.5 text-[9px] text-red-600">{{ annotationRecordMissingMessage(item) }}</p>
                                     </div>
                                     <details class="text-[10px]" data-annotation-style>
-                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span><i class="ph ph-paint-brush" aria-hidden="true"></i> <span class="capitalize">{{ item.mark }}</span><template v-if="item.label"> · {{ item.label }}</template></span></summary>
+                                        <summary class="cursor-pointer text-[10px] text-slate-500"><span><i class="ph ph-paint-brush" aria-hidden="true"></i> <span>{{ annotationMarkName(item.mark) }}</span><template v-if="item.label"> · {{ item.label }}</template></span></summary>
                                         <div class="mt-1 space-y-1">
                                             <div class="grid grid-cols-2 gap-1">
-                                                <select :value="item.mark" @change="setAnnotationField(set, item, 'mark', $event.target.value)" :aria-label="t('Annotation mark')" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">{{ t('Highlight (behind features)') }}</option><option value="band">{{ t('Band (annotation lane)') }}</option><option value="line">{{ t('Line') }}</option><option value="bracket">{{ t('Bracket') }}</option></select>
+                                                <select :value="item.mark" @change="setAnnotationField(set, item, 'mark', $event.target.value)" :aria-label="t('Annotation mark')" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option v-for="mark in annotationTrackMarkOptions" :key="mark" :value="mark">{{ annotationMarkChoice(mark) }}</option></select>
                                                 <input v-committed-value="item.label" @input="setAnnotationField(set, item, 'label', $event.target.value)" :aria-label="t('Annotation label')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Label')" :disabled="!semanticMutationAvailable">
                                             </div>
                                             <div class="flex flex-wrap items-center gap-2">

@@ -486,6 +486,14 @@ test('English passes through with its placeholders filled', () => {
   assert.equal(tn(1234, '{count} row', '{count} rows'), '1,234 rows');
   assert.equal(tn(1.5, '{count} second', '{count} seconds'), '1.5 seconds');
   assert.equal(tn(1234, '{count} row', '{count} rows', { count: '{count}' }), '{count} rows', 'a caller may keep the placeholder');
+  assert.equal(tn(1234, '{count} row', '{count} rows', { count: '99' }), '1,234 rows', 'any other {count} a caller gives is not shown');
+  // Every number a text inserts reads like its {count}: numberText writes each, in every call shape.
+  assert.equal(tn(4321, '{current} of {count} match', '{current} of {count} matches', { current: 1234 }), '1,234 of 4,321 matches');
+  assert.equal(t('Rows {from}–{to}', { from: 1200, to: 1500.5 }), 'Rows 1,200–1,500.5');
+  assert.equal(tx('annotation mark', '{n} rows', { n: 2000 }), '2,000 rows');
+  assert.equal(tm('Step {n}', { n: 10000 }), 'Step 10,000');
+  assert.deepEqual(textParts('{a} of {b}', ['b'], { a: 1234 }), [{ text: '1,234 of ' }, { slot: 'b' }]);
+  assert.equal(t('{id}', { id: '1234' }), '1234', 'a text value keeps its characters');
   assert.equal(tx('Linear (size scaling)', 'Linear'), 'Linear');
   assert.equal(msg('Canvas'), 'Canvas', 'msg() keeps the English, so comparisons keep working');
   assert.equal(tm(msg('Canvas')), 'Canvas');
@@ -493,22 +501,61 @@ test('English passes through with its placeholders filled', () => {
   assert.equal(tm('a.gbk'), 'a.gbk', 'a value that is no key shows as written');
 });
 
-// OV-3839: tn() writes {count} through numberText, the one owner of number text; a caller that passes the count again
-// would bypass it. Only a kept placeholder (`{ count: '{count}' }`, for a slot) may be passed.
-test('OV-3839: no tn() call passes its count as {count}', () => {
-  const problems = [];
-  for (const path of sourceFiles()) {
-    const { text, lines } = readSource(path);
-    for (const call of extractCalls(text, webPath(path), lines)) {
-      if (call.name !== 'tn' || call.key !== call.plural?.other) continue;
-      // The fourth argument, after the count and the two forms.
-      let end = text.indexOf('(', call.index);
-      for (let index = 0; index < 3 && text[end] !== ')'; index += 1) end = skipExpression(text, end + 1);
-      if (text[end] === ')') continue;
-      const params = text.slice(end + 1, skipExpression(text, end + 1));
-      if (/(?:^|[{,])\s*count\s*:(?!\s*'\{count\}')/.test(params)) problems.push(`${call.where}: ${params.trim()}`);
-    }
+// OV-3839: tn() shows its own count as {count}, written by numberText, the one owner of number text; a {count} a caller
+// passes is never shown. Only a kept placeholder (`{ count: '{count}' }`, for a slot) may be passed: any other is dead
+// code that reads as if it were shown. The params are an object literal (a `count:` key or the shorthand `count`) or a
+// variable that the same file declares with an object literal; a function's parameter is left to tn's run-time rule.
+// String literals are blanked first, so the kept `'{count}'` is no shorthand.
+const COUNT_PARAM = /(?:^|[{,])\s*count\s*(?::(?!\s*''\s*[,}])|(?=[,}]))/;
+const blankStrings = (text) => text.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, (literal) => (literal === "'{count}'" ? "''" : "'x'"));
+/** The object literal at the start of `text`, its strings blanked. @param {string} text */
+const declaredObject = (text) => {
+  let depth = 0;
+  for (let at = 0; at < text.length; at += 1) {
+    depth += text[at] === '{' ? 1 : text[at] === '}' ? -1 : 0;
+    if (depth === 0) return text.slice(0, at + 1);
   }
+  return text;
+};
+/**
+ * The tn() calls of one source whose params give {count}.
+ * @param {string} text @param {string} file @param {string[]} [lines]
+ */
+const tnCountParamProblems = (text, file, lines) => {
+  const problems = [];
+  for (const call of extractCalls(text, file, lines)) {
+    if (call.name !== 'tn' || call.key !== call.plural?.other) continue;
+    // The fourth argument, after the count and the two forms.
+    let end = text.indexOf('(', call.index);
+    for (let index = 0; index < 3 && text[end] !== ')'; index += 1) end = skipExpression(text, end + 1);
+    if (text[end] === ')') continue;
+    const params = text.slice(end + 1, skipExpression(text, end + 1)).trim();
+    const variable = /^[A-Za-z_$][\w$]*$/.test(params)
+      && new RegExp(String.raw`(?:const|let|var)\s+${params.replace('$', '\\$')}\s*=\s*(?=\{)`).exec(text);
+    const object = variable ? declaredObject(blankStrings(text.slice(variable.index + variable[0].length))) : blankStrings(params);
+    if (COUNT_PARAM.test(object)) problems.push(`${call.where}: ${params}`);
+  }
+  return problems;
+};
+test('OV-3839: the {count} guard finds a count key, the shorthand and a variable declared with one', () => {
+  const planted = [
+    "tn(n, '{count} row', '{count} rows', { count: numberText(n) });",
+    "tn(n, '{count} row', '{count} rows', { count, id });",
+    "const texts = { id: 1, count: n };\ntn(n, '{count} row', '{count} rows', texts);",
+    "tn(n, '{count} row', '{count} rows', { count: '{count}' });",
+    "tn(n, '{count} row', '{count} rows', { counted: 2, recount: 3 });",
+    "const other = { id: 1 };\ntn(n, '{count} row', '{count} rows', other);",
+    "const f = (params) => tn(n, '{count} row', '{count} rows', params);"
+  ].join('\n');
+  assert.deepEqual(tnCountParamProblems(planted, 'planted.js'), [
+    "planted.js:1: { count: numberText(n) }", 'planted.js:2: { count, id }', 'planted.js:4: texts'
+  ]);
+});
+test('OV-3839: no tn() call passes its count as {count}', () => {
+  const problems = sourceFiles().flatMap((path) => {
+    const { text, lines } = readSource(path);
+    return tnCountParamProblems(text, webPath(path), lines);
+  });
   assert.deepEqual(problems, []);
 });
 
@@ -1029,6 +1076,7 @@ test('in a right-to-left language each left-to-right run with a value is isolate
       // A stored text (a copied drawing's name) has no isolate.
       'دایره کپی'
     ].map((value) => (Array.isArray(value) ? value.map((part) => (part.text ? { text: ISOLATED(part.text) } : part)) : ISOLATED(value))));
+    assert.equal(i18n.t('Rows {from}–{to}', { from: 1200, to: 9 }), ISOLATED('ردیف ⟨1,200⟩ تا ⟨9⟩'), 'a number is numberText text inside its isolate');
     assert.equal(renderErrorText(errorParts), 'Close the group with ). Column 3, line 7.', 'the English text of an error has no isolate');
     await i18n.setUiLocale('en');
     assert.deepEqual(Object.fromEntries(attributes), { lang: 'en', dir: 'ltr', 'data-ui-text-style': 'cased' });
@@ -1170,6 +1218,27 @@ test('a mark is named by its UI word in the Marks row and inside its checkbox se
   } finally {
     await setUiLocale(SOURCE_LOCALE);
   }
+});
+
+// The marks are Python's Literal, carried by the generated request description: the Marks row, the Mark menu, the
+// table import and the slot validator read that one list, so a mark Python adds reaches each of them with no hand edit.
+test('the annotation marks are the generated request values, and no Web source keeps a copy of them', async () => {
+  const { ANNOTATION_MARKS, annotationMarkChoice, isAnnotationMark } = await import('../../gbdraw/web/js/services/track-slot-display.js');
+  const { CANONICAL_REQUEST_DESCRIPTION } = await import('../../gbdraw/web/js/contracts/request-shape.generated.js');
+  const generated = CANONICAL_REQUEST_DESCRIPTION.types.CanonicalRegionAnnotation.fields.mark.values;
+  assert.equal(ANNOTATION_MARKS, generated, 'the very list the generator writes');
+  assert.ok(generated.every(isAnnotationMark) && !isAnnotationMark('arrow'));
+  assert.deepEqual(ANNOTATION_MARKS.map(annotationMarkChoice), ['Line', 'Bracket', 'Band (annotation lane)', 'Highlight (behind features)']);
+  const html = compiledHtml(readFileSync(join(webRoot, 'index.html'), 'utf8'));
+  assert.match(html, /<option v-for="mark in annotationTrackMarkOptions" :key="mark" :value="mark">\{\{ annotationMarkChoice\(mark\) \}\}<\/option>/);
+  const copies = [];
+  for (const path of sourceFiles().filter((file) => !file.includes(`${sep}contracts${sep}`))) {
+    const { text } = readSource(path);
+    // A mark list written out: two or more mark identifiers as neighbouring literals, or an <option> per mark.
+    if (/(['"])(?:line|bracket|band|highlight)\1\s*,\s*(['"])(?:line|bracket|band|highlight)\2/.test(text)
+      || /<option value="(?:line|bracket|band|highlight)"/.test(text)) copies.push(webPath(path));
+  }
+  assert.deepEqual(copies, []);
 });
 
 test('the shown locale sets the page language, direction and text style, and only a switch that applies does', async () => {
