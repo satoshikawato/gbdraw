@@ -1,6 +1,6 @@
 // @ts-check
 import { drawnLinearSequences, omittedLinearUids } from './record-draw-selection.js';
-import { msg } from '../utils/i18n.js';
+import { msg, thenText } from '../utils/i18n.js';
 import { edgeRetainsUserData, windowLosatFilenamesOf } from './linear-comparison-retained.js';
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
 /** @import { InputFileRef } from './history-files.js' */
@@ -758,6 +758,18 @@ export const resolveLinearComparisonPlan = ({
 };
 
 /**
+ * The label of a comparison pair, "#1 → #2" in English: its query side, then
+ * its subject side, each the number of its record card (or a window pair's
+ * side, "1 window 2") after `#`. The one owner of the pair label: the
+ * Comparison card, its pair rows and window pairs, and Generate's dialog of
+ * missing BLAST files read it.
+ * @param {number | string} query
+ * @param {number | string} subject
+ * @returns {string}
+ */
+export const comparisonPairLabel = (query, subject) => thenText(`#${query}`, `#${subject}`);
+
+/**
  * The pairs set to Upload BLAST TSV without an active file, when they are the
  * draft's only issues: Generate asks to choose a file or set them to No
  * comparison (D-54). Any other issue keeps its typed error, since setting the
@@ -774,7 +786,7 @@ export const missingUploadPairsToResolve = (resolution) => {
     // Every issue is `missing-upload` here, so both uids have a card and both indexes are numbers.
     queryIndex: /** @type {number} */ (edge.queryIndex),
     subjectIndex: /** @type {number} */ (edge.subjectIndex),
-    label: `#${/** @type {number} */ (edge.queryIndex) + 1} → #${/** @type {number} */ (edge.subjectIndex) + 1}`
+    label: comparisonPairLabel(/** @type {number} */ (edge.queryIndex) + 1, /** @type {number} */ (edge.subjectIndex) + 1)
   }));
 };
 

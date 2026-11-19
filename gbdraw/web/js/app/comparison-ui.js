@@ -3,6 +3,7 @@
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
+  comparisonPairLabel,
   linearComparisonEdgeKey,
   normalizeLinearComparisonPlan
 } from '../services/linear-comparisons.js';
@@ -457,7 +458,7 @@ const issueActions = (code, pairLabel) => Object.freeze((code === 'missing-uploa
 // indexes is what the casts in the template read.
 /** @param {LinearComparisonResolvedEdge | undefined} edge */
 const pairLabelOf = (edge) => (Number.isInteger(edge?.queryIndex) && Number.isInteger(edge?.subjectIndex)
-  ? `#${/** @type {{ queryIndex: number }} */ (edge).queryIndex + 1} → #${/** @type {{ subjectIndex: number }} */ (edge).subjectIndex + 1}` : '');
+  ? comparisonPairLabel(/** @type {{ queryIndex: number }} */ (edge).queryIndex + 1, /** @type {{ subjectIndex: number }} */ (edge).subjectIndex + 1) : '');
 
 // A Selected plan breaks the LOSATP mode: the text names the pairs set to
 // Upload BLAST TSV, or says that the pairs are set one by one when every one

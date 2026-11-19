@@ -11,11 +11,12 @@
 // release tier requires every key (`node tools/i18n/sync.mjs status
 // --require-complete`, .claude/skills/translate-web-ui/SKILL.md).
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
+import { makeTempDirSync, removeTempDir } from './helpers/temp-dir.cjs';
 import {
   CONTEXT_SEPARATOR, SOURCE_LOCALE, UI_LOCALES, joinSentences, listText, msg, numberText, pluralTranslation, sentenceBody, sentenceSeparator, setUiLocale, t, textParts, tm, tn, tx, uiLocale,
   uiLocaleOf
@@ -772,6 +773,127 @@ test('OV-3669: every small font size of the page reads the text style floor', ()
   assert.deepEqual([...used].filter((size) => sizeOf(size) < 13 && !flooredUtilities.has(size)).sort(), []);
 });
 
+// A copy of utils/i18n.js with one more language read right to left, `qaa`
+// (a language tag reserved for local use): a test fixture, not a UI language.
+const loadWithRightToLeftFixture = async () => {
+  const source = readFileSync(join(jsRoot, 'utils/i18n.js'), 'utf8');
+  const opening = 'export const UI_LOCALES = Object.freeze([\n';
+  assert.equal(source.split(opening).length, 2, 'the fixture inserts its language at the start of UI_LOCALES');
+  const directory = makeTempDirSync('i18n-rtl-');
+  const path = join(directory, 'i18n.js');
+  writeFileSync(path, source.replace(opening, `${opening}  Object.freeze({ tag: 'qaa', name: 'qaa', sentenceSeparator: ' ', textStyle: 'cased', dir: 'rtl' }),\n`));
+  try {
+    return await import(pathToFileURL(path).href);
+  } finally {
+    removeTempDir(directory);
+  }
+};
+
+// The pseudo right-to-left catalog writes its words in Persian letters, as fa does.
+const RIGHT_TO_LEFT_CATALOG = {
+  'Rows {from}–{to}': 'ردیف {from} تا {to}',
+  'Rows {upper}–{lower}': 'ردیف‌های {upper}–{lower}',
+  '{record} {start}–{end}': 'رکورد {record} {start}–{end}',
+  '{value} (auto)': '{value} (خودکار)',
+  'Circular record {record} {selector}': 'رکورد حلقوی {record} {selector}',
+  '{pair}: {text}.': '{pair}: {text}.',
+  '{name} copy': '{name} کپی',
+  '{nt} skew': 'ترک {nt} skew',
+  'Depth series #{series}': 'سری عمق #{series}',
+  '{value}% identity': '{value}% همسانی',
+  '{completed}/{total} jobs': '{completed}/{total} کار',
+  '"{label}" (deleted)': '«{label}» (حذف)',
+  'Length {length} bp.': 'طول {length} bp.',
+  'Column {column}, line {line}.': 'ستون {column}، خط {line}.',
+  'Close the group with {sign}.': 'گروه را با {sign} ببندید.'
+};
+// ⟨ FSI, ⟦ LRI, ⟪ RLI, ⟩ PDI.
+const ISOLATED = (text) => text.replaceAll('⟨', '⁨').replaceAll('⟦', '⁦').replaceAll('⟪', '⁧').replaceAll('⟩', '⁩');
+
+test('in a right-to-left language each left-to-right run with a value is isolated whole; a left-to-right language keeps the bytes', async () => {
+  const i18n = await loadWithRightToLeftFixture();
+  const { renderErrorText } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+  const attributes = new Map();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  globalThis.document = { documentElement: { setAttribute: (name, value) => attributes.set(name, value) } };
+  const errorParts = [{ text: 'Close the group with {sign}.', params: { sign: ')' } }, { text: 'Column {column}, line {line}.', params: { column: 3, line: { text: '{n}', params: { n: 7 } } } }];
+  const shown = () => [
+    i18n.t('Rows {from}–{to}', { from: 3, to: 9 }),
+    i18n.t('{nt} skew', { nt: 'GC' }),
+    i18n.t('Depth series #{series}', { series: 2 }),
+    i18n.t('{value}% identity', { value: 80 }),
+    i18n.t('{completed}/{total} jobs', { completed: 1, total: 3 }),
+    i18n.t('"{label}" (deleted)', { label: 'gene (x)' }),
+    i18n.t('Length {length} bp.', { length: '1,234' }),
+    i18n.tn(2, '{count} row', '{count} rows'),
+    i18n.tx('Linear (size scaling)', '{name} is linear', { name: 'NC_1' }),
+    i18n.t('Help: {name}'),
+    i18n.textParts('Replaces your {type} default color {color}.', ['color'], { type: 'CDS' }),
+    i18n.listText(['GenBank', 'x (y)']),
+    i18n.thenArrow(),
+    renderErrorText(errorParts, i18n.tm, ' '),
+    i18n.t('Rows {upper}–{lower}', { upper: 1, lower: 9 }),
+    i18n.t('{record} {start}–{end}', { record: 'NC_1', start: '1', end: '9' }),
+    i18n.t('{value} (auto)', { value: '5 px' }),
+    i18n.t('Circular record {record} {selector}', { record: 'NC_1', selector: 'نمونه' }),
+    i18n.t('{w} × {h}', { w: 10, h: 20 }),
+    i18n.t('{a}..{b}', { a: 1, b: 9 }),
+    i18n.t("The record's {n} rows", { n: 3 }),
+    i18n.t('{nt} skew', { nt: 'ج' }),
+    i18n.thenText('#1', '#2'),
+    i18n.t('{pair}: {text}.', { pair: i18n.thenText('#1', '#2'), text: 'متن' }),
+    i18n.listText([i18n.thenText('#1', '#2'), i18n.thenText('#3', '#4')]),
+    i18n.t('{name} copy', { name: 'دایره' }),
+    i18n.fillText(i18n.t('{name} copy'), { name: 'دایره' })
+  ];
+  const english = shown();
+  try {
+    await i18n.setUiLocale('qaa', async () => ({ default: RIGHT_TO_LEFT_CATALOG }));
+    assert.deepEqual(Object.fromEntries(attributes), { lang: 'qaa', dir: 'rtl', 'data-ui-text-style': 'cased' });
+    assert.deepEqual(shown(), [
+      'ردیف ⟨3⟩ تا ⟨9⟩',
+      'ترک ⟦⟨GC⟩ skew⟩',
+      'سری عمق ⟦#⟨2⟩⟩',
+      '⟦⟨80⟩%⟩ همسانی',
+      '⟦⟨1⟩/⟨3⟩⟩ کار',
+      '«⟨gene (x)⟩» (حذف)',
+      'طول ⟦⟨1,234⟩ bp⟩.',
+      '⟦⟨2⟩ rows⟩',
+      '⟦⟨NC_1⟩ is linear⟩',
+      'Help: {name}',
+      [{ text: '⟦Replaces your ⟨CDS⟩ default color⟩ ' }, { slot: 'color' }, { text: '.' }],
+      '⟪⟨GenBank⟩ and ⟨x (y)⟩⟩',
+      '←',
+      'گروه را با ⟨)⟩ ببندید. ستون ⟨3⟩، خط ⟨⟨7⟩⟩.',
+      // A range and a value with its unit read left to right; two values a space apart keep the translator's order.
+      'ردیف‌های ⟦⟨1⟩–⟨9⟩⟩',
+      'رکورد ⟨NC_1⟩ ⟦⟨1⟩–⟨9⟩⟩',
+      '⟨5 px⟩ (خودکار)',
+      'رکورد حلقوی ⟨NC_1⟩ ⟨نمونه⟩',
+      '⟦⟨10⟩ × ⟨20⟩⟩',
+      '⟦⟨1⟩..⟨9⟩⟩',
+      "⟦The record's ⟨3⟩ rows⟩",
+      'ترک ⟦⟨ج⟩ skew⟩',
+      // "a, then b" reads right to left also inside a value's isolate and a list item.
+      '⟪⟨#1⟩ ← ⟨#2⟩⟩',
+      '⟨⟪⟨#1⟩ ← ⟨#2⟩⟩⟩: ⟨متن⟩.',
+      '⟪⟨⟪⟨#1⟩ ← ⟨#2⟩⟩⟩ and ⟨⟪⟨#3⟩ ← ⟨#4⟩⟩⟩⟩',
+      '⟨دایره⟩ کپی',
+      // A stored text (a copied drawing's name) has no isolate.
+      'دایره کپی'
+    ].map((value) => (Array.isArray(value) ? value.map((part) => (part.text ? { text: ISOLATED(part.text) } : part)) : ISOLATED(value))));
+    assert.equal(renderErrorText(errorParts), 'Close the group with ). Column 3, line 7.', 'the English text of an error has no isolate');
+    await i18n.setUiLocale('en');
+    assert.deepEqual(Object.fromEntries(attributes), { lang: 'en', dir: 'ltr', 'data-ui-text-style': 'cased' });
+    assert.deepEqual(shown(), english);
+    assert.deepEqual(english.slice(0, 9), ['Rows 3–9', 'GC skew', 'Depth series #2', '80% identity', '1/3 jobs', '"gene (x)" (deleted)', 'Length 1,234 bp.', '2 rows', 'NC_1 is linear']);
+    assert.deepEqual(english.slice(11), ['GenBank and x (y)', '→', 'Close the group with ). Column 3, line 7.', 'Rows 1–9', 'NC_1 1–9', '5 px (auto)',
+      'Circular record NC_1 نمونه', '10 × 20', '1..9', "The record's 3 rows", 'ج skew', '#1 → #2', '#1 → #2: متن.', '#1 → #2 and #3 → #4', 'دایره copy', 'دایره copy']);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'document', previous); else delete globalThis.document;
+  }
+});
+
 test('a locale outside the UI languages is refused', async () => {
   await assert.rejects(setUiLocale('xx', async () => ({ default: {} })), /Unknown UI locale/);
   assert.equal(uiLocale.value, SOURCE_LOCALE);
@@ -827,21 +949,22 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
   }
 });
 
-test('the shown locale sets the page language, and only a switch that applies does', async () => {
-  const root = { lang: 'en', textStyle: 'cased', setAttribute(name, value) { this[{ lang: 'lang', 'data-ui-text-style': 'textStyle' }[name]] = value; } };
+test('the shown locale sets the page language, direction and text style, and only a switch that applies does', async () => {
+  assert.deepEqual(UI_LOCALES.filter(({ dir }) => dir !== 'ltr').map(({ tag }) => tag), [], 'every UI language reads left to right');
+  const root = { lang: 'en', dir: 'ltr', textStyle: 'cased', setAttribute(name, value) { this[{ lang: 'lang', dir: 'dir', 'data-ui-text-style': 'textStyle' }[name]] = value; } };
   const previous = globalThis.document;
   globalThis.document = { documentElement: root };
   try {
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
-    assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps']);
+    assert.deepEqual([root.lang, root.dir, root.textStyle], ['zh-Hant', 'ltr', 'no-caps']);
     await setUiLocale('th', async () => ({ default: {} }));
-    assert.deepEqual([root.lang, root.textStyle], ['th', 'tall-marks']);
+    assert.deepEqual([root.lang, root.dir, root.textStyle], ['th', 'ltr', 'tall-marks']);
     await setUiLocale('zh-Hant', async () => ({ default: {} }));
     await assert.rejects(setUiLocale('ja', async () => { throw new Error('offline'); }), /offline/);
-    assert.deepEqual([root.lang, root.textStyle], ['zh-Hant', 'no-caps'], 'a catalog that fails to load changes nothing');
+    assert.deepEqual([root.lang, root.dir, root.textStyle], ['zh-Hant', 'ltr', 'no-caps'], 'a catalog that fails to load changes nothing');
     assert.equal(uiLocale.value, 'zh-Hant');
     await setUiLocale(SOURCE_LOCALE);
-    assert.deepEqual([root.lang, root.textStyle], ['en', 'cased']);
+    assert.deepEqual([root.lang, root.dir, root.textStyle], ['en', 'ltr', 'cased']);
   } finally {
     await setUiLocale(SOURCE_LOCALE);
     globalThis.document = previous;

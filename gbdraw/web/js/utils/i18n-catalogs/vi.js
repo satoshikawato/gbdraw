@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "bên ngoài: {tracks}",
   "{type} feature color": "Màu feature {type}",
   "{value} (auto)": "{value} (tự động)",
+  "{value} (auto; varies by record)": "{value} (tự động; khác nhau theo bản ghi)",
   "{value} (not found in current file)": "{value} (không tìm thấy trong tệp hiện tại)",
   "{value} ms": "{value} mili giây",
   "{value} s": "{value} giây",
-  "{value} {unit} (auto)": "{value} {unit} (tự động)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (tự động; khác nhau theo bản ghi)",
   "· changed after Align": "· đã thay đổi sau khi “Căn chỉnh”",
   "· custom colors": "· màu tuỳ chỉnh",
   "· gaps set": "· đã đặt khoảng hở",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (ước tính)"
+  "≈ {value} (estimate)": "≈ {value} (ước tính)"
 });

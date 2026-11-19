@@ -439,7 +439,7 @@ test('a failed Save does not offer Save Session again', async ({ page }) => {
   await settle(page);
   const outcome = await attemptSave(page);
   expect(outcome.downloads).toEqual([]);
-  const alert = page.locator('.border-l-red-500');
+  const alert = page.getByRole('alert', { name: 'Operation error' });
   await expect(alert).toBeVisible();
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toHaveCount(0);
 });
@@ -464,7 +464,7 @@ for (const [version, fixture] of [
   // D-25 Must preserve: the panel runs the needed Generate, then Save succeeds.
   expect(outcome.error.code).toBe('SESSION_SAVE_REQUIRES_GENERATE');
   await expect(page.locator('[data-session-save-needs-generate]')).toBeVisible();
-  const alert = page.locator('.border-l-red-500');
+  const alert = page.getByRole('alert', { name: 'Operation error' });
   await expect(alert.getByRole('button', { name: 'Save Session', exact: true })).toHaveCount(0);
   await alert.getByRole('button', { name: 'Generate', exact: true }).click();
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 300_000 });

@@ -9,7 +9,7 @@ import { allocateDrawingId, copyDrawingName, defaultDrawingName, drawingNamesPro
 import { projectInputReplacement } from '../services/drawing/inputs.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
-import { msg, t, tm } from '../utils/i18n.js';
+import { fillText, msg, t, tm } from '../utils/i18n.js';
 
 /** @import { CopyNamePhrase, DrawingId } from '../services/drawing-view.js' */
 /** @import { ModeProfileName } from '../mode-profiles.js' */
@@ -106,11 +106,12 @@ const shownDrawingName = ({ id, name }, mode) => (
 
 /**
  * A copy's name phrase in the UI language, stored as made (Owner D-35):
- * "<name> copy", then "<name> copy 2" in English.
+ * "<name> copy", then "<name> copy 2" in English. A stored name is filled
+ * without the isolates a shown text gets in a right-to-left language.
  * @type {CopyNamePhrase}
  */
 const copyNamePhrase = (name, number) => (
-  number > 1 ? t('{name} copy {number}', { name, number }) : t('{name} copy', { name })
+  number > 1 ? fillText(t('{name} copy {number}'), { name, number }) : fillText(t('{name} copy'), { name })
 );
 
 /** @type {HeldDrawing} What a drawing with no slot holds. */

@@ -2979,15 +2979,14 @@ export default Object.freeze({
   "{tracks} outside": "зовні: {tracks}",
   "{type} feature color": "Колір ознаки {type}",
   "{value} (auto)": "{value} (авто)",
+  "{value} (auto; varies by record)": "{value} (авто; залежить від запису)",
   "{value} (not found in current file)": "{value} (немає в поточному файлі)",
   "{value} ms": "{value} мс",
   "{value} s": "{value} с",
-  "{value} {unit} (auto)": "{value} {unit} (авто)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (авто; залежить від запису)",
   "· changed after Align": "· змінено після дії «Вирівняти»",
   "· custom colors": "· власні кольори",
   "· gaps set": "· проміжки задано",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (приблизно)"
+  "≈ {value} (estimate)": "≈ {value} (приблизно)"
 });

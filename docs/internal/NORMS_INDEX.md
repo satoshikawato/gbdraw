@@ -749,6 +749,7 @@ under "Cited ids without a record".
 - [PD-OI-106](OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-106-web-ui-language): Web UI language. ACCEPTED, concern `product.web-ui-language`, scenario revision 9, supersedes scenario revision 8.
   - `tests/web/browser-preferences.test.mjs`
   - `tests/web/i18n-catalogs.test.mjs`
+  - `tests/web/physical-sides.test.mjs`
   - `tests/web/sequence-search.playwright.spec.js`
   - `tests/web/ui-language.playwright.spec.js`
 
