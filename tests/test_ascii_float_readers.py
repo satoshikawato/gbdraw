@@ -167,7 +167,7 @@ def test_depth_track_values_refuse_non_ascii_text(
     assert get_args(["--gbk", "dummy.gb", option, "8", "auto"]).depth_track_tick_font_size == ["8", "auto"]
     with pytest.raises(SystemExit):
         get_args(["--gbk", "dummy.gb", option, text])
-    assert f"{option} values must be numbers or auto" in capsys.readouterr().err
+    assert f"{option} values must be finite numbers > 0 or auto" in capsys.readouterr().err
 
 
 def _outcome(read: Callable[[str], object], text: str) -> tuple[str, object]:
@@ -368,8 +368,8 @@ def test_every_cli_float_option_refuses_non_finite_values(mode: str, capsys: pyt
         ("linear", ["--track_axis_gap=nan"], "track axis gap must be a non-negative number or 'auto'"),
         ("linear", ["--track_axis_gap=inf"], "track axis gap must be a non-negative number or 'auto'"),
         ("circular", ["--arrow_head_length_ratio=nan"], "arrow head length ratio must be 'auto'"),
-        ("circular", ["--depth_track_tick_font_size", "nan"], "values must be numbers or auto"),
-        ("linear", ["--depth_track_height", "inf"], "values must be numbers or auto"),
+        ("circular", ["--depth_track_tick_font_size", "nan"], "values must be finite numbers > 0 or auto"),
+        ("linear", ["--depth_track_height", "inf"], "values must be finite numbers > 0 or auto"),
         # A slot scalar read nan and failed later with an unrelated overlap error.
         ("circular", ["--circular_track_slot", "features:features@r=nan"], "must be a finite number"),
         ("circular", ["--circular_track_slot", "features:features@w=infpx"], "must be a finite number"),

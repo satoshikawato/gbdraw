@@ -154,6 +154,30 @@ def test_a_per_series_number_is_refused_alike_on_every_surface(tmp_path: Path, t
     assert {name: _refusal(call) for name, call in surfaces.items()} == dict.fromkeys(surfaces, expected)
 
 
+@pytest.mark.parametrize(
+    ("module", "option"),
+    [
+        (circular_cli, "--depth_track_large_tick_interval"),
+        (circular_cli, "--depth_track_small_tick_interval"),
+        (circular_cli, "--depth_track_tick_font_size"),
+        (linear_cli, "--depth_track_large_tick_interval"),
+        (linear_cli, "--depth_track_small_tick_interval"),
+        (linear_cli, "--depth_track_tick_font_size"),
+        (linear_cli, "--depth_track_height"),
+    ],
+)
+@pytest.mark.parametrize("text", ["0", "-2", "nan", "inf", "x"])
+def test_the_cli_refuses_a_per_series_number_by_the_same_rule_naming_its_option(
+    module, option: str, text: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The CLI reads each per-series number with the rule every other surface uses and names its own option."""
+
+    assert getattr(module._get_args(["--gbk", "x.gb", f"{option}=auto"]), option[2:]) == ["auto"]
+    with pytest.raises(SystemExit):
+        module._get_args(["--gbk", "x.gb", f"{option}={text}"])
+    assert f"{option} values must be finite numbers > 0 or auto" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("module", [circular_cli, linear_cli])
 def test_the_global_depth_range_may_be_negative_except_on_a_log_scale(
     module, capsys: pytest.CaptureFixture[str]

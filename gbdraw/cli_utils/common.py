@@ -40,6 +40,7 @@ from gbdraw.core.figure_length import argparse_figure_length
 from gbdraw.core.numeric import JS_WHITESPACE, argparse_float, argparse_integer, ascii_int, parse_ascii_finite_float
 from gbdraw.core.fonts import RegisteredFont, complete_font_family, font_family_list_for, register_font_file_faces
 from gbdraw.analysis.depth import DEPTH_AGGREGATIONS, DEPTH_FILE_FORMATS, check_depth_range
+from gbdraw.analysis.depth_tracks import depth_track_number
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.series_style import SERIES_STYLES
 from gbdraw.api.options import DepthTrackInput
@@ -711,14 +712,11 @@ def validate_depth_axis_args(
     per_track = (("depth_track_height",) if track_heights else ()) + _DEPTH_TRACK_NUMBER_OPTIONS
     for option_name in per_track:
         for option_value in getattr(args, option_name) or []:
-            option_text = str(option_value).strip().lower()
-            if option_text in {"", "auto", "none", "null", "-"}:
-                continue
-            numeric_option_value = parse_ascii_finite_float(str(option_value))
-            if numeric_option_value is None:
-                parser.error(f"--{option_name} values must be numbers or auto")
-            if numeric_option_value <= 0:
-                parser.error(f"--{option_name} values must be > 0")
+            # The option lists the values fill are named after the option, plural (depth_track_heights).
+            try:
+                depth_track_number(option_value, field_name=f"{option_name}s")
+            except ValidationError:
+                parser.error(f"--{option_name} values must be finite numbers > 0 or auto")
 
 
 def _add_comparison_filter_args(parser: argparse.ArgumentParser) -> None:
