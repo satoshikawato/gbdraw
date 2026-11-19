@@ -1103,9 +1103,10 @@ one drawing never reaches another (PD-OI-090).
   Result and artifacts, and transient flags. The artifacts of each drawing that
   is not shown wait in its slot in the slot store (`services/artifact-slot.js`).
   A drawing's LOSAT evidence is one of its artifacts: its listed LOSAT results,
-  the raw searches and converted payloads, the protein identity manifest they
-  resolve in, and an older Session's protein candidates (`LOSAT_EVIDENCE_KEYS`
-  in `services/losat-cache.js`). Every `state` key is in
+  the raw searches and converted payloads and the names of those its Result
+  uses, the protein identity manifest they resolve in, and an older Session's
+  protein candidates and evidence (`LOSAT_EVIDENCE_KEYS` in
+  `services/losat-cache.js`). Every `state` key is in
   exactly one class in `tests/web/helpers/drawing-state.mjs`. The classes of
   shared values (`PROJECT_KEYS`, `UI_KEYS`) are registered lists, each key with
   the reason every drawing shares it, so a new shared value is an
@@ -1114,13 +1115,18 @@ one drawing never reaches another (PD-OI-090).
   Contract before moving it out of the drawing.
 - A value of one drawing lives as long as that drawing. A generated artifact
   value is kept in the artifact slot, or is registered with the reason it
-  needs none (it is read again from the mounted Result, for example). A value
-  kept beyond one call is keyed by the drawing object
+  needs none (it is read again from the mounted Result, for example). A
+  container (a Map, a Set, or a record) that lives beyond one call and holds a
+  value per drawing is keyed by the drawing object
   (`WeakMap<DrawingState, …>`), never by its `DrawingId`: a deleted drawing's
-  ID is given again to a new drawing. Only the stores that own a drawing's
-  lifetime key by ID (the drawing store, the slot store, and the History
-  router's Histories), and each takes and gives back the drawing's entry in
-  named operations for Delete and its Undo.
+  ID is given again to a new drawing. Only the registered stores that own a
+  drawing's lifetime key such a container by ID (the drawing store, the slot
+  store, and the History router's Histories), and each takes and gives back
+  the drawing's entry in named operations for Delete and its Undo. A single
+  value that names one drawing by its ID (the drawing of the open Similarity
+  alignment review, the drawing an error names) is cleared when that drawing
+  is removed (`removeDrawing` in `app/app-setup.js`); a Load that keeps the
+  review's drawing ID keeps the review (PD-OI-039).
 - A service never resolves the active drawing: it takes the `drawing` it
   reads (Session Save and the legacy configuration Load take it as
   `shownDrawing` from their caller). An owner resolves `state.activeDrawing()`

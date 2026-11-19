@@ -16,6 +16,17 @@
 //      a `create*`/`setup*` factory) is keyed by a drawing's ID, except the
 //      registered stores that own a drawing's lifetime. Key such a value by the
 //      drawing object (`WeakMap<DrawingState, ...>`).
+//
+// Check 3 reads the source text, so it does not see: a container held as a
+// property of a long-lived object (`cache.byId.set(drawing.id, v)`); a key
+// through a local (`const id = drawing.id; m.set(id, v)`) or a drawing in a
+// variable not named `drawing`, `arriving` or `departing`; `Set.add(drawing.id)`
+// with no JSDoc type and no `.has`; `Object.create(null)` written with
+// `[d.id]`; a factory that is not `create*`/`setup*` or is indented by other
+// than two spaces; a typedef imported from another module; a composite key
+// (`${drawing.id}:${uid}`). None of these holds a value per drawing on dev
+// when this guard was added. A single value that names one drawing by its ID
+// (not a container) is outside the check (R15 says how it is cleared).
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -118,7 +129,8 @@ export const DRAWING_LIFETIME_STORES = Object.freeze([
   // The drawing store: `removeDrawing` drops the drawing; the Undo's `addDrawing` and a new drawing put a drawing in.
   'state.js#drawings',
   // The artifact slots: `removeDrawing` takes the slot out (`takeSlot`) into the step; its Undo puts it back
-  // (`putSlot`); a new drawing has none until a switch keeps its artifact.
+  // (`putSlot`); a new drawing starts with no slot, or with the one its own operation made (Duplicate's copy, the
+  // slot a Redo holds).
   'services/artifact-slot.js#slots',
   // The History router's Histories: `removeMember` hands the History to the project step, its Undo gives it back;
   // `addMember` gives a new drawing an empty History and refuses an ID that has one.
