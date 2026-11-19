@@ -91,6 +91,8 @@ _OBSOLETE_GEOMETRY_KEYS = {
 }
 
 _OBSOLETE_SPACING_KEYS = {"gap", "gap_after"}
+# Retired slot keys that a stored slot text drops and the legacy transport reads past.
+_RETIRED_RESERVATION_KEYS = frozenset({"strict", "compress", "reserve"})
 # The slot parameter that carries a schema 1-2 slot spacing from the request
 # decoder to the slot parser (legacy transport only).
 _LEGACY_SPACING_PARAM = "__gbdraw_legacy_spacing"
@@ -325,13 +327,144 @@ def _migrate_legacy_circular_track_slot_spec(spec: str) -> str:
             continue
         raw_key, raw_value = part.split("=", 1)
         key = raw_key.strip().lower()
-        if key in {"strict", "compress", "reserve"}:
+        if key in _RETIRED_RESERVATION_KEYS:
             continue
         if key == "spacing":
             migrated.append(f"{_LEGACY_SPACING_PARAM}={raw_value.strip()}")
         else:
             migrated.append(part)
     return head if not migrated else f"{head}@{','.join(migrated)}"
+
+
+@dataclass(slots=True)
+class _SlotTextFields:
+    """The slot fields of one Circular slot text, as its options set them in order."""
+
+    id: str
+    renderer: str
+    enabled: bool = True
+    side: str | None = None
+    radius: ScalarSpec | None = None
+    width: ScalarSpec | None = None
+    z: int = 0
+    params: dict[str, object] = field(default_factory=dict)
+    inner_gap_px: float | None = None
+    outer_gap_px: float | None = None
+    legacy_spacing: ScalarSpec | None = None
+
+
+def _read_slot_field(fields: _SlotTextFields, key: str, value: str) -> bool:
+    """Read an option that sets a slot field; False when `key` names no slot field."""
+
+    if key == "id":
+        fields.id = value
+    elif key in {"renderer", "type"}:
+        fields.renderer = _normalize_renderer(value)
+        if fields.renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
+            raise ValueError(f"unknown circular track renderer '{fields.renderer}'")
+    elif key in {"enabled", "show", "visible"}:
+        fields.enabled = parse_bool(value)
+    elif key in {"z", "z_index", "zindex"}:
+        parsed_z = parse_ascii_integer(value)
+        if parsed_z is None:
+            raise ValueError(f"z must be an integer, got {value!r}")
+        fields.z = parsed_z
+    elif key in {"r", "radius"}:
+        fields.radius = ScalarSpec.parse(value)
+    elif key in {"w", "width"}:
+        fields.width = ScalarSpec.parse(value)
+    elif key == "inner_gap_px":
+        fields.inner_gap_px = parse_optional_pixel(value, field_name="inner_gap_px", allow_zero=True)
+    elif key == "outer_gap_px":
+        fields.outer_gap_px = parse_optional_pixel(value, field_name="outer_gap_px", allow_zero=True)
+    elif key == "side":
+        fields.side = _normalize_side_value(value)
+    else:
+        return False
+    return True
+
+
+def _read_retired_slot_key(
+    fields: _SlotTextFields, raw_key: str, key: str, value: str, *, allow_legacy_transport: bool
+) -> bool:
+    """Read a retired slot key; False when `key` is not one.
+
+    The legacy transport takes a spacing as the slot's legacy spacing and reads
+    past the reservation keys; a fresh slot text refuses both, and every slot
+    text refuses the retired geometry and gap keys.
+    """
+
+    if key == "spacing":
+        if not allow_legacy_transport:
+            raise ValueError("'spacing' is no longer supported; use inner_gap_px and outer_gap_px")
+        fields.legacy_spacing = ScalarSpec.parse(value)
+    elif key == _LEGACY_SPACING_PARAM:
+        if not allow_legacy_transport:
+            raise ValueError("private legacy spacing transport is not accepted by fresh track slots")
+        fields.legacy_spacing = ScalarSpec.parse(value)
+    elif key in _OBSOLETE_GEOMETRY_KEYS:
+        raise ValueError(f"'{key}' is no longer supported; use r=<radius> with w=<width>")
+    elif key in {"innerradius", "outerradius"}:
+        raise ValueError(f"'{raw_key}' is no longer supported; use r=<radius> with w=<width>")
+    elif key in _OBSOLETE_SPACING_KEYS or key == "gapafter":
+        raise ValueError(f"'{key}' is no longer supported; use inner_gap_px and outer_gap_px")
+    elif key in _RETIRED_RESERVATION_KEYS:
+        if not allow_legacy_transport:
+            raise ValueError(f"'{key}' is no longer supported; geometry and reservation are derived from side")
+    else:
+        return False
+    return True
+
+
+def _read_slot_param(params: dict[str, object], raw_key: str, key: str, value: str) -> None:
+    """Store an option that is a renderer param; `dinucleotide` is stored as `nt`."""
+
+    if key in {"nt", "dinucleotide"}:
+        params["nt"] = value
+    elif key.startswith("_"):
+        raise ValueError(f"private circular track parameter '{raw_key}' is not supported")
+    else:
+        params[key] = value
+
+
+def _read_slot_options(fields: _SlotTextFields, opts: str, *, allow_legacy_transport: bool) -> None:
+    """Read the `key=value` options of a slot text in order: a slot field, a retired key, or a renderer param."""
+
+    for raw_key, raw_value in split_kv_list(opts):
+        key = raw_key.strip().lower()
+        value = raw_value.strip()
+        if not (
+            _read_slot_field(fields, key, value)
+            or _read_retired_slot_key(fields, raw_key, key, value, allow_legacy_transport=allow_legacy_transport)
+        ):
+            _read_slot_param(fields.params, raw_key, key, value)
+
+
+def _renderer_params(renderer: str, params: dict[str, object], raw: str) -> dict[str, object]:
+    """A slot's params as its renderer stores them: a dinucleotide slot's pair once, as a validated `nt`, and a skew
+    slot's high and low colors as its positive and negative colors. A refusal names the slot by `raw`."""
+
+    if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+        try:
+            params = normalize_dinucleotide_params(params)
+        except Exception as exc:
+            raise CircularTrackSlotParseError(str(exc), raw) from exc
+    if renderer == "dinucleotide_skew":
+        params = _normalize_dinucleotide_skew_color_params(params)
+    return params
+
+
+def _checked_slot(slot: CircularTrackSlot, legacy_spacing: ScalarSpec | None, raw: str) -> CircularTrackSlot:
+    """The slot, with its legacy spacing attached, once it passes the checks of a slot list of its own.
+    A refusal names the slot by `raw`."""
+
+    if legacy_spacing is not None:
+        slot = _internal_circular_track_slot(slot, legacy_spacing=legacy_spacing)
+    try:
+        _normalize_circular_track_slots([slot])
+    except Exception as exc:
+        raise CircularTrackSlotParseError(str(exc), raw) from exc
+    return slot
 
 
 def parse_circular_track_slot(
@@ -350,118 +483,28 @@ def parse_circular_track_slot(
     if renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
         raise CircularTrackSlotParseError(f"unknown circular track renderer '{renderer}'", original)
 
-    enabled = True
-    side: str | None = None
-    radius: ScalarSpec | None = None
-    width: ScalarSpec | None = None
-    inner_gap_px: float | None = None
-    outer_gap_px: float | None = None
-    legacy_spacing: ScalarSpec | None = None
-    z = 0
-    params: dict[str, Any] = {}
-
+    fields = _SlotTextFields(id=slot_id, renderer=renderer)
     if opts:
         try:
-            for raw_key, raw_value in split_kv_list(opts):
-                key = raw_key.strip().lower()
-                value = raw_value.strip()
-                if key in {"id"}:
-                    slot_id = value
-                elif key in {"renderer", "type"}:
-                    renderer = _normalize_renderer(value)
-                    if renderer not in SUPPORTED_CIRCULAR_TRACK_RENDERERS:
-                        raise ValueError(f"unknown circular track renderer '{renderer}'")
-                elif key in {"enabled", "show", "visible"}:
-                    enabled = parse_bool(value)
-                elif key in {"z", "z_index", "zindex"}:
-                    parsed_z = parse_ascii_integer(value)
-                    if parsed_z is None:
-                        raise ValueError(f"z must be an integer, got {value!r}")
-                    z = parsed_z
-                elif key in {"r", "radius"}:
-                    radius = ScalarSpec.parse(value)
-                elif key in {"w", "width"}:
-                    width = ScalarSpec.parse(value)
-                elif key == "spacing":
-                    if not _allow_legacy_transport:
-                        raise ValueError(
-                            "'spacing' is no longer supported; use inner_gap_px and outer_gap_px"
-                        )
-                    legacy_spacing = ScalarSpec.parse(value)
-                elif key == _LEGACY_SPACING_PARAM:
-                    if not _allow_legacy_transport:
-                        raise ValueError(
-                            "private legacy spacing transport is not accepted by fresh track slots"
-                        )
-                    legacy_spacing = ScalarSpec.parse(value)
-                elif key == "inner_gap_px":
-                    inner_gap_px = parse_optional_pixel(
-                        value, field_name="inner_gap_px", allow_zero=True
-                    )
-                elif key == "outer_gap_px":
-                    outer_gap_px = parse_optional_pixel(
-                        value, field_name="outer_gap_px", allow_zero=True
-                    )
-                elif key in _OBSOLETE_GEOMETRY_KEYS:
-                    raise ValueError(f"'{key}' is no longer supported; use r=<radius> with w=<width>")
-                elif key in {"innerradius", "outerradius"}:
-                    raise ValueError(f"'{raw_key}' is no longer supported; use r=<radius> with w=<width>")
-                elif key in _OBSOLETE_SPACING_KEYS or key == "gapafter":
-                    raise ValueError(
-                        f"'{key}' is no longer supported; use inner_gap_px and outer_gap_px"
-                    )
-                elif key == "side":
-                    side = _normalize_side_value(value)
-                elif key in {"strict", "compress", "reserve"}:
-                    if not _allow_legacy_transport:
-                        raise ValueError(
-                            f"'{key}' is no longer supported; geometry and reservation are derived from side"
-                        )
-                elif key in {"nt", "dinucleotide"}:
-                    params["nt"] = value
-                elif key.startswith("_"):
-                    raise ValueError(
-                        f"private circular track parameter '{raw_key}' is not supported"
-                    )
-                else:
-                    params[key] = value
-        except CircularTrackSlotParseError:
-            raise
+            _read_slot_options(fields, opts, allow_legacy_transport=_allow_legacy_transport)
         except Exception as exc:
             raise CircularTrackSlotParseError(str(exc), original) from exc
 
-    if not slot_id:
+    if not fields.id:
         raise CircularTrackSlotParseError("missing circular track slot id", original)
-    if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
-        try:
-            params = normalize_dinucleotide_params(params)
-        except Exception as exc:
-            raise CircularTrackSlotParseError(str(exc), original) from exc
-    if renderer == "dinucleotide_skew":
-        params = _normalize_dinucleotide_skew_color_params(params)
-
     slot = CircularTrackSlot(
-        id=slot_id,
-        renderer=renderer,
-        enabled=enabled,
-        side=side,
-        radius=radius,
-        width=width,
-        z=z,
-        params=params,
-        inner_gap_px=inner_gap_px,
-        outer_gap_px=outer_gap_px,
+        id=fields.id,
+        renderer=fields.renderer,
+        enabled=fields.enabled,
+        side=fields.side,
+        radius=fields.radius,
+        width=fields.width,
+        z=fields.z,
+        params=_renderer_params(fields.renderer, fields.params, original),
+        inner_gap_px=fields.inner_gap_px,
+        outer_gap_px=fields.outer_gap_px,
     )
-    if legacy_spacing is not None:
-        slot = _internal_circular_track_slot(
-            slot,
-            legacy_spacing=legacy_spacing,
-        )
-    try:
-        _normalize_circular_track_slots([slot])
-    except Exception as exc:
-        raise CircularTrackSlotParseError(str(exc), original) from exc
-    return slot
+    return _checked_slot(slot, fields.legacy_spacing, original)
 
 
 def parse_circular_track_slots(
@@ -486,23 +529,9 @@ def parse_circular_track_slots(
                         if isinstance(legacy_spacing_raw, ScalarSpec)
                         else ScalarSpec.parse(legacy_spacing_raw)
                     )
-            if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
-                try:
-                    params = normalize_dinucleotide_params(params)
-                except Exception as exc:
-                    raise CircularTrackSlotParseError(str(exc), str(item.id)) from exc
-            if renderer == "dinucleotide_skew":
-                params = _normalize_dinucleotide_skew_color_params(params)
-            slot = replace(item, renderer=renderer, params=params)
-            if legacy_spacing is not None:
-                slot = _internal_circular_track_slot(
-                    slot,
-                    legacy_spacing=legacy_spacing,
-                )
-            try:
-                _normalize_circular_track_slots([slot])
-            except Exception as exc:
-                raise CircularTrackSlotParseError(str(exc), str(slot.id)) from exc
+            label = str(item.id)
+            params = _renderer_params(renderer, params, label)
+            slot = _checked_slot(replace(item, renderer=renderer, params=params), legacy_spacing, label)
         else:
             slot = parse_circular_track_slot(
                 str(item),
