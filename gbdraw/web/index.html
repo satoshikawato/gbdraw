@@ -4978,9 +4978,9 @@
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">{{ t('Marks') }}</span>
-                                                            <label v-for="mark in annotationTrackMarkOptions" :key="`linear-mark-${linearTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px] capitalize">
-                                                                <input type="checkbox" :checked="linearAnnotationMarkSelected(entry.slot, mark)" :aria-label="t('Linear track slot {id} mark {mark}', { id: entry.slot.id, mark: mark })" @change="setLinearAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
-                                                                {{ mark }}
+                                                            <label v-for="mark in annotationTrackMarkOptions" :key="`linear-mark-${linearTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px]">
+                                                                <input type="checkbox" :checked="linearAnnotationMarkSelected(entry.slot, mark)" :aria-label="t('Linear track slot {id} mark {mark}', { id: entry.slot.id, mark: annotationMarkName(mark) })" @change="setLinearAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
+                                                                {{ annotationMarkName(mark) }}
                                                             </label>
                                                         </div>
                                                     </div>
@@ -5402,9 +5402,9 @@
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">{{ t('Marks') }}</span>
-                                                            <label v-for="mark in annotationTrackMarkOptions" :key="`circular-mark-${circularTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px] capitalize">
-                                                                <input type="checkbox" :checked="circularAnnotationMarkSelected(entry.slot, mark)" :aria-label="t('Circular track slot {id} mark {mark}', { id: entry.slot.id, mark: mark })" @change="setCircularAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
-                                                                {{ mark }}
+                                                            <label v-for="mark in annotationTrackMarkOptions" :key="`circular-mark-${circularTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px]">
+                                                                <input type="checkbox" :checked="circularAnnotationMarkSelected(entry.slot, mark)" :aria-label="t('Circular track slot {id} mark {mark}', { id: entry.slot.id, mark: annotationMarkName(mark) })" @change="setCircularAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
+                                                                {{ annotationMarkName(mark) }}
                                                             </label>
                                                         </div>
                                                     </div>

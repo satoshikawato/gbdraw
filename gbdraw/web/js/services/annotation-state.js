@@ -1,6 +1,7 @@
 // @ts-check
 import { DRAFT_ANNOTATION_STYLE } from '../contracts/schema.generated.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { isAnnotationMark } from './track-slot-display.js';
 import { nextNumberedId } from './track-slot-validation.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
 
@@ -119,6 +120,7 @@ const normalizeTarget = (target) => {
  * @param {DeepReadonly<Partial<AnnotationStyle>> | null} [overrides]
  * @returns {AnnotationStyle}
  */
+
 export const createDefaultAnnotationStyle = (overrides = {}) => ({
   ...DRAFT_ANNOTATION_STYLE,
   strokeDasharray: [...DRAFT_ANNOTATION_STYLE.strokeDasharray],
@@ -163,9 +165,7 @@ export const normalizeAnnotationSets = (sets) => {
         id,
         target: normalizeTarget(item.target),
         label: String(item.label || ''),
-        mark: /** @type {(string | undefined)[]} */ (['line', 'bracket', 'band', 'highlight']).includes(item.mark)
-          ? /** @type {string} */ (item.mark) // listed above, so defined
-          : 'bracket',
+        mark: isAnnotationMark(item.mark) ? item.mark : 'bracket',
         lane: item.lane == null || item.lane === '' ? null : Math.max(0, Number(item.lane) || 0),
         style: item.style == null ? null : createDefaultAnnotationStyle(item.style),
         legendLabel: item.legendLabel == null ? null : String(item.legendLabel),

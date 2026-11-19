@@ -1,6 +1,34 @@
 // @ts-check
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
-import { t } from '../utils/i18n.js';
+import { t, tx } from '../utils/i18n.js';
+
+/**
+ * A mark an annotation region is drawn with (Python's annotation `mark`).
+ * @typedef {'line' | 'bracket' | 'band' | 'highlight'} AnnotationMark
+ */
+/**
+ * The marks, in the order a track slot's Marks row lists them.
+ * @type {readonly AnnotationMark[]}
+ */
+export const ANNOTATION_MARKS = Object.freeze(['line', 'bracket', 'band', 'highlight']);
+
+/** @param {unknown} value @returns {value is AnnotationMark} */
+export const isAnnotationMark = (value) => ANNOTATION_MARKS.some((mark) => mark === value);
+
+/**
+ * The name the UI shows for a mark: the one owner of that word, in the Marks
+ * row and inside the sentences that name a mark (never its identifier).
+ * @param {AnnotationMark} mark
+ * @returns {string}
+ */
+export const annotationMarkName = (mark) => {
+  switch (mark) {
+    case 'line': return t('Line');
+    case 'bracket': return t('Bracket');
+    case 'band': return tx('annotation mark', 'Band');
+    case 'highlight': return tx('annotation mark', 'Highlight');
+  }
+};
 
 /**
  * @param {unknown} value

@@ -16,8 +16,10 @@ import {
 } from '../services/depth-track-state.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
+  ANNOTATION_MARKS,
   findTrackSlotGeometry,
   formatPxAuto,
+  isAnnotationMark,
   isManualSlotValue,
   normalizeOptionalText,
   overlayFollowsNote
@@ -85,12 +87,6 @@ const STACK_ENTRY_SLOT = 'slot';
 const ESTIMATED_LINEAR_GC_HEIGHT_PX = 20;
 const ESTIMATED_LINEAR_DEPTH_HEIGHT_PX = 10;
 const ESTIMATED_LINEAR_DEPTH_SPACING_PX = 8;
-const ANNOTATION_MARK_OPTIONS = Object.freeze([
-  'line',
-  'bracket',
-  'band',
-  'highlight'
-]);
 
 /** The Depth series a Linear drawing's rows hold. @param {{ linearSeqs: readonly { depth?: DepthFileSlots }[] }} drawing */
 const linearAvailableDepthTrackCountForDrawing = (drawing) => (
@@ -512,15 +508,15 @@ export const createLinearTrackSlotEditor = ({
   const setLinearAnnotationMarkSelected = (slot, mark, checked) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
+    if (!slot || normalizeRenderer(slot.renderer) !== 'annotations' || !isAnnotationMark(mark)) return;
     slot.params = cloneParams(slot.params);
     const current = Array.isArray(slot.params.marks) && slot.params.marks.length > 0
       ? Array.from(new Set(slot.params.marks.map((/** @type {unknown} */ value) => String(value).trim().toLowerCase())))
-      : ANNOTATION_MARK_OPTIONS.slice();
+      : [...ANNOTATION_MARKS];
     const next = checked
       ? Array.from(new Set([...current, mark]))
       : current.filter((/** @type {string} */ value) => value !== mark);
-    if (next.length === 0 || next.length === ANNOTATION_MARK_OPTIONS.length) delete slot.params.marks;
+    if (next.length === 0 || next.length === ANNOTATION_MARKS.length) delete slot.params.marks;
     else slot.params.marks = next;
   };
 
@@ -1289,7 +1285,6 @@ export const createLinearTrackSlotEditor = ({
     linearTrackGlobalIssues,
     linearAnnotationAnchorOptions,
     linearAnnotationAnchorIsKnown,
-    annotationTrackMarkOptions: ANNOTATION_MARK_OPTIONS,
     linearAnnotationMarkSelected,
     setLinearAnnotationMarkSelected,
     linearAnnotationLaneGapValue: (/** @type {OptionalLinearSlot} */ slot) => linearAnnotationNumberValue(slot, 'lane_gap_px', 3),

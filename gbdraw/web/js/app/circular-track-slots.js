@@ -29,10 +29,12 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { AUTOMATIC_ANNOTATION_LANE_SIDES } from '../contracts/schema.generated.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
+  ANNOTATION_MARKS,
   findTrackSlotGeometry,
   findTrackSlotGeometryRecord,
   formatPxAuto,
   formatRadiusFactorAuto,
+  isAnnotationMark,
   isManualSlotValue,
   normalizeOptionalText,
   overlayFollowsNote,
@@ -192,12 +194,6 @@ const PRESET_LABELS = {
 // gbdraw/diagrams/circular/presets.py): its width and gaps. Its radius is the
 // layout's own result, so a row shows none until it is drawn (OV-1712).
 const AUTO_SLOT_SIZES = MODE_PROFILE_DATA.autoSizes.circularSlots;
-const ANNOTATION_MARK_OPTIONS = Object.freeze([
-  'line',
-  'bracket',
-  'band',
-  'highlight'
-]);
 
 /** @param {unknown} preset */
 const formatPresetName = (preset) => tm(PRESET_LABELS[normalizeCircularTrackPreset(preset)] || PRESET_LABELS.tuckin);
@@ -967,15 +963,15 @@ export const createCircularTrackSlotEditor = ({
   const setCircularAnnotationMarkSelected = (slot, mark, checked) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!slot || slot.renderer !== 'annotations' || !ANNOTATION_MARK_OPTIONS.includes(mark)) return;
+    if (!slot || slot.renderer !== 'annotations' || !isAnnotationMark(mark)) return;
     slot.params = cloneParams(slot.params);
     const current = Array.isArray(slot.params.marks) && slot.params.marks.length > 0
       ? Array.from(new Set(slot.params.marks.map((value) => String(value).trim().toLowerCase())))
-      : ANNOTATION_MARK_OPTIONS.slice();
+      : [...ANNOTATION_MARKS];
     const next = checked
       ? Array.from(new Set([...current, mark]))
       : current.filter((value) => value !== mark);
-    if (next.length === 0 || next.length === ANNOTATION_MARK_OPTIONS.length) delete slot.params.marks;
+    if (next.length === 0 || next.length === ANNOTATION_MARKS.length) delete slot.params.marks;
     else slot.params.marks = next;
   };
 
@@ -2034,7 +2030,6 @@ export const createCircularTrackSlotEditor = ({
     circularTrackGlobalIssues,
     circularAnnotationAnchorOptions,
     circularAnnotationAnchorIsKnown,
-    annotationTrackMarkOptions: ANNOTATION_MARK_OPTIONS,
     circularAnnotationMarkSelected,
     setCircularAnnotationMarkSelected,
     circularAnnotationLaneGapValue: (/** @type {CircularTrackSlot | null | undefined} */ slot) => circularAnnotationNumberValue(slot, 'lane_gap_px', 3),

@@ -1153,6 +1153,25 @@ test('a list of items without a conjunction takes the separator of the UI langua
   }
 });
 
+// A track slot's Marks row and the accessible name of each checkbox name a mark by its UI word (annotationMarkName in
+// services/track-slot-display.js), never by its identifier (line, bracket, band, highlight) inside a translated sentence.
+test('a mark is named by its UI word in the Marks row and inside its checkbox sentence', async () => {
+  const { ANNOTATION_MARKS, annotationMarkName } = await import('../../gbdraw/web/js/services/track-slot-display.js');
+  assert.deepEqual(ANNOTATION_MARKS.map(annotationMarkName), ['Line', 'Bracket', 'Band', 'Highlight']);
+  const html = compiledHtml(readFileSync(join(webRoot, 'index.html'), 'utf8'));
+  for (const side of ['Linear', 'Circular']) {
+    const row = html.slice(html.indexOf(`t('${side} track slot {id} mark {mark}'`) - 400, html.indexOf(`t('${side} track slot {id} mark {mark}'`) + 400);
+    assert.match(row, new RegExp(`t\\('${side} track slot \\{id\\} mark \\{mark\\}', \\{ id: entry\\.slot\\.id, mark: annotationMarkName\\(mark\\) \\}\\)`), side);
+    assert.match(row, /\{\{ annotationMarkName\(mark\) \}\}/, side);
+  }
+  try {
+    await setUiLocale('fa', async () => ({ default: { [`annotation mark${CONTEXT_SEPARATOR}Band`]: 'نوار', Line: 'خط' } }));
+    assert.deepEqual(ANNOTATION_MARKS.map(annotationMarkName), ['خط', 'Bracket', 'نوار', 'Highlight']);
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+  }
+});
+
 test('the shown locale sets the page language, direction and text style, and only a switch that applies does', async () => {
   assert.deepEqual(UI_LOCALES.filter(({ dir }) => dir !== 'ltr').map(({ tag }) => tag), ['ar', 'fa'], 'Arabic and Persian read right to left, every other UI language left to right');
   const root = { lang: 'en', dir: 'ltr', textStyle: 'cased', setAttribute(name, value) { this[{ lang: 'lang', dir: 'dir', 'data-ui-text-style': 'textStyle' }[name]] = value; } };
