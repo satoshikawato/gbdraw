@@ -6,7 +6,7 @@ import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import {
   INPUT_NAME_CHARACTERS, SESSION_CONTAINER_DAMAGED_MESSAGE, SESSION_CONTAINER_NO_DOCUMENT_MESSAGE
 } from '../contracts/schema.generated.js';
-import { CODE_TEXT, fillText, msg, numberText } from './i18n.js';
+import { fillText, msg, numberText } from './i18n.js';
 import { SELECTOR_TEXT } from './selector-syntax.js';
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'embedFonts', 'pdfFonts', 'buildProteinLosatCacheKeys', 'checkExportLimit', 'computeLabelFitRow', 'convertRingTablesToSearchFrame', 'convertStoredProteinResultFrames',
   'addRegionAnnotation', 'convertLosatpPairsToGenomicPayload', 'decideAutoOrientation', 'deriveRegionDrawing', 'extractCdsProteinFasta', 'extractFirstFasta', 'findInOtherFiles',

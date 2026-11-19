@@ -3529,11 +3529,10 @@ export default Object.freeze({
   "{tracks} outside": "الخارج: {tracks}",
   "{type} feature color": "لون عناصر {type}",
   "{value} (auto)": "{value} (تلقائي)",
+  "{value} (auto; varies by record)": "{value} (تلقائي؛ يختلف باختلاف السجل)",
   "{value} (not found in current file)": "{value} (غير موجود في الملف الحالي)",
   "{value} ms": "{value} ملي ثانية",
   "{value} s": "{value} ثانية",
-  "{value} {unit} (auto)": "{value} {unit} (تلقائي)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (تلقائي؛ يختلف باختلاف السجل)",
   "{windows} in {files}": "{windows} في {files}",
   "{windows} · {found} of {total} genes": "{windows} · الجينات: {found} من {total}",
   "· changed after Align": "· تغير بعد المحاذاة",
@@ -3541,5 +3540,5 @@ export default Object.freeze({
   "· gaps set": "· تم تعيين الفجوات",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (تقدير)"
+  "≈ {value} (estimate)": "≈ {value} (تقدير)"
 });

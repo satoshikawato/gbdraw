@@ -1057,6 +1057,15 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
     for (const tag of CATALOG_LOCALES) {
       await setUiLocale(tag, async () => ({ default: {} }));
       const expected = new Intl.ListFormat(tag, { type: 'conjunction' });
+      if (UI_LOCALES.find((row) => row.tag === tag)?.dir === 'rtl') {
+        // A right-to-left language isolates the list whole and each item in it; without the isolates and the
+        // direction marks the text is the locale's own pattern.
+        const plain = (items) => listText(items).replace(/[\u2066-\u2069]/g, '');
+        assert.equal(listText(['A']), ISOLATED('⟪⟨A⟩⟩'), tag);
+        assert.equal(plain(['A', 'B']), expected.format(['A', 'B']).replace(/[\u061C\u200E\u200F]/g, ''), tag);
+        assert.equal(plain(['A', 'B', 'C']), expected.format(['A', 'B', 'C']).replace(/[\u061C\u200E\u200F]/g, ''), tag);
+        continue;
+      }
       assert.equal(listText(['A']), 'A', tag);
       assert.equal(listText(['A', 'B']), expected.format(['A', 'B']), tag);
       assert.equal(listText(['A', 'B', 'C']), expected.format(['A', 'B', 'C']), tag);
@@ -1073,7 +1082,7 @@ test('a list keeps today\'s English and uses the locale\'s list pattern in every
 });
 
 test('the shown locale sets the page language, direction and text style, and only a switch that applies does', async () => {
-  assert.deepEqual(UI_LOCALES.filter(({ dir }) => dir !== 'ltr').map(({ tag }) => tag), [], 'every UI language reads left to right');
+  assert.deepEqual(UI_LOCALES.filter(({ dir }) => dir !== 'ltr').map(({ tag }) => tag), ['ar', 'fa'], 'Arabic and Persian read right to left, every other UI language left to right');
   const root = { lang: 'en', dir: 'ltr', textStyle: 'cased', setAttribute(name, value) { this[{ lang: 'lang', dir: 'dir', 'data-ui-text-style': 'textStyle' }[name]] = value; } };
   const previous = globalThis.document;
   globalThis.document = { documentElement: root };
@@ -1118,8 +1127,9 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
       ['ru', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       ['uk', ['other:0', 'one:1', 'other:2', 'other:1000000']],
       // fa takes `one` for 0 too; ar has its own `zero` and `two`, which take `other`.
-      ['fa', ['one:0', 'one:1', 'other:2', 'other:1000000']],
-      ['ar', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      // A right-to-left language isolates each text whole, and the count in it.
+      ['fa', ['⟦one:⟨0⟩⟩', '⟦one:⟨1⟩⟩', '⟦other:⟨2⟩⟩', '⟦other:⟨1000000⟩⟩'].map(ISOLATED)],
+      ['ar', ['⟦other:⟨0⟩⟩', '⟦one:⟨1⟩⟩', '⟦other:⟨2⟩⟩', '⟦other:⟨1000000⟩⟩'].map(ISOLATED)],
       ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
       ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],

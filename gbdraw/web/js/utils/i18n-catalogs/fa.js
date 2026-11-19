@@ -3529,11 +3529,10 @@ export default Object.freeze({
   "{tracks} outside": "{tracks} در خارج",
   "{type} feature color": "رنگ ویژگی {type}",
   "{value} (auto)": "{value} (خودکار)",
+  "{value} (auto; varies by record)": "{value} (خودکار؛ برای هر رکورد متفاوت است)",
   "{value} (not found in current file)": "{value} (در فایل فعلی یافت نشد)",
   "{value} ms": "{value} میلی‌ثانیه",
   "{value} s": "{value} ثانیه",
-  "{value} {unit} (auto)": "{value} {unit} (خودکار)",
-  "{value} {unit} (auto; varies by record)": "{value} {unit} (خودکار؛ برای هر رکورد متفاوت است)",
   "{windows} in {files}": "{windows} در {files}",
   "{windows} · {found} of {total} genes": "{windows} · {found} از {total} ژن",
   "· changed after Align": "· پس از تراز کردن تغییر کرد",
@@ -3541,5 +3540,5 @@ export default Object.freeze({
   "· gaps set": "· فاصله‌های تنظیم‌شده",
   "…": "…",
   "…{name}…": "…{name}…",
-  "≈ {value} {unit} (estimate)": "≈ {value} {unit} (تخمینی)"
+  "≈ {value} (estimate)": "≈ {value} (تخمینی)"
 });
