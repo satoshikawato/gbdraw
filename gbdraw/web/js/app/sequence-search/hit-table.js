@@ -65,7 +65,7 @@ export const createSearchHitTable = (panel, { activeDrawing, shownRoot }) => {
     const names = outcome.queries.map(({ name, length, program }) => (program === 'tblastn'
       ? t('No hits for {query} ({length} aa)', { query: name, length: numberText(length) })
       : t('No hits for {query} ({length} bp)', { query: name, length: numberText(length) })));
-    return [...names, tn(outcome.rowsLeftOut, 'The thresholds removed {count} alignment.', 'The thresholds removed {count} alignments.', { count: numberText(outcome.rowsLeftOut) })].join(' ');
+    return [...names, tn(outcome.rowsLeftOut, 'The thresholds removed {count} alignment.', 'The thresholds removed {count} alignments.')].join(' ');
   });
   // The hits the drawing outlines, by the shown set's id and the hits' annotation ids.
   const outline = computed(() => {

@@ -293,8 +293,9 @@ export const pluralTranslation = (rules, entries, count, one, other) => {
  * catalog key: `fr` and `pt` take `one` for 0 and 1, `en` and `es` for 1
  * only, `ja`, `zh-Hans`, `zh-Hant` and `ko` never. A value with plural
  * forms gives the text of the category (`pluralTranslation`). A missing
- * translation shows the form English chooses. `{count}` is the count unless
- * `params` gives it.
+ * translation shows the form English chooses. `{count}` is the count as
+ * `numberText` writes it (`1,234`) unless `params` gives it (a slot keeps
+ * `{ count: '{count}' }`).
  * @param {number} count
  * @param {string} one
  * @param {string} other
@@ -305,7 +306,7 @@ export const tn = (count, one, other, params) => {
   const english = pluralForm(ENGLISH_PLURALS, count, one, other);
   // Read the locale first: a render that calls `tn()` depends on it.
   const shown = locale.value === SOURCE_LOCALE ? english : pluralTranslation(shownPlurals, catalog, count, one, other) ?? english;
-  return substitute(shown, { count, ...params });
+  return substitute(shown, { count: numberText(count), ...params });
 };
 
 /**

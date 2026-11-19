@@ -363,7 +363,7 @@ export const labelFitRowReasonText = (reason) => {
     case 'font_limit': return t('Does not fit down to {size} pt', { size: numberText(reason.limit) });
     case 'spacing_limit': return t('Does not fit down to {spacing} px label spacing', { spacing: numberText(reason.limit) });
     case 'search_bound': return tn(reason.limit, 'No value found within {count} second.',
-      'No value found within {count} seconds.', { count: numberText(reason.limit) });
+      'No value found within {count} seconds.');
     case 'combination_limit': return t('Does not fit at {size} pt up to Y offset {limit}',
       { size: numberText(reason.fontSize), limit: numberText(reason.limit) });
     case 'labels_do_not_fit': return reason.counts.length

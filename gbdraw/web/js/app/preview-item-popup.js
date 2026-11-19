@@ -195,7 +195,7 @@ const buildLegendEntryView = ({
       ? tm(TRACK_ROW_SUBTITLE[trackKind])
       : featureCount == null
         ? t('Counting features…')
-        : tn(featureCount, '{count} feature', '{count} features', { count: numberText(featureCount) }),
+        : tn(featureCount, '{count} feature', '{count} features'),
     colorSource,
     defaultColorLine,
     ruleLines

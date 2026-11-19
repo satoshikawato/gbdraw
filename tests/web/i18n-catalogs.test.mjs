@@ -27,7 +27,8 @@ import { detectedTopologyNote } from '../../gbdraw/web/js/services/record-displa
 import { CATALOG_LOCALES, CATALOG_ROOT, catalogProblems, catalogStatus } from '../../tools/i18n/catalogs.mjs';
 import { classSourcePaths } from '../../tools/generate_web_tailwind_css.mjs';
 import {
-  PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, compiledLines, elementEnd, extractCalls, sourceCalls, sourceFiles, sourceKeys, webPath
+  PLACEHOLDER, VOID_TAGS, WEB_ROOT as webRoot, compiledHtml, compiledLines, elementEnd, extractCalls, readSource, skipExpression, sourceCalls, sourceFiles,
+  sourceKeys, webPath
 } from '../../tools/i18n/source-keys.mjs';
 
 const jsRoot = join(webRoot, 'js');
@@ -481,11 +482,34 @@ test('English passes through with its placeholders filled', () => {
   assert.equal(tn(1, '{count} row', '{count} rows'), '1 row');
   assert.equal(tn(2, '{count} row', '{count} rows'), '2 rows');
   assert.equal(tn(0, 'one record', '{count} records of {file}', { file: 'a.gb' }), '0 records of a.gb');
+  // OV-3839: {count} is the count as numberText writes it, unless the caller gives its own {count}.
+  assert.equal(tn(1234, '{count} row', '{count} rows'), '1,234 rows');
+  assert.equal(tn(1.5, '{count} second', '{count} seconds'), '1.5 seconds');
+  assert.equal(tn(1234, '{count} row', '{count} rows', { count: '{count}' }), '{count} rows', 'a caller may keep the placeholder');
   assert.equal(tx('Linear (size scaling)', 'Linear'), 'Linear');
   assert.equal(msg('Canvas'), 'Canvas', 'msg() keeps the English, so comparisons keep working');
   assert.equal(tm(msg('Canvas')), 'Canvas');
   assert.equal(tm('Step {n}', { n: 2 }), 'Step 2');
   assert.equal(tm('a.gbk'), 'a.gbk', 'a value that is no key shows as written');
+});
+
+// OV-3839: tn() writes {count} through numberText, the one owner of number text; a caller that passes the count again
+// would bypass it. Only a kept placeholder (`{ count: '{count}' }`, for a slot) may be passed.
+test('OV-3839: no tn() call passes its count as {count}', () => {
+  const problems = [];
+  for (const path of sourceFiles()) {
+    const { text, lines } = readSource(path);
+    for (const call of extractCalls(text, webPath(path), lines)) {
+      if (call.name !== 'tn' || call.key !== call.plural?.other) continue;
+      // The fourth argument, after the count and the two forms.
+      let end = text.indexOf('(', call.index);
+      for (let index = 0; index < 3 && text[end] !== ')'; index += 1) end = skipExpression(text, end + 1);
+      if (text[end] === ')') continue;
+      const params = text.slice(end + 1, skipExpression(text, end + 1));
+      if (/(?:^|[{,])\s*count\s*:(?!\s*'\{count\}')/.test(params)) problems.push(`${call.where}: ${params.trim()}`);
+    }
+  }
+  assert.deepEqual(problems, []);
 });
 
 test('a locale shows its catalog and falls back to English', async () => {
@@ -1114,30 +1138,30 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
   try {
     for (const [tag, expected] of [
       // fr and pt take `one` for 0 too; es only for 1.
-      ['fr', ['one:0', 'one:1', 'other:2', 'other:1000000']],
-      ['pt', ['one:0', 'one:1', 'other:2', 'other:1000000']],
+      ['fr', ['one:0', 'one:1', 'other:2', 'other:1,000,000']],
+      ['pt', ['one:0', 'one:1', 'other:2', 'other:1,000,000']],
       // es and fr select `many` for 1000000, which takes `other`.
-      ['es', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['es', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
       // de and tr take `one` for 1 only; it selects `many` for 1000000, pl, ru and uk `few` for 2 and `many` for 0
       // and 1000000, and a string value shows its `other` text for those.
-      ['de', ['other:0', 'one:1', 'other:2', 'other:1000000']],
-      ['it', ['other:0', 'one:1', 'other:2', 'other:1000000']],
-      ['pl', ['other:0', 'one:1', 'other:2', 'other:1000000']],
-      ['tr', ['other:0', 'one:1', 'other:2', 'other:1000000']],
-      ['ru', ['other:0', 'one:1', 'other:2', 'other:1000000']],
-      ['uk', ['other:0', 'one:1', 'other:2', 'other:1000000']],
+      ['de', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
+      ['it', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
+      ['pl', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
+      ['tr', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
+      ['ru', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
+      ['uk', ['other:0', 'one:1', 'other:2', 'other:1,000,000']],
       // fa takes `one` for 0 too; ar has its own `zero` and `two`, which take `other`.
       // A right-to-left language isolates each text whole, and the count in it.
-      ['fa', ['⟦one:⟨0⟩⟩', '⟦one:⟨1⟩⟩', '⟦other:⟨2⟩⟩', '⟦other:⟨1000000⟩⟩'].map(ISOLATED)],
-      ['ar', ['⟦other:⟨0⟩⟩', '⟦one:⟨1⟩⟩', '⟦other:⟨2⟩⟩', '⟦other:⟨1000000⟩⟩'].map(ISOLATED)],
-      ['ja', ['other:0', 'other:1', 'other:2', 'other:1000000']],
-      ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1000000']],
-      ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1000000']],
-      ['ko', ['other:0', 'other:1', 'other:2', 'other:1000000']],
+      ['fa', ['⟦one:⟨0⟩⟩', '⟦one:⟨1⟩⟩', '⟦other:⟨2⟩⟩', '⟦other:⟨1,000,000⟩⟩'].map(ISOLATED)],
+      ['ar', ['⟦other:⟨0⟩⟩', '⟦one:⟨1⟩⟩', '⟦other:⟨2⟩⟩', '⟦other:⟨1,000,000⟩⟩'].map(ISOLATED)],
+      ['ja', ['other:0', 'other:1', 'other:2', 'other:1,000,000']],
+      ['zh-Hans', ['other:0', 'other:1', 'other:2', 'other:1,000,000']],
+      ['zh-Hant', ['other:0', 'other:1', 'other:2', 'other:1,000,000']],
+      ['ko', ['other:0', 'other:1', 'other:2', 'other:1,000,000']],
       // Indonesian, Vietnamese and Thai have no plural forms; their `one` rows repeat the `other` text.
-      ['id', ['other:0', 'other:1', 'other:2', 'other:1000000']],
-      ['vi', ['other:0', 'other:1', 'other:2', 'other:1000000']],
-      ['th', ['other:0', 'other:1', 'other:2', 'other:1000000']]
+      ['id', ['other:0', 'other:1', 'other:2', 'other:1,000,000']],
+      ['vi', ['other:0', 'other:1', 'other:2', 'other:1,000,000']],
+      ['th', ['other:0', 'other:1', 'other:2', 'other:1,000,000']]
     ]) {
       await setUiLocale(tag, async () => ({ default: catalog }));
       assert.deepEqual(forms([0, 1, 2, 1000000]), expected, tag);
@@ -1148,7 +1172,7 @@ test('the shown locale\'s plural rules pick the form, and the English text of th
     // With an object on the `other` form, the `one` form is the text for exactly 1 and every other count takes the
     // object's text of its category, else its `other`: fr selects `one` for 0 and `many` for 1000000.
     await setUiLocale('fr', async () => ({ default: { '{count} row': 'one:{count}', '{count} rows': { many: 'many:{count}', other: 'other:{count}' } } }));
-    assert.deepEqual(forms([0, 1, 2, 1000000]), ['other:0', 'one:1', 'other:2', 'many:1000000']);
+    assert.deepEqual(forms([0, 1, 2, 1000000]), ['other:0', 'one:1', 'other:2', 'many:1,000,000']);
     await setUiLocale(SOURCE_LOCALE);
     assert.deepEqual(forms([0, 1]), ['0 rows', '1 row'], 'English again after a switch back');
   } finally {

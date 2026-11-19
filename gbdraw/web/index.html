@@ -4271,7 +4271,7 @@
                              A pending Session operation disables the whole panel, as every other settings control (GX-01, GX-12). -->
                         <fieldset data-history-ignore data-sequence-search :disabled="!semanticMutationAvailable" class="min-w-0 mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <button v-if="sequenceSearch.panel.folded" type="button" data-sequence-search-unfold class="btn btn-secondary w-full justify-between text-[10px] px-2" @click="sequenceSearch.setFolded(false)" :aria-expanded="false">
-                                <span class="truncate">{{ tn(sequenceSearch.panel.queries.length, '{count} query', '{count} queries', { count: sequenceSearch.panel.queries.length }) }} · {{ sequenceSearch.programText }} · {{ sequenceSearch.panel.colorMode === 'gradient' ? t('Gradient by query position') : t('One color per query') }}</span>
+                                <span class="truncate">{{ tn(sequenceSearch.panel.queries.length, '{count} query', '{count} queries') }} · {{ sequenceSearch.programText }} · {{ sequenceSearch.panel.colorMode === 'gradient' ? t('Gradient by query position') : t('One color per query') }}</span>
                                 <i class="ph ph-caret-down" aria-hidden="true"></i>
                             </button>
                             <div v-else class="space-y-2">

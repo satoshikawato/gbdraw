@@ -3,7 +3,7 @@
 /** @import { FileImports, ParsedSpecificRule } from './services/file-imports.js' */
 /** @import { NamedCardRecords } from './services/record-draw-selection.js' */
 /** @typedef {import('./services/drawing/inputs.js').LinearSeq} LinearSeq */
-import { msg, numberText, t, tn } from './utils/i18n.js';
+import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
 import { collectFeatureQualifierNames, specificColorQualifierSuggestions } from './services/feature-selector.js';
 import { BUILTIN_COLOR_TABLES } from './builtin-color-tables.generated.js';
@@ -891,12 +891,12 @@ const featureListBottomSpacerPx = computed(
 const featureEditorStatusText = computed(() => {
   const count = extractedFeatures.value.length;
   if (featureExtractionPending.value) {
-    return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...', { count: numberText(count) }) : t('Preparing features...');
+    return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...') : t('Preparing features...');
   }
   if (featureEditorStatus.value.status === 'failed') {
     return t('Feature editor unavailable');
   }
-  if (count > 0) return tn(count, '{count} feature ready', '{count} features ready', { count: numberText(count) });
+  if (count > 0) return tn(count, '{count} feature ready', '{count} features ready');
   return t('No features ready');
 });
 
