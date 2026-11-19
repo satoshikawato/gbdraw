@@ -4,9 +4,13 @@
   record keeps them with the record of the new file with its accession (its record ID without the version) or its
   record ID, and by its place in the file only when record IDs repeat or are missing, counted from the records the
   last Generate drew. A record the new file does not hold keeps neither: the question before the Replace names its
-  Depth files, also when one record is replaced by a record with another ID (OV-3846). When those are the only files
-  of a Depth series, the question also says that the series stays empty and that Generate will ask for a file or its
-  removal (OV-3954). The question lists a record's Depth files in the shown language's list form.
+  Depth files, also when one record is replaced by a record with another ID (OV-3846). Replacing the file then removes
+  them as Remove Depth TSV does: a Depth row with no width, spacing, or ID you set leaves with its series' last file,
+  the last Depth file turns Show Depth off, so Generate draws instead of refusing the Depth row, and a row that reaches
+  a row that leaves turns off too, which the question names; one Undo restores them all (OV-3955). When those are the
+  only files of a Depth series while another series keeps a file, the question also says that the series stays empty
+  and that Generate will ask for a file or its removal (OV-3954). The question lists a record's Depth files in the
+  shown language's list form.
 - Fixed: In the Web app, the unit selector of an empty (Auto) Circular track Width now starts at px, the unit of the
   Auto width shown under it, so a number typed over the shown width means pixels; an empty Radius still starts at ×R
   (OV-2314).

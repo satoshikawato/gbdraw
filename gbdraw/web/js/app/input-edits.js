@@ -12,7 +12,7 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { LinearSourceGroup } from '../services/linear-sources.js' */
 /** @import { LinearComparisonPair } from '../services/linear-comparisons.js' */
-/** @import { DrawingInputSite, ReplacementQuestion } from './drawing-list.js' */
+/** @import { DrawingInputSite, ReplacementAnswer, ReplacementQuestion } from './drawing-list.js' */
 
 /**
  * A mode panel's mutating handler: the session's busy answer, nothing when the
@@ -32,7 +32,7 @@ import { circularDepthRepresentatives, getLinearDepthFile } from './depth-tracks
  *   Writes `file` in place of `previous` with the uploader's own write, after asking when another drawing uses `previous`
  *   and then the uploader's `question`.
  * @property {(drawing: DrawingState, uid: string, field: 'gb' | 'gff' | 'fasta', value: InputFileCandidate | InputFileRef | null) => void} replaceCircularSourceFile
- * @property {(sites: readonly DrawingInputSite[], value: File, pickHolds: () => boolean) => Promise<boolean> | null} askCircularSourceReplacement
+ * @property {(sites: readonly DrawingInputSite[], value: File, pickHolds: () => boolean) => Promise<ReplacementAnswer> | null} askCircularSourceReplacement
  *   Asks before the source card files at `sites` are replaced when Depth files would leave with their records; null
  *   when nothing is asked.
  * @property {(drawing: DrawingState, index: number, file: InputFileCandidate | InputFileRef) => unknown} replaceCircularDepthFile

@@ -108,6 +108,15 @@ export const trackRowsText = (numbers) => tn(numbers.length, 'Track row {rows}',
 const sameEntries = (asked, now) => now.length === asked.length && now.every((row, index) => row === asked[index]);
 
 /**
+ * The sentence of a question about `count` rows, listed as its items, that start at or extend to a track the change
+ * removes or turns off: they turn off too (`askTrackHide`, and a File card's Replace that removes Depth files).
+ * @param {number} count
+ */
+export const reachingRowsText = (count) => tn(count,
+  'This row starts at or extends to a track that this change removes or turns off. It is turned off too, as it cannot be drawn without that track.',
+  'These rows start at or extend to a track that this change removes or turns off. They are turned off too, as they cannot be drawn without that track.');
+
+/**
  * PD-OI-104 scenario revisions 6 and 7: a change that removes or turns off
  * stack rows that other rows start at or extend to (`overlayRowsReaching`)
  * does not go ahead alone (a stack Generate refuses). It asks first: the
@@ -133,9 +142,7 @@ export const askTrackHide = ({ askChoice, runUndoable }, { rows, mode, hiding, a
       && reachingNow.length === reachingIds.size && reachingNow.every((index) => reachingIds.has(String(now[index].id)));
   };
   const own = question(stack.flatMap((row, index) => (ids.has(String(row.id)) ? [index + 1] : [])), ids);
-  const reach = reaching.length === 0 ? '' : tn(reaching.length,
-    'This row starts at or extends to a track that this change removes or turns off. It is turned off too, as it cannot be drawn without that track.',
-    'These rows start at or extend to a track that this change removes or turns off. They are turned off too, as they cannot be drawn without that track.');
+  const reach = reaching.length === 0 ? '' : reachingRowsText(reaching.length);
   return askChoice({
     title: own.title,
     description: joinSentences(...[own.description ?? '', reach].filter(Boolean)),
@@ -239,7 +246,7 @@ export const askingTrackRowRemoval = ({ askChoice, runUndoable, busy, rows, mode
 };
 
 /** @param {number} index A row's index in its stack. @param {unknown} id Its slot id. */
-const trackRowItem = (index, id) => t('{row} ({id})', { row: trackRowName(index), id: String(id) });
+export const trackRowItem = (index, id) => t('{row} ({id})', { row: trackRowName(index), id: String(id) });
 
 /** A stack row as Add track reads it: its slot id, switch, renderer and params. @typedef {{ id?: unknown, enabled?: unknown, renderer?: unknown, params?: unknown }} AnnotationAddRow */
 /** The action id of the choice that adds a row drawing the set of this id again. */
@@ -324,6 +331,40 @@ export const emptyDepthSeriesText = (series) => tn(series.length,
   { series: listText(series) });
 
 /**
+ * What a removal of Depth files (`loss`) does to the rows of `stack` beyond the rows that leave with their files, the
+ * one reading of it: a Depth row left on with no file that another row reaches turns off (`alsoOff`), as does every
+ * row that starts at or extends to a row that leaves or turns off (`reaching`, by place in `stack`); `emptySeries`
+ * are the Depth series then left with no file while the drawing draws Depth, and `staying` names the Depth rows that
+ * stay in the stack turned off. A Depth source removal (`askTrackSourceRemoval`) and a File card's Replace that
+ * removes Depth files (`createCircularSourceReplacementQuestion`) read it; `depthLossSentences` says it.
+ * @param {readonly SwitchedTrackRow[]} stack @param {'circular' | 'linear'} mode @param {DepthSourceLoss} loss
+ * @returns {{ alsoOff: Set<string>, reaching: number[], turnedOff: Set<string>, emptySeries: readonly number[], staying: string[] }}
+ */
+export const depthLossOutcome = (stack, mode, loss) => {
+  const alsoOff = new Set([...loss.stayingOn].filter((id) => overlayRowsReaching(stack, mode, new Set([id])).length > 0));
+  const reaching = overlayRowsReaching(stack, mode, new Set([...loss.leaving, ...alsoOff]));
+  const turnedOff = new Set([...reaching.map((index) => String(stack[index].id)), ...alsoOff]);
+  return {
+    alsoOff, reaching, turnedOff,
+    emptySeries: loss.emptySeries(turnedOff),
+    staying: stack.flatMap((row, index) => (alsoOff.has(String(row.id)) ? [trackRowItem(index, row.id)] : []))
+  };
+};
+/**
+ * The sentences of a question whose answer removes Depth files (`depthLossOutcome`): the Depth series it leaves with
+ * no file (`emptySeries`, each as the question names it) and the Depth rows that stay turned off (`staying`).
+ * @param {readonly string[]} emptySeries @param {readonly string[]} staying
+ * @returns {string[]}
+ */
+export const depthLossSentences = (emptySeries, staying) => [
+  emptySeries.length === 0 ? '' : emptyDepthSeriesText(emptySeries),
+  staying.length === 0 ? '' : tn(staying.length,
+    '{rows} has no Depth file left. It stays in the stack, turned off.',
+    '{rows} have no Depth file left. They stay in the stack, turned off.',
+    { rows: listText(staying) })
+].filter(Boolean);
+
+/**
  * The title and action of a removal's question.
  * @param {TrackSourceRemoval['kind']} kind @param {{ rows: string, series: number, id: string }} texts
  */
@@ -349,28 +390,17 @@ const trackSourceRemovalTexts = (kind, texts) => {
  */
 export const askTrackSourceRemoval = ({ askChoice, runUndoable, busy, rows, mode }, { kind, series = 0, track = '', loss, sources, label, apply }) => {
   const asked = [...sources()];
-  const stack = rows();
-  const alsoOff = new Set([...loss.stayingOn].filter((id) => overlayRowsReaching(stack, mode, new Set([id])).length > 0));
+  const { alsoOff, emptySeries, staying } = depthLossOutcome(rows(), mode, loss);
   return askTrackHide({ askChoice, runUndoable }, {
     rows,
     mode,
     hiding: new Set([...loss.leaving, ...alsoOff]),
     alsoOff,
-    question: (numbers, turnedOff) => {
-      const staying = stack.flatMap((row, index) => (alsoOff.has(String(row.id)) ? [trackRowItem(index, row.id)] : []));
-      const emptySeries = loss.emptySeries(turnedOff);
-      return {
-        ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1, id: track }),
-        description: joinSentences(...[
-          emptySeries.length === 0 ? '' : emptyDepthSeriesText(emptySeries.map((index) => `#${index + 1}`)),
-          staying.length === 0 ? '' : tn(staying.length,
-            '{rows} has no Depth file left. It stays in the stack, turned off.',
-            '{rows} have no Depth file left. They stay in the stack, turned off.',
-            { rows: listText(staying) })
-        ].filter(Boolean)),
-        keep: t('Cancel')
-      };
-    },
+    question: (numbers) => ({
+      ...trackSourceRemovalTexts(kind, { rows: trackRowsText(numbers), series: series + 1, id: track }),
+      description: joinSentences(...depthLossSentences(emptySeries.map((index) => `#${index + 1}`), staying)),
+      keep: t('Cancel')
+    }),
     label,
     unchanged: () => {
       const now = sources();

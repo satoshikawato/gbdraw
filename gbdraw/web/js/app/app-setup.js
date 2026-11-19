@@ -3402,7 +3402,9 @@ export const createAppSetup = () => {
   } = createInputUploads({
     shownAction, replaceFromShownDrawing, replaceCircularSourceFile,
     askCircularSourceReplacement: createCircularSourceReplacementQuestion({
-      state, askChoice, showNotice, barTabs: drawingBar.tabs, committedCardRecords: committedCardRecordsOf
+      state, askChoice, showNotice, barTabs: drawingBar.tabs, committedCardRecords: committedCardRecordsOf,
+      circularDepthSourceLoss: circularTrackSlotEditor.circularDepthSourceLoss,
+      changeCircularDepthSources: circularTrackSlotEditor.changeCircularDepthSources
     }),
     replaceCircularDepthFile, replaceLinearSourceFile, setLinearDepthFiles, setLinearSourceDepthFile,
     linearComparisonPairForEdgeKey, setLinearComparisonCardFile

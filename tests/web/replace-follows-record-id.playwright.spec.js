@@ -172,3 +172,88 @@ test('a reordered Replace keeps each record\'s Depth file and feature edit throu
   expect(loadedTwice).toEqual(withA(['BGC0000708', 'BGC0000709']));
   await testInfo.attach('drawn.json', { body: JSON.stringify({ before, loaded, back, twice, loadedTwice }, null, 2), contentType: 'application/json' });
 });
+
+// OV-3955 (D-37): a Replace whose answer removes Depth files runs the Depth source change Remove Depth file runs, in
+// the answer's step: a managed Depth row leaves with its series' last file, and the last Depth file turns Show Depth
+// off, so Generate draws; Undo and Redo restore the cards, the Depth files, the row and Show Depth together. Where a
+// series is left with no file while another keeps one, the question says Generate will ask for a file or its removal,
+// and Generate does.
+const depthState = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  const drawing = state.activeDrawing();
+  return {
+    recordIds: window.__GBDRAW_APP__.circularRecordList.map((record) => record.record_id),
+    showDepth: drawing.form.show_depth,
+    rows: drawing.adv.circular_track_slots.filter((slot) => slot.renderer === 'depth').map((slot) => slot.id),
+    depth: drawing.files.c_depth.map((row) => row.map((ref) => ref?.name ?? null))
+  };
+});
+/** One Circular File card of `text` with the Depth files `depth` (one row per record), drawn with the stack on. */
+const drawWithDepth = async (page, text, depth) => {
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(async ({ text, depth }) => {
+    const inputs = await import('./js/services/drawing/inputs.js');
+    const { state } = await import('./js/state.js');
+    const app = window.__GBDRAW_APP__;
+    app.selectDrawing('circular');
+    app.setCircularInputType('gb');
+    await app.addCircularSourceFiles([new File([text], 'first.gbk', { type: 'text/plain', lastModified: 1 })]);
+    app.files.c_depth = inputs.registerInputFileTree(state.inputFiles, depth.map((row) => row.map((entry) => (entry
+      ? new File([entry.text], entry.name, { type: 'text/tab-separated-values', lastModified: 2 }) : null))));
+    Object.assign(app.form, { multi_record_canvas: depth.length > 1, show_depth: true, suppress_gc: true, suppress_skew: true, legend: 'none' });
+    app.adv.depth_tracks.splice(0, app.adv.depth_tracks.length, ...depth[0].map((_, index) => (
+      { label: `Sample ${index + 1}`, color: '#1f77b4', large_tick_interval: null, small_tick_interval: null, tick_font_size: null })));
+    app.resetCircularTrackSlotsFromSimpleControls();
+    app.setCircularTrackSlotsEnabled(true);
+  }, { text, depth });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+};
+const LEAVING = 'The new file has no record for these records of the File card. Replacing the file removes their Depth files.';
+
+test('a Replace that removes the last Depth file turns Show Depth off with its row, so Generate draws, and one Undo restores them', async ({ page }) => {
+  test.setTimeout(600_000);
+  const sampleA = { name: 'sample-a.tsv', text: depthTsv('BGC0000708', 40579, 10) };
+  await drawWithDepth(page, genbankA, [[sampleA]]);
+  const before = await depthState(page);
+  expect(before).toEqual({ recordIds: ['BGC0000708'], showDepth: true, rows: ['depth'], depth: [['sample-a.tsv']] });
+
+  await replaceCardFile(page, 'b.gbk', genbankB);
+  const prompt = page.locator('[data-choice-prompt]');
+  await expect(prompt).toBeVisible({ timeout: 60_000 });
+  await expect(prompt).toContainText(LEAVING);
+  await expect(prompt).not.toContainText('Generate will ask');
+  await prompt.getByRole('button', { name: 'Replace file' }).click();
+  await recordOrder(page, ['BGC0000709']);
+  const replaced = { recordIds: ['BGC0000709'], showDepth: false, rows: [], depth: [[]] };
+  expect(await depthState(page)).toEqual(replaced);
+
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.undoHistory());
+  await recordOrder(page, ['BGC0000708']);
+  expect(await depthState(page)).toEqual(before);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.redoHistory());
+  await recordOrder(page, ['BGC0000709']);
+  expect(await depthState(page)).toEqual(replaced);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+});
+
+test('a Replace that leaves a Depth series with no file while another keeps one removes its row, and Generate asks for a file', async ({ page }) => {
+  test.setTimeout(600_000);
+  const sampleA = { name: 'sample-a.tsv', text: depthTsv('BGC0000708', 40579, 10) };
+  const sampleB = { name: 'sample-b.tsv', text: depthTsv('BGC0000709', 50466, 50) };
+  await drawWithDepth(page, `${genbankA}\n${genbankB}`, [[sampleA, null], [null, sampleB]]);
+  expect(await depthState(page)).toEqual({
+    recordIds: ['BGC0000708', 'BGC0000709'], showDepth: true, rows: ['depth_1', 'depth_2'], depth: [['sample-a.tsv', null], [null, 'sample-b.tsv']]
+  });
+
+  await replaceCardFile(page, 'a.gbk', genbankA);
+  const prompt = page.locator('[data-choice-prompt]');
+  await expect(prompt).toBeVisible({ timeout: 60_000 });
+  await expect(prompt).toContainText(`${LEAVING} Depth series #2 stays empty, and Generate will ask for a file or its removal.`);
+  await prompt.getByRole('button', { name: 'Replace file' }).click();
+  await recordOrder(page, ['BGC0000708']);
+  expect(await depthState(page)).toEqual({ recordIds: ['BGC0000708'], showDepth: true, rows: ['depth_1'], depth: [['sample-a.tsv', null]] });
+  const generated = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(generated.status).toBe('error');
+  expect(generated.error.code).toBe('DEPTH_INVALID');
+  expect(generated.error.context).toEqual(expect.objectContaining({ reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }));
+});

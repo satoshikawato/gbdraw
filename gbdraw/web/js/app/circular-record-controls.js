@@ -9,11 +9,11 @@
 // the settings pane's reveal, the panels' refs, and the record form defaults
 // as ports.
 import {
-  addCircularSource, bindCircularSourceFile, circularSlotFileKind, createCircularSource, markCircularDepthRows, moveCircularSource,
-  removeCircularSource, sessionFilesOfKind
+  addCircularSource, bindCircularSourceFile, bindDrawingInputFileTree, circularSlotFileKind, createCircularSource, markCircularDepthRows,
+  moveCircularSource, removeCircularSource, sessionFilesOfKind
 } from '../services/drawing/inputs.js';
 import { isInputFileRef } from '../services/history-files.js';
-import { activeDepthTrackIndices, isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
+import { isRecordMajorDepthFileMatrix } from '../services/depth-track-state.js';
 import { circularSourceInputs, inputSourceFiles, inputTypeSpec, pickedFileCards } from '../services/input-types.js';
 import { circularMarkRecords, settledCircularCardMarks } from '../services/record-discovery.js';
 import { cardHoldsRecordKey, cardRowsLeaving, resliceCardRows } from '../services/record-draw-selection.js';
@@ -24,8 +24,7 @@ import { circularMultiRecordDefaults, updateActiveLayoutPreference } from '../se
 import { settingsScrollOwner } from '../services/settings-sections.js';
 import { chooseRecordLayout } from '../services/one-circle-layout.js';
 import { drawingTabLabels } from './input-replacement-ports.js';
-import { emptyDepthSeriesText } from './track-slot-edits.js';
-import { draftDrawsDepth } from '../services/track-legend-rows.js';
+import { depthLossOutcome, depthLossSentences, reachingRowsText, trackRowItem } from './track-slot-edits.js';
 /** @import { DiagramMode, DrawingState, SessionBusy, WebState } from '../state.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
@@ -34,7 +33,9 @@ import { draftDrawsDepth } from '../services/track-legend-rows.js';
 /** @import { CircularListRecord } from '../services/record-discovery.js' */
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
-/** @import { DrawingBarOffer, DrawingBarTab, DrawingInputSite } from './drawing-list.js' */
+/** @import { ChangeDepthSources } from './depth-tracks.js' */
+/** @import { DepthSourceLoss } from '../services/depth-track-state.js' */
+/** @import { DrawingBarOffer, DrawingBarTab, DrawingInputSite, ReplacementAnswer } from './drawing-list.js' */
 /** @import { RevealSetting } from './settings-pane.js' */
 /** @import { CircularRecordLayoutChoice } from '../services/one-circle-layout.js' */
 
@@ -229,15 +230,16 @@ const sameEntries = (asked, now) => now.length === asked.length && now.every((en
  * read reads them, and the rows of the records the new file has no record for leave (`cardRowsLeaving`: by record ID,
  * else by place, D-05), from the records the drawing's committed request drew (`committed`, as that read and the next
  * Generate). None when the rows cannot be placed (a file that cannot be read, rows that are not those of
- * their cards): that read reports the matrix, as before. `emptySeries`: the Depth series (indexes) that hold a file
- * now and none in the matrix that read writes (`resliceCardRows`), while the drawing draws Depth (`draftDrawsDepth`):
- * Generate then asks for a file or the series' removal (OV-3954).
+ * their cards): that read reports the matrix, as before. `after`: the matrix that read writes (`resliceCardRows`) and
+ * the record IDs of each card after the Replace, which the answer writes with the Depth source change (OV-3955); null
+ * when the rows cannot be placed.
  * @param {DrawingState} drawing
  * @param {readonly ReplacedCardFile[]} replaced
  * @param {ReplacementFile} value
  * @param {(file: ReplacementFile | null) => FileLike | null | undefined} fileOf
  * @param {(drawing: DrawingState) => Promise<CommittedCardRecords>} committed
- * @returns {Promise<{ rows: { k: number, record: string | null, files: string[] }[], emptySeries: number[] }>}
+ * @returns {Promise<{ rows: { k: number, record: string | null, files: string[] }[],
+ *   after: { matrix: (InputFileRef | null)[][], cards: import('../services/record-draw-selection.js').CardRecords[] } | null }>}
  */
 const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf, committed) => {
   const settledMarks = settledCircularCardMarks(drawing);
@@ -246,7 +248,7 @@ const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf, commi
   /** @type {readonly ReplacementCardRecords[] | null} */
   const marks = drawing.files.c_depth_rows ?? settledMarks;
   const rows = depthRowsWithFiles(drawing);
-  const none = { rows: [], emptySeries: [] };
+  const none = { rows: [], after: null };
   if (!marks || !rows) return none;
   const inputType = drawing.inputType.value;
   /** @type {import('../services/input-types.js').CircularSourceInput<ReplacementFile>[]} */
@@ -266,26 +268,55 @@ const circularDepthFilesLeaving = async (drawing, replaced, value, fileOf, commi
   if (!now) return none;
   const committedRecords = await committed(drawing);
   const resliced = resliceCardRows(rows, marked, now, committedRecords, () => /** @type {(InputFileRef | null)[]} */ ([]));
-  const sourcedAfter = resliced && draftDrawsDepth('circular', drawing) ? activeDepthTrackIndices(resliced) : null;
   return {
     rows: cardRowsLeaving(rows, marked, now, committedRecords).flatMap(({ uid, k, row }) => {
       const files = row.flatMap((ref) => (ref ? [ref.name] : []));
       const record = drawing.circularRecordList.value.find((entry) => entry.uid === uid && entry.k === k);
       return files.length === 0 ? [] : [{ k, record: record ? record.record_id : null, files }];
     }),
-    emptySeries: sourcedAfter ? activeDepthTrackIndices(rows).filter((index) => !sourcedAfter.includes(index)) : []
+    after: resliced ? { matrix: resliced, cards: now } : null
   };
+};
+
+/** @param {DrawingState} drawing The drawing's stack rows. @returns {CircularTrackSlot[]} */
+const circularStackRows = (drawing) => (Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : []);
+
+/**
+ * The answer of a Replace question in one drawing, after its card files are written (OV-3955): the Depth matrix the
+ * read after the Replace places (`after.matrix`), with the cards' marks naming their files now, so that read finds
+ * the rows placed and keeps them, and the rows `turnedOff` off, through the Depth source change a Depth file removal
+ * runs (`changeCircularDepthSources`).
+ * @param {WebState} state @param {ChangeDepthSources} changeCircularDepthSources
+ * @param {{ drawing: DrawingState, turnedOff: ReadonlySet<string>,
+ *   after: { matrix: (InputFileRef | null)[][], cards: import('../services/record-draw-selection.js').CardRecords[] } }} outcome
+ */
+const writeReplacedDepth = (state, changeCircularDepthSources, { drawing, after, turnedOff }) => {
+  const recordIds = new Map(after.cards.map((card) => [card.uid, card.recordIds]));
+  const marks = circularSourceInputs(drawing.inputType.value, drawing.circularSources).map(({ uid, primaryFile, pairedFile }) => ({
+    uid, primaryFile, pairedFile, recordIds: recordIds.get(uid) ?? null
+  }));
+  changeCircularDepthSources(drawing, () => {
+    bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', after.matrix);
+    markCircularDepthRows(drawing.slices.inputs, marks);
+    circularStackRows(drawing).forEach((row) => { if (turnedOff.has(String(row.id))) row.enabled = false; });
+  }, { setsFile: false, series: 'same' });
 };
 
 /**
  * The question a card's file control asks before a Replace that removes Depth files (OV-2318). Registers nothing.
  * @param {{ state: WebState, askChoice: AskChoice, showNotice: ShowNotice, barTabs: () => Array<DrawingBarTab | DrawingBarOffer>,
- *   committedCardRecords: (drawing: DrawingState) => Promise<CommittedCardRecords> }} ports
+ *   committedCardRecords: (drawing: DrawingState) => Promise<CommittedCardRecords>,
+ *   circularDepthSourceLoss: (drawing: DrawingState, nextDepth: DrawingState['files']['c_depth']) => DepthSourceLoss,
+ *   changeCircularDepthSources: ChangeDepthSources }} ports
  *   `barTabs`: the drawing bar's tabs, named as they show. `committedCardRecords`: the record IDs of each card's file as
- *   the drawing's committed request drew it (the runner's `committedCardRecordsOf`).
- * @returns {(sites: readonly DrawingInputSite[], value: File, pickHolds: () => boolean) => Promise<boolean> | null}
+ *   the drawing's committed request drew it (the runner's `committedCardRecordsOf`). `circularDepthSourceLoss` and
+ *   `changeCircularDepthSources`: what a Depth file removal does to the stack and Show Depth, and its one writer
+ *   (the track editor's), which Remove Depth file runs too.
+ * @returns {(sites: readonly DrawingInputSite[], value: File, pickHolds: () => boolean) => Promise<ReplacementAnswer> | null}
  */
-export const createCircularSourceReplacementQuestion = ({ state, askChoice, showNotice, barTabs, committedCardRecords }) => {
+export const createCircularSourceReplacementQuestion = ({
+  state, askChoice, showNotice, barTabs, committedCardRecords, circularDepthSourceLoss, changeCircularDepthSources
+}) => {
   /** @param {ReplacementFile | null} file */
   const fileOf = (file) => /** @type {FileLike | null} */ (isInputFileRef(file) ? state.inputFiles.fileOf(file) : file);
   /**
@@ -306,11 +337,19 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, show
    * them again, so the dialog names the files as they are. An answer given
    * after either change does nothing (as `askTrackSourceRemoval`). Null when
    * no Depth file can leave (the control's write runs in its own step); else
-   * whether to replace, after which the write needs a step of its own.
+   * the answer (`ReplacementAnswer`), whose write needs a step of its own: after
+   * the card files, it writes each drawing's Depth matrix as the read after the
+   * Replace places it, with the Depth source change a Depth file removal makes
+   * (`changeCircularDepthSources`: a managed Depth row goes with its series'
+   * last file, the last Depth file turns Show Depth off, and the rows that
+   * reach a row that leaves turn off, `depthLossOutcome`), so that Generate
+   * draws and one Undo restores the cards, the matrix and the stack (OV-3955).
+   * The question says that outcome in the words of the Depth removal question
+   * (`depthLossSentences`).
    * @param {readonly DrawingInputSite[]} sites
    * @param {File} value The picked file: the card's file control gives a File, which always has a name.
    * @param {() => boolean} pickHolds
-   * @returns {Promise<boolean> | null}
+   * @returns {Promise<ReplacementAnswer> | null}
    */
   const askCircularSourceReplacement = (sites, value, pickHolds) => {
     /** @type {Map<DrawingState['id'], ReplacedCardFile[]>} */
@@ -326,7 +365,8 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, show
       && replaced.some(({ uid }) => drawing.circularSources.some((card) => card.uid === uid)));
     if (asking().length === 0) return null;
     const cardsNow = () => inScope.flatMap(({ drawing }) => replacedCards(drawing));
-    const depthNow = () => inScope.flatMap(({ drawing }) => replacementDepthFiles(drawing));
+    // The Depth files and the stack rows the answer writes from, compared by identity.
+    const depthNow = () => inScope.flatMap(({ drawing }) => [...replacementDepthFiles(drawing), ...circularStackRows(drawing)]);
     const picked = cardsNow();
     // The replaced drawings, by identity, and their cards as at the pick.
     const cardsHold = () => inScope.every(({ drawing }) => state.drawingList().includes(drawing)) && sameEntries(picked, cardsNow());
@@ -362,20 +402,30 @@ export const createCircularSourceReplacementQuestion = ({ state, askChoice, show
         if (named) return record ? t('#{n} {record} in {drawing}: {files}', { ...texts, record }) : t('#{n} in {drawing}: {files}', texts);
         return record ? t('#{n} {record}: {files}', { ...texts, record }) : t('#{n}: {files}', texts);
       }));
-      if (items.length === 0) return true;
-      // The Depth series the answer leaves with no file, each in its drawing when the question names drawings.
-      const emptySeries = leaving.flatMap(({ drawingId, emptySeries: series }) => series.map((index) => (named
+      if (items.length === 0) return () => {};
+      // What the Depth files leaving do to each drawing's stack, as Remove Depth file reads it.
+      const outcomes = leaving.flatMap(({ drawingId, after }) => {
+        const drawing = state.drawingOf(drawingId);
+        if (!after) return [];
+        const stack = circularStackRows(drawing);
+        return [{ drawingId, drawing, after, stack, ...depthLossOutcome(stack, 'circular', circularDepthSourceLoss(drawing, after.matrix)) }];
+      });
+      // The Depth series left with no file, each in its drawing when the question names drawings.
+      const emptySeries = outcomes.flatMap(({ drawingId, emptySeries: series }) => series.map((index) => (named
         ? t('#{n} in {drawing}', { n: index + 1, drawing: drawingName(drawingId) }) : `#${index + 1}`)));
+      const reaching = outcomes.flatMap(({ stack, reaching: rows }) => rows.map((index) => trackRowItem(index, stack[index].id)));
       const answer = await askChoice({
         title: t('Replace the file and remove Depth files?'),
-        description: joinSentences(...[
+        description: joinSentences(
           t('The new file has no record for these records of the File card. Replacing the file removes their Depth files.'),
-          emptySeries.length === 0 ? '' : emptyDepthSeriesText(emptySeries)
-        ].filter(Boolean)),
-        items,
+          ...depthLossSentences(emptySeries, outcomes.flatMap(({ staying }) => staying)),
+          ...(reaching.length === 0 ? [] : [reachingRowsText(reaching.length)])
+        ),
+        items: [...items, ...reaching],
         actions: [{ id: 'replace', label: t('Replace file'), tone: 'danger' }]
       });
-      return answer === 'replace' && cardsHold() && stillShown() && sameEntries(asked, depthNow());
+      if (!(answer === 'replace' && cardsHold() && stillShown() && sameEntries(asked, depthNow()))) return false;
+      return () => outcomes.forEach((outcome) => writeReplacedDepth(state, changeCircularDepthSources, outcome));
     })();
   };
   return askCircularSourceReplacement;
