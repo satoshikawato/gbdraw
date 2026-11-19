@@ -12,6 +12,8 @@ const {
   defaultConservationSeriesLabel,
   effectiveRingColor,
   moveConservationSeriesEntry,
+  orderInOwnPlaces,
+  orderSeriesByRingRows,
   orderedConservationSources,
   reassignDrawnRingColors,
   reassignRingColorsOnReorder,
@@ -366,4 +368,19 @@ test('the rings of a drawing differ when rings of files of one name, size and da
   assert.deepEqual(changed.circularConservation.series.map((entry) => entry.sourceKey), searched.circularConservation.series.map((entry) => entry.sourceKey));
   assert.notEqual(ringsOfDrawing(changed), ringsOfDrawing(searched));
   assert.equal(ringsOfDrawing(drawingOf(['a', 'b', 'c'])), ringsOfDrawing(searched));
+});
+
+// OV-3852 (the Owner's choice A): one ring order. The series takes the order of its managed stack rows in the places its
+// entries hold; an entry no row draws, and a row that is not a managed ring row, keep their places.
+test('the series takes its managed ring rows\' order, each entry in a place the ordered entries hold', () => {
+  const ring = (key) => ({ renderer: 'sequence_conservation', params: { managed: 'circular_conservation', series_key: key } });
+  const series = ['a', 'b', 'c', 'd'].map((sourceKey) => ({ sourceKey }));
+  const slots = [{ renderer: 'features', params: {} }, ring('c'), { renderer: 'sequence_conservation', params: { series_key: 'b' } },
+    ring('a'), ring('gone'), ring('b')];
+  assert.equal(orderSeriesByRingRows(series, slots), true);
+  assert.deepEqual(series.map((entry) => entry.sourceKey), ['c', 'a', 'b', 'd'], 'd, which no row draws, keeps its place');
+  assert.equal(orderSeriesByRingRows(series, slots), false, 'a series in its rows\' order does not move');
+  const items = ['x', 3, 'y', 1, 2];
+  assert.equal(orderInOwnPlaces(items, (item) => (typeof item === 'number' ? item : undefined)), true);
+  assert.deepEqual(items, ['x', 1, 'y', 2, 3]);
 });

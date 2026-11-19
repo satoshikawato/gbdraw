@@ -238,6 +238,44 @@ export const reassignRingColorsOnReorder = (drawing) => (
 );
 
 /**
+ * Puts the items `rank` ranks in the order of their ranks, in the places they hold; an item it does not rank keeps its
+ * place. The one move of the ring order between the series and its managed stack rows (OV-3852).
+ * @template T
+ * @param {T[]} items Reordered in place.
+ * @param {(item: T) => number | undefined} rank
+ * @returns {boolean} Whether an item moved.
+ */
+export const orderInOwnPlaces = (items, rank) => {
+  const places = items.flatMap((item, place) => (rank(item) === undefined ? [] : [place]));
+  const ordered = places.map((place) => items[place])
+    .sort((left, right) => /** @type {number} */ (rank(left)) - /** @type {number} */ (rank(right)));
+  if (ordered.every((item, index) => item === items[places[index]])) return false;
+  places.forEach((place, index) => { items[place] = ordered[index]; });
+  return true;
+};
+
+/**
+ * A managed ring row as the ring order reads it: the series entry it draws, by its key.
+ * @typedef {{ renderer?: unknown, params?: { managed?: unknown, series_key?: unknown } | null }} RingRowOfSeries
+ */
+/**
+ * One ring order (OV-3852, the Owner's choice A): the series takes the order of its managed rows in the stack, so a
+ * move of a ring's stack row moves its ring in the list too; an entry no row draws keeps its place.
+ * @param {{ sourceKey?: unknown }[]} series Reordered in place.
+ * @param {readonly RingRowOfSeries[]} slots
+ * @returns {boolean} Whether an entry moved.
+ */
+export const orderSeriesByRingRows = (series, slots) => {
+  /** @type {Map<string, number>} */
+  const rowOrder = new Map();
+  slots.forEach((slot) => {
+    const key = String(slot?.params?.series_key || '').trim();
+    if (isManagedConservationSlot(slot) && key && !rowOrder.has(key)) rowOrder.set(key, rowOrder.size);
+  });
+  return orderInOwnPlaces(series, (entry) => rowOrder.get(String(entry.sourceKey || '')));
+};
+
+/**
  * @template T
  * @param {T | (T | null)[] | null | undefined} files a null place is dropped
  * @returns {T[]}

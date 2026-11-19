@@ -9,6 +9,8 @@ import {
   NO_RING_KEY_CHANGES,
   circularRingSources,
   isManagedConservationSlot,
+  orderInOwnPlaces,
+  orderSeriesByRingRows,
   orderedConservationSources,
   reassignRingColorsOnReorder,
   ringKeyAfter,
@@ -436,6 +438,24 @@ const conservationEntries = (drawing) => {
 const managedConservationSlotKey = (slot) => String(slot?.params?.series_key || '').trim();
 
 /**
+ * One ring order (OV-3852): the managed ring rows, new ones too, take the series order (`entryOrderByKey`, by ring key)
+ * in the places they hold.
+ * @param {CircularTrackSlot[]} slots Reordered in place.
+ * @param {ReadonlyMap<string, number>} entryOrderByKey
+ */
+const orderRingRowsBySeries = (slots, entryOrderByKey) => orderInOwnPlaces(slots, (slot) => (
+  isManagedConservationSlot(slot) ? entryOrderByKey.get(managedConservationSlotKey(slot)) : undefined));
+
+/**
+ * Where a ring row the stack lacks goes in: after the last ring row, else after the features row.
+ * @param {readonly CircularTrackSlot[]} slots
+ */
+const ringRowInsertIndex = (slots) => {
+  const lastRing = slots.findLastIndex((slot) => isManagedConservationSlot(slot));
+  return Math.max(0, (lastRing >= 0 ? lastRing : slots.findIndex((slot) => slot?.renderer === 'features')) + 1);
+};
+
+/**
  * The managed ring rows no source draws: a row whose source has gone, and a
  * second row of one source. A row's key is read after `keyChanges`, the change
  * that leaves `entries` (`RingKeyChanges`).
@@ -654,9 +674,9 @@ export const editCircularFeatureDensityRows = (changeTrackLayout, drawing, edit,
  */
 
 /**
- * A stack move that re-assigns the rings' scheme colours after it while 「トラックを並び替えたら色を振り直す」 is on,
- * in the move's own step (PD-OI-110); `sync` carries the new colours to the ring rows. A move that answers (a busy
- * Session) moved nothing.
+ * A stack move, after which the series takes its managed ring rows' order (one ring order, OV-3852) and the rings'
+ * scheme colours are re-assigned while 「トラックを並び替えたら色を振り直す」 is on, in the move's own step (PD-OI-110);
+ * `sync` carries the new places and colours to the ring rows. A move that answers (a busy Session) moved nothing.
  * @template {unknown[]} A
  * @template R
  * @param {(drawing: DrawingState, ...args: A) => R} move
@@ -665,7 +685,9 @@ export const editCircularFeatureDensityRows = (changeTrackLayout, drawing, edit,
  */
 const reassigningRingColors = (move, sync) => (drawing, ...args) => {
   const answer = move(drawing, ...args);
-  if (!answer && reassignRingColorsOnReorder(drawing)) sync(drawing);
+  if (answer) return answer;
+  if (orderSeriesByRingRows(drawing.circularConservation.series, drawing.adv.circular_track_slots)) sync(drawing);
+  if (reassignRingColorsOnReorder(drawing)) sync(drawing);
   return answer;
 };
 
@@ -1169,18 +1191,8 @@ export const createCircularTrackSlotEditor = ({
       presentKeys.add(key);
     });
 
-    let preferredInsertIndex = -1;
-    nextSlots.forEach((slot, index) => {
-      if (isManagedConservationSlot(slot)) preferredInsertIndex = index;
-    });
-    if (preferredInsertIndex < 0) {
-      preferredInsertIndex = nextSlots.findIndex((slot) => slot?.renderer === 'features');
-    }
-    commitManagedSlotMutation(drawing, {
-      nextSlots,
-      newSlots: missingSlots,
-      preferredInsertIndex: Math.max(0, preferredInsertIndex + 1)
-    });
+    commitManagedSlotMutation(drawing, { nextSlots, newSlots: missingSlots, preferredInsertIndex: ringRowInsertIndex(nextSlots) });
+    orderRingRowsBySeries(drawing.adv.circular_track_slots, entryOrderByKey);
     refreshSlots(drawing);
   };
 

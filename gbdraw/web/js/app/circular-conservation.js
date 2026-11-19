@@ -22,6 +22,7 @@ import {
   ringKeyChangesOf,
   moveConservationSeriesEntry,
   normalizeFileList,
+  orderSeriesByRingRows,
   orderedConservationSources,
   parseConservationLabelText,
   readRingColorScheme,
@@ -436,6 +437,11 @@ export const createCircularConservationSources = ({
   /** @param {DrawingState} drawing @param {boolean} ringSettingStored */
   const reconcileLoadedCircularConservation = (drawing, ringSettingStored) => {
     if (!ringSettingStored) drawing.circularConservation.enabled = hasRingSourceFiles(drawing);
+    // One ring order (OV-3852): a Session whose custom stack drew its rings in another order than its series lists them
+    // keeps the order it drew; its series takes the rows' order before the rows follow the series.
+    if (drawing.adv.circular_track_slots_enabled === true) {
+      orderSeriesByRingRows(drawing.circularConservation.series, drawing.adv.circular_track_slots);
+    }
     reconcileCircularConservation(drawing);
   };
   // A ring row's name or color, or a record label read for it, shows in its

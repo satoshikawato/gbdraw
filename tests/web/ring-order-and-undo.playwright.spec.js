@@ -64,10 +64,12 @@ const rings = (page) => page.evaluate(async () => {
   const result = app.currentResults()[app.selectedResultIndex];
   const svg = result ? new DOMParser().parseFromString(String(result.content), 'image/svg+xml') : null;
   // Each drawn ring, outermost first, by the series place it draws.
-  const drawn = svg ? [...svg.querySelectorAll('[data-gbdraw-slot-renderer="sequence_conservation"]')]
-    .map((group) => Number(group.getAttribute('data-source-index'))) : [];
+  const groups = svg ? [...svg.querySelectorAll('[data-gbdraw-slot-renderer="sequence_conservation"]')] : [];
+  const drawn = groups.map((group) => Number(group.getAttribute('data-source-index')));
+  // Each drawn ring's stack row, in the order the figure draws them (its group id ends with the row id).
+  const drawnRows = groups.map((group) => String(group.id).replace(/^track_slot_[0-9a-f]+_/, ''));
   const keys = new Set(series.map((entry) => entry.key));
-  return { series, rows, drawn, rowsOnSeries: rows.every((row) => keys.has(row.key)) };
+  return { series, rows, drawn, drawnRows, rowsOnSeries: rows.every((row) => keys.has(row.key)) };
 });
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 const clickHistory = async (page, name) => {
@@ -157,4 +159,74 @@ test.describe('OV-2317: ring handlers during a running Generate', () => {
       await page.context().close();
     });
   }
+});
+
+// The list, the stack rows and the drawn rings, each as ring names (a, b, c), in their order.
+const order = async (page, { drawn = false } = {}) => {
+  const now = await rings(page);
+  const name = (text) => text.replace(/^.*ring/, '');
+  const byKey = new Map(now.series.map((entry) => [entry.key, name(entry.label)]));
+  return {
+    list: now.series.map((entry) => name(entry.label)),
+    rows: now.rows.map((row) => byKey.get(row.key) ?? `?${row.id}`),
+    ...(drawn ? { drawn: now.drawnRows.map(name) } : {})
+  };
+};
+const one = (names) => ({ list: names, rows: names });
+const settleStep = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.settlePendingIntent());
+const click = async (page, label) => {
+  // A stack row's buttons show with the Track stack open.
+  const stack = page.locator('[data-track-slots-toggle]');
+  if (label.startsWith('Circular track slot') && (await stack.getAttribute('aria-expanded')) !== 'true') {
+    await stack.evaluate((element) => element.click());
+  }
+  const button = page.locator(`button[aria-label="${label}"]`).first();
+  await expect(button).toBeEnabled();
+  // The ring list and the stack rows sit in closed sections; the click is the button's own handler.
+  await button.evaluate((element) => element.click());
+  await settleStep(page);
+};
+
+test.describe('OV-3852: one ring order with Use custom stack on', () => {
+  for (const [what, label] of [
+    ['Move series', 'Move series inward'],
+    ['a move of a ring\'s Track stack row', 'Circular track slot conservation_ringb Move outward']
+  ]) {
+    test(`${what} moves the list and the stack rows together, the figure draws that order, and Undo is one step`, async ({ browser }) => {
+      const page = await loadRings(browser);
+      expect(await order(page)).toEqual(one(['a', 'b', 'c']));
+      const start = await undoCount(page);
+      await click(page, label);
+      expect(await order(page)).toEqual(one(['b', 'a', 'c']));
+      expect(await undoCount(page)).toBe(start + 1);
+      expect(await generate(page)).toEqual({ generated: true, error: null });
+      expect(await order(page, { drawn: true })).toEqual({ ...one(['b', 'a', 'c']), drawn: ['b', 'a', 'c'] });
+      await clickHistory(page, /^Undo/);
+      await clickHistory(page, /^Undo/);
+      expect(await order(page)).toEqual(one(['a', 'b', 'c']));
+      await page.context().close();
+    });
+  }
+
+  test('a Session whose stack drew its rings in another order than its list keeps the drawn order at Load', async ({ browser }, testInfo) => {
+    let page = await loadRings(browser);
+    // A Session an earlier version saved: the stack rows moved, its list kept (the stack drew the rows' order).
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const slots = state.activeDrawing().adv.circular_track_slots;
+      const at = (id) => slots.findIndex((slot) => slot.id === id);
+      const [ringA] = slots.splice(at('conservation_ringa'), 1);
+      slots.splice(at('conservation_ringc'), 0, ringA);
+    });
+    expect(await order(page)).toEqual({ list: ['a', 'b', 'c'], rows: ['b', 'a', 'c'] });
+    const file = testInfo.outputPath('rows-moved.gbdraw');
+    await download(page, 'Save Session', file);
+    await page.context().close();
+    page = await load(browser, file);
+    await stubLosat(page);
+    expect(await order(page)).toEqual(one(['b', 'a', 'c']));
+    expect(await generate(page)).toEqual({ generated: true, error: null });
+    expect(await order(page, { drawn: true })).toEqual({ ...one(['b', 'a', 'c']), drawn: ['b', 'a', 'c'] });
+    await page.context().close();
+  });
 });

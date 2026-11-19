@@ -644,6 +644,7 @@ test('after a LOSAT Generate, the source radio upload, LOSAT, upload keeps each 
 
 // #1777 review 7 (OV-3194): a rerender of the committed request (R1 (c)) leaves the draft's moved rings as the move
 // left them; the next Generate draws them in that order (tests/web/ring-draft-transitions.test.mjs walks every edit).
+// Each ring keeps its own stack row, which the move moves with it (one ring order, OV-3852).
 test('a rerender of the committed request after a move leaves each ring where the move put it, with its own label, colour and stack row (#1777 review 7)', async () => {
   for (const distinct of [false, true]) {
     await withStack(async (drawing) => {
@@ -653,12 +654,12 @@ test('a rerender of the committed request after a move leaves each ring where th
       rerenderCommitted(drawing, canonical);
       const files = distinct ? 'files of their own names' : 'sequence.fasta files';
       assert.deepEqual(ringLooks(), [looks[1], looks[0], looks[2]], `${files}: the moved rings, each with its own label and colour`);
-      assert.deepEqual(stackRingRows(), rows, `${files}: each ring in its own row`);
+      assert.deepEqual(stackRingRows(), [rows[1], rows[0], rows[2]], `${files}: each ring in its own row, in the moved order`);
       assert.deepEqual(await drawnRings(), [['GB', 'TTTT'], ['GA', 'ACGT'], ['GC', 'GGGG']], files);
       assert.deepEqual(ringIdentityDefects(drawing), [], files);
       await generateRings(drawing);
       assert.deepEqual(ringLooks(), [looks[1], looks[0], looks[2]], `${files}: the next Generate`);
-      assert.deepEqual(stackRingRows(), rows, `${files}: the next Generate keeps each row`);
+      assert.deepEqual(stackRingRows(), [rows[1], rows[0], rows[2]], `${files}: the next Generate keeps each row`);
       assert.deepEqual(await drawnRings(), [['GB', 'TTTT'], ['GA', 'ACGT'], ['GC', 'GGGG']], `${files}: the next Generate`);
     });
   }

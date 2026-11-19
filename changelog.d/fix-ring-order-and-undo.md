@@ -7,3 +7,7 @@
 - Fixed: Web app: a Linear protein comparison (LOSATP) that the Web app of another LOSAT build searched, such
   as gbdraw 0.14.5's, is searched again at the first **Generate Diagram** after a Session load, as it is when
   any setting changes, instead of being drawn from the stored result with nothing changed.
+- Fixed: Web app: with **Use custom stack** on, the comparison rings have one order: **Move series** moves the
+  ring's Track stack row with it, a move of a ring's Track stack row moves the ring in the list, and the figure
+  draws the rings in that order; each move is one Undo step. A Session whose stack drew its rings in another order
+  than its list opens with the list in the drawn order (OV-3852).

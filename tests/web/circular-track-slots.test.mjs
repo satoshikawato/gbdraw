@@ -724,10 +724,11 @@ test('OV-1656: the Circular gap writer stores one text, so `1px` is `1` before S
 });
 
 // PD-OI-110: a stack move re-assigns the rings' scheme colours to the drawn order, in the move, while
-// 「トラックを並び替えたら色を振り直す」 is on; under Same color it is disabled and changes nothing (D-21).
+// 「トラックを並び替えたら色を振り直す」 is on; under Same color it is disabled and changes nothing (D-21). The move
+// moves the ring in the series too (one ring order, OV-3852).
 test('a stack move of a ring row re-assigns the scheme colours with the checkbox on, except under Same color', () => {
   const files = ['a.tsv', 'b.tsv'].map((name) => ({ name, size: 1, lastModified: 0 }));
-  for (const [scheme, expected] of [['ten', [1, 0]], ['same', [0, 1]]]) {
+  for (const [scheme, expected] of [['ten', [['b.tsv', 0], ['a.tsv', 1]]], ['same', [['b.tsv', 1], ['a.tsv', 0]]]]) {
     const state = createState({ conservationEnabled: true, conservationFiles: files });
     Object.assign(state.circularConservation, {
       colorScheme: scheme,
@@ -743,6 +744,6 @@ test('a stack move of a ring row re-assigns the scheme colours with the checkbox
     assert.deepEqual(rows(), ['features', 'outer_gap', 'a.tsv', 'b.tsv', 'gc_content']);
     editor.moveCircularTrackSlot(3, 2);
     assert.deepEqual(rows(), ['features', 'outer_gap', 'b.tsv', 'a.tsv', 'gc_content']);
-    assert.deepEqual(state.circularConservation.series.map(({ schemeIndex }) => schemeIndex), expected, scheme);
+    assert.deepEqual(state.circularConservation.series.map(({ fileName, schemeIndex }) => [fileName, schemeIndex]), expected, scheme);
   }
 });
