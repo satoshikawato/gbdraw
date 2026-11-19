@@ -859,21 +859,21 @@ const inputBindingsOf = (state) => ({ drawingList: state.drawingList });
 /**
  * @param {DrawingView} drawing
  * @param {Partial<FilesData>} filesData a step's (a field it leaves out binds nothing)
- * @param {HistorySnapshotFileStore} fileStore
+ * @param {InputFileStore['registerFile']} registerFile
  */
-const applyFilesData = (drawing, filesData, fileStore) => {
+const applyFilesData = (drawing, filesData, registerFile) => {
   // The drawing's inputs slice installs the step's capture: a binding holds
   // the step's refs, which History keeps stored (a ref whose file was released
   // binds nothing). An intent leaves out the comparisons a Generate wrote; a
   // Linear checkpoint holds them.
   const { linearSeqs = [], circularSources = [], inputType, linearComparisons: _planFiles, ...files } = filesData;
-  installBoundInputs(fileStore, drawing.slices.inputs, { files, linearSeqs, circularSources, inputType }, {
+  installBoundInputs({ registerFile }, drawing.slices.inputs, { files, linearSeqs, circularSources, inputType }, {
     keep: Object.hasOwn(filesData, 'linearCanonicalComparisons') ? [] : ['linearCanonicalComparisons']
   });
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
       (filesData.linearComparisons ?? []).map((comparison) => [comparison.id, {
-        file: fileStore.registerFile(isInputFileRef(comparison.file) ? comparison.file : null),
+        file: registerFile(isInputFileRef(comparison.file) ? comparison.file : null),
         loadedSourceName: comparison.loadedSourceName
       }])
     );
@@ -885,12 +885,6 @@ const applyFilesData = (drawing, filesData, fileStore) => {
 };
 
 /**
- * @typedef {object} HistorySnapshotFileStore
- *   The functions of the project's input file store (`state.inputFiles`)
- *   that the snapshot service calls (F-05).
- * @property {InputFileStore['registerFile']} registerFile
- *   A step's ref, while its file is stored; `null` once released.
- *
  * @typedef {object} HistorySnapshotRuntimeOwner
  *   The generated-artifact runtime owner that the composition root registers (`app/app-setup.js`).
  * @property {() => Record<string, any>} capture The runtime state, with its canonical session.
@@ -917,8 +911,9 @@ const applyFilesData = (drawing, filesData, fileStore) => {
  * @template [P=unknown]
  * @typedef {object} HistorySnapshotServiceOptions
  * @property {HistorySnapshotState<D>} state
- * @property {HistorySnapshotFileStore} fileStore
- *   The file store that holds the files an intent and a checkpoint name.
+ * @property {InputFileStore['registerFile']} registerFile
+ *   The input file store's (`state.inputFiles`) registration of a file an intent or a checkpoint names: a step's ref,
+ *   while its file is stored; `null` once released.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
  * @property {((drawing: D, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean }) => unknown) | null} [applyConfigData]
@@ -1024,9 +1019,9 @@ const checkpointCatalogFeatures = (snapshot) => {
  *   readSlotValues: (drawingId: DrawingId, keys: typeof LOSAT_EVIDENCE_KEYS) => Readonly<LosatEvidence>,
  *   writeArtifactValues: (drawingId: DrawingId, values: Readonly<Partial<LosatEvidence>>) => void,
  *   drawingOf: (drawingId: DrawingId) => Pick<DrawingView, 'slices'>,
- *   fileStore: Pick<InputFileStore, 'registerFile'> }} owner
+ *   registerFile: InputFileStore['registerFile'] }} owner
  */
-const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, readSlotValues, writeArtifactValues, drawingOf, fileStore }) => {
+const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, readSlotValues, writeArtifactValues, drawingOf, registerFile }) => {
   // A drawing's seven values where its artifact is: the shown drawing's state, a kept slot (every key filled).
   /** @type {(drawingId: DrawingId) => LosatEvidence} */
   const losatEvidenceOf = (drawingId) => {
@@ -1063,7 +1058,7 @@ const createLosatEvidenceAccess = ({ shownDrawingId, artifactSlots, readSlotValu
      */
     writeLosatClear: (drawingId, { evidence, comparisons }) => {
       writeArtifactValues(drawingId, evidence);
-      bindDrawingCanonicalComparisons(fileStore, drawingOf(drawingId).slices.inputs, comparisons);
+      bindDrawingCanonicalComparisons({ registerFile }, drawingOf(drawingId).slices.inputs, comparisons);
     },
     /**
      * The LOSAT evidence of every drawing of the project: the shown drawing's and each kept slot's. A drawing History
@@ -1160,7 +1155,7 @@ export const createHeldFigurePorts = ({ captureArtifactSlot, paint }) => {
  */
 export const createHistorySnapshotService = ({
   state,
-  fileStore,
+  registerFile,
   nextTick = async () => {},
   buildConfigData = null,
   applyConfigData = null,
@@ -1182,8 +1177,8 @@ export const createHistorySnapshotService = ({
   heldResultPaint = null,
   onArtifactSlotsChanged = () => {}
 }) => {
-  if (!state || !fileStore || typeof currentResults !== 'function') {
-    throw new Error('createHistorySnapshotService requires state, fileStore, and currentResults.');
+  if (!state || typeof registerFile !== 'function' || typeof currentResults !== 'function') {
+    throw new Error('createHistorySnapshotService requires state, registerFile, and currentResults.');
   }
 
   // The drawing the displayed artifact belongs to, by ID (S6,
@@ -1896,7 +1891,7 @@ export const createHistorySnapshotService = ({
     artifactSlots.writeValues(state.drawingOf(drawingId), values);
   };
   const losatEvidence = createLosatEvidenceAccess({
-    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues, drawingOf: state.drawingOf, fileStore,
+    shownDrawingId: () => state.activeDrawingId.value, artifactSlots, writeArtifactValues, drawingOf: state.drawingOf, registerFile,
     // readSlotValues fills every key it is given; its `any`-valued result is read as the seven LOSAT values here.
     readSlotValues: (drawingId, keys) => /** @type {LosatEvidence} */ (readSlotValues(drawingId, keys))
   });
@@ -2029,7 +2024,7 @@ export const createHistorySnapshotService = ({
       }
 
       if (domains.has('files')) {
-        applyFilesData(drawing, intent.files || {}, fileStore);
+        applyFilesData(drawing, intent.files || {}, registerFile);
       }
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, drawingId);
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
@@ -2097,7 +2092,7 @@ export const createHistorySnapshotService = ({
       }
       await nextTick();
 
-      applyFilesData(drawing, snapshot.files || {}, fileStore);
+      applyFilesData(drawing, snapshot.files || {}, registerFile);
       if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, drawingId);
 
       state.skipCaptureBaseConfig.value = true;

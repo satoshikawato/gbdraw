@@ -26,7 +26,7 @@ export const sessionRollbackPort = async (
   const { createHistorySnapshotService } = await import('../../../gbdraw/web/js/services/history-snapshot.js');
   const { createInputFileStore } = await import('../../../gbdraw/web/js/services/history-files.js');
   const artifactPort = createHistorySnapshotService({
-    state: /** @type {any} */ (state), fileStore: createInputFileStore(), currentResults: () => state.results.value
+    state: /** @type {any} */ (state), registerFile: createInputFileStore().registerFile, currentResults: () => state.results.value
   });
   const historyMembers = Object.freeze({ histories: [] });
   return createSessionImportRollbackState({

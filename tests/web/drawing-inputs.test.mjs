@@ -321,7 +321,7 @@ test('a card step is the shown drawing\'s: Undo from another drawing never undoe
   const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
   const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
   const snapshots = createHistorySnapshotService({
-    state, fileStore: state.inputFiles, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+    state, registerFile: state.inputFiles.registerFile, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
   });
   const history = createHistoryRouter({
     drawingIds: ['circular', 'linear'],
@@ -363,7 +363,7 @@ test('a History intent\'s files are the drawing\'s inputs slice capture', async 
   const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
   const { INPUTS_SLICE } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const snapshots = createHistorySnapshotService({
-    state, fileStore: state.inputFiles, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+    state, registerFile: state.inputFiles.registerFile, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
   });
   const circular = state.drawingOf('circular');
   bindInputFile(state.inputFiles, circular.slices.inputs, 'whitelist', fileNamed('keep.tsv'));
@@ -390,8 +390,14 @@ test('Undo of an input-file step installs the step\'s inputs slice capture', asy
   const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
   const { INPUTS_SLICE, bindInputFile, bindDrawingCanonicalComparisons, bindLinearSeqFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const store = state.inputFiles;
+  // The service is given the store's registerFile alone, no store object: the inputs slice files a restore binds and a
+  // canonical comparison's file go through this port (loaded-comparison-names pins the plan edges' files).
+  /** @type {unknown[]} */
+  const registered = [];
+  /** @type {typeof store.registerFile} */
+  const registerFile = (file) => { registered.push(file); return store.registerFile(file); };
   const snapshots = createHistorySnapshotService({
-    state, fileStore: store, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+    state, registerFile, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
   });
   const history = createHistoryRouter({
     drawingIds: ['circular', 'linear'],
@@ -420,7 +426,12 @@ test('Undo of an input-file step installs the step\'s inputs slice capture', asy
   // Only the first row file is released; the step's other file stays stored.
   const stored = [...boundInputFileIds({ drawingList: () => state.drawingList() }), stepCapture.files.blacklist.fileId];
   store.retainOnly(stored.filter((id) => id !== released.fileId));
+  registered.length = 0;
   await history.undo();
+  // History holds its own copies of the step's refs: the port sees each one by its file id.
+  const registeredIds = registered.map((file) => (file && typeof file === 'object' && 'fileId' in file ? file.fileId : null));
+  assert.deepEqual([stepCapture.files.blacklist.fileId, released.fileId].filter((id) => registeredIds.includes(id)),
+    [stepCapture.files.blacklist.fileId, released.fileId], 'the restore rebinds the step\'s files through the port it was given');
   const expected = {
     ...stepCapture,
     files: { ...stepCapture.files, linearCanonicalComparisons: generated },
@@ -429,6 +440,15 @@ test('Undo of an input-file step installs the step\'s inputs slice capture', asy
   const { circularRecordList: _list, circularRecordDiscovery: _discovery, ...restored } = INPUTS_SLICE.capture(slice);
   const { circularRecordList: _l, circularRecordDiscovery: _d, ...wanted } = expected;
   assert.deepEqual(restored, wanted, 'the slice holds the step\'s capture: the released row file binds nothing, the generated comparisons stay');
+  // Clear LOSAT results binds the draft's own comparisons through the same port.
+  const view = store.registerFile(fileNamed('pairs.json'));
+  registered.length = 0;
+  snapshots.writeLosatClear(linear.id, {
+    evidence: snapshots.losatClearOf(linear.id).held.evidence,
+    comparisons: [{ kind: 'collinearityResult', file: view, canonicalInput: true }]
+  });
+  assert.deepEqual(registered, [view], 'a canonical comparison\'s file is bound through the port');
+  assert.equal(INPUTS_SLICE.capture(slice).files.linearCanonicalComparisons[0].file, view);
   INPUTS_SLICE.install(slice, initial);
 });
 

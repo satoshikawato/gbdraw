@@ -58,7 +58,7 @@ assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} feature
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
-const slotSnapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
+const slotSnapshots = createHistorySnapshotService({ state, registerFile: createInputFileStore().registerFile, currentResults: () => state.results.value });
 // The Load made no Linear drawing (D-15-120); the offer tab makes it.
 (await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder())();
 const circularSlot = slotSnapshots.captureArtifactSlot();

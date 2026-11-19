@@ -104,8 +104,13 @@ test('a Load, then Undo and Redo, keep the name the request stored for each comp
   ]);
   assert.deepEqual(await draftNames(), STORED);
 
+  // The service is given the store's registerFile alone: a restore gives each plan edge its file back through it.
+  /** @type {unknown[]} */
+  const registered = [];
+  /** @type {typeof state.inputFiles.registerFile} */
+  const registerFile = (file) => { registered.push(file); return state.inputFiles.registerFile(file); };
   const snapshots = createHistorySnapshotService({
-    state, fileStore: state.inputFiles, currentResults: () => state.results.value,
+    state, registerFile, currentResults: () => state.results.value,
     buildConfigData: sessionConfig.buildConfigData, applyConfigData: sessionConfig.applyCapturedConfigData
   });
   const history = createHistoryRouter({
@@ -128,8 +133,14 @@ test('a Load, then Undo and Redo, keep the name the request stored for each comp
     setComparisonEdgeFile(state.activeDrawing().linearComparisonPlan.edges[1], chosen);
   });
   assert.deepEqual(await draftNames(), [[0, 'hits.tsv'], [1, 'mine.tsv']]);
+  registered.length = 0;
   await history.undo();
   assert.deepEqual(await draftNames(), STORED, 'Undo of a file choice');
+  /** @type {(file: unknown) => unknown} */
+  const fileIdOf = (file) => (file && typeof file === 'object' && 'fileId' in file ? file.fileId : null);
+  const edgeFileIds = state.activeDrawing().linearComparisonPlan.edges.map(({ file }) => fileIdOf(file));
+  assert.ok(edgeFileIds.every((id) => id !== null && registered.map(fileIdOf).includes(id)),
+    'the Undo gives each plan edge its file through the port the service was given');
   await history.redo();
   assert.deepEqual(await draftNames(), [[0, 'hits.tsv'], [1, 'mine.tsv']], 'Redo of a file choice');
 });
