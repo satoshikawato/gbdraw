@@ -1,0 +1,1 @@
+- Fixed: Probe native LOSAT subcommands with `-help` instead of `--help` and parse both LOSAT v0.1.0 (`[possible values: ...]`) and LOSAT v0.2.0 / NCBI (`Permissible values: '...'`) `-task` help formats, so LOSAT v0.2.0 runtimes work alongside v0.1.0 without a version switch.

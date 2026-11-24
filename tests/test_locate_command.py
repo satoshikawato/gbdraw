@@ -69,7 +69,7 @@ args = sys.argv[1:]
 if args == ["--version"]:
     print("losat 0.2.0")
     sys.exit(0)
-if len(args) == 2 and args[1] == "--help":
+if len(args) == 2 and args[1] == "-help":
     sys.exit(0 if args[0] in ("blastn", "tblastn", "blastp") else 2)
 program = args[0]
 query = list(SeqIO.parse(args[args.index("-query") + 1], "fasta"))
@@ -426,7 +426,7 @@ import sys
 if sys.argv[1:] == ["--version"]:
     print("losat 0.2.0")
     sys.exit(0)
-if sys.argv[2:] == ["--help"]:
+if sys.argv[2:] == ["-help"]:
     sys.exit(0)
 print("out of memory", file=sys.stderr)
 sys.exit(3)

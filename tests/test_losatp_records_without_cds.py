@@ -45,7 +45,7 @@ args = sys.argv[1:]
 if args in (["--version"], ["-version"]):
     print("losat 0.1.0")
     sys.exit(0)
-if len(args) == 2 and args[1] == "--help":
+if len(args) == 2 and args[1] == "-help":
     sys.exit(0)
 def read(path):
     with open(path, encoding="utf-8") as handle:
@@ -71,6 +71,7 @@ MODES = ("pairwise", "similarity_groups", "collinear")
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
+    monkeypatch.setattr(runtime_module, "_HELP_TEXTS", {}, raising=False)
     monkeypatch.setattr(runtime_module, "_TASK_VALUES", {}, raising=False)
 
 

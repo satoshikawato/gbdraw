@@ -449,7 +449,7 @@ args = sys.argv[1:]
 if args in (["--version"], ["-version"]):
     print("losat ${genomeScale ? '0.2.0' : '0.1.0'}")
     sys.exit(0)
-if len(args) == 2 and args[1] == "--help":
+if len(args) == 2 and args[1] == "-help":
     ${genomeScale ? 'print("  -dbsize <Int8>")' : 'pass'}
     sys.exit(0)
 def proteins(path):

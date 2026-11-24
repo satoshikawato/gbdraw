@@ -40,7 +40,7 @@ with open({log!r}, "a", encoding="utf-8") as handle:
 if args in (["--version"], ["-version"]):
     print("losat {version}")
     sys.exit(0)
-if len(args) == 2 and args[1] == "--help":
+if len(args) == 2 and args[1] == "-help":
     print("      -task <TASK>")
     print("          [default: megablast] [possible values: megablast, blastn]")
     if {search_space}:
