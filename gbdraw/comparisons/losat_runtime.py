@@ -420,31 +420,45 @@ def _probe(command: list[str]) -> subprocess.CompletedProcess[str] | None:
 
 _TASK_VALUES: dict[str, frozenset[str] | None] = {}
 _POSSIBLE_VALUES = re.compile(r"\[possible values:\s*([^\]]+)\]")
+_PERMISSIBLE_VALUES = re.compile(r"Permissible values:\s*([^>\]]+)")
+_QUOTED_VALUE = re.compile(r"'([^']+)'")
+
+
+def _parse_task_values(block: str) -> frozenset[str] | None:
+    """Parse ``-task`` values from clap (v0.1.0) or NCBI (v0.2.0+) ``-help`` text."""
+
+    possible = _POSSIBLE_VALUES.search(block)
+    if possible:
+        items = frozenset(item.strip() for item in possible.group(1).split(",") if item.strip())
+        return items or None
+    permissible = _PERMISSIBLE_VALUES.search(block)
+    if permissible:
+        items = frozenset(item.strip() for item in _QUOTED_VALUE.findall(permissible.group(1)) if item.strip())
+        return items or None
+    return None
 
 
 def losat_task_values(executable: str) -> frozenset[str] | None:
     """Return the ``blastn`` task values a LOSAT runtime lists, or ``None``.
 
     Released LOSAT v0.1.0 lists ``[possible values: megablast, blastn]`` under
-    its task option; a runtime that lists none is not checked. Probed once per
-    executable.
+    its task option, and LOSAT v0.2.0+ lists NCBI's
+    ``Permissible values: 'blastn' ... 'megablast'`` under ``blastn -help``;
+    a runtime that lists neither is not checked. Reuses the single cached
+    ``blastn -help`` probe per executable.
     """
 
     key = str(executable)
     if key in _TASK_VALUES:
         return _TASK_VALUES[key]
-    completed = _probe([key, "blastn", "--help"])
+    help_text = _subcommand_help(key, "blastn")
     values: frozenset[str] | None = None
-    if completed is not None:
-        lines = f"{completed.stdout}\n{completed.stderr}".splitlines()
+    if help_text is not None:
+        lines = help_text.splitlines()
         for index, line in enumerate(lines):
             if re.match(r"^\s*-{1,2}task\b", line):
                 block = "\n".join(lines[index:index + 8])
-                match = _POSSIBLE_VALUES.search(block)
-                if match:
-                    values = frozenset(
-                        item.strip() for item in match.group(1).split(",") if item.strip()
-                    )
+                values = _parse_task_values(block)
                 break
     _TASK_VALUES[key] = values
     return values
@@ -487,11 +501,11 @@ _HELP_TEXTS: dict[tuple[str, str], str | None] = {}
 
 
 def _subcommand_help(executable: str, search: str) -> str | None:
-    """The ``--help`` text of a LOSAT subcommand, or ``None`` when it fails. Probed once per executable and subcommand."""
+    """The ``-help`` text of a LOSAT subcommand, or ``None`` when it fails. Probed once per executable and subcommand."""
 
     key = (str(executable), str(search))
     if key not in _HELP_TEXTS:
-        completed = _probe([key[0], key[1], "--help"])
+        completed = _probe([key[0], key[1], "-help"])
         _HELP_TEXTS[key] = (
             f"{completed.stdout}\n{completed.stderr}" if completed is not None and completed.returncode == 0 else None
         )
@@ -502,7 +516,7 @@ def losat_supports_program(executable: str, search: str) -> bool:
     """Whether a LOSAT runtime has the subcommand ``search``.
 
     Released LOSAT v0.1.0 has ``blastn``, ``tblastx`` and ``blastp`` and
-    answers ``losat tblastn --help`` with an error.
+    answers ``losat tblastn -help`` with an error.
     """
 
     return _subcommand_help(executable, search) is not None

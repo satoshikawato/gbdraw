@@ -183,7 +183,7 @@ def test_a_losat_without_searchsp_searches_as_before_and_warns(
     tmp_path: Path, ring_searches: list[dict[str, object]], monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A LOSAT whose ``blastn --help`` lists no ``-searchsp`` (v0.1.0): the probe the CLI runs logs the warning."""
+    """A LOSAT whose ``blastn -help`` lists no ``-searchsp`` (v0.1.0): the probe the CLI runs logs the warning."""
 
     from types import SimpleNamespace
 

@@ -39,7 +39,7 @@ with open({log!r}, "a", encoding="utf-8") as handle:
 if args in (["--version"], ["-version"]):
     print("losat 0.1.0")
     sys.exit(0)
-if len(args) == 2 and args[1] == "--help":
+if len(args) == 2 and args[1] == "-help":
     print("      -query_gencode <QUERY_GENCODE>")
     print("      -task <TASK>")
     print("          [default: megablast] [possible values: megablast, blastn]")
@@ -61,6 +61,7 @@ for query in ids(args[args.index("-query") + 1]):
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
+    monkeypatch.setattr(runtime_module, "_HELP_TEXTS", {}, raising=False)
     monkeypatch.setattr(runtime_module, "_TASK_VALUES", {}, raising=False)
 
 

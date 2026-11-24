@@ -69,7 +69,7 @@ if log:
 if args in (["--version"], ["-version"]):
     print({version!r})
     sys.exit(0)
-if len(args) == 2 and args[1] == "--help":
+if len(args) == 2 and args[1] == "-help":
     print("      -query_gencode <QUERY_GENCODE>")
     sys.exit(0)
 if "--query-gencode" in args:
@@ -110,6 +110,7 @@ def _logged_calls(log: Path) -> list[list[str]]:
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
     monkeypatch.setattr(runtime_module, "_HELP_TEXTS", {})
+    monkeypatch.setattr(runtime_module, "_TASK_VALUES", {})
 
 
 # Resolution order (design 3.6): explicit, conda, managed, PATH losat,
@@ -662,7 +663,7 @@ def test_native_tlosatx_reproduces_metazoan_mtdna_bytes(
     ).read_text(encoding="utf-8")
 
 
-# Program probe: released LOSAT v0.1.0 has no tblastn (``losat tblastn --help`` exits 2).
+# Program probe: released LOSAT v0.1.0 has no tblastn (``losat tblastn -help`` exits 2).
 
 _NO_TBLASTN = """#!{python}
 import json, os, sys
@@ -700,8 +701,95 @@ def test_tlosatn_refuses_a_losat_runtime_without_tblastn(tmp_path: Path) -> None
     assert "--losat_bin" in message and "--ncbi_blast_bin" in message and "another search program" in message
     assert exc_info.value.diagnostic == {"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE", "program": "tlosatn"}
     # Probed once per executable; no search ran, nothing fell back to blastn.
-    assert [call for call in _logged_calls(log) if call[:1] == ["tblastn"]] == [["tblastn", "--help"]]
+    assert [call for call in _logged_calls(log) if call[:1] == ["tblastn"]] == [["tblastn", "-help"]]
     assert all("-query" not in call for call in _logged_calls(log))
+
+
+def test_help_and_task_probes_support_v010_clap_format_in_one_probe(tmp_path: Path) -> None:
+    log = tmp_path / "v010.jsonl"
+    binary = tmp_path / "losat-0.1.0"
+    binary.write_text(
+        f"""#!{sys.executable}
+import json, sys
+args = sys.argv[1:]
+with open({str(log)!r}, "a", encoding="utf-8") as handle:
+    handle.write(json.dumps(args) + "\\n")
+if args == ["--version"]:
+    print("losat 0.1.0")
+    sys.exit(0)
+if args == ["blastn", "-help"]:
+    print("      -task <TASK>")
+    print("          [default: megablast]")
+    print("          [possible values: megablast, blastn]")
+    sys.exit(0)
+sys.exit(2)
+""",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    exe = str(binary)
+
+    assert runtime_module.losat_supports_program(exe, "blastn") is True
+    assert runtime_module.losat_supports_program(exe, "tblastn") is False
+    assert runtime_module.losat_takes_genome_scale("losatn", losat_bin=exe) is False
+    assert runtime_module.losat_task_values(exe) == frozenset({"megablast", "blastn"})
+    runtime_module.require_losat_task_support("blastn", losat_bin=exe)
+    with pytest.raises(ValidationError, match="dc-megablast") as exc_info:
+        runtime_module.require_losat_task_support("dc-megablast", losat_bin=exe)
+    assert exc_info.value.diagnostic == {
+        "code": "COMPARISON_INPUT",
+        "reason": "LOSAT_TASK",
+        "field": "losatn_task",
+        "program": "losatn",
+    }
+    blastn_calls = [call for call in _logged_calls(log) if call[:1] == ["blastn"]]
+    assert blastn_calls == [["blastn", "-help"]]
+
+
+def test_help_and_task_probes_support_v020_ncbi_format_in_one_probe(tmp_path: Path) -> None:
+    log = tmp_path / "v020.jsonl"
+    binary = tmp_path / "losat-0.2.0"
+    binary.write_text(
+        f"""#!{sys.executable}
+import json, sys
+args = sys.argv[1:]
+with open({str(log)!r}, "a", encoding="utf-8") as handle:
+    handle.write(json.dumps(args) + "\\n")
+if args == ["--version"]:
+    print("losat 0.2.0")
+    sys.exit(0)
+if len(args) == 2 and args[1] == "--help":
+    sys.stderr.write('LOSAT argument error: Unknown argument: "-help"\\n')
+    sys.exit(1)
+if args == ["blastn", "-help"]:
+    print(" -task <String, Permissible values: 'blastn' 'blastn-short' 'dc-megablast'")
+    print("                'megablast' 'rmblastn' >")
+    print("   Task to execute")
+    print("   Default = `megablast'")
+    print(" -searchsp <Int8, >=0>")
+    sys.exit(0)
+if args == ["tblastn", "-help"]:
+    print(" -dbsize <Int8, >=0>")
+    sys.exit(0)
+sys.exit(1)
+""",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    exe = str(binary)
+
+    assert runtime_module.losat_supports_program(exe, "blastn") is True
+    assert runtime_module.losat_supports_program(exe, "tblastn") is True
+    assert runtime_module.losat_takes_genome_scale("losatn", losat_bin=exe) is True
+    assert runtime_module.losat_task_values(exe) == frozenset(
+        {"blastn", "blastn-short", "dc-megablast", "megablast", "rmblastn"}
+    )
+    runtime_module.require_losat_task_support("dc-megablast", losat_bin=exe)
+    with pytest.raises(ValidationError, match="unsupported-task"):
+        runtime_module.require_losat_task_support("unsupported-task", losat_bin=exe)
+    calls = _logged_calls(log)
+    assert all("--help" not in call for call in calls)
+    assert [call for call in calls if call[:1] == ["blastn"]] == [["blastn", "-help"]]
 
 
 def test_program_probe_passes_runtimes_that_have_the_program(tmp_path: Path) -> None:
