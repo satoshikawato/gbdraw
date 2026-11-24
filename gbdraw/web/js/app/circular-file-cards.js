@@ -12,7 +12,7 @@ import { circularSourceInputs, inputTypeSpec } from '../services/input-types.js'
 import { formatRecordLength } from '../services/record-options.js';
 import { errorText } from '../utils/error-text.js';
 import { t, tm, tn } from '../utils/i18n.js';
-import { fileCardLine } from './file-card.js';
+import { fileCardLine, fileCardNeedLine } from './file-card.js';
 import { RECORDS_NOT_INSPECTED_LABEL } from './linear-record-selector.js';
 /** @import { DiagramMode, DrawingState, SessionBusy } from '../state.js' */
 /** @import { CircularSource } from '../services/drawing/inputs.js' */
@@ -158,6 +158,19 @@ export const createCircularFileCards = ({
   });
 
   /**
+   * The Source records line while a card waits for a file: records are read
+   * only once every card holds its files, so the line says what the first
+   * waiting card needs (OV-3099; it said nothing, and the other cards' records
+   * did not show either).
+   */
+  const waitingLine = computed(() => {
+    const drawing = shownDrawingOfMode('circular');
+    if (drawing === null || circularRecordDiscoveryState.value.status !== 'idle') return '';
+    const waiting = cards.value.find((card) => !card.ready);
+    return waiting ? fileCardNeedLine(drawing.inputType.value, waiting.source, waiting.index) : '';
+  });
+
+  /**
    * The place a record's Topology card names it by: its file, and its `#k`
    * when the file holds more than one record (circular-multi-file D-10).
    * @param {{ sourceUid: string, selector: string }} row
@@ -184,7 +197,7 @@ export const createCircularFileCards = ({
   };
 
   return {
-    addZone, cards, isFolded, setFolded, addFiles, readError, recordPlace, removal, removalTarget, requestRemoval,
-    cancelRemoval, applyRemoval
+    addZone, cards, isFolded, setFolded, addFiles, readError, waitingLine, recordPlace, removal, removalTarget,
+    requestRemoval, cancelRemoval, applyRemoval
   };
 };
